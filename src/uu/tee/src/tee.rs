@@ -84,7 +84,7 @@ fn tee(options: &Options) -> Result<()> {
         },
     );
 
-    let mut output = MultiWriter::new(writers, options.output_error.clone());
+    let mut output = MultiWriter::new(writers, options.output_error);
     let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
@@ -197,7 +197,7 @@ impl MultiWriter {
 }
 
 fn process_error(
-    mode: Option<&OutputErrorMode>,
+    mode: Option<OutputErrorMode>,
     e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
@@ -222,8 +222,8 @@ fn process_error(
 impl Write for MultiWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         let mut aborted = None;
-        let mode = self.output_error_mode.clone();
         let mut errors = 0;
+        let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
             let res = (|| {
                 writer.write_all(buf)?;
@@ -232,7 +232,7 @@ impl Write for MultiWriter {
             match res {
                 Ok(()) => true,
                 Err(e) => {
-                    if let Err(e) = process_error(mode.as_ref(), e, writer, &mut errors) {
+                    if let Err(e) = process_error(mode, e, writer, &mut errors) {
                         aborted.get_or_insert(e);
                     }
                     false
