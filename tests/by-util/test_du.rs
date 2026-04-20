@@ -2274,23 +2274,17 @@ fn test_overriding_block_size_arg_with_invalid_value_still_errors() {
 
 #[test]
 fn test_du_repeated_h() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-h", "-h"]).succeeds();
+    new_ucmd!().args(&["-s", "-h", "-h"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_a() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-a", "-a"]).succeeds();
+    new_ucmd!().args(&["-a", "-a"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_apparent_size() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-s", "-A", "-A"])
         .succeeds()
         .stdout_only("6\t.\n");
@@ -2298,16 +2292,12 @@ fn test_du_repeated_apparent_size() {
 
 #[test]
 fn test_du_repeated_block_size() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-B", "100", "-B", "100"]).succeeds();
+    new_ucmd!().args(&["-s", "-B", "100", "-B", "100"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_b() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-s", "-b", "-b"])
         .succeeds()
         .stdout_only("5148\t.\n");
@@ -2315,23 +2305,17 @@ fn test_du_repeated_b() {
 
 #[test]
 fn test_du_repeated_c() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-c", "-c"]).succeeds();
+    new_ucmd!().args(&["-s", "-c", "-c"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_d() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-d", "2", "-d", "2"]).succeeds();
+    new_ucmd!().args(&["-d", "2", "-d", "2"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_inodes() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-s", "--inodes", "--inodes"])
         .succeeds()
         .stdout_only("11\t.\n");
@@ -2339,44 +2323,32 @@ fn test_du_repeated_inodes() {
 
 #[test]
 fn test_du_repeated_k() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-k", "-k"]).succeeds();
+    new_ucmd!().args(&["-s", "-k", "-k"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_l() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-l", "-l"]).succeeds();
+    new_ucmd!().args(&["-s", "-l", "-l"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_dereference() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-L", "-L"]).succeeds();
+    new_ucmd!().args(&["-s", "-L", "-L"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_dereference_args() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-D", "-D"]).succeeds();
+    new_ucmd!().args(&["-s", "-D", "-D"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_no_dereference() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-P", "-P"]).succeeds();
+    new_ucmd!().args(&["-s", "-P", "-P"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_m() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd()
+    new_ucmd!()
         .args(&["-s", "-m", "-m"])
         .succeeds()
         .stdout_only("1\t.\n");
@@ -2384,59 +2356,50 @@ fn test_du_repeated_m() {
 
 #[test]
 fn test_du_repeated_0() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-0", "-0"]).succeeds();
+    new_ucmd!().args(&["-s", "-0", "-0"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_separate_dirs() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-S", "-S"]).succeeds();
+    new_ucmd!().args(&["-s", "-S", "-S"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_s() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-s"]).succeeds();
+    new_ucmd!().args(&["-s", "-s"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_si() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "--si", "--si"]).succeeds();
+    new_ucmd!().args(&["-s", "--si", "--si"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_x() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-x", "-x"]).succeeds();
+    new_ucmd!().args(&["-s", "-x", "-x"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_t() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-t", "100", "-t", "100"]).succeeds();
+    new_ucmd!().args(&["-s", "-t", "100", "-t", "100"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_v() {
-    let ts = TestScenario::new(util_name!());
-
-    ts.ucmd().args(&["-s", "-v", "-v"]).succeeds();
+    new_ucmd!().args(&["-s", "-v", "-v"]).succeeds();
 }
 
 #[test]
 fn test_du_repeated_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    at.write("./somefile", "file2");
-    at.write("./file2", "a*");
+
+    // Set up the data for use with command 'du' and argument '--files0-from'.
+    // File 'somefile' has to contain a list of NUL-terminated directory and
+    // file names.
+    at.mkdir("dir");
+    at.write("dir/file2", "xyz");
+    at.write("./somefile", "dir\0");
 
     ts.ucmd()
         .args(&[
@@ -2450,6 +2413,7 @@ fn test_du_repeated_files0_from() {
 }
 
 #[test]
+#[cfg(feature = "touch")]
 fn test_du_repeated_time() {
     let ts = TestScenario::new(util_name!());
 
@@ -2485,6 +2449,7 @@ fn test_du_repeated_time() {
 }
 
 #[test]
+#[cfg(feature = "touch")]
 fn test_du_repeated_time_style() {
     let ts = TestScenario::new(util_name!());
 
@@ -2513,6 +2478,7 @@ fn test_du_repeated_time_style() {
         .ucmd()
         .env("TZ", "UTC")
         .arg("--time")
+        .arg("--time-style=full-iso")
         .arg("--time-style=full-iso")
         .arg("date_test")
         .succeeds();
