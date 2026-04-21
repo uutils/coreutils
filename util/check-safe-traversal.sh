@@ -269,6 +269,55 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     rm -f test_cp_src test_cp_dst
 fi
 
+# mv cross-device symlink replacement must use *at syscalls against a
+# pinned parent fd (matches GNU's force_symlinkat) so a concurrent rename
+# of the parent directory cannot redirect the temp-and-rename dance, and
+# the temp name must come from /dev/urandom rather than a guessable
+# pid+nanos pattern.
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv symlink-replace check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+        sym_src=$(mktemp -u -p "$TEMP_DIR" sym_src.XXXXXX)
+        sym_dst=$(mktemp -u -p /dev/shm sym_dst.XXXXXX)
+        ln -s /nowhere "$sym_src"
+        # Pre-existing dest forces the EEXIST branch into create_symlink_replace.
+        ln -s /elsewhere "$sym_dst"
+
+        if [ "$USE_MULTICALL" -eq 1 ]; then
+            mv_cmd="$COREUTILS_BIN mv"
+        else
+            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+        fi
+        strace -f -e trace=openat,symlink,symlinkat,rename,renameat,renameat2,unlink,unlinkat,read \
+            -o strace_mv_symlink_replace.log \
+            $mv_cmd "$sym_src" "$sym_dst" 2>/dev/null || true
+
+        sym_dst_base=$(basename "$sym_dst")
+
+        # Temp-and-rename must happen against a real parent dirfd, not AT_FDCWD.
+        if ! grep -qE 'symlinkat\("[^"]*", [0-9]+,' strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must use symlinkat with a parent dirfd (issue #10010 follow-up)"
+        fi
+        if ! grep -qE "renameat2?\([0-9]+, \"[^\"]+\", [0-9]+, \"$sym_dst_base\"" strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must use renameat with a parent dirfd to commit the dest (issue #10010 follow-up)"
+        fi
+
+        # Random temp source must be /dev/urandom (rejecting the prior pid+nanos scheme).
+        if ! grep -q 'openat(AT_FDCWD, "/dev/urandom"' strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must seed the temp name from /dev/urandom"
+        fi
+
+        echo "OK: mv symlink replace uses symlinkat+renameat with parent dirfd and unguessable temp name"
+        rm -f "$sym_dst"
+    fi
+fi
+
 echo ""
 echo "✓ Basic safe traversal verification completed"
 echo ""
