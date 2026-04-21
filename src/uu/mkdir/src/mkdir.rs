@@ -287,7 +287,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     #[cfg(unix)]
     let (mkdir_mode, shaped_umask) = {
         let umask = mode::get_umask();
-        let umask_bits = rustix::fs::Mode::from_bits_truncate(umask);
+        let umask_bits = rustix::fs::Mode::from_bits_truncate(umask as rustix::fs::RawMode);
         if is_parent {
             // Parent directories are never affected by -m (matches GNU behavior).
             // We pass 0o777 as the mode and shape the umask so it cannot block
@@ -297,12 +297,15 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // grandparent — through the normal mkdir(2) path.
             (
                 DEFAULT_PERM,
-                umask_bits & !rustix::fs::Mode::from_bits_truncate(0o300),
+                umask_bits & !rustix::fs::Mode::from_bits_truncate(0o300 as rustix::fs::RawMode),
             )
         } else {
             match config.mode {
                 // Explicit -m: shape umask so it cannot block explicitly requested bits.
-                Some(m) => (m, umask_bits & !rustix::fs::Mode::from_bits_truncate(m)),
+                Some(m) => (
+                    m,
+                    umask_bits & !rustix::fs::Mode::from_bits_truncate(m as rustix::fs::RawMode),
+                ),
                 // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
                 None => (DEFAULT_PERM, umask_bits),
             }
