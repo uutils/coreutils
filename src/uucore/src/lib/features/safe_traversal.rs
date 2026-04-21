@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -389,32 +389,25 @@ impl DirFd {
     /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
     /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
     /// race because the fd pins the inode.
+    ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &CStr, mode: u32) -> io::Result<()> {
-        use std::os::unix::io::FromRawFd;
+    fn chmod_at_via_opath(&self, name: &std::ffi::CStr, mode: u32) -> io::Result<()> {
+        use rustix::fs::{Mode, OFlags, chmod, openat};
 
-        let fd = unsafe {
-            libc::openat(
-                self.fd.as_raw_fd(),
-                name.as_ptr(),
-                libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC,
-            )
-        };
-        if fd < 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
+        let fd = openat(
+            &self.fd,
+            name,
+            OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
 
         let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = CStr::from_bytes_with_nul(proc_path.as_bytes())
+        let proc_cstr = std::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
 
-        let ret = unsafe { libc::chmod(proc_cstr.as_ptr(), mode as libc::mode_t) };
-        if ret < 0 {
-            Err(io::Error::last_os_error())
-        } else {
-            Ok(())
-        }
+        chmod(proc_cstr, Mode::from_bits_truncate(mode))
+            .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
     }
 
     /// Change mode of this directory
@@ -907,8 +900,8 @@ impl std::os::unix::fs::MetadataExt for Metadata {
 mod tests {
     use super::*;
     use std::fs;
-    use std::os::unix::fs::symlink;
     use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::symlink;
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
 
@@ -1345,9 +1338,7 @@ mod tests {
         // Create a sentinel file outside the traversal directory
         let sentinel = temp_dir.path().join("sentinel");
         fs::write(&sentinel, "victim").unwrap();
-        let sentinel_mode = fs::symlink_metadata(&sentinel)
-            .unwrap()
-            .mode();
+        let sentinel_mode = fs::symlink_metadata(&sentinel).unwrap().mode();
 
         // Create a subdirectory with a symlink pointing to the sentinel
         let subdir = temp_dir.path().join("subdir");
@@ -1364,9 +1355,7 @@ mod tests {
         // which is acceptable — the important thing is the target is NOT modified.
         if let Ok(()) = result {
             // fchmodat2 succeeded: verify sentinel mode is unchanged
-            let new_sentinel_mode = fs::symlink_metadata(&sentinel)
-                .unwrap()
-                .mode();
+            let new_sentinel_mode = fs::symlink_metadata(&sentinel).unwrap().mode();
             assert_eq!(
                 new_sentinel_mode, sentinel_mode,
                 "sentinel mode should not change when chmod'ing symlink with NoFollow"
