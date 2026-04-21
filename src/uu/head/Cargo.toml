@@ -24,6 +24,7 @@ memchr = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "parser-size",
+  "pipes",
   "ringbuffer",
   "lines",
   "fs",
