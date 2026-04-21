@@ -11,6 +11,7 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
@@ -36,7 +37,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
-    let verbose = matches.get_flag(OPT_VERBOSE) || env::var("POSIXLY_CORRECT").is_ok();
+    let verbose = matches.get_flag(OPT_VERBOSE) || *IS_POSIXLY_CORRECT;
 
     // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
     // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,
@@ -192,3 +193,6 @@ fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
     }
     stdout().flush()
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
