@@ -197,8 +197,8 @@ impl MultiWriter {
         let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
             let res = (|| {
-                writer.write_all(buf)?;
-                writer.flush()
+                writer.inner.write_all(buf)?;
+                writer.inner.flush()
             })();
             match res {
                 Ok(()) => true,
@@ -272,16 +272,6 @@ impl Write for Writer {
 struct NamedWriter {
     inner: Writer,
     pub name: OsString,
-}
-
-impl Write for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
 }
 
 struct NamedReader {
