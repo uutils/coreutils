@@ -2901,7 +2901,10 @@ fn test_mv_cross_device_symlink_onto_existing() {
         fs::read_link(&dst_path).expect("read_link failed"),
         Path::new("/etc/passwd"),
     );
-    assert!(!at.symlink_exists("src_link"), "source symlink should be gone");
+    assert!(
+        !at.symlink_exists("src_link"),
+        "source symlink should be gone"
+    );
 }
 
 /// Cross-device mv of a symlink onto an existing *directory* destination

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default
+// spell-checker:ignore getxattr posix_acl_default ENOTSUP EOPNOTSUPP
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
@@ -13,20 +13,81 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
+/// Returns true if the error is the kernel/filesystem signaling that
+/// extended attributes are not supported (`ENOTSUP` / `EOPNOTSUPP`).
+/// On Linux these are the same errno; on the BSDs they differ, so we
+/// match on either.
+#[cfg(unix)]
+fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+    matches!(
+        err.raw_os_error(),
+        Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
+    )
+}
+
+#[cfg(not(unix))]
+fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+    false
+}
+
 /// Copies extended attributes (xattrs) from one file or directory to another.
+///
+/// Returns `Ok(())` if the destination filesystem signals that xattrs are
+/// not supported (`ENOTSUP` / `EOPNOTSUPP`), since cross-filesystem moves
+/// onto e.g. tmpfs without xattr support are a legitimate scenario. All
+/// other errors propagate so the caller can surface (for example)
+/// permission failures on `security.*` namespaces.
 ///
 /// # Arguments
 ///
 /// * `source` - A reference to the source path.
 /// * `dest` - A reference to the destination path.
-///
-/// # Returns
-///
-/// A result indicating success or failure.
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    for attr_name in xattr::list(&source)? {
+    let attrs = match xattr::list(&source) {
+        Ok(a) => a,
+        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for attr_name in attrs {
         if let Some(value) = xattr::get(&source, &attr_name)? {
-            xattr::set(&dest, &attr_name, &value)?;
+            if let Err(e) = xattr::set(&dest, &attr_name, &value) {
+                if is_xattr_unsupported(&e) {
+                    return Ok(());
+                }
+                return Err(e);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Copies extended attributes between two open file descriptors.
+///
+/// Unlike [`copy_xattrs`], which re-resolves `source` and `dest` paths on
+/// every syscall (leaving a TOCTOU window a concurrent renamer could
+/// exploit to redirect individual list/get/set calls to different
+/// inodes), this variant operates on pinned file descriptors so every
+/// xattr read is from the same inode and every write goes to the same
+/// inode. See issue #10014.
+///
+/// `ENOTSUP` / `EOPNOTSUPP` from the destination is treated as success,
+/// matching [`copy_xattrs`].
+#[cfg(unix)]
+pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
+    use xattr::FileExt;
+    let attrs = match source.list_xattr() {
+        Ok(a) => a,
+        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for attr_name in attrs {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            if let Err(e) = dest.set_xattr(&attr_name, &value) {
+                if is_xattr_unsupported(&e) {
+                    return Ok(());
+                }
+                return Err(e);
+            }
         }
     }
     Ok(())
@@ -198,6 +259,36 @@ mod tests {
 
         let copied_value = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied_value, test_value);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_xattrs_fd() {
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("source.txt");
+        let dest_path = temp_dir.path().join("dest.txt");
+
+        File::create(&source_path).unwrap();
+        File::create(&dest_path).unwrap();
+
+        let test_attr = "user.fd_test";
+        let test_value = b"fd value";
+        // If the filesystem doesn't support user xattrs (e.g. some CI runners
+        // on overlayfs), skip without failing.
+        if xattr::set(&source_path, test_attr, test_value).is_err() {
+            return;
+        }
+
+        let src = File::open(&source_path).unwrap();
+        let dst = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&dest_path)
+            .unwrap();
+
+        copy_xattrs_fd(&src, &dst).unwrap();
+
+        let copied = xattr::get(&dest_path, test_attr).unwrap().unwrap();
+        assert_eq!(copied, test_value);
     }
 
     #[test]

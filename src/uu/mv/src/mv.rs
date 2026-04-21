@@ -916,7 +916,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = copy_xattrs_if_supported(from, to);
+        let _ = fsxattr::copy_xattrs(from, to);
     }
     // Preserve ownership (uid/gid) from the source symlink
     let _ = preserve_ownership(from, to);
@@ -1239,7 +1239,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = copy_xattrs_if_supported(from, to);
+            let _ = fsxattr::copy_xattrs(from, to);
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1282,20 +1282,62 @@ fn rename_file_fallback(
         }
     }
 
-    // Regular file copy
-    fs::copy(from, to)
-        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-
-    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        let _ = copy_xattrs_if_supported(from, to);
-    }
-
-    // Preserve ownership (uid/gid) from the source file
+    // Regular file copy. On Unix, we open source and destination via the
+    // shared `uucore::safe_copy` helpers and keep the file descriptors alive
+    // across the content copy, mode restoration, and xattr copy. This pins
+    // both inodes so a concurrent path renamer cannot redirect later xattr
+    // list/get/set syscalls to different inodes (issue #10014). Both opens
+    // use O_NOFOLLOW so the same path-swap-to-symlink TOCTOU that cp #10017
+    // closes for cp's regular-file path is closed here for mv too — on the
+    // source so we don't read through an attacker-planted symlink, and on
+    // the dest so a planted symlink can't redirect the truncate and write
+    // to a victim file the caller has permission to write.
+    //
+    // `std::io::copy` has a File→File specialization that uses
+    // `copy_file_range`/`sendfile` on Linux, so this is roughly as fast as
+    // `fs::copy` and not a regression for large files.
     #[cfg(unix)]
     {
+        use std::fs::Permissions;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use uucore::safe_copy::{create_dest_restrictive, open_source};
+        let src_file = open_source(from, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let src_mode = src_file
+            .metadata()
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
+            .mode()
+            & 0o7777;
+        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        io::copy(&mut &src_file, &mut dst_file)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
+        // Copy xattrs on the pinned fds. Errors are best-effort to match
+        // the previous path-based behavior; filesystems that don't support
+        // xattrs are a legal destination for cross-device moves.
+        #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+        {
+            let _ = fsxattr::copy_xattrs_fd(&src_file, &dst_file);
+        }
+
+        // Preserve ownership (uid/gid) before applying the final mode.
+        // chown(2) clears S_ISUID/S_ISGID for non-root callers, so applying
+        // the mode after the chown is the only way to faithfully preserve
+        // setuid/setgid bits — matching GNU mv / cp's ordering.
         let _ = preserve_ownership(from, to);
+
+        // Now widen to the source's full mode (including setuid/setgid/
+        // sticky). The restrictive 0o600 used at create_dest_restrictive()
+        // opened the dest narrowly so other users couldn't observe the
+        // file mid-copy.
+        let _ = dst_file.set_permissions(Permissions::from_mode(src_mode));
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::copy(from, to)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     }
 
     fs::remove_file(from)
@@ -1338,18 +1380,6 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
-/// These errors indicate the filesystem doesn't support extended attributes,
-/// which is acceptable when moving files across filesystems.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
-    match fsxattr::copy_xattrs(from, to) {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
-        Err(e) => Err(e),
-    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {
