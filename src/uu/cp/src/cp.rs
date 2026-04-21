@@ -1755,6 +1755,55 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     Ok(())
 }
 
+/// Copy the access and modification timestamps from `source_metadata` onto `dest`.
+/// If `dest` is a symlink, the symlink's own timestamps are set rather than the
+/// target's.
+///
+/// On WASI this calls `rustix::fs::utimensat` directly because `filetime`'s
+/// WASI backend panics in `from_last_{access,modification}_time`. `SystemTime`
+/// values are converted to `Timespec` against `UNIX_EPOCH`, matching WASI's
+/// `path_filestat_set_times` contract (unsigned nanosecond count — pre-epoch
+/// source times can't be represented).
+fn set_timestamps(source_metadata: &Metadata, dest: &Path) -> CopyResult<()> {
+    #[cfg(target_os = "wasi")]
+    {
+        use std::time::UNIX_EPOCH;
+        let to_timespec = |t: std::time::SystemTime| -> io::Result<rustix::fs::Timespec> {
+            let d = t
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
+            Ok(rustix::fs::Timespec {
+                tv_sec: d.as_secs() as i64,
+                tv_nsec: d.subsec_nanos() as i32,
+            })
+        };
+        let timestamps = rustix::fs::Timestamps {
+            last_access: to_timespec(source_metadata.accessed()?)?,
+            last_modification: to_timespec(source_metadata.modified()?)?,
+        };
+        let flags = if dest.is_symlink() {
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+        } else {
+            rustix::fs::AtFlags::empty()
+        };
+        rustix::fs::utimensat(rustix::fs::CWD, dest, &timestamps, flags)
+            .map_err(io::Error::from)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let atime = FileTime::from_last_access_time(source_metadata);
+        let mtime = FileTime::from_last_modification_time(source_metadata);
+        if dest.is_symlink() {
+            filetime::set_symlink_file_times(dest, atime, mtime)?;
+        } else {
+            filetime::set_file_times(dest, atime, mtime)?;
+        }
+        Ok(())
+    }
+}
+
 /// Copy the specified attributes from one path to another.
 /// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
 /// (used when -Z is specified to set the default context instead).
@@ -1835,51 +1884,8 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        #[cfg(target_os = "wasi")]
-        {
-            // `filetime`'s WASI backend panics in
-            // `from_last_{access,modification}_time`. Reach `utimensat` directly
-            // through `rustix`, converting `SystemTime` → `Timespec` via
-            // `UNIX_EPOCH` (which matches the `path_filestat_set_times` contract).
-            use std::time::UNIX_EPOCH;
-            let to_timespec = |t: std::time::SystemTime| -> io::Result<rustix::fs::Timespec> {
-                // Pre-epoch source times can't be represented by WASI's
-                // `path_filestat_set_times` (unsigned nanosecond count).
-                let d = t
-                    .duration_since(UNIX_EPOCH)
-                    .map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
-                Ok(rustix::fs::Timespec {
-                    tv_sec: d.as_secs() as _,
-                    tv_nsec: d.subsec_nanos() as _,
-                })
-            };
-            let timestamps = rustix::fs::Timestamps {
-                last_access: to_timespec(source_metadata.accessed()?)?,
-                last_modification: to_timespec(source_metadata.modified()?)?,
-            };
-            let flags = if dest.is_symlink() {
-                rustix::fs::AtFlags::SYMLINK_NOFOLLOW
-            } else {
-                rustix::fs::AtFlags::empty()
-            };
-            rustix::fs::utimensat(rustix::fs::CWD, dest, &timestamps, flags)
-                .map_err(io::Error::from)?;
-            Ok(())
-        }
-
-        #[cfg(not(target_os = "wasi"))]
-        {
-            let atime = FileTime::from_last_access_time(&source_metadata);
-            let mtime = FileTime::from_last_modification_time(&source_metadata);
-            if dest.is_symlink() {
-                filetime::set_symlink_file_times(dest, atime, mtime)?;
-            } else {
-                filetime::set_file_times(dest, atime, mtime)?;
-            }
-
-            Ok(())
-        }
+    handle_preserve(attributes.timestamps, || {
+        set_timestamps(&source_metadata, dest)
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
