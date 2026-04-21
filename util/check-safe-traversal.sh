@@ -159,7 +159,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv; do
+    for util in rm chmod chown chgrp du mv cp; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -217,6 +217,29 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv"; then
     echo "test" > test_mv_src/file.txt
     echo "test" > test_mv_src/sub/file2.txt
     check_utility "mv" "openat,renameat,newfstatat,rename" "openat" "test_mv_src test_mv_dst" "move_directory"
+fi
+
+# Test cp destination creation - must use a restrictive initial mode (0o600)
+# so the destination is never briefly readable by other users on a shared
+# directory before cp applies the final permissions. See issue #10011.
+if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
+    echo "cp_perm_test" > test_cp_src_perm
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        cp_cmd="$COREUTILS_BIN cp"
+    else
+        cp_cmd="$PROJECT_ROOT/target/${PROFILE}/cp"
+    fi
+    rm -f test_cp_dst_perm
+    strace -f -e trace=openat -o strace_cp_dest_perm.log \
+        $cp_cmd test_cp_src_perm test_cp_dst_perm 2>/dev/null || true
+    # The creation openat should carry mode 0600. Any wider mode (e.g. 0666
+    # masked by umask) reopens the window #10011 closed.
+    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
+        cat strace_cp_dest_perm.log
+        fail_immediately "cp must create the destination with mode 0600 (issue #10011)"
+    fi
+    echo "✓ cp creates destination with restrictive 0600 mode"
+    rm -f test_cp_src_perm test_cp_dst_perm
 fi
 
 echo ""

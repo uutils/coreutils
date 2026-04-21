@@ -5,14 +5,14 @@
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek
 
 use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::Read;
 use std::os::unix::fs::FileExt;
+use std::os::unix::fs::FileTypeExt;
 use std::os::unix::fs::MetadataExt;
-use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 use std::path::Path;
 use uucore::buf_copy;
-use uucore::mode::get_umask;
+use uucore::safe_copy::{create_dest_restrictive, safe_copy_file};
 use uucore::translate;
 
 use crate::{
@@ -58,11 +58,11 @@ where
     P: AsRef<Path>,
 {
     let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let dst_file = create_dest_restrictive(&dest, false)?;
     if ioctl_ficlone(dst_file, src_file).is_err() {
         return match fallback {
             CloneFallback::Error => Err(std::io::Error::last_os_error()),
-            CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+            CloneFallback::FSCopy => safe_copy_file(source, dest, false).map(|_| ()),
             CloneFallback::SparseCopy => sparse_copy(source, dest),
             CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
         };
@@ -114,7 +114,7 @@ where
     P: AsRef<Path>,
 {
     let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let dst_file = create_dest_restrictive(dest, false)?;
 
     let size = src_file.metadata()?.size();
     ftruncate(&dst_file, size)?;
@@ -149,7 +149,7 @@ where
     P: AsRef<Path>,
 {
     let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let dst_file = create_dest_restrictive(dest, false)?;
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
     ftruncate(&dst_file, size.try_into().unwrap())?;
@@ -208,12 +208,11 @@ where
     // TODO Update the code below to respect the case where
     // `--preserve=ownership` is not true.
     let mut src_file = File::open(&source)?;
-    let mode = 0o622 & !get_umask();
-    let mut dst_file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .mode(mode)
-        .open(&dest)?;
+    // Use the same restrictive initial mode as the regular file path so that
+    // the dest does not momentarily sit with broader perms. The `0o622 &
+    // !umask` form previously used here could still allow group/other write
+    // under a permissive umask. See #10011.
+    let mut dst_file = create_dest_restrictive(&dest, false)?;
 
     let dest_is_stream = is_stream(&dst_file.metadata()?);
     if !dest_is_stream {
@@ -258,7 +257,7 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+                    CopyMethod::FSCopy => safe_copy_file(source, dest, false).map(|_| ()),
                     _ => sparse_copy(source, dest),
                 }
             }
@@ -274,7 +273,7 @@ pub(crate) fn copy_on_write(
                 if let Ok(debug) = result {
                     copy_debug = debug;
                 }
-                std::fs::copy(source, dest).map(|_| ())
+                safe_copy_file(source, dest, false).map(|_| ())
             }
         }
         (ReflinkMode::Never, SparseMode::Auto) => {
@@ -293,7 +292,7 @@ pub(crate) fn copy_on_write(
 
                 match copy_method {
                     CopyMethod::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
-                    _ => std::fs::copy(source, dest).map(|_| ()),
+                    _ => safe_copy_file(source, dest, false).map(|_| ()),
                 }
             }
         }

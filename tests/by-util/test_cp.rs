@@ -7877,3 +7877,25 @@ fn test_cp_recursive_non_utf8_source() {
 
     assert!(at.plus("dir2").join("a").exists());
 }
+
+// Regression guard for issue #10011: cp now creates the destination with
+// mode 0o600 instead of the umask-derived 0o666, so another user in a
+// shared directory cannot open the file through its permissive initial
+// mode before cp applies the final permissions. The final mode must still
+// match the source mode masked by the running umask, so no user-visible
+// behavior changes.
+#[test]
+#[cfg(unix)]
+fn test_cp_final_mode_unchanged_after_restrictive_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.set_mode("src", 0o644);
+
+    ucmd.umask(0o022).arg("src").arg("dst").succeeds();
+
+    let mode = at.metadata("dst").mode() & 0o777;
+    assert_eq!(
+        mode, 0o644,
+        "dst final mode should match source & ~umask (got {mode:o})"
+    );
+}
