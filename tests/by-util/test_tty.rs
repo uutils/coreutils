@@ -95,3 +95,13 @@ fn test_version_pipe_no_stderr() {
     child.close_stdout();
     child.wait().unwrap().no_stderr();
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_help_version_dev_full_exit_code() {
+    use std::fs::OpenOptions;
+    for arg in ["--help", "--version"] {
+        let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+        new_ucmd!().arg(arg).set_stdout(dev_full).fails_with_code(3);
+    }
+}

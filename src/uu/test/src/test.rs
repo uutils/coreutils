@@ -51,9 +51,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     if binary_name.ends_with('[') {
         // If invoked as [ we should recognize --help and --version (but not -h or -v)
         if args.len() == 1 && (args[0] == "--help" || args[0] == "--version") {
-            uucore::clap_localization::handle_clap_result(
+            uucore::clap_localization::handle_clap_result_with_exit_code(
                 uu_app(),
                 std::iter::once(program).chain(args.into_iter()),
+                2,
             )?;
             return Ok(());
         }

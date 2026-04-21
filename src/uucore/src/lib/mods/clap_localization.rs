@@ -11,7 +11,7 @@
 //! instead of parsing error strings, providing a more robust solution.
 //!
 
-use crate::error::{UResult, USimpleError};
+use crate::error::{UClapError, UResult, USimpleError};
 use crate::locale::translate;
 
 use clap::error::{ContextKind, ErrorKind};
@@ -442,10 +442,45 @@ where
 {
     cmd.try_get_matches_from(itr).map_err(|e| {
         if e.exit_code() == 0 {
-            e.into() // Preserve help/version
+            // For help/version display, use exit_code as the write failure code so that
+            // if stdout is full (e.g., /dev/full), the program exits with the utility's
+            // expected error code rather than the default 1.
+            e.with_exit_code(exit_code).into()
         } else {
             let formatter = ErrorFormatter::new(crate::util_name());
             let code = formatter.print_error(&e, exit_code);
+            USimpleError::new(code, "")
+        }
+    })
+}
+
+/// Like [`handle_clap_result_with_exit_code`], but allows specifying separate exit codes for
+/// argument parse errors and for write failures when printing help/version output.
+///
+/// This is useful for utilities that use different exit codes for I/O errors vs. argument
+/// parse errors (e.g., `tty` exits 3 on write errors but 2 on argument parse errors).
+pub fn handle_clap_result_with_exit_codes<I, T>(
+    cmd: Command,
+    itr: I,
+    parse_error_code: i32,
+    write_failure_code: i32,
+) -> UResult<ArgMatches>
+where
+    I: IntoIterator<Item = T>,
+    T: Into<OsString> + Clone,
+{
+    cmd.try_get_matches_from(itr).map_err(|e| {
+        if e.exit_code() == 0 {
+            // For DisplayHelp/DisplayVersion, ClapErrorWrapper::code() ignores the `code` field
+            // and returns either 0 (success) or `write_failure_code` (on stdout write failure).
+            // We pass `parse_error_code` to `with_exit_code` only to satisfy the constructor;
+            // the actual success/failure distinction is driven by `write_failure_code`.
+            e.with_exit_code(parse_error_code)
+                .with_write_failure_code(write_failure_code)
+                .into()
+        } else {
+            let formatter = ErrorFormatter::new(crate::util_name());
+            let code = formatter.print_error(&e, parse_error_code);
             USimpleError::new(code, "")
         }
     })

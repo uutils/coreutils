@@ -1,0 +1,17 @@
+Index: gnu/tests/help/help-version.sh
+===================================================================
+--- gnu.orig/tests/help/help-version.sh
++++ gnu/tests/help/help-version.sh
+@@ -56,9 +56,9 @@ expected_failure_status_fgrep=2
+ test "$built_programs" \
+   || fail_ "built_programs not specified!?!"
+
+-test "$VERSION" \
+-  || fail_ "set envvar VERSION; it is required for a PATH sanity-check"
+-
++# Extract VERSION dynamically from first program's output for uutils
++for i in $built_programs; do
++  VERSION=$(env $i --version | sed -n '1s/.* //p;q'); break; done
+ # Extract version from --version output of the first program
+ for i in $built_programs; do
+   v=$(env $i --version | sed -n '1s/.* //p;q')
