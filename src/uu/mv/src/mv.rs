@@ -1254,16 +1254,22 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
-    // Remove existing target file if it exists
+    // If the destination is a symlink, remove it first so the subsequent
+    // `fs::copy` does not follow the symlink and write to the target. The
+    // remaining race window (between this unlink and the open inside
+    // `fs::copy`) matches GNU mv; the separate pre-copy unlink of regular
+    // files was an additional window unique to uutils and has been removed.
+    // See issue #10015.
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
             let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
             io::Error::new(err.kind(), inter_device_msg)
         })?;
-    } else if to.exists() {
-        // For non-symlinks, just remove the file without special error handling
-        fs::remove_file(to)?;
     }
+    // For regular-file destinations we intentionally do NOT unlink here.
+    // `fs::copy` opens with `O_WRONLY|O_CREAT|O_TRUNC`, which truncates an
+    // existing regular file in place — matching GNU mv and avoiding the
+    // extra unlink/copy race window.
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
     #[cfg(unix)]
