@@ -5,10 +5,7 @@
 
 //! Buffer-based copying implementation for Linux and Android.
 
-use crate::{
-    error::UResult,
-    pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact},
-};
+use crate::error::UResult;
 
 /// Buffer-based copying utilities for unix (excluding Linux).
 use std::{
@@ -53,7 +50,8 @@ where
 {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
-    if !splice_write(src, dest)? {
+    // todo: bypass broker pipe this if input or output is pipe. We use this mostly for stream.
+    if !crate::pipes::splice_unbounded_broker(src, dest)? {
         return Ok(());
     }
 
@@ -67,44 +65,4 @@ where
     // is required here.
     dest.flush()?;
     Ok(())
-}
-
-/// Write from source `handle` into destination `write_fd` using Linux-specific
-/// `splice` system call.
-///
-/// # Arguments
-/// - `source` - source handle
-/// - `dest` - destination handle
-#[inline]
-pub(crate) fn splice_write<R, S>(source: &R, dest: &mut S) -> UResult<bool>
-where
-    R: Read + AsFd + AsRawFd,
-    S: AsRawFd + AsFd + Write,
-{
-    let (pipe_rd, pipe_wr) = pipe()?; // todo: bypass this if input or output is pipe. We use this mostly for stream.
-    // improve throughput
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = rustix::pipe::fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
-
-    loop {
-        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(false),
-            Ok(n) => {
-                if splice_exact(&pipe_rd, dest, n).is_err() {
-                    // If the first splice manages to copy to the intermediate
-                    // pipe, but the second splice to stdout fails for some reason
-                    // we can recover by copying the data that we have from the
-                    // intermediate pipe to stdout using normal read/write. Then
-                    // we tell the caller to fall back.
-                    let mut drain = Vec::with_capacity(n); // bounded by pipe size
-                    pipe_rd.take(n as u64).read_to_end(&mut drain)?;
-                    dest.write_all(&drain)?;
-                    return Ok(true);
-                }
-            }
-            Err(_) => return Ok(true),
-        }
-    }
 }

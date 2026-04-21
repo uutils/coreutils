@@ -86,6 +86,48 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
     rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
 }
 
+/// force-splice source to dest even both of them are not pipe
+/// return true if we need read/write fallback
+///
+/// This should not be used if one of them are pipe to save resources
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+where
+    R: Read + AsFd,
+    S: AsFd + std::io::Write,
+{
+    static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
+    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe().ok()).as_ref() else {
+        return Ok(true);
+    };
+    // improve throughput
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+
+    loop {
+        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(false),
+            Ok(n) => {
+                if splice_exact(&pipe_rd, dest, n).is_err() {
+                    // If the first splice manages to copy to the intermediate
+                    // pipe, but the second splice to stdout fails for some reason
+                    // we can recover by copying the data that we have from the
+                    // intermediate pipe to stdout using normal read/write. Then
+                    // we tell the caller to fall back.
+                    let mut drain = Vec::with_capacity(n); // bounded by pipe size
+                    pipe_rd.take(n as u64).read_to_end(&mut drain)?;
+                    dest.write_all(&drain)?;
+                    return Ok(true);
+                }
+            }
+            Err(_) => return Ok(true),
+        }
+    }
+}
+
 /// splice `n` bytes with safe read/write fallback
 /// return actually sent bytes
 #[inline]
@@ -129,6 +171,7 @@ pub fn send_n_bytes(
         .get_or_init(|| pipe_with_size(pipe_size).ok())
         .as_ref()
     {
+        // todo: create fn splice_bounded_broker
         loop {
             match splice(&input, &broker_w, n as usize) {
                 Ok(0) => break might_fuse(&input),
