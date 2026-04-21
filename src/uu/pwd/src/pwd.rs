@@ -8,6 +8,7 @@ use clap::{Arg, Command};
 use std::env;
 use std::io;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
@@ -115,7 +116,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // We should get c in this case instead of a/b at the end of the path
     let cwd = if matches.get_flag(OPT_PHYSICAL) {
         physical_path()
-    } else if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+    } else if matches.get_flag(OPT_LOGICAL) || *IS_POSIXLY_CORRECT {
         logical_path()
     } else {
         physical_path()
@@ -161,3 +162,6 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
