@@ -1248,6 +1248,20 @@ pub fn list_with_output<O: LsOutput>(
     Ok(())
 }
 
+/// Build the path for the ".." entry of `parent`.
+///
+/// On WASI the sandbox may block access to ".." at the preopened root,
+/// so fall back to the parent path itself when its metadata can't be
+/// read. On other targets this is just `parent/..`.
+fn dotdot_path(parent: &Path) -> PathBuf {
+    let dotdot = parent.join("..");
+    #[cfg(target_os = "wasi")]
+    if dotdot.metadata().is_err() {
+        return parent.to_path_buf();
+    }
+    dotdot
+}
+
 fn collect_directory_entries<O: LsOutput>(
     entries: &mut Vec<PathData>,
     path_data: &PathData,
@@ -1266,7 +1280,7 @@ fn collect_directory_entries<O: LsOutput>(
             false,
         ));
         entries.push(PathData::new(
-            path_data.path().join("..").into(),
+            dotdot_path(path_data.path()).into(),
             None,
             Some(OsStr::new("..").into()),
             config,
