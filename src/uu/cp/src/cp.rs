@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -921,13 +921,15 @@ impl Attributes {
         xattr: Preserve::No { explicit: false },
     };
 
-    // TODO: ownership is required if the user is root, for non-root users it's not required.
+    // xattr is intentionally NOT in DEFAULT — GNU `cp -p` only preserves
+    // mode, ownership, and timestamps. Default xattr preservation leaks
+    // capability / SELinux labels into copies and fails hard on filesystems
+    // without xattr support. See issue #9704.
     pub const DEFAULT: Self = Self {
         #[cfg(unix)]
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
         ..Self::NONE
     };
 
@@ -1829,6 +1831,14 @@ pub(crate) fn copy_attributes(
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
+            // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
+            // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
+            // so we keep ACL parity with GNU without preserving user xattrs
+            // (which are intentionally excluded from the default -p set per
+            // issue #9704). Best-effort: ignore failures on filesystems that
+            // do not support ACL xattrs.
+            #[cfg(all(unix, not(target_os = "android")))]
+            copy_acls(source, dest);
         }
 
         Ok(())

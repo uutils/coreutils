@@ -1768,6 +1768,47 @@ fn test_cp_preserve_all() {
     }
 }
 
+// GNU `cp -p` preserves mode, ownership, and timestamps but NOT xattrs.
+// xattr preservation requires explicit `--preserve=xattr` or `-a`. See #9704.
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "openbsd", target_os = "macos"))
+))]
+fn test_cp_p_does_not_preserve_xattr_by_default() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    let xattr_key = "user.test_preserve_p";
+    let setfattr = Command::new("setfattr")
+        .args(["-n", xattr_key, "-v", "v", &at.plus_as_string("src")])
+        .status();
+    match setfattr {
+        Ok(s) if s.success() => {}
+        _ => {
+            println!("test skipped: setfattr not available / filesystem rejects xattrs");
+            return;
+        }
+    }
+
+    scene
+        .ucmd()
+        .args(&["-p", &at.plus_as_string("src"), &at.plus_as_string("dst")])
+        .succeeds();
+
+    let out = Command::new("getfattr")
+        .args(["--only-values", "-n", xattr_key, &at.plus_as_string("dst")])
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        !out.status.success(),
+        "cp -p should not preserve xattrs by default, but '{xattr_key}' was copied"
+    );
+}
+
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
