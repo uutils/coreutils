@@ -3,11 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore reflink
-use std::fs::File;
 use std::path::Path;
 
 use uucore::buf_copy;
-use uucore::safe_copy::create_dest_restrictive;
+use uucore::safe_copy::{create_dest_restrictive, open_source};
 use uucore::translate;
 
 use crate::{
@@ -23,6 +22,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_stream: bool,
+    nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if reflink_mode != ReflinkMode::Never {
         return Err(translate!("cp-error-reflink-not-supported")
@@ -41,8 +41,10 @@ pub(crate) fn copy_on_write(
     };
 
     if source_is_stream {
-        let mut src_file = File::open(source)?;
-        let mut dst_file = create_dest_restrictive(dest, false)?;
+        let mut src_file = open_source(source, nofollow)
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        let mut dst_file = create_dest_restrictive(dest, false)
+            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 
         let dest_is_stream = is_stream(&dst_file.metadata()?);
         if !dest_is_stream {
@@ -57,13 +59,14 @@ pub(crate) fn copy_on_write(
         return Ok(copy_debug);
     }
 
-    // Equivalent of fs::copy but creates dest with DEST_INITIAL_MODE rather
-    // than the default umask-derived 0o666, closing the window where another
-    // user could read/write dest before cp applies the final permissions.
+    // Replacement for fs::copy: restrictive 0o600 dest mode (#10011) and
+    // O_NOFOLLOW on the *source* under -P (#10017). The destination open
+    // intentionally does not use O_NOFOLLOW so that an existing symlink at
+    // dest is followed, matching GNU cp.
     let mut src_file =
-        File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let mut dst_file =
-        create_dest_restrictive(dest, false).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let mut dst_file = create_dest_restrictive(dest, false)
+        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
     std::io::copy(&mut src_file, &mut dst_file)
         .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
 

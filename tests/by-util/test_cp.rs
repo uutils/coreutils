@@ -3036,8 +3036,6 @@ fn test_cp_symlink_overwrite_detection() {
         .fails()
         .stderr_only(if cfg!(target_os = "windows") {
             "cp: will not copy 'good/README' through just-created symlink 'tmp\\README'\n"
-        } else if cfg!(target_os = "macos") {
-            "cp: will not overwrite just-created 'tmp/README' with 'good/README'\n"
         } else {
             "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n"
         });
@@ -7897,5 +7895,94 @@ fn test_cp_final_mode_unchanged_after_restrictive_create() {
     assert_eq!(
         mode, 0o644,
         "dst final mode should match source & ~umask (got {mode:o})"
+    );
+}
+
+// Sanity check for the `-P` happy path: a symlink source is copied as a
+// symlink, not by following it. The actual `O_NOFOLLOW` invariant for
+// issue #10017 (path swap to a symlink between lstat and open) cannot be
+// raced deterministically from a unit test; that is locked in by the
+// strace check in util/check-safe-traversal.sh, which fails if a future
+// change drops `O_NOFOLLOW` from the source open under `-P`.
+#[test]
+#[cfg(unix)]
+fn test_cp_no_dereference_copies_symlink_as_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("target", "secret target contents");
+    at.symlink_file("target", "src_link");
+
+    ucmd.arg("-P").arg("src_link").arg("dst").succeeds();
+    assert!(at.symlink_exists("dst"));
+    assert!(at.read_symlink("dst").ends_with("target"));
+}
+
+// Regression for GNU tests/cp/deref-slink: when the destination exists as
+// a symlink, `cp -d` (which implies --no-dereference for the source) must
+// still follow the destination symlink and overwrite the link's target.
+// `-P`/`-d` only forbids dereferencing on the source side; applying
+// O_NOFOLLOW to the dest open broke this and surfaced as ELOOP.
+#[test]
+#[cfg(unix)]
+fn test_cp_d_overwrites_existing_symlink_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.touch("slink-target");
+    at.symlink_file("slink-target", "slink");
+
+    ucmd.arg("-d").arg("f").arg("slink").succeeds();
+
+    // The destination symlink itself remains a symlink (GNU follows it
+    // through to the target rather than replacing it).
+    assert!(at.symlink_exists("slink"));
+    assert!(at.read_symlink("slink").ends_with("slink-target"));
+}
+
+// Regression for GNU tests/cp/acl: `cp -p` must preserve POSIX ACLs on
+// Linux. ACLs are part of GNU's `mode` preservation, not its `xattr`
+// preservation, so the default-no-xattr change in #9704 must not strip
+// them. Only runs when `setfacl` is available so non-ACL filesystems and
+// non-Linux CI do not flag spurious failures.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_p_preserves_posix_acls() {
+    use std::process::Command;
+
+    if Command::new("setfacl").arg("--version").output().is_err() {
+        return;
+    }
+    if Command::new("getfacl").arg("--version").output().is_err() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+
+    let setfacl = Command::new("setfacl")
+        .arg("-m")
+        .arg("user:bin:rw-")
+        .arg(at.plus("src"))
+        .status();
+    let Ok(status) = setfacl else { return };
+    if !status.success() {
+        // Filesystem doesn't support ACLs; skip.
+        return;
+    }
+
+    ucmd.arg("-p").arg("src").arg("dst").succeeds();
+
+    let src_acl = Command::new("getfacl")
+        .arg("--omit-header")
+        .arg(at.plus("src"))
+        .output()
+        .unwrap();
+    let dst_acl = Command::new("getfacl")
+        .arg("--omit-header")
+        .arg(at.plus("dst"))
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&src_acl.stdout),
+        String::from_utf8_lossy(&dst_acl.stdout),
+        "cp -p must preserve POSIX ACLs (GNU tests/cp/acl regression)",
     );
 }

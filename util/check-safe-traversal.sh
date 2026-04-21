@@ -219,27 +219,40 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv"; then
     check_utility "mv" "openat,renameat,newfstatat,rename" "openat" "test_mv_src test_mv_dst" "move_directory"
 fi
 
-# Test cp destination creation - must use a restrictive initial mode (0o600)
-# so the destination is never briefly readable by other users on a shared
-# directory before cp applies the final permissions. See issue #10011.
+# cp invariant checks. Both #10011 (restrictive 0600 destination mode) and
+# #10017 (O_NOFOLLOW on the -P source) need to hold; verify each on its own
+# strace.
 if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
-    echo "cp_perm_test" > test_cp_src_perm
     if [ "$USE_MULTICALL" -eq 1 ]; then
         cp_cmd="$COREUTILS_BIN cp"
     else
         cp_cmd="$PROJECT_ROOT/target/${PROFILE}/cp"
     fi
+
+    # #10011: destination created with mode 0600 so other users cannot open
+    # the file through its umask-derived initial mode before cp narrows it.
+    echo "cp_perm_test" > test_cp_src_perm
     rm -f test_cp_dst_perm
     strace -f -e trace=openat -o strace_cp_dest_perm.log \
         $cp_cmd test_cp_src_perm test_cp_dst_perm 2>/dev/null || true
-    # The creation openat should carry mode 0600. Any wider mode (e.g. 0666
-    # masked by umask) reopens the window #10011 closed.
     if ! grep -qE 'openat\(AT_FDCWD, "test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
         cat strace_cp_dest_perm.log
         fail_immediately "cp must create the destination with mode 0600 (issue #10011)"
     fi
     echo "✓ cp creates destination with restrictive 0600 mode"
     rm -f test_cp_src_perm test_cp_dst_perm
+
+    # #10017: -P opens source with O_NOFOLLOW so a path swap to a symlink
+    # between the lstat check and the open cannot redirect the copy.
+    echo "cp_nofollow_test" > test_cp_src
+    strace -f -e trace=openat -o strace_cp_nofollow.log \
+        $cp_cmd -P test_cp_src test_cp_dst 2>/dev/null || true
+    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
+        cat strace_cp_nofollow.log
+        fail_immediately "cp -P must open the source with O_NOFOLLOW (issue #10017)"
+    fi
+    echo "✓ cp -P opens source with O_NOFOLLOW"
+    rm -f test_cp_src test_cp_dst
 fi
 
 echo ""

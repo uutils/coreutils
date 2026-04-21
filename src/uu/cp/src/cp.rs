@@ -2274,6 +2274,7 @@ fn handle_copy_mode(
                 context,
                 source_metadata,
                 symlinked_files,
+                source_in_command_line,
                 created_parent_dirs,
             )?;
         }
@@ -2294,6 +2295,7 @@ fn handle_copy_mode(
                             context,
                             source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
                         )?;
                     }
@@ -2327,6 +2329,7 @@ fn handle_copy_mode(
                             context,
                             source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
                         )?;
                     }
@@ -2339,6 +2342,7 @@ fn handle_copy_mode(
                     context,
                     source_metadata,
                     symlinked_files,
+                    source_in_command_line,
                     created_parent_dirs,
                 )?;
             }
@@ -2716,6 +2720,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
+#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,
@@ -2723,6 +2728,7 @@ fn copy_helper(
     context: &str,
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     if options.parents {
@@ -2753,6 +2759,14 @@ fn copy_helper(
     if source_metadata.is_symlink() {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
+        // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
+        // In that case source_metadata was obtained via lstat, so a path swap
+        // to a symlink between lstat and open must be refused to close the
+        // TOCTOU window described in issue #10017. In deref mode cp
+        // intentionally follows symlinks, matching GNU cp's behavior of
+        // applying O_NOFOLLOW here only with `-P`.
+        #[cfg(unix)]
+        let nofollow = !options.dereference(source_in_command_line);
         let copy_debug = copy_on_write(
             source,
             dest,
@@ -2761,6 +2775,8 @@ fn copy_helper(
             context,
             #[cfg(unix)]
             is_stream(source_metadata),
+            #[cfg(unix)]
+            nofollow,
         )?;
 
         if !options.attributes_only && options.debug {
