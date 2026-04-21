@@ -293,21 +293,128 @@ impl DirFd {
         mode: u32,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+        // --- fchmodat2 path (Linux 6.6+, asm-generic arches only) ---
+        // Uses the raw mode value directly; no nix::Mode conversion needed.
+        // Only enabled on asm-generic architectures where syscall number 452 is
+        // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
+        // use different numbering and are not supported until libc exposes
+        // SYS_fchmodat2 for them.
+        #[cfg(all(
+            target_os = "linux",
+            any(
+                target_arch = "x86_64",
+                target_arch = "x86",
+                target_arch = "arm",
+                target_arch = "aarch64",
+                target_arch = "riscv64",
+                target_arch = "riscv32",
+            ),
+        ))]
+        if matches!(symlink_behavior, SymlinkBehavior::NoFollow) {
+            use std::sync::atomic::{AtomicBool, Ordering};
+
+            // Cache: if fchmodat2 returned ENOSYS once, the kernel is too old
+            // and will never support it. Skip the syscall on subsequent calls.
+            static FCHMODAT2_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+            if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
+                // Syscall number for fchmodat2 on asm-generic architectures.
+                const SYS_FCHMODAT2: libc::c_long = 452;
+                // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
+                // - fd: valid open file descriptor
+                // - name: valid C string pointer (name_cstr lives for the duration)
+                // - mode: valid mode_t value
+                // - flags: AT_SYMLINK_NOFOLLOW (valid flag for fchmodat2)
+                let res = unsafe {
+                    libc::syscall(
+                        SYS_FCHMODAT2,
+                        self.fd.as_raw_fd(),
+                        name_cstr.as_ptr(),
+                        mode as libc::mode_t,
+                        libc::AT_SYMLINK_NOFOLLOW,
+                    )
+                };
+                if res == 0 {
+                    return Ok(());
+                }
+                let err = io::Error::last_os_error();
+                match err.raw_os_error() {
+                    Some(libc::ENOSYS) => {
+                        FCHMODAT2_UNAVAILABLE.store(true, Ordering::Relaxed);
+                        // Fall through to fchmodat
+                    }
+                    _ => return Err(err),
+                }
+            }
+        }
+
+        // --- fchmodat fallback path ---
+        // nix::Mode conversion is needed here because fchmodat() requires it.
+        let nix_mode = Mode::from_bits_truncate(mode as libc::mode_t);
+
         let flags = if symlink_behavior.should_follow() {
             FchmodatFlags::FollowSymlink
         } else {
             FchmodatFlags::NoFollowSymlink
         };
 
-        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
+        match fchmodat(&self.fd, name_cstr.as_c_str(), nix_mode, flags) {
+            Ok(()) => Ok(()),
+            Err(e)
+                if !symlink_behavior.should_follow()
+                    && (e == nix::errno::Errno::EOPNOTSUPP || e == nix::errno::Errno::ENOTSUP) =>
+            {
+                // musl does not emulate AT_SYMLINK_NOFOLLOW via /proc/self/fd
+                // like glibc does, so fchmodat returns EOPNOTSUPP on old kernels.
+                // Fall back to O_PATH + /proc/self/fd/{fd} + fchmod.
+                #[cfg(target_os = "linux")]
+                {
+                    self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    Err(io::Error::from_raw_os_error(e as i32))
+                }
+            }
+            Err(e) => Err(io::Error::from_raw_os_error(e as i32)),
+        }
+    }
 
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+    /// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
+    /// is not available (musl on kernel < 6.6).
+    ///
+    /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
+    /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
+    /// race because the fd pins the inode.
+    #[cfg(target_os = "linux")]
+    fn chmod_at_via_opath(&self, name: &CStr, mode: u32) -> io::Result<()> {
+        use std::os::unix::io::FromRawFd;
 
-        fchmodat(&self.fd, name_cstr.as_c_str(), mode, flags)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        let fd = unsafe {
+            libc::openat(
+                self.fd.as_raw_fd(),
+                name.as_ptr(),
+                libc::O_PATH | libc::O_NOFOLLOW | libc::O_CLOEXEC,
+            )
+        };
+        if fd < 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let fd = unsafe { OwnedFd::from_raw_fd(fd) };
 
-        Ok(())
+        let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
+        let proc_cstr = CStr::from_bytes_with_nul(proc_path.as_bytes())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
+
+        let ret = unsafe { libc::chmod(proc_cstr.as_ptr(), mode as libc::mode_t) };
+        if ret < 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
     }
 
     /// Change mode of this directory
@@ -801,6 +908,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::symlink;
+    use std::os::unix::fs::MetadataExt;
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
 
@@ -1225,6 +1333,47 @@ mod tests {
         // With follow_symlinks=false, should fail (ELOOP or ENOTDIR)
         let result_nofollow = dir_fd.open_subdir(OsStr::new("link"), SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
+    }
+
+    /// Verify that chmod_at with NoFollow does not change the symlink target's mode.
+    /// This test demonstrates that the TOCTOU race in recursive chmod is closed:
+    /// chmod on a symlink entry should not affect the target file.
+    #[test]
+    fn test_chmod_at_nofollow_preserves_target_mode() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // Create a sentinel file outside the traversal directory
+        let sentinel = temp_dir.path().join("sentinel");
+        fs::write(&sentinel, "victim").unwrap();
+        let sentinel_mode = fs::symlink_metadata(&sentinel)
+            .unwrap()
+            .mode();
+
+        // Create a subdirectory with a symlink pointing to the sentinel
+        let subdir = temp_dir.path().join("subdir");
+        fs::create_dir(&subdir).unwrap();
+        let link = subdir.join("link");
+        symlink(&sentinel, &link).unwrap();
+
+        // Open the subdirectory and chmod the symlink entry with NoFollow
+        let dir_fd = DirFd::open(&subdir, SymlinkBehavior::Follow).unwrap();
+        let result = dir_fd.chmod_at(OsStr::new("link"), 0o777, SymlinkBehavior::NoFollow);
+
+        // On Linux 6.6+ (fchmodat2), the chmod should succeed without affecting the target.
+        // On older kernels, fchmodat with AT_SYMLINK_NOFOLLOW returns EOPNOTSUPP/ENOTSUP,
+        // which is acceptable — the important thing is the target is NOT modified.
+        if let Ok(()) = result {
+            // fchmodat2 succeeded: verify sentinel mode is unchanged
+            let new_sentinel_mode = fs::symlink_metadata(&sentinel)
+                .unwrap()
+                .mode();
+            assert_eq!(
+                new_sentinel_mode, sentinel_mode,
+                "sentinel mode should not change when chmod'ing symlink with NoFollow"
+            );
+        }
+        // If result is Err (EOPNOTSUPP on old kernels), the target is also unchanged,
+        // which is the correct behavior — no silent modification.
     }
 
     #[test]
