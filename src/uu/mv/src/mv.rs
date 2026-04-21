@@ -903,7 +903,17 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to)?;
+
+    // Fast path: create the symlink directly. If the destination already
+    // exists, fall through to the atomic temp-and-rename path. Matches GNU
+    // mv, which replaces the existing destination. See issue #10010.
+    match unix::fs::symlink(&path_symlink_points_to, to) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            create_symlink_replace(&path_symlink_points_to, to)?;
+        }
+        Err(e) => return Err(e),
+    }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
         let _ = copy_xattrs_if_supported(from, to);
@@ -911,6 +921,64 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     // Preserve ownership (uid/gid) from the source symlink
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
+}
+
+/// Create a symlink at `to` pointing to `target`, replacing any existing
+/// file/symlink at `to` atomically. Creates the new symlink at a temp
+/// name in `to`'s parent directory, then renames it into place. `rename`
+/// is atomic on Linux, so a concurrent observer of `to` never sees it
+/// absent. See issue #10010.
+#[cfg(unix)]
+fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
+    use std::ffi::{OsStr, OsString};
+    use std::os::unix::ffi::OsStrExt;
+
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = to
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination path"))?;
+    let pid = std::process::id();
+
+    // Try a few times with a fresh nanos suffix on EEXIST. The pid+nanos
+    // pair is already unique in practice, but pid namespaces and clock
+    // coarsening can collide; retry rather than overwrite a stranger's
+    // temp file.
+    for _ in 0..8 {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+
+        // Build the temp name as raw bytes so non-UTF-8 basenames survive
+        // intact (no U+FFFD substitution). Truncate the basename so the
+        // total length stays under a conservative NAME_MAX of 255 bytes.
+        let prefix = format!(".mv-tmp-{pid}-{nanos}-");
+        let max_base_len = 255usize.saturating_sub(prefix.len());
+        let base_bytes = basename.as_bytes();
+        let base_slice = &base_bytes[..base_bytes.len().min(max_base_len)];
+        let mut tmp_name = OsString::from(prefix);
+        tmp_name.push(OsStr::from_bytes(base_slice));
+        let tmp_path = parent.join(&tmp_name);
+
+        match unix::fs::symlink(target, &tmp_path) {
+            Ok(()) => {
+                if let Err(e) = fs::rename(&tmp_path, to) {
+                    let _ = fs::remove_file(&tmp_path);
+                    return Err(e);
+                }
+                return Ok(());
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique temp name in destination directory",
+    ))
 }
 
 #[cfg(windows)]
