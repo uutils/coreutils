@@ -486,7 +486,7 @@ fn get_quoted_file_name(
 
 fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
     match *t {
-        Token::Byte(byte) => write_raw_byte(byte),
+        Token::Byte(byte) => print_raw_byte(byte),
         Token::Char(c) => print!("{c}"),
         Token::Directive {
             flag,
@@ -696,7 +696,7 @@ fn print_unsigned_hex(
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
-fn write_raw_byte(byte: u8) {
+fn print_raw_byte(byte: u8) {
     std::io::stdout().write_all(&[byte]).unwrap();
 }
 
@@ -1039,7 +1039,7 @@ impl Stater {
         _: bool,
     ) -> Result<(), i32> {
         match *t {
-            Token::Byte(byte) => write_raw_byte(byte),
+            Token::Byte(byte) => print_raw_byte(byte),
             Token::Char(c) => print!("{c}"),
 
             Token::Directive {
