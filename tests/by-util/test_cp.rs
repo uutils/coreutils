@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
 #[cfg(unix)]
 use rstest::rstest;
@@ -7896,6 +7896,28 @@ fn test_cp_preserve_context_with_z_fails() {
     ucmd.args(&["--preserve=context", "-Z", "src", "dst"])
         .fails()
         .stderr_contains("cannot combine");
+}
+
+// Covers the happy path for issue #9750: when chown succeeds (src owner ==
+// current user), `cp -p` preserves setuid/setgid. The failure-path behavior —
+// stripping setuid/setgid when chown cannot preserve ownership — requires a
+// multi-user setup (source owned by a different uid, cp run as non-root) and
+// is exercised by GNU's test suite; documenting here as future coverage.
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_setuid_when_chown_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.set_mode("src", 0o4755);
+
+    ucmd.arg("-p").arg("src").arg("dst").succeeds();
+
+    let mode = at.metadata("dst").mode() & 0o7777;
+    assert_eq!(
+        mode & 0o4000,
+        0o4000,
+        "setuid bit should be preserved when chown succeeds (got mode {mode:o})"
+    );
 }
 
 #[test]

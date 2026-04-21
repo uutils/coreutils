@@ -1780,6 +1780,14 @@ pub(crate) fn copy_attributes(
         attributes.mode
     };
 
+    // Track whether `chown` to the source's uid succeeded. If it did not
+    // (typical case: non-root user copying a root-owned setuid file), the
+    // mode preservation below must strip setuid/setgid so the destination
+    // does not give the copying user elevated privileges via the copy.
+    // Matches GNU cp. See issue #9750.
+    #[cfg(unix)]
+    let ownership_preserved = std::cell::Cell::new(true);
+
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
     handle_preserve(attributes.ownership, || -> CopyResult<()> {
@@ -1812,6 +1820,7 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
+            ownership_preserved.set(false);
             let _ = try_chown(None);
         }
         Ok(())
@@ -1824,7 +1833,23 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
+            #[cfg(unix)]
+            let source_perms = {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = source_metadata.permissions();
+                if !ownership_preserved.get() {
+                    // GNU cp strips setuid (04000) and setgid (02000) when
+                    // ownership could not be preserved. Keep the sticky bit
+                    // (01000) and all rwx bits.
+                    let mode = perms.mode() & !0o6000;
+                    perms.set_mode(mode);
+                }
+                perms
+            };
+            #[cfg(not(unix))]
+            let source_perms = source_metadata.permissions();
+
+            fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
