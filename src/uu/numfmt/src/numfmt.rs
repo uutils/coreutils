@@ -32,6 +32,7 @@ pub mod options;
 
 mod numeric;
 mod units;
+
 // Returns `true` if the input is in scientific notation
 fn is_scientific(input: &[u8]) -> bool {
     if let Some(pos) = input.iter().position(|&b| b == b'E' || b == b'e') {
@@ -73,10 +74,10 @@ fn format_and_write<W: std::io::Write>(
         match std::str::from_utf8(line) {
             Ok(s) => {
                 if is_scientific(s.as_bytes()) {
-                Err(format!(
-                    "invalid suffix in input: '{}'",
-                    String::from_utf8_lossy(line)
-                ))
+                    Err(format!(
+                        "invalid suffix in input: '{}'",
+                        String::from_utf8_lossy(line)
+                    ))
                 } else {
                     write_formatted_with_whitespace(dest, s, options, eol)
                 }
