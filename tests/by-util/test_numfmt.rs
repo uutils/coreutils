@@ -1470,3 +1470,46 @@ fn test_invalid_utf8_input() {
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
 }
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_output() {
+    // Output uses the locale separator
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1,5K\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_input_comma() {
+    // fr_FR should take '1,5' as a number
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1,5"])
+        .succeeds()
+        .stdout_is("1,500\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_rejects_period() {
+    // '.' isn't valid in fr_FR, should bail
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1.5"])
+        .fails()
+        .stderr_contains("invalid");
+}
+
+#[test]
+fn test_locale_c_uses_period() {
+    // C locale should still use '.' as usual
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1.5K\n");
+}
