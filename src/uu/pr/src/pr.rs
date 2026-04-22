@@ -503,7 +503,6 @@ fn get_date_format(matches: &ArgMatches) -> String {
     .to_string()
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -1188,7 +1187,6 @@ fn to_table_short_file(
     table
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,

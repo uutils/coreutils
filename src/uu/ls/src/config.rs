@@ -675,7 +675,7 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);

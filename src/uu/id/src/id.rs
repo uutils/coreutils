@@ -122,7 +122,6 @@ struct State {
 }
 
 #[uucore::main(no_signals)]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut lock = io::stdout().lock();

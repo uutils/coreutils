@@ -321,7 +321,6 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
     String::from_utf8(result).expect("produces ASCII bytes")
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> UResult<()> {
     // Compile the regular expression pattern if it is provided.
     let maybe_pattern = if regex {

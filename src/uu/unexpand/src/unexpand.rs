@@ -444,7 +444,6 @@ impl PrintState {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn unexpand_buf(
     buf: &[u8],
     output: &mut BufWriter<Stdout>,
