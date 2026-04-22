@@ -169,10 +169,10 @@ fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
     }
 
-    let normalized = if dec_sep != "." {
-        s.replace(dec_sep, ".")
-    } else {
+    let normalized = if dec_sep == "." {
         s.to_string()
+    } else {
+        s.replace(dec_sep, ".")
     };
 
     normalized
@@ -554,7 +554,11 @@ fn try_format_exact_int_without_suffix_scaling(
     Some(if precision == 0 {
         scaled.to_string()
     } else {
-        format!("{scaled}{}{}", locale_decimal_separator(), "0".repeat(precision))
+        format!(
+            "{scaled}{}{}",
+            locale_decimal_separator(),
+            "0".repeat(precision)
+        )
     })
 }
 
