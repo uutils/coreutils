@@ -195,7 +195,6 @@ impl MultiWriter {
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
         let mut aborted = None;
-        let mut errors = 0;
         let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
             let res = (|| {
@@ -205,14 +204,13 @@ impl MultiWriter {
             match res {
                 Ok(()) => true,
                 Err(e) => {
-                    if let Err(e) = process_error(mode, e, writer, &mut errors) {
+                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
                         aborted.get_or_insert(e);
                     }
                     false
                 }
             }
         });
-        self.ignored_errors += errors;
         aborted.map_or(
             if self.writers.is_empty() {
                 // This error kind will never be raised by the standard
