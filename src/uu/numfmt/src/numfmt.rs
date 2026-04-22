@@ -33,6 +33,19 @@ pub mod options;
 mod numeric;
 mod units;
 
+// Return `true` if the input is in scientific notation
+fn is_scientific(input: &[u8]) -> bool {
+    if let Some(pos) = input.iter().position(|&b| b == b'E' || b == b'e') {
+        if pos < input.len() - 1 {
+            if input[pos + 1].is_ascii_digit() {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 /// Format a single line and write it, handling `--invalid` error modes.
 ///
 /// Returns `true` if the line contained invalid input (only possible in
@@ -49,19 +62,6 @@ fn format_and_write<W: std::io::Write>(
         None => input_line,
     };
 
-    // Return false if the input is in scientific notation
-    if let Some(pos) = line.iter().position(|&b| b == b'E' || b == b'e') {
-        if pos < line.len() - 1 {
-            if line[pos + 1].is_ascii_digit() {
-                let err = format!(
-                    "invalid suffix in input: '{}'",
-                    String::from_utf8_lossy(line)
-                );
-                return Err(Box::new(NumfmtError::FormattingError(err)));
-            }
-        }
-    }
-
     // In non-abort modes we buffer the formatted output so that on error we
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
@@ -72,7 +72,16 @@ fn format_and_write<W: std::io::Write>(
         write_formatted_with_delimiter(dest, line, options, eol)
     } else {
         match std::str::from_utf8(line) {
-            Ok(s) => write_formatted_with_whitespace(dest, s, options, eol),
+            Ok(s) => {
+                if is_scientific(s.as_bytes()) {
+                    Err(translate!(
+                        "numfmt-error-invalid-number",
+                        "input" => escape_line(line).quote()
+                    ))
+                } else {
+                    write_formatted_with_whitespace(dest, s, options, eol)
+                }
+            }
             Err(_) => Err(translate!(
                 "numfmt-error-invalid-number",
                 "input" => escape_line(line).quote()
