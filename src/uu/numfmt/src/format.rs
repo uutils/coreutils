@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore powf seps
+// spell-checker:ignore powf seps replacen
 
 use uucore::display::Quotable;
 use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
