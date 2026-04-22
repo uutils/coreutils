@@ -37,15 +37,14 @@ use uucore::entries;
 use uucore::fsxattr::has_acl;
 #[cfg(any(
     target_os = "linux",
-    target_os = "macos",
     target_os = "android",
-    target_os = "ios",
     target_os = "freebsd",
     target_os = "dragonfly",
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "illumos",
-    target_os = "solaris"
+    target_os = "solaris",
+    target_vendor = "apple"
 ))]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
@@ -86,6 +85,10 @@ pub(crate) struct PaddingCollection {
     #[cfg(unix)]
     pub(crate) minor: usize,
     pub(crate) block_size: usize,
+    /// True if any listed item has an ACL or non-trivial security context,
+    /// which requires reserving one extra column for the `+`/`.` indicator
+    /// so link-count columns align across items with and without it.
+    pub(crate) has_alt_access: bool,
 }
 
 pub(crate) struct DisplayItemName {
@@ -626,15 +629,14 @@ fn display_date(
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
     #[cfg(any(
         target_os = "linux",
-        target_os = "macos",
         target_os = "android",
-        target_os = "ios",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
         target_os = "openbsd",
         target_os = "illumos",
-        target_os = "solaris"
+        target_os = "solaris",
+        target_vendor = "apple"
     ))]
     {
         let ft = metadata.file_type();
@@ -905,9 +907,10 @@ fn display_item_long(
             state.display_buf.push(b' ');
         }
 
-        state
-            .display_buf
-            .extend_pad_left(&display_symlink_count(md), padding.link_count);
+        state.display_buf.extend_pad_left(
+            &display_symlink_count(md),
+            padding.link_count + usize::from(padding.has_alt_access),
+        );
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1058,7 +1061,10 @@ fn display_item_long(
             state.display_buf.push(b'.');
         }
         state.display_buf.push(b' ');
-        state.display_buf.extend_pad_left("?", padding.link_count);
+        state.display_buf.extend_pad_left(
+            "?",
+            padding.link_count + usize::from(padding.has_alt_access),
+        );
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1146,7 +1152,12 @@ fn classify_file(path: &PathData) -> Option<char> {
 }
 
 fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
+    // The `hostname` crate does not support WASI (no OS-level hostname API),
+    // so we use an empty string for hyperlinks on WASI.
+    #[cfg(not(target_os = "wasi"))]
     static HOSTNAME: LazyLock<OsString> = LazyLock::new(|| hostname::get().unwrap_or_default());
+    #[cfg(target_os = "wasi")]
+    static HOSTNAME: LazyLock<OsString> = LazyLock::new(OsString::new);
 
     // OSC 8 hyperlink format: \x1b]8;;URL\x1b\\TEXT\x1b]8;;\x1b\\
     // \x1b = ESC, \x1b\\ = ESC backslash
@@ -1236,6 +1247,7 @@ fn calculate_padding_collection(
         major: 1,
         minor: 1,
         block_size: 1,
+        has_alt_access: false,
     };
 
     for item in items {
@@ -1267,7 +1279,8 @@ fn calculate_padding_collection(
                 padding_collections.context = context_len.max(padding_collections.context);
             }
 
-            // correctly align columns when some files have capabilities/ACLs and others do not
+            // Track whether any item has an ACL or non-trivial security context so
+            // rendering can reserve a single extra column for the `+`/`.` indicator.
             {
                 #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
                 // TODO: See how Mac should work here
@@ -1275,7 +1288,7 @@ fn calculate_padding_collection(
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
                 let is_acl_set = has_acl(item.display_name());
                 if context_len > 1 || is_acl_set {
-                    padding_collections.link_count += 1;
+                    padding_collections.has_alt_access = true;
                 }
             }
 
@@ -1316,6 +1329,7 @@ fn calculate_padding_collection(
         context: 1,
         size: 1,
         block_size: 1,
+        has_alt_access: false,
     };
 
     for item in items {

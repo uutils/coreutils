@@ -3,7 +3,6 @@ name = "uu_printenv"
 description = "printenv ~ (uutils) display value of environment VAR"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/printenv"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/printenv.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

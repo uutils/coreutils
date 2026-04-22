@@ -3,7 +3,6 @@ name = "uu_nproc"
 description = "nproc ~ (uutils) display the number of processing units available"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/nproc"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/nproc.rs"
+test = false
+doctest = false
 
 [dependencies]
 libc = { workspace = true }

@@ -1220,6 +1220,12 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                 (S::VDISCARD, "^O"),
             ];
         }
+        "tabs" => {
+            flags = vec!["tab0"];
+        }
+        "-tabs" => {
+            flags = vec!["tab3"];
+        }
         _ => unreachable!("invalid combination setting: must have been caught earlier"),
     }
     let mut flags = flags
@@ -1253,9 +1259,9 @@ fn get_sane_control_char(cc_index: S) -> u8 {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("stty")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("stty"))
         .override_usage(format_usage(&translate!("stty-usage")))
         .about(translate!("stty-about"))
         .infer_long_args(true)

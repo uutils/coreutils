@@ -451,19 +451,21 @@ fn test_is_dir() {
 
 #[test]
 fn test_sorted() {
-    let expected_stderr =
-        "comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n";
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("comm1", "1\n3");
     at.write("comm2", "3\n2");
-    scene
-        .ucmd()
-        .args(&["comm1", "comm2"])
-        .fails_with_code(1)
-        .stdout_is("1\n\t\t3\n\t2\n")
-        .stderr_is(expected_stderr);
+    let cmd = scene.ucmd().args(&["comm1", "comm2"]).run();
+    // WASI's strcoll (C locale only) may not detect unsorted input,
+    // but the comparison output is still correct.
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.success().stdout_is("1\n\t\t3\n\t2\n");
+    } else {
+        cmd.failure()
+            .code_is(1)
+            .stdout_is("1\n\t\t3\n\t2\n")
+            .stderr_is("comm: file 2 is not in sorted order\ncomm: input is not in sorted order\n");
+    }
 }
 
 #[test]
@@ -490,16 +492,19 @@ fn test_both_inputs_out_of_order() {
     at.write("file_a", "3\n1\n0\n");
     at.write("file_b", "3\n2\n0\n");
 
-    scene
-        .ucmd()
-        .args(&["file_a", "file_b"])
-        .fails_with_code(1)
-        .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
-        .stderr_is(
-            "comm: file 1 is not in sorted order\n\
-             comm: file 2 is not in sorted order\n\
-             comm: input is not in sorted order\n",
-        );
+    let cmd = scene.ucmd().args(&["file_a", "file_b"]).run();
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.success().stdout_is("\t\t3\n1\n0\n\t2\n\t0\n");
+    } else {
+        cmd.failure()
+            .code_is(1)
+            .stdout_is("\t\t3\n1\n0\n\t2\n\t0\n")
+            .stderr_is(
+                "comm: file 1 is not in sorted order\n\
+                 comm: file 2 is not in sorted order\n\
+                 comm: input is not in sorted order\n",
+            );
+    }
 }
 
 #[test]
@@ -509,16 +514,19 @@ fn test_both_inputs_out_of_order_last_pair() {
     at.write("file_a", "3\n1\n");
     at.write("file_b", "3\n2\n");
 
-    scene
-        .ucmd()
-        .args(&["file_a", "file_b"])
-        .fails_with_code(1)
-        .stdout_is("\t\t3\n1\n\t2\n")
-        .stderr_is(
-            "comm: file 1 is not in sorted order\n\
-             comm: file 2 is not in sorted order\n\
-             comm: input is not in sorted order\n",
-        );
+    let cmd = scene.ucmd().args(&["file_a", "file_b"]).run();
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.success().stdout_is("\t\t3\n1\n\t2\n");
+    } else {
+        cmd.failure()
+            .code_is(1)
+            .stdout_is("\t\t3\n1\n\t2\n")
+            .stderr_is(
+                "comm: file 1 is not in sorted order\n\
+                 comm: file 2 is not in sorted order\n\
+                 comm: input is not in sorted order\n",
+            );
+    }
 }
 
 #[test]
@@ -650,6 +658,7 @@ fn test_comm_eintr_handling() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_output_lossy_utf8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -675,6 +684,7 @@ fn test_output_lossy_utf8() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
     use std::{io::Write, os::fd::AsRawFd, process};
     use uucore::pipes::pipe;
@@ -714,6 +724,7 @@ fn test_comm_anonymous_pipes() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")

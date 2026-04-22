@@ -320,8 +320,12 @@ impl Parser {
     }
 
     fn parse_bytes(arg: &str, val: &str) -> Result<usize, ParseError> {
-        parse_bytes_with_opt_multiplier(val)?
-            .try_into()
+        let num = parse_bytes_with_opt_multiplier(val)?;
+
+        if num == 0 {
+            return Err(ParseError::InvalidNumber(val.to_string()));
+        }
+        num.try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }
 
@@ -524,8 +528,8 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
         parse_bytes_no_x(s, parts[0])
     } else {
         let mut total: u64 = 1;
-        for part in parts {
-            if part == "0" {
+        for (i, part) in parts.iter().enumerate() {
+            if *part == "0" && i != parts.len() - 1 {
                 show_zero_multiplier_warning();
             }
             let num = parse_bytes_no_x(s, part)?;

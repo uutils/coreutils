@@ -105,6 +105,13 @@ fn test_preserve_status() {
 }
 
 #[test]
+fn test_kill_after_preserves_timeout_exit_without_preserve_status() {
+    new_ucmd!()
+        .args(&["-k", "1", "1", "sleep", "10"])
+        .fails_with_code(124)
+        .no_output();
+}
+#[test]
 fn test_preserve_status_even_when_send_signal() {
     // When sending CONT signal, process doesn't get killed or stopped.
     // So, expected result is success and code 0.
@@ -272,6 +279,9 @@ fn test_forward_sigint_to_child() {
             "trap 'echo got_int; exit 42' INT; sleep 5",
         ])
         .run_no_wait();
+    #[cfg(target_os = "macos")]
+    cmd.delay(1000);
+    #[cfg(not(target_os = "macos"))]
     cmd.delay(100);
     cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGINT);
     cmd.make_assertion()
@@ -285,4 +295,22 @@ fn test_foreground_signal0_kill_after() {
     new_ucmd!()
         .args(&["--foreground", "-s0", "-k.1", ".1", "sleep", "10"])
         .fails_with_code(137);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_realtime_signal_names() {
+    // timeout should accept RTMIN and RTMAX as valid signal names
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "RTMIN", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMIN to command");
+    new_ucmd!()
+        .args(&["-v", "-s", "SIGRTMAX", ".1", "sleep", "1"])
+        .fails()
+        .stderr_contains("sending signal RTMAX to command");
 }

@@ -4,7 +4,6 @@ name = "uu_date"
 description = "date ~ (uutils) display or set the current time"
 repository = "https://github.com/uutils/coreutils/tree/main/src/date"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -18,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/date.rs"
+doctest = false
 
 [features]
 default = ["i18n-datetime"]
@@ -40,11 +40,11 @@ jiff = { workspace = true, features = [
   "tzdb-concatenated",
 ] }
 parse_datetime = { workspace = true }
-regex = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["time"] }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["time"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [

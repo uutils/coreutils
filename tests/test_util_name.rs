@@ -27,6 +27,32 @@ fn init() {
 }
 
 #[test]
+#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
+fn binary_name_protection() {
+    let ts = TestScenario::new("env");
+    let bin = ts.bin_path.clone();
+    ts.ucmd()
+        .arg("-a")
+        .arg("hijacked")
+        .arg(&bin)
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("coreutils");
+}
+
+#[test]
+fn test_coreutils_help_ignore_args() {
+    let scenario = TestScenario::new("help_ignoring_args");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg("--help")
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
+}
+
+#[test]
 #[cfg(feature = "ls")]
 fn execution_phrase_double() {
     use std::process::Command;

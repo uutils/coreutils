@@ -5,7 +5,6 @@ name = "uu_sort"
 description = "sort ~ (uutils) sort input lines"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -19,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/sort.rs"
+doctest = false
 
 [features]
 default = ["i18n-collator"]
@@ -42,11 +42,12 @@ uucore = { workspace = true, features = [
   "version-cmp",
   "i18n-decimal",
   "i18n-collator",
+  "i18n-datetime",
 ] }
 fluent = { workspace = true }
 foldhash = { workspace = true }
 
-[target.'cfg(not(target_os = "redox"))'.dependencies]
+[target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -61,6 +62,7 @@ uucore = { workspace = true, features = [
   "parser-size",
   "version-cmp",
   "i18n-collator",
+  "i18n-datetime",
 ] }
 
 [[bin]]

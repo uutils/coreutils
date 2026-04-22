@@ -649,8 +649,9 @@ fn test_follow_name_multiple() {
 
         #[cfg(target_os = "linux")]
         let delay = 100;
-        // unstable on macOS
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "macos")]
+        let delay = 2000;
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         let delay = 1000;
 
         child
@@ -5080,6 +5081,21 @@ fn test_child_when_run_with_stderr_to_stdout() {
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
+        .set_stdout(File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tail: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_write_is_reported_on_seekable_input() {
+    let ts = TestScenario::new("tail");
+    let at = &ts.fixtures;
+
+    at.write("bigfile", &"x\n".repeat(1_100_000));
+
+    ts.ucmd()
+        .arg("bigfile")
         .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");

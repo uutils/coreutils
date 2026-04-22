@@ -5,7 +5,6 @@ name = "uu_tac"
 description = "tac ~ (uutils) concatenate and display input lines in reverse order"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tac"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -19,6 +18,7 @@ workspace = true
 
 [lib]
 path = "src/tac.rs"
+doctest = false
 
 [dependencies]
 memchr = { workspace = true }

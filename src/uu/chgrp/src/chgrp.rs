@@ -98,7 +98,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("chgrp")
         .version(uucore::crate_version!())
         .about(translate!("chgrp-about"))
         .override_usage(format_usage(&translate!("chgrp-usage")))

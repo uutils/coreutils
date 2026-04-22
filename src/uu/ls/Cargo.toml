@@ -5,7 +5,6 @@ name = "uu_ls"
 description = "ls ~ (uutils) display directory contents"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -19,12 +18,12 @@ workspace = true
 
 [lib]
 path = "src/ls.rs"
+doctest = false
 
 [dependencies]
 ansi-width = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
-hostname = { workspace = true }
 lscolors = { workspace = true }
 rustc-hash = { workspace = true }
 selinux = { workspace = true, optional = true }
@@ -45,6 +44,10 @@ uucore = { workspace = true, features = [
 ] }
 uutils_term_grid = { workspace = true }
 fluent = { workspace = true }
+
+# hostname crate does not support WASI (no OS-level hostname API)
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+hostname = { workspace = true }
 
 [[bin]]
 name = "ls"

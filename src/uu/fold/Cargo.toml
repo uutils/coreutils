@@ -3,7 +3,6 @@ name = "uu_fold"
 description = "fold ~ (uutils) wrap each line of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fold"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/fold.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

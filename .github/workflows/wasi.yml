@@ -1,0 +1,67 @@
+# spell-checker:ignore wasip wasmtime
+name: WASI
+
+# spell-checker:ignore TRIGGERPATH
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test_wasi:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-wasip1
+    - uses: Swatinem/rust-cache@v2
+    - name: Install wasmtime
+      run: |
+        curl https://wasmtime.dev/install.sh -sSf | bash
+        echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
+    - name: Run unit tests
+      env:
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+      run: |
+        # Get all utilities and exclude ones that don't compile for wasm32-wasip1
+        EXCLUDE="dd|df|du|env|expr|mktemp|more|tac|test"
+        UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
+        cargo test --target wasm32-wasip1 --no-default-features $UTILS
+    - name: Run integration tests via wasmtime
+      env:
+        RUSTFLAGS: --cfg wasi_runner
+      run: |
+        # Build the WASI binary
+        cargo build --target wasm32-wasip1 --no-default-features --features feat_wasm
+        # Run host-compiled integration tests against the WASI binary.
+        # Tests incompatible with WASI are annotated with
+        # #[cfg_attr(wasi_runner, ignore)] in the test source files.
+        # TODO: add integration tests for these tools as WASI support is extended:
+        #   arch b2sum cat cksum cp csplit date dir dircolors fmt join ln
+        #   ls md5sum mkdir mv nproc pathchk pr printenv ptx pwd readlink
+        #   realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum
+        #   sha512sum shred sleep sort split tail touch tsort uname uniq
+        #   vdir yes
+        UUTESTS_BINARY_PATH="$(pwd)/target/wasm32-wasip1/debug/coreutils.wasm" \
+        UUTESTS_WASM_RUNNER=wasmtime \
+        cargo test --test tests -- \
+          test_base32:: test_base64:: test_basenc:: test_basename:: \
+          test_comm:: test_cut:: test_dirname:: test_echo:: \
+          test_expand:: test_factor:: test_false:: test_fold:: \
+          test_head:: test_link:: test_nl:: test_numfmt:: \
+          test_od:: test_paste:: test_printf:: test_shuf:: test_sum:: \
+          test_tee:: test_tr:: test_true:: test_truncate:: \
+          test_unexpand:: test_unlink:: test_wc::

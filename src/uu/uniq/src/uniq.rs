@@ -187,14 +187,11 @@ impl Uniq {
     }
 
     fn is_c_locale() -> bool {
-        for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
-            if let Some(v) = std::env::var_os(key) {
-                if !v.is_empty() {
-                    return v == "C" || v == "POSIX";
-                }
-            }
-        }
-        true
+        ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|&key| std::env::var_os(key))
+            .filter(|v| !v.is_empty())
+            .is_none_or(|v| v == "C" || v == "POSIX")
     }
 
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
@@ -655,7 +652,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(map_clap_errors(clap_error));
             }
             // Use ErrorFormatter directly to handle error
-            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            let formatter = uucore::clap_localization::ErrorFormatter::new("uniq");
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
     };
@@ -699,7 +696,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uniq")
         .version(uucore::crate_version!())
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))

@@ -6,6 +6,7 @@ curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --stri
 # TODO stop backporting tests from master at GNU coreutils > $ver
  backport=(
   misc/coreutils.sh # enable test
+  tee/tee.sh # input containing sleep
   misc/yes.sh # zero-copy
 )
  for f in "${backport[@]}"

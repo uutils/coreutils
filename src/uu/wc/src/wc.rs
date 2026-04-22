@@ -19,6 +19,7 @@ use std::{
     io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
@@ -297,12 +298,11 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use nix::sys::stat;
     use std::os::fd::AsFd;
 
     matches!(
-        stat::fstat(io::stdin().as_fd()),
-        Ok(meta) if meta.st_mode & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+        rustix::fs::fstat(io::stdin().as_fd()),
+        Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
     )
 }
 
@@ -393,7 +393,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("wc")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))
@@ -580,11 +580,11 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-    posixly_correct: bool,
+    is_posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if posixly_correct {
+            let is_space = if is_posixly_correct {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
                 ch.is_whitespace()
@@ -656,7 +656,7 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
+    let is_posixly_correct = *IS_POSIXLY_CORRECT;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -665,7 +665,7 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
-                    posixly_correct,
+                    is_posixly_correct,
                 );
             }
             Err(e) => {
@@ -1040,3 +1040,6 @@ fn print_stats(
     }
     writeln!(stdout)
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());

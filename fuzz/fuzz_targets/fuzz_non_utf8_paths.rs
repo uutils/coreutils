@@ -7,7 +7,7 @@
 
 #![no_main]
 use libfuzzer_sys::fuzz_target;
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::collections::HashSet;
 use std::env::temp_dir;

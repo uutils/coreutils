@@ -300,11 +300,12 @@ impl Sequence {
         set2_uniques.sort_unstable();
         set2_uniques.dedup();
 
+        let set1_has_class = set1.iter().any(|x| matches!(x, Self::Class(_)));
         // If the complement flag is used in translate mode, only one unique
         // character may appear in set2. Validate this with the set of uniques
         // in set2 that we just generated.
         // Also, set2 must not overgrow set1, otherwise the mapping can't be 1:1.
-        if set1.iter().any(|x| matches!(x, Self::Class(_)))
+        if set1_has_class
             && translating
             && complement_flag
             && (set2_uniques.len() > 1 || set2_solved.len() > set1_len)
@@ -314,7 +315,27 @@ impl Sequence {
 
         if set2_solved.len() < set1_solved.len() {
             if truncate_set1_flag {
-                set1_solved.truncate(set2_solved.len());
+                if complement_flag && set1_has_class {
+                    // GNU applies -t before complementing a character class.
+                    // That means we must first truncate the expanded, non-complemented
+                    // source set, then complement the truncated prefix to recover the
+                    // final translation domain.
+                    let truncated_set1: Vec<_> = set1
+                        .iter()
+                        .flat_map(Self::flatten)
+                        .take(set2_solved.len())
+                        .collect();
+                    set1_solved = (0..=u8::MAX)
+                        .filter(|x| !truncated_set1.contains(x))
+                        .collect();
+                    // After expansion the complemented domain may be larger than set2.
+                    // Re-check the complement validity constraint.
+                    if set2_uniques.len() > 1 || set1_solved.len() > set2_solved.len() {
+                        return Err(BadSequence::ComplementMoreThanOneUniqueInSet2);
+                    }
+                } else {
+                    set1_solved.truncate(set2_solved.len());
+                }
             } else if matches!(
                 set2.last().copied(),
                 Some(Self::Class(Class::Upper | Class::Lower))

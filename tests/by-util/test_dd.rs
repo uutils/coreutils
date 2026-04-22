@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname seekable fadvise FADV DONTNEED
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname fadvise FADV DONTNEED
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -113,6 +113,14 @@ fn version() {
 #[test]
 fn help() {
     new_ucmd!().args(&["--help"]).succeeds();
+}
+
+#[test]
+fn test_out_of_memory() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory"); //todo: improve error message at all platforms
 }
 
 #[test]
@@ -255,6 +263,13 @@ fn test_zero_multiplier_warning() {
             .succeeds()
             .no_stdout()
             .stderr_contains("warning: '0x' is a zero multiplier; use '00x' if that is intended");
+
+        new_ucmd!()
+            .args(&[format!("{arg}=0x0x0").as_str(), "status=none"])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
     }
 }
 
@@ -2091,4 +2106,18 @@ fn test_ascii_case_conversion_fallback() {
         .pipe_in(expected)
         .succeeds();
     assert_eq!(result.stdout(), input);
+}
+
+#[test]
+fn test_bs_not_positive() {
+    for bs in [-5, 0, 0x0] {
+        for bs_param in ["bs", "ibs", "obs", "cbs"] {
+            new_ucmd!()
+                .args(&[format!("{bs_param}={bs}")])
+                .fails()
+                .no_stdout()
+                .code_is(1)
+                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+        }
+    }
 }

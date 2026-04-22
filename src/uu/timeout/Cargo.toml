@@ -3,7 +3,6 @@ name = "uu_timeout"
 description = "timeout ~ (uutils) run COMMAND with a DURATION time limit"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/timeout"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/timeout.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
@@ -30,3 +31,11 @@ nix = { workspace = true, features = ["signal"] }
 [[bin]]
 name = "timeout"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "timeout_bench"
+harness = false

@@ -108,6 +108,16 @@ skip = [
   { name = "foldhash", version = "0.1.5" },
   # keccak, sha1, sha2
   { name = "cpufeatures", version = "0.2.17" },
+  # various crates
+  { name = "digest", version = "0.10.7" },
+  # digest
+  { name = "crypto-common", version = "0.1.7" },
+  # digest
+  { name = "block-buffer", version = "0.10.4" },
+  # parse_datetime
+  { name = "winnow", version = "0.7.15" },
+  # parking_lot_core
+  { name = "redox_syscall", version = "0.5.18" },
 ]
 # spell-checker: enable
 

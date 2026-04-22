@@ -192,9 +192,9 @@ enum PrError {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pr"))
         .about(translate!("pr-about"))
         .after_help(translate!("pr-after-help"))
         .override_usage(format_usage(&translate!("pr-usage")))
@@ -475,7 +475,7 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         let i = value_to_parse.0;
         let option = value_to_parse.1;
         i.parse().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid {option} argument {}", i.quote()),
+            msg: format!("invalid -{option} argument {}", i.quote()),
         })
     };
     matches
@@ -771,6 +771,11 @@ fn build_options(
             })
     });
     let start_column_option = match res {
+        Some(Ok(0)) => {
+            return Err(PrError::EncounteredErrors {
+                msg: "invalid --column argument '0'".to_string(),
+            });
+        }
         Some(res) => Some(res?),
         None => None,
     };
@@ -778,6 +783,11 @@ fn build_options(
     // --column has more priority than -column
 
     let column_option_value = match parse_usize(matches, options::COLUMN) {
+        Some(Ok(0)) => {
+            return Err(PrError::EncounteredErrors {
+                msg: "invalid --column argument '0'".to_string(),
+            });
+        }
         Some(res) => Some(res?),
         None => start_column_option,
     };

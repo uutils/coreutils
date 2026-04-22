@@ -84,10 +84,10 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `nix::Error`
+    /// Wrapper around `rustix::io::Errno`
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("{0}")]
-    Nix(#[from] nix::Error),
+    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -142,7 +142,7 @@ impl OutputOptions {
 
     /// We can write fast if we can simply copy the contents of the file to
     /// stdout, without augmenting the output with e.g. line numbers.
-    fn can_write_fast(&self) -> bool {
+    fn can_print_fast(&self) -> bool {
         !(self.show_tabs
             || self.show_nonprint
             || self.show_ends
@@ -229,26 +229,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let show_nonprint = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
-        options::SHOW_NONPRINTING.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
+        options::SHOW_NONPRINTING_TABS,
+        options::SHOW_NONPRINTING,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_ends = [
-        options::SHOW_ENDS.to_owned(),
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_NONPRINTING_ENDS.to_owned(),
+        options::SHOW_ENDS,
+        options::SHOW_ALL,
+        options::SHOW_NONPRINTING_ENDS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
 
     let show_tabs = [
-        options::SHOW_ALL.to_owned(),
-        options::SHOW_TABS.to_owned(),
-        options::SHOW_NONPRINTING_TABS.to_owned(),
+        options::SHOW_ALL,
+        options::SHOW_TABS,
+        options::SHOW_NONPRINTING_TABS,
     ]
     .iter()
     .any(|v| matches.get_flag(v));
@@ -268,11 +268,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cat")
         .version(uucore::crate_version!())
         .override_usage(format_usage(&translate!("cat-usage")))
         .about(translate!("cat-about"))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("cat"))
         .infer_long_args(true)
         .args_override_self(true)
         .arg(
@@ -359,10 +359,10 @@ fn cat_handle<R: FdReadable>(
     options: &OutputOptions,
     state: &mut OutputState,
 ) -> CatResult<()> {
-    if options.can_write_fast() {
-        write_fast(handle)
+    if options.can_print_fast() {
+        print_fast(handle)
     } else {
-        write_lines(handle, options, state)
+        print_lines(handle, options, state)
     }
 }
 
@@ -420,11 +420,11 @@ where
         Ok(())
     } else {
         // each next line is expected to display "cat: …"
-        let line_joiner = format!("\n{}: ", uucore::util_name());
+        let line_joiner = "\ncat: ";
 
         Err(uucore::error::USimpleError::new(
             error_messages.len() as i32,
-            error_messages.join(&line_joiner),
+            error_messages.join(line_joiner),
         ))
     }
 }
@@ -476,19 +476,27 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
-    let mut stdout_lock = stdout.lock();
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let mut stdout = stdout;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &stdout_lock)? {
+        if !splice::write_fast_using_splice(handle, &mut stdout)? {
             return Ok(());
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
+    print_slow(handle, stdout)
+}
+
+#[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
+#[cfg_attr(not(any(target_os = "linux", target_os = "android")), inline)]
+fn print_slow<R: FdReadable>(handle: &mut InputHandle<R>, stdout: io::Stdout) -> CatResult<()> {
+    let mut stdout_lock = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
@@ -516,7 +524,7 @@ fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 
 /// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
-fn write_lines<R: FdReadable>(
+fn print_lines<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,

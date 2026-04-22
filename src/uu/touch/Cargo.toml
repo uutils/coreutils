@@ -4,7 +4,6 @@ name = "uu_touch"
 description = "touch ~ (uutils) change FILE timestamps"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/touch"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -18,6 +17,7 @@ workspace = true
 
 [lib]
 path = "src/touch.rs"
+doctest = false
 
 [dependencies]
 filetime = { workspace = true }
@@ -29,7 +29,8 @@ uucore = { workspace = true, features = ["libc", "parser"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["fs"] }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

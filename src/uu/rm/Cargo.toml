@@ -3,7 +3,6 @@ name = "uu_rm"
 description = "rm ~ (uutils) remove PATHNAME"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/rm"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/rm.rs"
+doctest = false
 
 [dependencies]
 thiserror = { workspace = true }

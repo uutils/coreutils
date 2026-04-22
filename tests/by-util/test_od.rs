@@ -224,6 +224,52 @@ fn test_bfloat16_compact() {
 }
 
 #[test]
+fn test_tf_default_is_double() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    let default_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tf")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_double_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfD")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    let explicit_float_output = new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_str()
+        .to_string();
+
+    assert_eq!(default_output, explicit_double_output);
+    assert_ne!(default_output, explicit_float_output);
+}
+
+#[test]
+fn test_tf_explicit_float_still_uses_4_bytes() {
+    let input: [u8; 8] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40];
+    new_ucmd!()
+        .arg("--endian=little")
+        .arg("-An")
+        .arg("-tfF")
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("       1.0000000       2.0000000\n");
+}
+
+#[test]
 fn test_f16() {
     let input: [u8; 14] = [
         0x00, 0x3c, // 0x3C00 1.0
@@ -718,31 +764,47 @@ fn test_invalid_traditional_offsets_are_filenames() {
 
 #[test]
 fn test_traditional_offset_overflow_diagnosed() {
+    // The ERANGE message differs across platforms (e.g. "Result too large"
+    // on glibc vs "Result not representable" on wasi-libc), so when testing
+    // via a WASM runner we just check that stderr mentions the input value.
+    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
     let erange = erange_message();
     let long_octal = "7".repeat(255);
     let long_decimal = format!("{}.", "9".repeat(254));
     let long_hex = format!("0x{}", "f".repeat(253));
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_octal)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_octal}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_octal}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_octal}: {erange}\n"));
+    }
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_decimal)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_decimal}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_decimal}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_decimal}: {erange}\n"));
+    }
 
-    new_ucmd!()
+    let cmd = new_ucmd!()
         .arg("-")
         .arg(&long_hex)
         .pipe_in(Vec::<u8>::new())
-        .fails_with_code(1)
-        .stderr_only(format!("od: {long_hex}: {erange}\n"));
+        .fails_with_code(1);
+    if wasm {
+        cmd.stderr_contains(format!("od: {long_hex}:"));
+    } else {
+        cmd.stderr_only(format!("od: {long_hex}: {erange}\n"));
+    }
 }
 
 #[test]
@@ -835,6 +897,7 @@ fn test_skip_bytes_prints_after_consuming_multiple_inputs() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_skip_bytes_proc_file_without_seeking() {
     let proc_path = Path::new("/proc/version");
     if !proc_path.exists() {
@@ -872,6 +935,10 @@ fn test_skip_bytes_error() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
 fn test_read_bytes() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;

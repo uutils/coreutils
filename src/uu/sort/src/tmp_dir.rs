@@ -2,20 +2,23 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
+use std::path::Path;
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
     fs::File,
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
 };
 
 use tempfile::TempDir;
-use uucore::{
-    error::{UResult, USimpleError},
-    show_error, translate,
-};
+use uucore::error::UResult;
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
+use uucore::{error::USimpleError, show_error, translate};
 
-use crate::{SortError, current_open_fd_count, fd_soft_limit};
+use crate::SortError;
 
 /// A wrapper around [`TempDir`] that may only exist once in a process.
 ///
@@ -41,17 +44,7 @@ struct HandlerRegistration {
 static HANDLER_STATE: LazyLock<Arc<Mutex<HandlerRegistration>>> =
     LazyLock::new(|| Arc::new(Mutex::new(HandlerRegistration::default())));
 
-fn should_install_signal_handler() -> bool {
-    const CTRL_C_FDS: usize = 2;
-    const RESERVED_FOR_MERGE: usize = 3; // temp output + minimum inputs
-    let Some(limit) = fd_soft_limit() else {
-        return true;
-    };
-    let open_fds = current_open_fd_count().unwrap_or(3);
-    open_fds.saturating_add(CTRL_C_FDS + RESERVED_FOR_MERGE) <= limit
-}
-
-#[cfg(not(target_os = "redox"))]
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     // This shared state must originate from `HANDLER_STATE` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
@@ -101,7 +94,8 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
     Ok(())
 }
 
-#[cfg(target_os = "redox")]
+#[cfg(any(target_os = "redox", target_os = "wasi"))]
+#[allow(clippy::unnecessary_wraps)]
 fn ensure_signal_handler_installed(_state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
     Ok(())
 }
@@ -136,9 +130,10 @@ impl TmpDirWrapper {
             guard.path = Some(path);
         }
 
-        if should_install_signal_handler() {
-            ensure_signal_handler_installed(state)?;
-        }
+        // Always attempt to install the signal handler so that Ctrl+C
+        // triggers cleanup. Failure is non-fatal: sort still works,
+        // just without SIGINT-triggered temp directory removal.
+        let _ = ensure_signal_handler_installed(state);
         Ok(())
     }
 
@@ -176,11 +171,21 @@ impl Drop for TmpDirWrapper {
             guard.lock = None;
             guard.path = None;
         }
+        drop(guard);
+
+        // Explicitly attempt cleanup before TempDir's Drop runs silently.
+        // TempDir::drop uses `let _ = remove_dir_all()` which silently
+        // ignores errors, potentially leaking the directory.
+        #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
+        if let Some(ref temp_dir) = self.temp_dir {
+            let _ = remove_tmp_dir(temp_dir.path());
+        }
     }
 }
 
 /// Remove the directory at `path` by deleting its child files and then itself.
 /// Errors while deleting child files are ignored.
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 fn remove_tmp_dir(path: &Path) -> std::io::Result<()> {
     if let Ok(read_dir) = std::fs::read_dir(path) {
         for file in read_dir.flatten() {

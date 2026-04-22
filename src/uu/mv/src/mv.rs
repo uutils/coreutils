@@ -226,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mv")
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -821,6 +821,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -883,7 +885,8 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to).and_then(|_| fs::remove_file(from))
+    make_fifo(to)?;
+    fs::remove_file(from)
 }
 
 #[cfg(not(unix))]
@@ -905,6 +908,8 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     {
         let _ = copy_xattrs_if_supported(from, to);
     }
+    // Preserve ownership (uid/gid) from the source symlink
+    let _ = preserve_ownership(from, to);
     fs::remove_file(from)
 }
 
@@ -926,13 +931,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
@@ -1007,9 +1008,11 @@ fn copy_dir_contents(
     // Create the destination directory
     fs::create_dir_all(to)?;
 
-    // Recursively copy contents
     #[cfg(unix)]
     {
+        // Preserve ownership (uid/gid) of the top-level directory
+        let _ = preserve_ownership(from, to);
+
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
@@ -1087,6 +1090,12 @@ fn copy_dir_contents_recursive(
             // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
+            // Preserve ownership (uid/gid) of the subdirectory
+            #[cfg(unix)]
+            {
+                let _ = preserve_ownership(&from_path, &to_path);
+            }
+
             print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
@@ -1150,9 +1159,12 @@ fn copy_file_with_hardlinks_helper(
 
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
+        // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
         make_fifo(to)?;
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;
@@ -1161,6 +1173,8 @@ fn copy_file_with_hardlinks_helper(
         {
             let _ = copy_xattrs_if_supported(from, to);
         }
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     }
 
     Ok(())
@@ -1210,8 +1224,51 @@ fn rename_file_fallback(
         let _ = copy_xattrs_if_supported(from, to);
     }
 
+    // Preserve ownership (uid/gid) from the source file
+    #[cfg(unix)]
+    {
+        let _ = preserve_ownership(from, to);
+    }
+
     fs::remove_file(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+    Ok(())
+}
+
+/// Preserve ownership (uid/gid) from source to destination.
+/// Uses lchown so it works on symlinks without following them.
+/// Errors are silently ignored for non-root users who cannot chown.
+#[cfg(unix)]
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let source_meta = from.symlink_metadata()?;
+    let uid = source_meta.uid();
+    let gid = source_meta.gid();
+
+    let dest_meta = to.symlink_metadata()?;
+    let dest_uid = dest_meta.uid();
+    let dest_gid = dest_meta.gid();
+
+    // Only chown if ownership actually differs
+    if uid != dest_uid || gid != dest_gid {
+        use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+        // Use follow=false so lchown is used (works on symlinks)
+        // Silently ignore errors: non-root users typically cannot chown to
+        // arbitrary uid, matching GNU mv behavior which also uses best-effort.
+        let _ = wrap_chown(
+            to,
+            &dest_meta,
+            Some(uid),
+            Some(gid),
+            false,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Silent,
+            },
+        );
+    }
+
     Ok(())
 }
 
@@ -1255,14 +1312,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }

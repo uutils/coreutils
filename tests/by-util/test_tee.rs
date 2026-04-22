@@ -17,6 +17,15 @@ use std::time::Duration;
 // spell-checker:ignore nopipe
 
 #[test]
+#[cfg(unix)]
+fn test_error_stdin_directory() {
+    new_ucmd!()
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails_with_code(1)
+        .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
@@ -116,6 +125,7 @@ fn test_tee_multiple_append_flags() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_readonly() {
     let (at, mut ucmd) = at_and_ucmd!();
     let content_tee = "hello";
@@ -137,6 +147,7 @@ fn test_readonly() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_tee_output_not_buffered() {
     // POSIX says: The tee utility shall not buffer output
 
@@ -182,7 +193,65 @@ fn test_tee_output_not_buffered() {
     handle.join().unwrap();
 }
 
-#[cfg(target_os = "linux")]
+#[test]
+fn test_tee_continues_after_short_read() {
+    // Regression test: `tee` must keep reading until EOF even when the
+    // first `read(2)` returns fewer bytes than its internal buffer. This
+    // happens in any pipeline where the upstream writer pauses between
+    // writes (e.g. a slow producer, a `sleep` in a shell pipeline, or a
+    // service emitting log lines in bursts). Treating a short read as
+    // end-of-file caused tee to exit prematurely and downstream producers
+    // to die with SIGPIPE on their next write.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if a regression reintroduces the bug in a form where
+    // tee blocks on read instead of exiting early.
+    let handle = std::thread::spawn(move || {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_out = "tee_short_read_out";
+
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // First chunk — deliberately much smaller than tee's internal
+        // buffer so that `read(2)` returns a short count.
+        child.write_in(b"first\n");
+        assert_eq!(&child.stdout_exact_bytes(6), b"first\n");
+
+        // Give a buggy implementation time to exit before we try to
+        // write again.
+        child.delay(50);
+
+        // Second chunk. A correctly-implemented tee is still reading
+        // from stdin; a buggy one has already exited and this write
+        // will either fail with EPIPE or never reach the output file.
+        child.write_in(b"second\n");
+        assert_eq!(&child.stdout_exact_bytes(7), b"second\n");
+
+        // `wait` closes stdin for us before waiting on the child.
+        child.wait().unwrap().success();
+
+        assert_eq!(at.read(file_out), "first\nsecond\n");
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(
+        handle.is_finished(),
+        "tee did not complete within the timeout"
+    );
+    handle.join().unwrap();
+}
+
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
 mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 

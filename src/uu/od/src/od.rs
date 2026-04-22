@@ -132,38 +132,35 @@ impl OdOptions {
 
         let formats = parse_format_flags(args).map_err(|e| USimpleError::new(1, e))?;
 
-        let mut line_bytes = match matches.get_one::<String>(options::WIDTH) {
-            None => 16,
-            Some(s) => {
-                if matches.value_source(options::WIDTH) == Some(ValueSource::CommandLine) {
-                    let width_display = option_display_name(args, options::WIDTH, Some('w'));
-                    let parsed = parse_number_of_bytes(s).map_err(|e| {
-                        USimpleError::new(1, format_error_message(&e, s, &width_display))
-                    })?;
-                    if parsed == 0 {
-                        return Err(USimpleError::new(
-                            1,
-                            translate!(
-                                "od-error-invalid-argument",
-                                "option" => width_display.clone(),
-                                "value" => s.quote()
-                            ),
-                        ));
-                    }
-                    usize::try_from(parsed).map_err(|_| {
-                        USimpleError::new(
-                            1,
-                            translate!(
-                                "od-error-argument-too-large",
-                                "option" => width_display.clone(),
-                                "value" => s.quote()
-                            ),
-                        )
-                    })?
-                } else {
-                    16
-                }
+        let mut line_bytes = if let (Some(s), Some(ValueSource::CommandLine)) = (
+            matches.get_one::<String>(options::WIDTH),
+            matches.value_source(options::WIDTH),
+        ) {
+            let width_display = option_display_name(args, options::WIDTH, Some('w'));
+            let parsed = parse_number_of_bytes(s)
+                .map_err(|e| USimpleError::new(1, format_error_message(&e, s, &width_display)))?;
+            if parsed == 0 {
+                return Err(USimpleError::new(
+                    1,
+                    translate!(
+                        "od-error-invalid-argument",
+                        "option" => width_display.clone(),
+                        "value" => s.quote()
+                    ),
+                ));
             }
+            usize::try_from(parsed).map_err(|_| {
+                USimpleError::new(
+                    1,
+                    translate!(
+                        "od-error-argument-too-large",
+                        "option" => width_display.clone(),
+                        "value" => s.quote()
+                    ),
+                )
+            })?
+        } else {
+            16
         };
 
         let min_bytes = formats.iter().fold(1, |max, next| {
@@ -290,9 +287,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("od")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("od"))
         .about(translate!("od-about"))
         .override_usage(format_usage(&translate!("od-usage")))
         .after_help(translate!("od-after-help"))
@@ -619,15 +616,13 @@ fn extract_strings_from_input(
 
     loop {
         // Check if we've reached the read_bytes limit
-        if let Some(limit) = read_bytes {
-            if bytes_read >= limit {
-                // Special case: when -N limit is reached with a pending string
-                // that meets min_length, output it even without null terminator
-                if current_string.len() >= min_length {
-                    print_string(string_start_offset, &current_string)?;
-                }
-                break;
+        if read_bytes.is_some_and(|l| bytes_read >= l) {
+            // Special case: when -N limit is reached with a pending string
+            // that meets min_length, output it even without null terminator
+            if current_string.len() >= min_length {
+                print_string(string_start_offset, &current_string)?;
             }
+            break;
         }
 
         // Read one byte at a time

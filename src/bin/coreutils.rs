@@ -10,7 +10,7 @@ use std::cmp;
 use std::ffi::OsString;
 use std::io::{self, Write};
 use std::process;
-use uucore::Args;
+use uucore::{Args, error::strip_errno};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -44,7 +44,7 @@ Currently defined functions:
     if let Err(e) = writeln!(io::stdout(), "{s}")
         && e.kind() != io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(io::stderr(), "coreutils: {e}");
+        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
         process::exit(1);
     }
 }
@@ -85,17 +85,17 @@ fn main() {
 
         match util {
             "--list" => {
-                // If --help is also present, show usage instead of list
-                if args.any(|arg| arg == "--help" || arg == "-h") {
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
+                // we should fail with additional args https://github.com/uutils/coreutils/issues/11383#issuecomment-4082564058
+                if args.next().is_some() {
+                    let _ = writeln!(io::stderr(), "coreutils: invalid argument");
+                    process::exit(1);
                 }
                 let mut out = io::stdout().lock();
                 for util in utils.keys() {
                     if let Err(e) = writeln!(out, "{util}")
                         && e.kind() != io::ErrorKind::BrokenPipe
                     {
-                        let _ = writeln!(io::stderr(), "coreutils: {e}");
+                        let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
                         process::exit(1);
                     }
                 }
@@ -105,7 +105,7 @@ fn main() {
                 if let Err(e) = writeln!(io::stdout(), "coreutils {VERSION} (multi-call binary)")
                     && e.kind() != io::ErrorKind::BrokenPipe
                 {
-                    let _ = writeln!(io::stderr(), "coreutils: {e}");
+                    let _ = writeln!(io::stderr(), "coreutils: {}", strip_errno(&e));
                     process::exit(1);
                 }
                 process::exit(0);
@@ -125,26 +125,8 @@ fn main() {
                 process::exit(uumain(vec![util_os].into_iter().chain(args)));
             }
             None => {
+                // GNU coreutils --help string shows help for coreutils
                 if util == "--help" || util == "-h" {
-                    // see if they want help on a specific util
-                    if let Some(util_os) = args.next() {
-                        let Some(util) = util_os.to_str() else {
-                            validation::not_found(&util_os)
-                        };
-
-                        match utils.get(util) {
-                            Some(&(uumain, _)) => {
-                                let code = uumain(
-                                    vec![util_os, OsString::from("--help")]
-                                        .into_iter()
-                                        .chain(args),
-                                );
-                                io::stdout().flush().expect("could not flush stdout");
-                                process::exit(code);
-                            }
-                            None => validation::not_found(&util_os),
-                        }
-                    }
                     usage(&utils, binary_as_util);
                     process::exit(0);
                 } else if util.starts_with('-') {
@@ -156,8 +138,13 @@ fn main() {
             }
         }
     } else {
-        // no arguments provided
-        usage(&utils, binary_as_util);
-        process::exit(0);
+        // GNU just fails, but busybox tests needs usage
+        // todo: patch the test suite instead
+        if binary_as_util.ends_with("box") {
+            usage(&utils, binary_as_util);
+        } else {
+            let _ = writeln!(io::stderr(), "coreutils: missing argument");
+        }
+        process::exit(1);
     }
 }

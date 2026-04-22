@@ -439,6 +439,7 @@ fn test_negative_size_with_space() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_size_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -450,6 +451,7 @@ fn test_fifo_error_size_only() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_reference_file_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -462,6 +464,7 @@ fn test_fifo_error_reference_file_only() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_reference_and_size() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -474,6 +477,7 @@ fn test_fifo_error_reference_and_size() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());

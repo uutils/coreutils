@@ -9,7 +9,7 @@ use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
-use rand::Rng;
+use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use std::env::temp_dir;
 use std::ffi::OsString;
