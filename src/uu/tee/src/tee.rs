@@ -159,12 +159,14 @@ impl MultiWriter {
         // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
         const BUF_SIZE: usize = 8 * 1024;
         let mut buffer = [0u8; BUF_SIZE];
-        // fast-path for small input
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => self.write_flush(&buffer[..received])?,
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-            _ => {}
+        // fast-path for small input. needs 2+ read to catch end of file
+        for _ in 0..2 {
+            match input.read(&mut buffer) {
+                Ok(0) => return Ok(()), // end of file
+                Ok(received) => self.write_flush(&buffer[..received])?,
+                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+                _ => {}
+            }
         }
         // buffer is too small optimize for large input
         //stack array makes code path for smaller file slower
