@@ -196,19 +196,12 @@ impl MultiWriter {
         let mut errors = 0;
         let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
-            let res = (|| {
-                writer.inner.write_all(buf)?;
-                writer.inner.flush()
-            })();
-            match res {
-                Ok(()) => true,
-                Err(e) => {
-                    if let Err(e) = process_error(mode, e, writer, &mut errors) {
-                        aborted.get_or_insert(e);
-                    }
+            writer
+                .write_flush(buf, mode, &mut errors)
+                .unwrap_or_else(|e| {
+                    aborted.get_or_insert(e);
                     false
-                }
-            }
+                })
         });
         self.ignored_errors += errors;
         aborted.map_or(
@@ -222,6 +215,24 @@ impl MultiWriter {
             },
             Err,
         )
+    }
+}
+
+impl NamedWriter {
+    // this should be part of NamedWriter to support splice() fast-path easier
+    fn write_flush(
+        &mut self,
+        buf: &[u8],
+        mode: Option<OutputErrorMode>,
+        ignored_errors: &mut usize,
+    ) -> Result<bool> {
+        match (|| {
+            self.inner.write_all(buf)?;
+            self.inner.flush()
+        })() {
+            Ok(()) => Ok(true),
+            Err(e) => process_error(mode, e, self, ignored_errors).map(|_| false),
+        }
     }
 }
 
