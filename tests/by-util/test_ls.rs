@@ -5054,16 +5054,7 @@ fn test_tabsize_formatting() {
         .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_vendor = "apple"
-))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
