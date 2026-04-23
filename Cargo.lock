@@ -4156,6 +4156,7 @@ dependencies = [
  "foldhash 0.2.0",
  "itertools 0.14.0",
  "memchr",
+ "memmap2",
  "nix",
  "rand 0.10.1",
  "rayon",

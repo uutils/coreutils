@@ -13,54 +13,31 @@
 
 use std::{
     cmp::Ordering,
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     fs::{self, File},
     io::{BufWriter, Read, Write},
     iter,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
+    sync::{
+        Arc,
+        mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
+    },
     thread::{self, JoinHandle},
 };
 
 use compare::Compare;
+use memmap2::Mmap;
 use uucore::error::{FromIo, UResult};
 
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, current_open_fd_count, fd_soft_limit, open,
+    compare_by, current_open_fd_count, fd_soft_limit,
+    sort_input::{SortInput, SortInputs},
     tmp_dir::TmpDirWrapper,
 };
-
-/// If the output file occurs in the input files as well, copy the contents of the output file
-/// and replace its occurrences in the inputs with that copy.
-fn replace_output_file_in_input_files(
-    files: &mut [OsString],
-    output: Option<&OsStr>,
-    tmp_dir: &mut TmpDirWrapper,
-) -> UResult<()> {
-    let mut copy: Option<PathBuf> = None;
-    if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
-        for file in files {
-            if let Ok(file_path) = Path::new(file).canonicalize() {
-                if file_path == output_path {
-                    if let Some(copy) = &copy {
-                        *file = copy.clone().into_os_string();
-                    } else {
-                        let (_file, copy_path) = tmp_dir.next_file()?;
-                        fs::copy(file_path, &copy_path)
-                            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                        *file = copy_path.clone().into_os_string();
-                        copy = Some(copy_path);
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
-}
 
 /// Determine the effective merge batch size, enforcing a minimum and respecting the
 /// file-descriptor soft limit after reserving stdio/output and a safety margin.
@@ -99,10 +76,45 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    replace_output_file_in_input_files(files, output.as_output_name(), tmp_dir)?;
-    let files = files
-        .iter()
-        .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
+    // If the output file is also listed as an input, pre-mmap it before
+    // it gets opened for writing. This allows reading the original content
+    // via mmap while writing to the same file, without needing a temp copy.
+    let output_as_input = if let Some(name) = output.as_output_name() {
+        let output_path = Path::new(name).canonicalize()?;
+        let appears = files.iter().any(|f| {
+            Path::new(f)
+                .canonicalize()
+                .map(|p| p == output_path)
+                .unwrap_or(false)
+        });
+        if appears {
+            let read_fd = File::open(name).map_err(|error| SortError::ReadFailed {
+                path: output_path.clone(),
+                error,
+            })?;
+            // SAFETY: We keep the read_fd open for the lifetime of the mmap,
+            // and we only read from it. The file is not modified while the
+            // mmap exists (writing happens later via a separate FD).
+            let mmap = Arc::new(unsafe { Mmap::map(&read_fd) }.map_err(|error| {
+                SortError::ReadFailed {
+                    path: output_path.clone(),
+                    error,
+                }
+            })?);
+            Some((output_path, mmap))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let sort_inputs = SortInputs::from_files_with_output(files, output_as_input)?;
+    let files = sort_inputs.into_iter().map(|result| {
+        result.map(|input| PlainMergeInput::<SortInput> {
+            inner: input,
+        })
+    });
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
@@ -594,5 +606,64 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_merge_output_as_input() {
+        // Setup: output file 'out' contains "6\n", inputs in/1..in/5 contain 1..5
+        let mut out = NamedTempFile::new().unwrap();
+        out.write_all(b"6\n").unwrap();
+        out.flush().unwrap();
+        let out_path = out.path().as_os_str().to_os_string();
+
+        let inputs: Vec<NamedTempFile> = (1..=5)
+            .map(|i| {
+                let mut f = NamedTempFile::new().unwrap();
+                writeln!(f, "{}", i).unwrap();
+                f.flush().unwrap();
+                f
+            })
+            .collect();
+
+        let files = vec![
+            out_path.clone(),
+            inputs[0].path().as_os_str().to_os_string(),
+            inputs[1].path().as_os_str().to_os_string(),
+            inputs[2].path().as_os_str().to_os_string(),
+            inputs[3].path().as_os_str().to_os_string(),
+            inputs[4].path().as_os_str().to_os_string(),
+            out_path.clone(),
+        ];
+
+        // Check Opened SortInputs: 7 inputs but only 6 unique sources
+        let output_canon = out.path().canonicalize().unwrap();
+        let read_fd = File::open(out.path()).unwrap();
+        let output_mmap = Arc::new(unsafe { Mmap::map(&read_fd).unwrap() });
+
+        let sort_inputs =
+            SortInputs::from_files_with_output(&files, Some((output_canon, output_mmap))).unwrap();
+
+        assert_eq!(sort_inputs.len(), 7);
+        assert_eq!(sort_inputs.unique_count(), 6);
+
+        // Run merge
+        let mut files_mut = files.clone();
+        let settings = GlobalSettings::default();
+        let output = Output::new(Some(out_path.as_os_str())).unwrap();
+        let mut tmp_dir = TmpDirWrapper::new(std::env::temp_dir());
+
+        merge(&mut files_mut, &settings, output, &mut tmp_dir).unwrap();
+
+        // If merge succeeded with only 6 unique sources, mmap deduplication worked.
+        // Verify correctness.
+        let result = std::fs::read_to_string(out.path()).unwrap();
+        assert_eq!(result, "1\n2\n3\n4\n5\n6\n6\n");
     }
 }

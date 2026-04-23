@@ -1132,6 +1132,66 @@ fn test_merge_reversed() {
 }
 
 #[test]
+fn test_merge_duplicate_files() {
+    // Test that merging the same file twice produces correct output
+    // This verifies FD reuse via SortInputs
+    new_ucmd!()
+        .arg("-m")
+        .arg("merge_duplicates_1.txt")
+        .arg("merge_duplicates_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_duplicates_1_1.expected");
+}
+
+#[test]
+fn test_merge_duplicate_files_interleaved() {
+    // Test merging file1, file2, file1 - same file appears twice
+    new_ucmd!()
+        .arg("-m")
+        .arg("merge_duplicates_1.txt")
+        .arg("merge_duplicates_2.txt")
+        .arg("merge_duplicates_1.txt")
+        .succeeds()
+        .stdout_only_fixture("merge_duplicates_1_2_1.expected");
+}
+
+#[test]
+fn test_merge_single_stdin() {
+    // Test that single stdin works with -m
+    new_ucmd!()
+        .arg("-m")
+        .arg("-")
+        .pipe_in("1\n3\n5\n")
+        .succeeds()
+        .stdout_only("1\n3\n5\n");
+}
+#[test]
+fn test_merge_duplicate_stdin() {
+    // Verify that duplicate stdin is allowed (GNU Coreutils compatible)
+    // Note: stdin is a single stream, so duplicate '-' reads the same stream.
+    // The first read gets the data, subsequent reads get EOF (empty).
+    new_ucmd!()
+        .arg("-m")
+        .arg("-")
+        .arg("-")
+        .pipe_in("1\n3\n5\n")
+        .succeeds()
+        .stdout_only("1\n3\n5\n");
+}
+
+#[test]
+fn test_merge_mixed_stdin_and_files() {
+    // Verify that sort -m allows mixing stdin with files (GNU Coreutils compatible)
+    new_ucmd!()
+        .arg("-m")
+        .arg("-")
+        .arg("merge_duplicates_1.txt")
+        .pipe_in("apricot\nelderberry\nkiwi\n")
+        .succeeds()
+        .stdout_only_fixture("merge_mixed_stdin.expected");
+}
+
+#[test]
 fn test_pipe() {
     // TODO: issue 1608 reports a panic when we attempt to read from stdin,
     // which was closed by the other side of the pipe. This test does not
