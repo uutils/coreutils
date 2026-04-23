@@ -1524,3 +1524,28 @@ fn test_ignores_invalid_mode_issue11935() {
         .stderr_is("numfmt: invalid suffix in input: '1e5'\n")
         .stdout_is("100\n1e5\n200\n");
 }
+
+#[test]
+fn test_iec_format_precision_cap() {
+    // gnu zero pads after 3 decimals on iec
+    let cases = [
+        ("1500", "1.46500K"),
+        ("999999", "976.56200K"),
+        ("310174", "302.90500K"),
+    ];
+    for (input, expected) in cases {
+        new_ucmd!()
+            .args(&["--to=iec", "--format=%.5f", input])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+#[test]
+fn test_si_format_precision_no_cap() {
+    // si shouldn't get the cap, full precision
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.5f", "1234567"])
+        .succeeds()
+        .stdout_is("1.23457M\n");
+}
