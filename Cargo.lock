@@ -4121,6 +4121,7 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "memchr",
+ "memmap2",
  "rand 0.10.1",
  "rayon",
  "rustix",

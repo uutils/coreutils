@@ -17,6 +17,7 @@ mod custom_str_cmp;
 mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
+mod sort_input;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
