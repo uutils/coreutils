@@ -6,7 +6,7 @@
 // spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
-use glob::Pattern;
+use glob::{Pattern, PatternError};
 use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -749,7 +749,7 @@ enum DuError {
     InvalidTimeStyleArg(String),
 
     #[error("{}", translate!("du-error-invalid-glob", "error" => _0))]
-    InvalidGlob(String),
+    InvalidGlob(PatternError),
 }
 
 impl UError for DuError {}
@@ -785,10 +785,8 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
                 translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
             );
         }
-        match parse_glob::from_str(&f) {
-            Ok(glob) => exclude_patterns.push(glob),
-            Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
-        }
+        let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;
+        exclude_patterns.push(glob);
     }
     Ok(exclude_patterns)
 }
