@@ -1,5 +1,6 @@
 {
 	"extends": [
 		"config:recommended"
-	]
+	],
+	"updatePinnedDependencies": false
 }
