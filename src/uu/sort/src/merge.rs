@@ -110,11 +110,9 @@ pub fn merge(
     };
 
     let sort_inputs = SortInputs::from_files_with_output(files, output_as_input)?;
-    let files = sort_inputs.into_iter().map(|result| {
-        result.map(|input| PlainMergeInput::<SortInput> {
-            inner: input,
-        })
-    });
+    let files = sort_inputs
+        .into_iter()
+        .map(|result| result.map(|input| PlainMergeInput::<SortInput> { inner: input }));
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {

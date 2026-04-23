@@ -277,7 +277,11 @@ impl Iterator for SortInputsIntoIter {
             match File::open(path) {
                 Ok(file) => input.inner = SortInputInner::File(file),
                 Err(error) => {
-                    return Some(Err(SortError::ReadFailed { path: path.clone(), error }.into()));
+                    return Some(Err(SortError::ReadFailed {
+                        path: path.clone(),
+                        error,
+                    }
+                    .into()));
                 }
             }
         }
@@ -316,7 +320,9 @@ mod tests {
     #[test]
     fn test_sort_input_new_file() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"hello world").expect("should write to temp file");
+        tmpfile
+            .write_all(b"hello world")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let input = SortInput::new(tmpfile.path().as_os_str()).expect("should create sort input");
@@ -338,7 +344,9 @@ mod tests {
     #[test]
     fn test_sort_input_mmap_read() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"mmap test data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"mmap test data")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
@@ -354,7 +362,9 @@ mod tests {
     #[test]
     fn test_sort_input_into_box_read() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"test data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"test data")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
@@ -362,7 +372,9 @@ mod tests {
         let input = SortInput::from_mmap(mmap);
         let mut reader: Box<dyn Read + Send> = input.into();
         let mut buf = [0u8; 9];
-        let n = reader.read(&mut buf).expect("should read from boxed reader");
+        let n = reader
+            .read(&mut buf)
+            .expect("should read from boxed reader");
         assert_eq!(n, 9);
         assert_eq!(&buf, b"test data");
     }
@@ -370,7 +382,9 @@ mod tests {
     #[test]
     fn test_sort_input_mmap_independent_reads() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"independent reads").expect("should write to temp file");
+        tmpfile
+            .write_all(b"independent reads")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
@@ -381,11 +395,15 @@ mod tests {
 
         // Both should be able to read independently
         let mut buf1 = [0u8; 11];
-        input1.read(&mut buf1).expect("should read from first input");
+        input1
+            .read(&mut buf1)
+            .expect("should read from first input");
         assert_eq!(&buf1, b"independent");
 
         let mut buf2 = [0u8; 11];
-        input2.read(&mut buf2).expect("should read from second input");
+        input2
+            .read(&mut buf2)
+            .expect("should read from second input");
         assert_eq!(&buf2, b"independent");
     }
 
@@ -399,7 +417,9 @@ mod tests {
     #[test]
     fn test_sort_inputs_single_file() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"data")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let files = vec![tmpfile.path().as_os_str().to_os_string()];
@@ -411,11 +431,17 @@ mod tests {
     #[test]
     fn test_sort_inputs_multiple_unique() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
-        tmpfile1.write_all(b"data1").expect("should write to temp file");
+        tmpfile1
+            .write_all(b"data1")
+            .expect("should write to temp file");
         let mut tmpfile2 = NamedTempFile::new().expect("should create temp file");
-        tmpfile2.write_all(b"data2").expect("should write to temp file");
+        tmpfile2
+            .write_all(b"data2")
+            .expect("should write to temp file");
         let mut tmpfile3 = NamedTempFile::new().expect("should create temp file");
-        tmpfile3.write_all(b"data3").expect("should write to temp file");
+        tmpfile3
+            .write_all(b"data3")
+            .expect("should write to temp file");
 
         let files = vec![
             tmpfile1.path().as_os_str().to_os_string(),
@@ -430,9 +456,13 @@ mod tests {
     #[test]
     fn test_sort_inputs_with_duplicates() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
-        tmpfile1.write_all(b"data1").expect("should write to temp file");
+        tmpfile1
+            .write_all(b"data1")
+            .expect("should write to temp file");
         let mut tmpfile2 = NamedTempFile::new().expect("should create temp file");
-        tmpfile2.write_all(b"data2").expect("should write to temp file");
+        tmpfile2
+            .write_all(b"data2")
+            .expect("should write to temp file");
 
         let files = vec![
             tmpfile1.path().as_os_str().to_os_string(),
@@ -448,7 +478,9 @@ mod tests {
     #[test]
     fn test_sort_inputs_duplicate_mmap_independent() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"independent reads").expect("should write to temp file");
+        tmpfile
+            .write_all(b"independent reads")
+            .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let files = vec![
@@ -468,7 +500,9 @@ mod tests {
                 _ => panic!("Expected mmap"),
             },
         };
-        input1.read(&mut buf1).expect("should read from first input");
+        input1
+            .read(&mut buf1)
+            .expect("should read from first input");
         assert_eq!(&buf1, b"independent");
 
         let mut buf2 = [0u8; 11];
@@ -481,7 +515,9 @@ mod tests {
                 _ => panic!("Expected mmap"),
             },
         };
-        input2.read(&mut buf2).expect("should read from second input");
+        input2
+            .read(&mut buf2)
+            .expect("should read from second input");
         assert_eq!(&buf2, b"independent");
     }
 
@@ -490,7 +526,13 @@ mod tests {
         let files = vec![OsString::from("-")];
         let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
         assert_eq!(inputs.len(), 1);
-        assert!(inputs.iter().next().expect("should get first input").is_stdin());
+        assert!(
+            inputs
+                .iter()
+                .next()
+                .expect("should get first input")
+                .is_stdin()
+        );
     }
 
     #[test]
@@ -505,7 +547,9 @@ mod tests {
     fn test_sort_inputs_mixed_stdin_and_files_allowed() {
         // Verify that mixing stdin with files is allowed (GNU Coreutils compatible)
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"data")
+            .expect("should write to temp file");
 
         let files = vec![
             OsString::from("-"),
@@ -518,9 +562,13 @@ mod tests {
     #[test]
     fn test_sort_inputs_order_preserved() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
-        tmpfile1.write_all(b"data1").expect("should write to temp file");
+        tmpfile1
+            .write_all(b"data1")
+            .expect("should write to temp file");
         let mut tmpfile2 = NamedTempFile::new().expect("should create temp file");
-        tmpfile2.write_all(b"data2").expect("should write to temp file");
+        tmpfile2
+            .write_all(b"data2")
+            .expect("should write to temp file");
 
         let files = vec![
             tmpfile2.path().as_os_str().to_os_string(),
@@ -534,7 +582,9 @@ mod tests {
     #[test]
     fn test_sort_inputs_from_files_error() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"data")
+            .expect("should write to temp file");
 
         let files = vec![
             tmpfile.path().as_os_str().to_os_string(),
@@ -549,7 +599,9 @@ mod tests {
     #[test]
     fn test_sort_inputs_into_iter() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile.write_all(b"data").expect("should write to temp file");
+        tmpfile
+            .write_all(b"data")
+            .expect("should write to temp file");
 
         let files = vec![tmpfile.path().as_os_str().to_os_string()];
         let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
