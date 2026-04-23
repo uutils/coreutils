@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck memmem
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -18,12 +18,11 @@ use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
-use uucore::format_usage;
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
-use uucore::translate;
+use uucore::{format_usage, show_error, translate};
 
 #[derive(Debug, Error)]
 enum JoinError {
@@ -650,7 +649,7 @@ impl<'a> State<'a> {
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
                 }
-                eprintln!("{}: {err_msg}", uucore::execution_phrase());
+                show_error!("{err_msg}");
                 self.has_failed = true;
             }
 
@@ -1096,11 +1095,7 @@ fn exec<Sep: Separator>(
     writer.flush()?;
 
     if state1.has_failed || state2.has_failed {
-        eprintln!(
-            "{}: {}",
-            uucore::execution_phrase(),
-            translate!("join-error-input-not-sorted")
-        );
+        show_error!("{}", translate!("join-error-input-not-sorted"));
         set_exit_code(1);
     }
     Ok(())

@@ -357,8 +357,7 @@ fn wrong_line_order() {
         .fails()
         .stdout_contains("7 g f 4 fg")
         .stderr_is(format!(
-            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
-            ts.bin_path.to_string_lossy(),
+            "{0}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0}: input is not in sorted order\n",
             ts.util_name
         ));
 
@@ -383,8 +382,7 @@ fn both_files_wrong_line_order() {
         .fails()
         .stdout_contains("5 e 3 ef")
         .stderr_is(format!(
-            "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
-            ts.bin_path.to_string_lossy(),
+            "{0}: fields_5.txt:4: is not sorted: 3\n{0}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0}: input is not in sorted order\n",
             ts.util_name
         ));
 
