@@ -422,7 +422,7 @@ itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
 # Pin due to https://github.com/nix-rust/nix/issues/2750
-libc = "=0.2.182"
+libc = "=0.2.186"
 lscolors = { version = "0.21.0", default-features = false, features = [
   "gnu_legacy",
 ] }
