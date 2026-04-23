@@ -1519,6 +1519,8 @@ fn test_locale_c_uses_period() {
 #[test]
 fn test_ignores_invalid_mode_issue11935() {
     new_ucmd!()
-        .args(&["--invalid=warn", "100 1e5 200"])
-        .succeeds();
+        .args(&["--invalid=warn", "100", "1e5", "200"])
+        .succeeds()
+        .stderr_is("numfmt: invalid suffix in input: '1e5'\n")
+        .stdout_is("100\n1e5\n200\n");
 }
