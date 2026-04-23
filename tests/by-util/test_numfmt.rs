@@ -1519,6 +1519,6 @@ fn test_locale_c_uses_period() {
 #[test]
 fn test_ignores_invalid_mode_issue11935() {
     new_ucmd!()
-        .args(&["--invalid=warn","100 1e5 200"])
+        .args(&["--invalid=warn", "100 1e5 200"])
         .succeeds();
 }
