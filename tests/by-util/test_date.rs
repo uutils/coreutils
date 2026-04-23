@@ -1398,14 +1398,7 @@ fn test_date_locale_hour_c_locale() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_hour_en_us() {
     // en_US locale typically uses 12-hour format when available
     // Note: If locale is not installed on system, falls back to C locale (24-hour)
@@ -1440,14 +1433,7 @@ fn test_date_explicit_format_overrides_locale() {
 
 // Comprehensive locale formatting tests to verify actual locale format strings are used
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_leading_zeros_en_us() {
     // Test for leading zeros in en_US locale
     // en_US uses %I (01-12) with leading zeros, not %l (1-12) without
@@ -1576,14 +1562,7 @@ fn test_date_locale_format_not_hardcoded() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_en_us_vs_c_difference() {
     // Verify that en_US and C locales produce different outputs
     // (if en_US locale is available on the system)
