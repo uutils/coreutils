@@ -71,7 +71,7 @@ jobs:
             const content = fs.readFileSync('./result.txt').toString();
 
             const marker = '<!-- size-comment-bot -->';
-            const body = `${marker}\nBinary size comparison:\n\`\`\`\n${content}\n\`\`\``;
+            const body = `${marker}\nBinary size comparison:\n\`\`\`\n${content}\`\`\``;
 
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,
