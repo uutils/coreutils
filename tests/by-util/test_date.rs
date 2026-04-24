@@ -1965,7 +1965,6 @@ fn test_date_strftime_flag_on_composite() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
 fn test_date_strftime_o_modifier() {
     // In C locale the `O` modifier is a no-op (alternative numeric symbols).
     // GNU renders `%Om` as `06` for June.
@@ -1980,6 +1979,21 @@ fn test_date_strftime_o_modifier() {
 }
 
 #[test]
+fn test_date_strftime_invalid_o_modifier() {
+    // In C locale the `O` modifier is a no-op (alternative numeric symbols).
+    // Modifier 'O' applies only to numeric conversion specifiers.
+    // `%Oa-%OA-%Oc` should be ignored.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Oa-%OA-%Oc")
+        .succeeds()
+        .stdout_is("%Oa-%OA-%Oc\n");
+}
+
+#[test]
 fn test_date_strftime_e_modifier() {
     // In C locale the `E` modifier is a no-op (alternative era).
     // GNU renders `%Ex` as `06/15/24` for 2024-06-15.
@@ -1991,6 +2005,22 @@ fn test_date_strftime_e_modifier() {
         .arg("+%EC-%Ey-%Ex")
         .succeeds()
         .stdout_is("20-24-06/15/24\n");
+}
+
+#[test]
+fn test_date_strftime_invalid_e_modifier() {
+    // In C locale the `E` modifier is a no-op (alternative era).
+    // This modifier applies to the
+    // '%c', '%C', '%x', '%X', '%y' and '%Y' conversion specifiers.
+    // `%Ea-%Em-%El` should be ignored.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%Ea-%Em-%El")
+        .succeeds()
+        .stdout_is("%Ea-%Em-%El\n");
 }
 
 #[test]
