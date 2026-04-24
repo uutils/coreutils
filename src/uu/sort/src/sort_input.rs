@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 //! Input file handling for sort merge.
 //!
-//! Dedupes duplicate paths via mmap and defers opening unique files until
+//! Dedupes duplicate paths via memory-map and defers opening unique files until
 //! iteration so `merge_with_file_limit` respects its batch size.
 
 use std::{
@@ -19,7 +19,7 @@ use std::{
     },
 };
 
-use memmap2::Mmap;
+use memmap2::Mmap as MemoryMap;
 use uucore::error::UResult;
 
 use crate::{STDIN_FILE, SortError};
@@ -31,8 +31,8 @@ enum SortInputInner {
     File(File),
     /// A memory-mapped file shared across duplicate paths, with an
     /// independent cursor per instance.
-    Mmap {
-        data: Arc<Mmap>,
+    FileRead {
+        data: Arc<MemoryMap>,
         offset: AtomicUsize,
     },
     Stdin,
@@ -40,7 +40,7 @@ enum SortInputInner {
     LazyFile(PathBuf),
 }
 
-/// Handle to a single sort input (file, mmap, or stdin).
+/// Handle to a single sort input (file, memory-map, or stdin).
 #[derive(Debug)]
 pub struct SortInput {
     inner: SortInputInner,
@@ -68,9 +68,9 @@ impl SortInput {
         }
     }
 
-    fn from_mmap(data: Arc<Mmap>) -> Self {
+    fn from_memory_map(data: Arc<MemoryMap>) -> Self {
         Self {
-            inner: SortInputInner::Mmap {
+            inner: SortInputInner::FileRead {
                 data,
                 offset: AtomicUsize::new(0),
             },
@@ -93,7 +93,7 @@ impl Read for SortInput {
 
         match &mut self.inner {
             SortInputInner::File(file) => file.read(buf),
-            SortInputInner::Mmap { data, offset } => {
+            SortInputInner::FileRead { data, offset } => {
                 let pos = offset.load(Ordering::Relaxed);
                 let available = data.len().saturating_sub(pos);
                 let to_read = buf.len().min(available);
@@ -120,7 +120,7 @@ impl From<SortInput> for Box<dyn Read + Send> {
 
 /// Collection of sort inputs.
 ///
-/// Preserves argument order and multiplicity. Duplicate paths are mmap'd once
+/// Preserves argument order and multiplicity. Duplicate paths are memory-map'd once
 /// and shared; unique paths are stored lazily and opened during iteration so the
 /// merge batch size limits active FDs.
 #[derive(Debug)]
@@ -137,12 +137,12 @@ impl SortInputs {
 
     /// Build a `SortInputs` from paths.
     ///
-    /// - Duplicate paths → one mmap shared across all instances.
+    /// - Duplicate paths → one memory-map shared across all instances.
     /// - Unique paths → stored as `LazyFile` and opened when the iterator yields them.
-    /// - `output_as_input`: pre-created mmap used when the output file is also an input.
+    /// - `output_as_input`: pre-created memory-map used when the output file is also an input.
     pub fn from_files_with_output(
         files: &[std::ffi::OsString],
-        output_as_input: Option<(PathBuf, Arc<Mmap>)>,
+        output_as_input: Option<(PathBuf, Arc<MemoryMap>)>,
     ) -> UResult<Self> {
         let mut inputs = Vec::with_capacity(files.len());
 
@@ -158,10 +158,10 @@ impl SortInputs {
 
         // Second pass: build inputs
         // - Unique files: LazyFile (opened during iteration)
-        // - Duplicate files: mmap once, share it
-        // - Output-as-input: use pre-created mmap
+        // - Duplicate files: memory-map once, share it
+        // - Output-as-input: use pre-created memory-map
         // - Stdin: single occurrence
-        let mut opened_files: HashMap<PathBuf, Arc<Mmap>> = HashMap::new();
+        let mut opened_files: HashMap<PathBuf, Arc<MemoryMap>> = HashMap::new();
 
         for file in files {
             if file == STDIN_FILE {
@@ -173,34 +173,35 @@ impl SortInputs {
                 let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
 
                 // Check if this is the output file used as input
-                if let Some((ref output_path, ref output_mmap)) = output_as_input {
+                if let Some((ref output_path, ref output_memory_map)) = output_as_input {
                     if canonical == *output_path {
-                        inputs.push(SortInput::from_mmap(output_mmap.clone()));
+                        inputs.push(SortInput::from_memory_map(output_memory_map.clone()));
                         continue;
                     }
                 }
 
                 if *path_counts.get(&canonical).unwrap_or(&0) > 1 {
-                    // Duplicate file: use mmap
-                    let mmap = if let Some(mmap) = opened_files.get(&canonical) {
-                        mmap.clone()
+                    // Duplicate file: use memory-map
+                    let memory_map = if let Some(memory_map) = opened_files.get(&canonical) {
+                        memory_map.clone()
                     } else {
                         let f = File::open(path).map_err(|error| SortError::ReadFailed {
                             path: path.to_owned(),
                             error,
                         })?;
-                        // SAFETY: We keep the file open for the lifetime of the mmap,
+                        // SAFETY: We keep the file open for the lifetime of the memory-map,
                         // and we only read from it. The file is not modified.
-                        let mmap = Arc::new(unsafe { Mmap::map(&f) }.map_err(|error| {
-                            SortError::ReadFailed {
-                                path: path.to_owned(),
-                                error,
-                            }
-                        })?);
-                        opened_files.insert(canonical, mmap.clone());
-                        mmap
+                        let memory_map =
+                            Arc::new(unsafe { MemoryMap::map(&f) }.map_err(|error| {
+                                SortError::ReadFailed {
+                                    path: path.to_owned(),
+                                    error,
+                                }
+                            })?);
+                        opened_files.insert(canonical, memory_map.clone());
+                        memory_map
                     };
-                    inputs.push(SortInput::from_mmap(mmap));
+                    inputs.push(SortInput::from_memory_map(memory_map));
                 } else {
                     // Unique file: defer opening until iteration so that
                     // merge_with_file_limit can respect its batch_size and
@@ -227,14 +228,14 @@ impl SortInputs {
         self.inputs.is_empty()
     }
 
-    /// Returns the number of unique sources (stdin + unique files + mmap groups).
+    /// Returns the number of unique sources (stdin + unique files + memory-map groups).
     #[allow(dead_code)]
     pub fn unique_count(&self) -> usize {
         let mut file_count = 0;
         let mut stdin_present = false;
 
-        // Count unique mmap instances by Arc pointer
-        let mut seen_mmaps = std::collections::HashSet::new();
+        // Count unique memory-map instances by Arc pointer
+        let mut seen_memory_maps = std::collections::HashSet::new();
 
         for input in &self.inputs {
             match &input.inner {
@@ -244,13 +245,13 @@ impl SortInputs {
                 SortInputInner::File(_) | SortInputInner::LazyFile(_) => {
                     file_count += 1;
                 }
-                SortInputInner::Mmap { data, .. } => {
-                    seen_mmaps.insert(Arc::as_ptr(data));
+                SortInputInner::FileRead { data, .. } => {
+                    seen_memory_maps.insert(Arc::as_ptr(data));
                 }
             }
         }
 
-        file_count + seen_mmaps.len() + usize::from(stdin_present)
+        file_count + seen_memory_maps.len() + usize::from(stdin_present)
     }
 
     /// Iterate over the inputs without consuming them.
@@ -342,16 +343,17 @@ mod tests {
     }
 
     #[test]
-    fn test_sort_input_mmap_read() {
+    fn test_sort_input_memory_map_read() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
-            .write_all(b"mmap test data")
+            .write_all(b"memory_map test data")
             .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
-        let mmap = Arc::new(unsafe { Mmap::map(&file).expect("should mmap temp file") });
-        let mut input = SortInput::from_mmap(mmap);
+        let memory_map =
+            Arc::new(unsafe { MemoryMap::map(&file).expect("should memory_map temp file") });
+        let mut input = SortInput::from_memory_map(memory_map);
 
         let mut buf = [0u8; 14];
         let n = input.read(&mut buf).expect("should read from input");
@@ -368,8 +370,8 @@ mod tests {
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
-        let mmap = Arc::new(unsafe { Mmap::map(&file).expect("should mmap temp file") });
-        let input = SortInput::from_mmap(mmap);
+        let mmap = Arc::new(unsafe { MemoryMap::map(&file).expect("should mmap temp file") });
+        let input = SortInput::from_memory_map(mmap);
         let mut reader: Box<dyn Read + Send> = input.into();
         let mut buf = [0u8; 9];
         let n = reader
@@ -388,10 +390,10 @@ mod tests {
         tmpfile.flush().expect("should flush temp file");
 
         let file = File::open(tmpfile.path()).expect("should open temp file");
-        let mmap = Arc::new(unsafe { Mmap::map(&file).expect("should mmap temp file") });
+        let mmap = Arc::new(unsafe { MemoryMap::map(&file).expect("should mmap temp file") });
 
-        let mut input1 = SortInput::from_mmap(mmap.clone());
-        let mut input2 = SortInput::from_mmap(mmap);
+        let mut input1 = SortInput::from_memory_map(mmap.clone());
+        let mut input2 = SortInput::from_memory_map(mmap);
 
         // Both should be able to read independently
         let mut buf1 = [0u8; 11];
@@ -493,7 +495,7 @@ mod tests {
         let mut buf1 = [0u8; 11];
         let mut input1 = SortInput {
             inner: match &inputs.iter().next().expect("should get first input").inner {
-                SortInputInner::Mmap { data, offset } => SortInputInner::Mmap {
+                SortInputInner::FileRead { data, offset } => SortInputInner::FileRead {
                     data: data.clone(),
                     offset: AtomicUsize::new(offset.load(Ordering::Relaxed)),
                 },
@@ -508,7 +510,7 @@ mod tests {
         let mut buf2 = [0u8; 11];
         let mut input2 = SortInput {
             inner: match &inputs.iter().nth(1).expect("should get second input").inner {
-                SortInputInner::Mmap { data, offset } => SortInputInner::Mmap {
+                SortInputInner::FileRead { data, offset } => SortInputInner::FileRead {
                     data: data.clone(),
                     offset: AtomicUsize::new(offset.load(Ordering::Relaxed)),
                 },
