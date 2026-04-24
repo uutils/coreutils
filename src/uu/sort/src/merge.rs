@@ -28,7 +28,7 @@ use std::{
 };
 
 use compare::Compare;
-use memmap2::Mmap;
+use memmap2::Mmap as MemoryMap;
 use uucore::error::{FromIo, UResult};
 
 use crate::{
@@ -76,9 +76,9 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    // If the output file is also listed as an input, pre-mmap it before
+    // If the output file is also listed as an input, Use memory-map to load it before
     // it gets opened for writing. This allows reading the original content
-    // via mmap while writing to the same file, without needing a temp copy.
+    // via memory-map while writing to the same file, without needing a temp copy.
     let output_as_input = if let Some(name) = output.as_output_name() {
         let output_path = Path::new(name).canonicalize()?;
         let appears = files
@@ -89,16 +89,17 @@ pub fn merge(
                 path: output_path.clone(),
                 error,
             })?;
-            // SAFETY: We keep the read_fd open for the lifetime of the mmap,
+            // SAFETY: We keep the read_fd open for the lifetime of the memory-map,
             // and we only read from it. The file is not modified while the
-            // mmap exists (writing happens later via a separate FD).
-            let mmap = Arc::new(unsafe { Mmap::map(&read_fd) }.map_err(|error| {
-                SortError::ReadFailed {
-                    path: output_path.clone(),
-                    error,
-                }
-            })?);
-            Some((output_path, mmap))
+            // memory-map exists (writing happens later via a separate FD).
+            let output_as_input =
+                Arc::new(unsafe { MemoryMap::map(&read_fd) }.map_err(|error| {
+                    SortError::ReadFailed {
+                        path: output_path.clone(),
+                        error,
+                    }
+                })?);
+            Some((output_path, output_as_input))
         } else {
             None
         }
@@ -640,10 +641,11 @@ mod tests {
         // Check Opened SortInputs: 7 inputs but only 6 unique sources
         let output_canon = out.path().canonicalize().unwrap();
         let read_fd = File::open(out.path()).unwrap();
-        let output_mmap = Arc::new(unsafe { Mmap::map(&read_fd).unwrap() });
+        let output_as_input = Arc::new(unsafe { MemoryMap::map(&read_fd).unwrap() });
 
         let sort_inputs =
-            SortInputs::from_files_with_output(&files, Some((output_canon, output_mmap))).unwrap();
+            SortInputs::from_files_with_output(&files, Some((output_canon, output_as_input)))
+                .unwrap();
 
         assert_eq!(sort_inputs.len(), 7);
         assert_eq!(sort_inputs.unique_count(), 6);
@@ -656,7 +658,7 @@ mod tests {
 
         merge(&mut files_mut, &settings, output, &mut tmp_dir).unwrap();
 
-        // If merge succeeded with only 6 unique sources, mmap deduplication worked.
+        // If merge succeeded with only 6 unique sources, memory-map deduplication worked.
         // Verify correctness.
         let result = fs::read_to_string(out.path()).unwrap();
         assert_eq!(result, "1\n2\n3\n4\n5\n6\n6\n");
