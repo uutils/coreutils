@@ -81,12 +81,9 @@ pub fn merge(
     // via mmap while writing to the same file, without needing a temp copy.
     let output_as_input = if let Some(name) = output.as_output_name() {
         let output_path = Path::new(name).canonicalize()?;
-        let appears = files.iter().any(|f| {
-            Path::new(f)
-                .canonicalize()
-                .map(|p| p == output_path)
-                .unwrap_or(false)
-        });
+        let appears = files
+            .iter()
+            .any(|f| Path::new(f).canonicalize().is_ok_and(|p| p == output_path));
         if appears {
             let read_fd = File::open(name).map_err(|error| SortError::ReadFailed {
                 path: output_path.clone(),
