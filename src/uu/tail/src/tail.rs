@@ -575,17 +575,26 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     Ok(())
 }
 
-fn print_target_section<R>(file: &mut R, limit: Option<u64>) -> UResult<()>
-where
-    R: Read + ?Sized,
-{
-    // Print the target section of the file.
+// Print the target section of the file
+fn print_target_section<
+    #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read + ?Sized,
+>(
+    file: &mut R,
+    limit: Option<u64>,
+) -> UResult<()> {
     let stdout = stdout();
     let mut stdout = stdout.lock();
     if let Some(limit) = limit {
         let mut reader = file.take(limit);
         io::copy(&mut reader, &mut stdout)?;
     } else {
+        // zero-copy fast-path
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
+            io::copy(file, &mut stdout)?;
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
         io::copy(file, &mut stdout)?;
     }
     Ok(())
