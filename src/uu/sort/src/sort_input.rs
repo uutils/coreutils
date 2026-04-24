@@ -396,13 +396,13 @@ mod tests {
         // Both should be able to read independently
         let mut buf1 = [0u8; 11];
         input1
-            .read(&mut buf1)
+            .read_exact(&mut buf1)
             .expect("should read from first input");
         assert_eq!(&buf1, b"independent");
 
         let mut buf2 = [0u8; 11];
         input2
-            .read(&mut buf2)
+            .read_exact(&mut buf2)
             .expect("should read from second input");
         assert_eq!(&buf2, b"independent");
     }
@@ -492,7 +492,7 @@ mod tests {
         // Both inputs should be able to read independently
         let mut buf1 = [0u8; 11];
         let mut input1 = SortInput {
-            inner: match &inputs.iter().nth(0).expect("should get first input").inner {
+            inner: match &inputs.iter().next().expect("should get first input").inner {
                 SortInputInner::Mmap { data, offset } => SortInputInner::Mmap {
                     data: data.clone(),
                     offset: AtomicUsize::new(offset.load(Ordering::Relaxed)),
@@ -501,7 +501,7 @@ mod tests {
             },
         };
         input1
-            .read(&mut buf1)
+            .read_exact(&mut buf1)
             .expect("should read from first input");
         assert_eq!(&buf1, b"independent");
 
@@ -516,7 +516,7 @@ mod tests {
             },
         };
         input2
-            .read(&mut buf2)
+            .read_exact(&mut buf2)
             .expect("should read from second input");
         assert_eq!(&buf2, b"independent");
     }
