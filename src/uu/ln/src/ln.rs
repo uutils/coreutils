@@ -6,9 +6,10 @@
 // spell-checker:ignore (ToDO) srcpath targetpath EEXIST
 
 use clap::{Arg, ArgAction, Command};
-use std::io::{Write, stdout};
+use std::io::{self, Write, stdout};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{UError, UIoError, UResult};
+
 use uucore::fs::{make_path_relative_to, paths_refer_to_same_file};
 use uucore::translate;
 use uucore::{format_usage, prompt_yes, show_error};
@@ -28,16 +29,16 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
 pub struct Settings {
-    overwrite: OverwriteMode,
-    backup: BackupMode,
-    suffix: OsString,
-    symbolic: bool,
-    relative: bool,
-    logical: bool,
-    target_dir: Option<PathBuf>,
-    no_target_dir: bool,
-    no_dereference: bool,
-    verbose: bool,
+    pub overwrite: OverwriteMode,
+    pub backup: BackupMode,
+    pub suffix: OsString,
+    pub symbolic: bool,
+    pub relative: bool,
+    pub logical: bool,
+    pub target_dir: Option<PathBuf>,
+    pub no_target_dir: bool,
+    pub no_dereference: bool,
+    pub verbose: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -48,9 +49,15 @@ pub enum OverwriteMode {
 }
 
 #[derive(Error, Debug)]
-enum LnError {
+pub enum LnError {
     #[error("{}", translate!("ln-error-target-is-not-directory", "target" => _0.quote()))]
     TargetIsNotADirectory(PathBuf),
+
+    #[error("{0}")]
+    IoErr(#[from] UIoError),
+
+    #[error("{1}: {0}")]
+    IoErrContext(UIoError, String),
 
     #[error("")]
     SomeLinksFailed,
@@ -71,6 +78,13 @@ enum LnError {
 impl UError for LnError {
     fn code(&self) -> i32 {
         1
+    }
+}
+pub type LnResult<T> = Result<T, LnError>;
+
+impl From<io::Error> for LnError {
+    fn from(err: io::Error) -> Self {
+        Self::IoErr(UIoError::from(err))
     }
 }
 
@@ -133,7 +147,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         verbose: matches.get_flag(options::VERBOSE),
     };
 
-    exec(&paths[..], &settings)
+    exec(&paths[..], &settings)?;
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -249,7 +264,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
+pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -270,14 +285,13 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
     if files.len() == 1 {
-        return Err(LnError::MissingDestination(files[0].clone()).into());
+        return Err(LnError::MissingDestination(files[0].clone()));
     }
     if files.len() > 2 {
         return Err(LnError::ExtraOperand(
             files[2].clone().into(),
             uucore::execution_phrase().to_string(),
-        )
-        .into());
+        ));
     }
     assert!(!files.is_empty());
 
@@ -285,9 +299,9 @@ fn exec(files: &[PathBuf], settings: &Settings) -> UResult<()> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> UResult<()> {
+fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) -> LnResult<()> {
     if !target_dir.is_dir() {
-        return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()).into());
+        return Err(LnError::TargetIsNotADirectory(target_dir.to_owned()));
     }
     // remember the linked destinations for further usage
     let mut linked_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
@@ -369,7 +383,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     if all_successful {
         Ok(())
     } else {
-        Err(LnError::SomeLinksFailed.into())
+        Err(LnError::SomeLinksFailed)
     }
 }
 
@@ -387,7 +401,7 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
 }
 
 #[allow(clippy::cognitive_complexity)]
-fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
+fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)
@@ -400,18 +414,22 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
             if paths_refer_to_same_file(src, dst, true) {
-                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
         }
         if let Some(ref p) = backup_path {
-            fs::rename(dst, p)
-                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+            fs::rename(dst, p).map_err(|e| {
+                LnError::IoErrContext(
+                    UIoError::from(e),
+                    translate!("ln-cannot-backup", "file" => dst.quote()),
+                )
+            })?;
         }
         match settings.overwrite {
             OverwriteMode::NoClobber => {}
             OverwriteMode::Interactive => {
                 if !prompt_yes!("{}", translate!("ln-prompt-replace", "file" => dst.quote())) {
-                    return Err(LnError::SomeLinksFailed.into());
+                    return Err(LnError::SomeLinksFailed);
                 }
 
                 let _ = fs::remove_file(dst);
@@ -428,7 +446,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
                         _ => true,
                     };
                     if same_entry {
-                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()).into());
+                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
                     }
                 }
                 let _ = fs::remove_file(dst);
@@ -441,26 +459,37 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> UResult<()> {
         symlink(&source, dst).map_err(Into::into)
     } else {
         let p = if settings.logical && source.is_symlink() {
-            fs::canonicalize(&source)
-                .map_err_context(|| translate!("ln-failed-to-access", "file" => source.quote()))?
+            fs::canonicalize(&source).map_err(|e| {
+                LnError::IoErrContext(
+                    UIoError::from(e),
+                    translate!("ln-failed-to-access", "file" => source.quote()),
+                )
+            })?
         } else {
             source.to_path_buf()
         };
         match fs::hard_link(&p, dst) {
             Ok(()) => Ok(()),
-            Err(_) if p.is_dir() => {
-                Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf()).into())
-            }
-            Err(e) => Err(e).map_err_context(|| {
-                translate!("ln-failed-to-create-hard-link", "source" => source.quote(), "dest" => dst.quote())
-            }),
+            Err(_) if p.is_dir() => Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf())),
+            Err(e) => Err(LnError::IoErrContext(
+                UIoError::from(e),
+                translate!(
+                    "ln-failed-to-create-hard-link",
+                    "source" => source.quote(),
+                    "dest" => dst.quote()
+                ),
+            )),
         }
     };
 
     if let Err(e) = res {
         if let Some(ref p) = backup_path {
-            fs::rename(p, dst)
-                .map_err_context(|| translate!("ln-cannot-backup", "file" => dst.quote()))?;
+            fs::rename(p, dst).map_err(|e| {
+                LnError::IoErrContext(
+                    UIoError::from(e),
+                    translate!("ln-cannot-backup", "file" => dst.quote()),
+                )
+            })?;
         }
         return Err(e);
     }
