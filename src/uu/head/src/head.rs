@@ -401,14 +401,15 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 
 #[allow(clippy::cognitive_complexity)]
 fn uu_head(options: &HeadOptions) -> UResult<()> {
+    let mut stdout = io::stdout().lock();
     let mut first = true;
     for file in &options.files {
         let res = if file == "-" {
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
-                    println!();
+                    writeln!(stdout)?;
                 }
-                println!("{}", translate!("head-header-stdin"));
+                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
             }
             let stdin = io::stdin();
 
@@ -463,11 +464,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             };
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
-                    println!();
+                    writeln!(stdout)?;
                 }
-                print!("==> ");
+                write!(stdout, "==> ")?;
                 print_verbatim(file).unwrap();
-                println!(" <==");
+                writeln!(stdout, " <==")?;
             }
             head_file(&mut file_handle, options)?;
             Ok(())
