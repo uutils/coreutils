@@ -624,7 +624,7 @@ mod tests {
         let inputs: Vec<NamedTempFile> = (1..=5)
             .map(|i| {
                 let mut f = NamedTempFile::new().unwrap();
-                writeln!(f, "{}", i).unwrap();
+                writeln!(f, "{i}").unwrap();
                 f.flush().unwrap();
                 f
             })
@@ -661,7 +661,7 @@ mod tests {
 
         // If merge succeeded with only 6 unique sources, mmap deduplication worked.
         // Verify correctness.
-        let result = std::fs::read_to_string(out.path()).unwrap();
+        let result = fs::read_to_string(out.path()).unwrap();
         assert_eq!(result, "1\n2\n3\n4\n5\n6\n6\n");
     }
 }
