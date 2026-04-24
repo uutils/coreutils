@@ -99,7 +99,12 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
 
     // Flags: any of [_0^#+-], zero or more.
     let flags_start = pos;
-    while pos < bytes.len() && matches!(bytes[pos], b'_' | b'0' | b'^' | b'#' | b'+' | b'-') {
+    while pos < bytes.len()
+        && matches!(
+            bytes[pos],
+            b'_' | b'0' | b'^' | b'#' | b'+' | b'-' | b'O' | b'E'
+        )
+    {
         pos += 1;
     }
     let flags = &s[flags_start..pos];
@@ -223,7 +228,49 @@ fn format_with_modifiers(
                 base_format.clear();
                 base_format.push('%');
                 base_format.push_str(parsed.spec);
-                let formatted = broken_down.to_string_with_config(config, &base_format)?;
+                let mut formatted = String::new();
+                // If modifier is 'E' or 'O',
+                // check if specifier is allowed to work with the modifier.
+                if parsed.flags == "E" {
+                    // Modifier applies to the ‘%c’, ‘%C’, ‘%x’, ‘%X’,
+                    // ‘%y’ and ‘%Y’ conversion specifiers.
+                    if matches!(parsed.spec, "c" | "C" | "x" | "X" | "y" | "Y") {
+                        formatted.push_str(
+                            broken_down
+                                .to_string_with_config(config, &base_format)?
+                                .as_str(),
+                        );
+                    } else {
+                        // Use unformatted string to display
+                        // if specifier does not work with modifier 'E'.
+                        formatted.push('%');
+                        formatted.push_str(parsed.flags);
+                        formatted.push_str(parsed.spec);
+                    }
+                } else if parsed.flags == "O" {
+                    // Modifier 'O' applies only to numeric conversion specifiers.
+                    if matches!(parsed.spec, "a" | "A" | "c" | "D" | "F" | "x" | "X") {
+                        // Use unformatted string to display
+                        // if specifier does not work with modifier 'O'.
+                        formatted.push('%');
+                        formatted.push_str(parsed.flags);
+                        formatted.push_str(parsed.spec);
+                    } else {
+                        // All other specifiers work with modifier 'O'.
+                        formatted.push_str(
+                            broken_down
+                                .to_string_with_config(config, &base_format)?
+                                .as_str(),
+                        );
+                    }
+                } else {
+                    // If modifier is not 'E' either 'O', format the string with config.
+                    formatted.push_str(
+                        broken_down
+                            .to_string_with_config(config, &base_format)?
+                            .as_str(),
+                    );
+                }
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
                     let modified = apply_modifiers(&formatted, &parsed)?;
