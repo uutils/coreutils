@@ -1133,26 +1133,30 @@ fn test_merge_reversed() {
 
 #[test]
 fn test_merge_duplicate_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
     // Test that merging the same file twice produces correct output
     // This verifies FD reuse via SortInputs
-    new_ucmd!()
-        .arg("-m")
+    ucmd.arg("-m")
         .arg("merge_duplicates_1.txt")
         .arg("merge_duplicates_1.txt")
         .succeeds()
-        .stdout_only_fixture("merge_duplicates_1_1.expected");
+        .stdout_is("1\n1\n3\n3\n5\n5\n");
 }
 
 #[test]
 fn test_merge_duplicate_files_interleaved() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
+    at.write("merge_duplicates_2.txt", "2\n4\n6\n");
+    println!("Sub sir: {}", at.as_string());
     // Test merging file1, file2, file1 - same file appears twice
-    new_ucmd!()
-        .arg("-m")
+    ucmd.arg("-m")
         .arg("merge_duplicates_1.txt")
         .arg("merge_duplicates_2.txt")
         .arg("merge_duplicates_1.txt")
         .succeeds()
-        .stdout_only_fixture("merge_duplicates_1_2_1.expected");
+        .stdout_is("1\n1\n2\n3\n3\n4\n5\n5\n6\n");
 }
 
 #[test]
@@ -1181,14 +1185,15 @@ fn test_merge_duplicate_stdin() {
 
 #[test]
 fn test_merge_mixed_stdin_and_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
     // Verify that sort -m allows mixing stdin with files (GNU Coreutils compatible)
-    new_ucmd!()
-        .arg("-m")
+    ucmd.arg("-m")
         .arg("-")
         .arg("merge_duplicates_1.txt")
         .pipe_in("apricot\nelderberry\nkiwi\n")
         .succeeds()
-        .stdout_only_fixture("merge_mixed_stdin.expected");
+        .stdout_is("1\n3\n5\napricot\nelderberry\nkiwi\n");
 }
 
 #[test]
