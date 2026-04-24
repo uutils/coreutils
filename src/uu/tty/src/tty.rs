@@ -39,7 +39,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut stdout = std::io::stdout();
 
-    let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
+    let name = rustix::termios::ttyname(std::io::stdin(), Vec::new());
 
     let write_result = if let Ok(name) = name {
         use std::os::unix::ffi::OsStrExt;
@@ -60,7 +60,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new("tty")
+    let cmd = Command::new(uucore::util_name())
         .version(uucore::crate_version!())
         .about(translate!("tty-about"))
         .override_usage(format_usage(&translate!("tty-usage")))

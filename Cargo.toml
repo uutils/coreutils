@@ -450,9 +450,9 @@ rstest = "0.26.0"
 rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
-# binary name of coreutils can be hijacked by overriding getauxval via LD_PRELOAD
-# So we use param and avoid libc backend
-rustix = { version = "1.1.4", features = ["param"] }
+# param: binary name of coreutils can be hijacked by overriding getauxval via LD_PRELOAD
+# use-libc: route syscalls through glibc (not direct asm) for LD_PRELOAD/sanitizer compat
+rustix = { version = "1.1.4", features = ["param", "use-libc"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"

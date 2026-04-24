@@ -1371,14 +1371,15 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
+    let rlimit = getrlimit(Resource::Nofile);
+    let rlim_cur = rlimit.current;
+    if rlim_cur.is_none() {
+        // None means RLIM_INFINITY
         return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
     }
-    usize::try_from(rlim_cur)
+    usize::try_from(rlim_cur.unwrap())
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
 
@@ -1410,8 +1411,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1436,9 +1435,10 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        let fd = fd as libc::c_int;
-        // Probe with libc::fcntl because the fd may be invalid.
-        if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
+        let fd = fd as std::os::fd::RawFd;
+        // SAFETY: We are only probing whether the fd is valid via fcntl_getfd;
+        // the borrowed fd is not used beyond this call.
+        if rustix::io::fcntl_getfd(unsafe { std::os::fd::BorrowedFd::borrow_raw(fd) }).is_ok() {
             count = count.saturating_add(1);
         }
     }
@@ -1770,7 +1770,6 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 

@@ -6,8 +6,6 @@
 // spell-checker:ignore (ToDO) signalname pids killpg
 
 use clap::{Arg, ArgAction, Command};
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -69,22 +67,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
 
             let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from EXIT
-            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
-            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
-                None
+            // Signal 0 (EXIT) means "check if process exists" - pass 0 to kill()
+            let sig_num: i32 = if sig_name.is_some_and(|name| name == "EXIT") {
+                0
             } else {
-                let sig = (sig as i32)
-                    .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
-                Some(sig)
+                sig as i32
             };
 
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
                 Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
             } else {
-                kill(sig, &pids);
+                kill(sig_num, &pids);
                 Ok(())
             }
         }
@@ -250,11 +244,43 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Option<Signal>, pids: &[i32]) {
+fn kill(sig: i32, pids: &[i32]) {
+    use rustix::process::{
+        Pid, Signal, kill_current_process_group, kill_process, kill_process_group,
+        test_kill_current_process_group, test_kill_process, test_kill_process_group,
+    };
+
     for &pid in pids {
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
+        let esrch = || Err(rustix::io::Errno::SRCH);
+        let result = if sig == 0 {
+            // Signal 0: test if process/group exists
+            match pid.cmp(&0) {
+                std::cmp::Ordering::Greater => {
+                    Pid::from_raw(pid).map_or_else(esrch, test_kill_process)
+                }
+                std::cmp::Ordering::Equal => test_kill_current_process_group(),
+                std::cmp::Ordering::Less => {
+                    Pid::from_raw(-pid).map_or_else(esrch, test_kill_process_group)
+                }
+            }
+        } else {
+            // SAFETY: sig is a non-zero value from user input; the kernel
+            // will reject truly invalid signal numbers with EINVAL.
+            let signal = unsafe { Signal::from_raw_unchecked(sig) };
+            match pid.cmp(&0) {
+                std::cmp::Ordering::Greater => {
+                    Pid::from_raw(pid).map_or_else(esrch, |p| kill_process(p, signal))
+                }
+                std::cmp::Ordering::Equal => kill_current_process_group(signal),
+                std::cmp::Ordering::Less => {
+                    Pid::from_raw(-pid).map_or_else(esrch, |p| kill_process_group(p, signal))
+                }
+            }
+        };
+
+        if let Err(e) = result {
             show!(
-                Error::from_raw_os_error(e as i32)
+                Error::from(e)
                     .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
             );
         }

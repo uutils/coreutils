@@ -17,15 +17,6 @@ use ini::Ini;
 use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
 };
-#[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SigHandler::{SigDfl, SigIgn},
-    SigSet, SigmaskHow, Signal, signal, sigprocmask,
-};
-#[cfg(unix)]
-use nix::unistd::execvp;
 use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::{BTreeMap, BTreeSet};
@@ -38,6 +29,8 @@ use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use uucore::signals::csignal::{self, SigHandler};
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
@@ -295,16 +288,25 @@ fn build_signal_request(
 }
 
 #[cfg(unix)]
-fn signal_from_value(sig_value: usize) -> UResult<Signal> {
-    Signal::try_from(sig_value as i32).map_err(|_| {
-        USimpleError::new(
+fn signal_from_value(sig_value: usize) -> UResult<libc::c_int> {
+    let sig = sig_value as libc::c_int;
+    // Validate signal number is in a reasonable range.
+    // On Linux, reject glibc-reserved signals between standard signals and SIGRTMIN
+    // (typically 32 and 33, used internally by NPTL).
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let reserved = sig > libc::SIGSYS && sig < libc::SIGRTMIN();
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let reserved = false;
+    if sig <= 0 || sig >= 128 || reserved {
+        return Err(USimpleError::new(
             125,
             translate!(
                 "env-error-invalid-signal",
                 "signal" => sig_value.to_string().quote()
             ),
-        )
-    })
+        ));
+    }
+    Ok(sig)
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -836,11 +838,21 @@ impl EnvAppData {
             }
 
             // Execute the program using execvp. this replaces the current
-            // process. The execvp function takes care of appending a NULL
-            // argument to the argument list so that we don't have to.
-            match execvp(&prog_cstring, &argv) {
-                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
-                Err(nix::errno::Errno::EACCES) => {
+            // process.
+            //
+            // Build a null-terminated array of pointers for execvp.
+            let mut argv_ptrs: Vec<*const libc::c_char> = argv.iter().map(|a| a.as_ptr()).collect();
+            argv_ptrs.push(std::ptr::null());
+
+            // SAFETY: prog_cstring is a valid null-terminated C string,
+            // argv_ptrs is a null-terminated array of valid C string pointers.
+            // execvp only returns on error.
+            unsafe { libc::execvp(prog_cstring.as_ptr(), argv_ptrs.as_ptr()) };
+
+            let err = io::Error::last_os_error();
+            match err.raw_os_error() {
+                Some(libc::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Some(libc::EACCES) => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -850,7 +862,7 @@ impl EnvAppData {
                     );
                     Err(126.into())
                 }
-                Err(_) => {
+                _ => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -859,9 +871,6 @@ impl EnvAppData {
                         )
                     );
                     Err(126.into())
-                }
-                Ok(_) => {
-                    unreachable!("execvp should never return on success")
                 }
             }
         }
@@ -1072,7 +1081,7 @@ fn apply_signal_action<F>(
     signal_fn: F,
 ) -> UResult<()>
 where
-    F: Fn(Signal) -> UResult<()>,
+    F: Fn(libc::c_int) -> UResult<()>,
 {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
@@ -1080,7 +1089,16 @@ where
         let Ok(sig) = signal_from_value(sig_value) else {
             return Ok(());
         };
-        signal_fn(sig)?;
+        match signal_fn(sig) {
+            Ok(()) => {}
+            Err(_) if !explicit => {
+                // When applying to all signals, silently skip signals that
+                // the OS refuses to change (e.g. SIGTHR on OpenBSD).
+                // GNU env also ignores these.
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        }
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
@@ -1096,41 +1114,38 @@ where
 }
 
 #[cfg(unix)]
-fn ignore_signal(sig: Signal) -> UResult<()> {
-    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    let result = unsafe { signal(sig, SigIgn) };
-    if let Err(err) = result {
+fn ignore_signal(sig: libc::c_int) -> UResult<()> {
+    if let Err(err) = unsafe { csignal::set_signal_handler(sig, SigHandler::SigIgn) } {
         return Err(USimpleError::new(
             125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
+            translate!("env-error-failed-set-signal-action", "signal" => sig, "error" => err),
         ));
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn reset_signal(sig: Signal) -> UResult<()> {
-    let result = unsafe { signal(sig, SigDfl) };
-    if let Err(err) = result {
+fn reset_signal(sig: libc::c_int) -> UResult<()> {
+    if let Err(err) = unsafe { csignal::set_signal_handler(sig, SigHandler::SigDfl) } {
         return Err(USimpleError::new(
             125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
+            translate!("env-error-failed-set-signal-action", "signal" => sig, "error" => err),
         ));
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn block_signal(sig: Signal) -> UResult<()> {
-    let mut set = SigSet::empty();
+fn block_signal(sig: libc::c_int) -> UResult<()> {
+    let mut set = csignal::SigSet::empty();
     set.add(sig);
-    if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
+    if let Err(err) = csignal::sigprocmask(csignal::SigmaskHow::Block, Some(&set), None) {
         return Err(USimpleError::new(
             125,
             translate!(
                 "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
+                "signal" => sig,
+                "error" => err
             ),
         ));
     }
