@@ -166,6 +166,14 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     )
 }
 
+// zero-copy fast-path
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
+    let out = io::stdout();
+    uucore::pipes::send_n_bytes(input, out, n).map_err(wrap_in_stdout_error)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
@@ -309,15 +317,13 @@ where
         // obviously found our 0th-line-from-the-end offset.
         if check_last_byte_first_loop {
             check_last_byte_first_loop = false;
-            if let Some(last_byte_of_file) = buffer.last() {
-                if last_byte_of_file != &separator {
-                    if n == 0 {
-                        input.rewind()?;
-                        return Ok(file_size);
-                    }
-                    assert_eq!(lines, 0);
-                    lines = 1;
+            if buffer.last().is_some_and(|&b| b != separator) {
+                if n == 0 {
+                    input.rewind()?;
+                    return Ok(file_size);
                 }
+                assert_eq!(lines, 0);
+                lines = 1;
             }
         }
 
@@ -608,6 +614,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // missing trait for AsFd
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
         assert!(read_n_bytes(&mut empty, 0).is_ok());

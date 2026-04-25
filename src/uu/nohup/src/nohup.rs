@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
+#[cfg(not(unix))]
+compile_error!("nohup is not supported on the target");
 
 use clap::{Arg, ArgAction, Command};
 use libc::{SIG_IGN, SIGHUP, dup2, signal};
@@ -180,14 +182,7 @@ unsafe extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "cygwin",
-    target_os = "netbsd"
-))]
+#[cfg(not(target_vendor = "apple"))]
 /// # Safety
 /// This function is unsafe because it dereferences a raw pointer.
 unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {

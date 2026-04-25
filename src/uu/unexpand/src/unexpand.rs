@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
+// spell-checker:ignore (ToDO) nums aflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
@@ -154,7 +154,7 @@ struct Options {
     files: Vec<OsString>,
     tab_config: TabConfig,
     aflag: bool,
-    uflag: bool,
+    utf8: bool,
 }
 
 impl Options {
@@ -170,7 +170,7 @@ impl Options {
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
             && !matches.get_flag(options::FIRST_ONLY);
-        let uflag = !matches.get_flag(options::NO_UTF8);
+        let utf8 = !matches.get_flag(options::NO_UTF8);
 
         let files = match matches.get_many::<OsString>(options::FILE) {
             Some(v) => v.cloned().collect(),
@@ -181,7 +181,7 @@ impl Options {
             files,
             tab_config,
             aflag,
-            uflag,
+            utf8,
         })
     }
 }
@@ -396,7 +396,7 @@ enum CharType {
     Other,
 }
 
-fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
+fn next_char_info(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
     use CharType::{Backspace, Other, Space, Tab};
     let b = buf[byte];
     if b.is_ascii() {
@@ -408,7 +408,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
         };
     }
 
-    if uflag {
+    if utf8 {
         let nbytes = char::from(b).len_utf8();
         // don't overrun the buffer because of invalid UTF-8
         if buf
@@ -474,7 +474,7 @@ fn unexpand_buf(
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
         // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-        if !options.uflag && !options.aflag && print_state.leading {
+        if !options.utf8 && !options.aflag && print_state.leading {
             // In default mode (not -a), we only convert leading spaces
             // So we can batch process them and then copy the rest
             while byte < buf.len() {
@@ -516,7 +516,7 @@ fn unexpand_buf(
         }
 
         // figure out how big the next char is, if it's UTF-8
-        let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
+        let (ctype, cwidth, nbytes) = next_char_info(options.utf8, buf, byte);
 
         // now figure out how many columns this char takes up, and maybe print it
         let tabs_buffered = print_state.leading || options.aflag;

@@ -84,7 +84,7 @@ fn tee(options: &Options) -> Result<()> {
         },
     );
 
-    let mut output = MultiWriter::new(writers, options.output_error.clone());
+    let mut output = MultiWriter::new(writers, options.output_error);
     let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
@@ -93,7 +93,7 @@ fn tee(options: &Options) -> Result<()> {
     }
 
     // We cannot use std::io::copy here as it doesn't flush the output buffer
-    let res = match copy(input, &mut output) {
+    let res = match output.copy_unbuffered(input) {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
         // success of this part (if there was an error that should
@@ -103,56 +103,10 @@ fn tee(options: &Options) -> Result<()> {
         _ => Ok(()),
     };
 
-    if had_open_errors || res.is_err() || output.flush().is_err() || output.error_occurred() {
+    if had_open_errors || res.is_err() || output.error_occurred() {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
-    }
-}
-
-/// Copies all bytes from the input buffer to the output buffer.
-fn copy(mut input: impl Read, mut output: impl Write) -> Result<()> {
-    // The implementation for this function is adopted from the generic buffer copy implementation from
-    // the standard library:
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
-
-    // Use buffer size from std implementation
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    const BUF_SIZE: usize = if cfg!(target_os = "espidf") {
-        512
-    } else {
-        8 * 1024
-    };
-    let mut buffer = [0u8; BUF_SIZE];
-
-    for _ in 0..2 {
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                output.write_all(&buffer[..received])?;
-                // flush the buffer to comply with POSIX requirement that
-                // `tee` does not buffer the input.
-                output.flush()?;
-            }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-    // buffer is too small optimize for large input
-    //stack array makes code path for smaller file slower
-    let mut buffer = vec![0u8; 4 * BUF_SIZE];
-    loop {
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                output.write_all(&buffer[..received])?;
-                // flush the buffer to comply with POSIX requirement that
-                // `tee` does not buffer the input.
-                output.flush()?;
-            }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
     }
 }
 
@@ -193,6 +147,40 @@ struct MultiWriter {
 }
 
 impl MultiWriter {
+    /// Copies all bytes from the input buffer to the output buffer
+    /// without buffering which is POSIX requirement.
+    pub fn copy_unbuffered<R: Read>(&mut self, mut input: R) -> Result<()> {
+        // todo: support splice() and tee() fast-path at here
+        // The implementation for this function is adopted from the generic buffer copy implementation from
+        // the standard library:
+        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
+
+        // Use buffer size from std implementation
+        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
+        const BUF_SIZE: usize = 8 * 1024;
+        let mut buffer = [0u8; BUF_SIZE];
+        // fast-path for small input. needs 2+ read to catch end of file
+        for _ in 0..2 {
+            match input.read(&mut buffer) {
+                Ok(0) => return Ok(()), // end of file
+                Ok(received) => self.write_flush(&buffer[..received])?,
+                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+                _ => {}
+            }
+        }
+        // buffer is too small optimize for large input
+        //stack array makes code path for smaller file slower
+        let mut buffer = vec![0u8; 4 * BUF_SIZE];
+        loop {
+            match input.read(&mut buffer) {
+                Ok(0) => return Ok(()), // end of file
+                Ok(received) => self.write_flush(&buffer[..received])?,
+                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+                _ => {}
+            }
+        }
+    }
+
     fn new(writers: Vec<NamedWriter>, output_error_mode: Option<OutputErrorMode>) -> Self {
         Self {
             writers,
@@ -204,98 +192,59 @@ impl MultiWriter {
     fn error_occurred(&self) -> bool {
         self.ignored_errors != 0
     }
+
+    fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
+        let mut aborted = None;
+        let mode = self.output_error_mode;
+        self.writers.retain_mut(|writer| {
+            let res = (|| {
+                writer.inner.write_all(buf)?;
+                writer.inner.flush()
+            })();
+            match res {
+                Ok(()) => true,
+                Err(e) => {
+                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
+                        aborted.get_or_insert(e);
+                    }
+                    false
+                }
+            }
+        });
+        aborted.map_or(
+            if self.writers.is_empty() {
+                // This error kind will never be raised by the standard
+                // library, so we can use it for early termination of
+                // `copy`
+                Err(Error::from(ErrorKind::Other))
+            } else {
+                Ok(())
+            },
+            Err,
+        )
+    }
 }
 
 fn process_error(
-    mode: Option<&OutputErrorMode>,
-    f: Error,
+    mode: Option<OutputErrorMode>,
+    e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {
-    match mode {
-        Some(OutputErrorMode::Warn) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            *ignored_errors += 1;
-            Ok(())
-        }
-        Some(OutputErrorMode::WarnNoPipe) | None => {
-            if f.kind() != ErrorKind::BrokenPipe {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                *ignored_errors += 1;
-            }
-            Ok(())
-        }
-        Some(OutputErrorMode::Exit) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            Err(f)
-        }
-        Some(OutputErrorMode::ExitNoPipe) => {
-            if f.kind() == ErrorKind::BrokenPipe {
-                Ok(())
-            } else {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                Err(f)
-            }
-        }
-    }
-}
+    let ignore_pipe = matches!(
+        mode,
+        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+    );
 
-impl Write for MultiWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            let result = writer.write_all(buf);
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
-        });
-        self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else if self.writers.is_empty() {
-            // This error kind will never be raised by the standard
-            // library, so we can use it for early termination of
-            // `copy`
-            Err(Error::from(ErrorKind::Other))
-        } else {
-            Ok(buf.len())
-        }
+    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
+        return Ok(());
     }
-
-    fn flush(&mut self) -> Result<()> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            let result = writer.flush();
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
-        });
-        self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else {
-            Ok(())
-        }
+    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
+        Err(e)
+    } else {
+        *ignored_errors += 1;
+        Ok(())
     }
 }
 
@@ -325,32 +274,18 @@ struct NamedWriter {
     pub name: OsString,
 }
 
-impl Write for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
-
 struct NamedReader {
     inner: std::io::Stdin,
 }
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        match self.inner.read(buf) {
-            Err(f) => {
-                let _ = writeln!(
-                    stderr(),
-                    "tee: {}",
-                    translate!("tee-error-stdin", "error" => strip_errno(&f))
-                );
-                Err(f)
-            }
-            okay => okay,
-        }
+        self.inner.read(buf).inspect_err(|e| {
+            let _ = writeln!(
+                stderr(),
+                "tee: {}",
+                translate!("tee-error-stdin", "error" => strip_errno(e))
+            );
+        })
     }
 }

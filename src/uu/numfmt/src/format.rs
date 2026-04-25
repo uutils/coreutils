@@ -3,10 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore powf seps
+// spell-checker:ignore powf seps replacen
 
 use uucore::display::Quotable;
-use uucore::i18n::decimal::locale_grouping_separator;
+use uucore::i18n::decimal::{locale_decimal_separator, locale_grouping_separator};
 use uucore::translate;
 
 use crate::numeric::ParsedNumber;
@@ -16,30 +16,37 @@ use crate::units::{
 };
 
 fn find_numeric_beginning(s: &str) -> Option<&str> {
-    let mut decimal_point_seen = false;
+    let dec_sep = locale_decimal_separator();
+    let mut seen_dec = false;
     if s.is_empty() {
         return None;
     }
 
-    if s.starts_with('.') {
-        return Some(".");
+    if s.starts_with(dec_sep) {
+        return Some(&s[..dec_sep.len()]);
     }
 
-    for (idx, c) in s.char_indices() {
-        if c == '-' && idx == 0 {
+    let mut chars = s.char_indices().peekable();
+    while let Some((i, c)) = chars.next() {
+        if c == '-' && i == 0 {
             continue;
         }
         if c.is_ascii_digit() {
             continue;
         }
-        if c == '.' && !decimal_point_seen {
-            decimal_point_seen = true;
+        if !seen_dec && s[i..].starts_with(dec_sep) {
+            seen_dec = true;
+            // skip past any remaining bytes of a multi-byte sep
+            for _ in 1..dec_sep.chars().count() {
+                chars.next();
+            }
             continue;
         }
-        if s[..idx].parse::<f64>().is_err() {
+        let num_str = s[..i].replace(dec_sep, ".");
+        if num_str.parse::<f64>().is_err() {
             return None;
         }
-        return Some(&s[..idx]);
+        return Some(&s[..i]);
     }
 
     Some(s)
@@ -149,7 +156,8 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
 }
 
 fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
-    if s.ends_with('.') {
+    let dec_sep = locale_decimal_separator();
+    if s.ends_with(dec_sep) {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
     }
 
@@ -157,7 +165,18 @@ fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
         return Ok(ParsedNumber::ExactInt(n));
     }
 
-    s.parse::<f64>()
+    if dec_sep != "." && s.contains('.') {
+        return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+
+    let normalized = if dec_sep == "." {
+        s.to_string()
+    } else {
+        s.replace(dec_sep, ".")
+    };
+
+    normalized
+        .parse::<f64>()
         .map(ParsedNumber::Float)
         .map_err(|_| translate!("numfmt-error-invalid-number", "input" => input.quote()))
 }
@@ -234,7 +253,8 @@ fn apply_grouping(s: &str) -> String {
     } else {
         ("", s)
     };
-    let (integer, fraction) = rest.split_once('.').map_or((rest, ""), |(i, f)| (i, f));
+    let dec_sep = locale_decimal_separator();
+    let (integer, fraction) = rest.split_once(dec_sep).map_or((rest, ""), |(i, f)| (i, f));
     if integer.len() < 4 {
         return s.to_string();
     }
@@ -263,7 +283,7 @@ fn apply_grouping(s: &str) -> String {
     }
 
     if !fraction.is_empty() {
-        grouped.push('.');
+        grouped.push_str(dec_sep);
         grouped.push_str(fraction);
     }
 
@@ -341,7 +361,8 @@ impl<'a> Iterator for WhitespaceSplitter<'a, '_> {
 /// Returns the implicit precision of a number, which is the count of digits after the dot. For
 /// example, 1.23 has an implicit precision of 2.
 fn parse_implicit_precision(s: &str) -> usize {
-    match s.split_once('.') {
+    let dec_sep = locale_decimal_separator();
+    match s.split_once(dec_sep) {
         Some((_, decimal_part)) => decimal_part
             .chars()
             .take_while(char::is_ascii_digit)
@@ -533,7 +554,11 @@ fn try_format_exact_int_without_suffix_scaling(
     Some(if precision == 0 {
         scaled.to_string()
     } else {
-        format!("{scaled}.{}", "0".repeat(precision))
+        format!(
+            "{scaled}{}{}",
+            locale_decimal_separator(),
+            "0".repeat(precision)
+        )
     })
 }
 
@@ -552,25 +577,32 @@ fn transform_to(
     let s = s.to_f64();
     let i2 = s / (opts.to_unit as f64);
     let (i2, s) = consider_suffix(i2, opts.to, round_method, precision)?;
+    let dec_sep = locale_decimal_separator();
+    let localize = |s: String| -> String {
+        if dec_sep == "." {
+            s
+        } else {
+            s.replacen('.', dec_sep, 1)
+        }
+    };
     Ok(match s {
-        None => {
-            format!(
-                "{:.precision$}",
-                round_with_precision(i2, round_method, precision),
-            )
-        }
-        Some(s) if precision > 0 => {
-            format!(
-                "{i2:.precision$}{unit_separator}{}",
-                DisplayableSuffix(s, opts.to),
-            )
-        }
+        None => localize(format!(
+            "{:.precision$}",
+            round_with_precision(i2, round_method, precision),
+        )),
+        Some(s) if precision > 0 => localize(format!(
+            "{i2:.precision$}{unit_separator}{}",
+            DisplayableSuffix(s, opts.to),
+        )),
         Some(s) if is_precision_specified => {
             format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
         }
         Some(s) if i2.abs() < 10.0 => {
-            // when there's a single digit before the dot.
-            format!("{i2:.1}{unit_separator}{}", DisplayableSuffix(s, opts.to))
+            // single digit before the decimal, like 1.5K
+            localize(format!(
+                "{i2:.1}{unit_separator}{}",
+                DisplayableSuffix(s, opts.to)
+            ))
         }
         Some(s) => {
             format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))

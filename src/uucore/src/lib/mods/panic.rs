@@ -52,9 +52,7 @@ pub fn preserve_inherited_sigpipe() {
     use nix::libc;
 
     // Check if parent specified that SIGPIPE should be default
-    if let Ok(val) = std::env::var("RUST_SIGPIPE")
-        && val == "default"
-    {
+    if std::env::var_os("RUST_SIGPIPE").is_some_and(|v| v == "default") {
         unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
         // Remove the environment variable so child processes don't inherit it incorrectly
         unsafe { std::env::remove_var("RUST_SIGPIPE") };

@@ -2107,3 +2107,17 @@ fn test_ascii_case_conversion_fallback() {
         .succeeds();
     assert_eq!(result.stdout(), input);
 }
+
+#[test]
+fn test_bs_not_positive() {
+    for bs in [-5, 0, 0x0] {
+        for bs_param in ["bs", "ibs", "obs", "cbs"] {
+            new_ucmd!()
+                .args(&[format!("{bs_param}={bs}")])
+                .fails()
+                .no_stdout()
+                .code_is(1)
+                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+        }
+    }
+}

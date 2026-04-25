@@ -35,18 +35,7 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 use uucore::fsxattr::has_acl;
-#[cfg(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "android",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
+#[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
     error::UResult,
@@ -628,18 +617,7 @@ fn display_date(
 }
 
 fn display_len_or_rdev(metadata: &Metadata, config: &Config) -> SizeOrDeviceId {
-    #[cfg(any(
-        target_os = "linux",
-        target_os = "macos",
-        target_os = "android",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "dragonfly",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "illumos",
-        target_os = "solaris"
-    ))]
+    #[cfg(unix)]
     {
         let ft = metadata.file_type();
         if ft.is_char_device() || ft.is_block_device() {

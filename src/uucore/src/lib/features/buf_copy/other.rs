@@ -17,16 +17,11 @@ use crate::error::UResult;
 /// # Arguments
 /// * `source` - `Read` implementor to copy data from.
 /// * `dest` - `Write` implementor to copy data to.
-///
-/// # Returns
-///
-/// Result of operation and bytes successfully written (as a `u64`) when
-/// operation is successful.
-pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<u64>
+pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<()>
 where
     R: Read,
     S: Write,
 {
-    let result = std::io::copy(src, dest)?;
-    Ok(result)
+    std::io::copy(src, dest)?;
+    Ok(())
 }

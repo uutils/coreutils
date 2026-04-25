@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces pairable unpairable nocheck memmem
+// spell-checker:ignore (ToDO) autoformat FILENUM whitespaces nocheck memmem
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
@@ -18,12 +18,11 @@ use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
-use uucore::format_usage;
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
 use uucore::line_ending::LineEnding;
-use uucore::translate;
+use uucore::{format_usage, show_error, translate};
 
 #[derive(Debug, Error)]
 enum JoinError {
@@ -650,7 +649,7 @@ impl<'a> State<'a> {
                 if input.check_order == CheckOrder::Enabled {
                     return Err(JoinError::UnorderedInput(err_msg));
                 }
-                eprintln!("{}: {err_msg}", uucore::execution_phrase());
+                show_error!("{err_msg}");
                 self.has_failed = true;
             }
 
@@ -1096,11 +1095,7 @@ fn exec<Sep: Separator>(
     writer.flush()?;
 
     if state1.has_failed || state2.has_failed {
-        eprintln!(
-            "{}: {}",
-            uucore::execution_phrase(),
-            translate!("join-error-input-not-sorted")
-        );
+        show_error!("{}", translate!("join-error-input-not-sorted"));
         set_exit_code(1);
     }
     Ok(())
@@ -1109,21 +1104,15 @@ fn exec<Sep: Separator>(
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
 fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
-    if let Some(keys) = keys {
-        if let Some(key) = key {
-            if keys != key {
-                // Show zero-based field numbers as one-based.
-                return Err(USimpleError::new(
-                    1,
-                    translate!("join-error-incompatible-fields", "field1" => (keys + 1), "field2" => (key + 1)),
-                ));
-            }
-        }
-
-        return Ok(keys);
+    match (keys, key) {
+        // Show zero-based field numbers as one-based.
+        (Some(k1), Some(k2)) if k1 != k2 => Err(USimpleError::new(
+            1,
+            translate!("join-error-incompatible-fields", "field1" => (k1 + 1), "field2" => (k2 + 1)),
+        )),
+        (Some(k), _) | (_, Some(k)) => Ok(k),
+        (None, None) => Ok(0),
     }
-
-    Ok(key.unwrap_or(0))
 }
 
 /// Parse the specified field string as a natural number and return

@@ -35,12 +35,7 @@ pub fn is_unsafe_overwrite<I: AsFd, O: AsFd>(input: &I, output: &O) -> bool {
     let input_pos = rustix::fs::seek(input, SeekFrom::Current(0)).map(|v| v as i64);
     let output_pos = rustix::fs::seek(output, SeekFrom::Current(0)).map(|v| v as i64);
     if is_appending(output) {
-        if let Ok(pos) = input_pos {
-            if pos >= 0 && (pos as u64) >= file_size {
-                return false;
-            }
-        }
-        return true;
+        return !input_pos.is_ok_and(|pos| pos >= 0 && (pos as u64) >= file_size);
     }
     let Ok(input_pos) = input_pos else {
         return false;
