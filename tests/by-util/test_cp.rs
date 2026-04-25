@@ -7877,3 +7877,98 @@ fn test_cp_recursive_non_utf8_source() {
 
     assert!(at.plus("dir2").join("a").exists());
 }
+
+/// Regression tests for Issue #10017: TOCTOU symlink swap vulnerability.
+///
+/// These tests verify that `cp` opens source files with `O_NOFOLLOW` when
+/// symlink dereferencing is not requested, preventing a race condition where
+/// an attacker swaps a regular file with a symlink between the metadata check
+/// and the open call.
+mod issue_10017_no_follow {
+    use super::*;
+    use uutests::util::TestScenario;
+
+    /// Verify that copying a regular file still works after the O_NOFOLLOW change.
+    #[test]
+    fn copy_regular_file_works() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "hello world");
+        scene.ucmd().arg("src").arg("dst").succeeds();
+        assert_eq!(at.read("dst"), "hello world");
+    }
+
+    /// Verify that copying a file via symlink with `-L` (dereference) works.
+    #[test]
+    #[cfg(not(windows))]
+    fn copy_dereference_follows_symlink() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("target", "target content");
+        fs::symlink("target", at.plus("link")).unwrap();
+        scene.ucmd().arg("-L").arg("link").arg("dst").succeeds();
+        assert_eq!(at.read("dst"), "target content");
+        assert!(!at.is_symlink("dst"));
+    }
+
+    /// Verify that with `-P` (no-dereference), a symlink source is copied
+    /// as a symlink (not the target's contents).
+    #[test]
+    #[cfg(not(windows))]
+    fn copy_symlink_as_link_no_dereference() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("target", "target content");
+        fs::symlink("target", at.plus("link")).unwrap();
+        scene.ucmd().arg("-P").arg("link").arg("dst").succeeds();
+        assert!(at.is_symlink("dst"));
+    }
+
+    /// Verify that copying a regular file with `--reflink=never` still works.
+    #[test]
+    fn copy_reflink_never_regular_file() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "reflink never content");
+        scene
+            .ucmd()
+            .arg("--reflink=never")
+            .arg("src")
+            .arg("dst")
+            .succeeds();
+        assert_eq!(at.read("dst"), "reflink never content");
+    }
+
+    /// Verify that recursive copy of regular files still works with O_NOFOLLOW.
+    #[test]
+    #[cfg(not(windows))]
+    fn recursive_copy_regular_files() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("srcdir");
+        at.write("srcdir/a", "file a");
+        at.write("srcdir/b", "file b");
+        scene.ucmd().arg("-r").arg("srcdir").arg("dstdir").succeeds();
+        assert_eq!(at.read("dstdir/a"), "file a");
+        assert_eq!(at.read("dstdir/b"), "file b");
+    }
+
+    /// Verify that `-P` (no-dereference) with a regular file still copies
+    /// the file contents correctly.
+    #[test]
+    #[cfg(not(windows))]
+    fn copy_no_dereference_regular_file() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "no-deref content");
+        scene.ucmd().arg("-P").arg("src").arg("dst").succeeds();
+        assert_eq!(at.read("dst"), "no-deref content");
+        assert!(!at.is_symlink("dst"));
+    }
+}

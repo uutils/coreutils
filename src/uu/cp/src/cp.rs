@@ -2275,6 +2275,7 @@ fn handle_copy_mode(
                 source_metadata,
                 symlinked_files,
                 created_parent_dirs,
+                source_in_command_line,
             )?;
         }
         CopyMode::SymLink => {
@@ -2295,6 +2296,7 @@ fn handle_copy_mode(
                             source_metadata,
                             symlinked_files,
                             created_parent_dirs,
+                            source_in_command_line,
                         )?;
                     }
                     UpdateMode::None => {
@@ -2328,6 +2330,7 @@ fn handle_copy_mode(
                             source_metadata,
                             symlinked_files,
                             created_parent_dirs,
+                            source_in_command_line,
                         )?;
                     }
                 }
@@ -2340,6 +2343,7 @@ fn handle_copy_mode(
                     source_metadata,
                     symlinked_files,
                     created_parent_dirs,
+                    source_in_command_line,
                 )?;
             }
         }
@@ -2725,6 +2729,7 @@ fn copy_helper(
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    source_in_command_line: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -2762,6 +2767,7 @@ fn copy_helper(
             context,
             #[cfg(unix)]
             is_stream(source_metadata),
+            options.dereference(source_in_command_line),
         )?;
 
         if !options.attributes_only && options.debug {
