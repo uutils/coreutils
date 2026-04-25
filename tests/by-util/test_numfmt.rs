@@ -1549,3 +1549,13 @@ fn test_si_format_precision_no_cap() {
         .succeeds()
         .stdout_is("1.23457M\n");
 }
+
+// https://github.com/uutils/coreutils/issues/11937
+// numfmt: --format width accounting diverges from GNU for multi-byte --suffix
+#[test]
+fn test_multibyte_suffix_issue11937() {
+    new_ucmd!()
+        .args(&["--suffix=€", "--format=%10.2f", "692"])
+        .succeeds()
+        .stdout_is("   692.00€\n");
+}
