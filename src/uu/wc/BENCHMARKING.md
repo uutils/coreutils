@@ -22,8 +22,7 @@ except to see if it still works. Try `wc -c largefile`.
 On Linux `splice()` is used to get the input's length while discarding it directly.
 
 The best way I've found to generate a fast input to test `splice()` is to pipe the
-output of uutils `cat` into it. Note that GNU `cat` is slower and therefore less
-suitable, and that if a file is given as its input directly (as in
+output of uutils `cat` (with `splice()` support) into it. If a file is given as its input directly (as in
 `wc -c < largefile`) the first strategy kicks in. Try `uucat somefile | wc -c`.
 
 ### Counting lines and UTF-8 characters

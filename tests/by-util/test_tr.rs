@@ -21,12 +21,20 @@ fn test_invalid_input() {
         .fails_with_code(1)
         .stderr_contains("tr: extra operand '<'");
     #[cfg(unix)]
-    new_ucmd!()
-        .args(&["1", "1"])
-        // will test "tr 1 1 < ."
-        .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
-        .fails_with_code(1)
-        .stderr_contains("tr: read error: Is a directory");
+    {
+        let cmd = new_ucmd!()
+            .args(&["1", "1"])
+            // will test "tr 1 1 < ."
+            .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
+            .fails_with_code(1);
+        if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            // On WASI the fluent translation key may appear instead of the
+            // translated text, but the OS error string is still present.
+            cmd.stderr_contains("Is a directory");
+        } else {
+            cmd.stderr_contains("tr: read error: Is a directory");
+        }
+    }
 }
 
 #[test]
@@ -371,6 +379,15 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
+}
+
+#[test]
+fn test_truncate_applies_before_complement_with_class() {
+    new_ucmd!()
+        .args(&["-ct", "[:digit:]", "X"])
+        .pipe_in("A")
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
 }
 
 #[test]
@@ -1496,6 +1513,7 @@ fn check_complement_set2_too_big() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_set() {
     let stdin = b"\x01amp\xfe\xff";
     let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
@@ -1587,6 +1605,7 @@ fn test_non_digit_repeat() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_octal_escape_ambiguous_followed_by_non_utf8() {
     // This case does not trigger the panic
     let set1 = OsStr::from_bytes(b"\\501a");
@@ -1621,6 +1640,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     new_ucmd!()
         .args(&["e", "a"])

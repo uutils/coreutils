@@ -1054,8 +1054,7 @@ fn test_nonexistent_file() {
 fn test_df_all_shows_binfmt_misc() {
     // Check if binfmt_misc is mounted
     let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
-        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
-        .unwrap_or(false);
+        .is_ok_and(|content| content.lines().any(|line| line.contains("binfmt_misc")));
 
     if is_mounted {
         let output = new_ucmd!()
@@ -1076,8 +1075,7 @@ fn test_df_all_shows_binfmt_misc() {
 fn test_df_hides_binfmt_misc_by_default() {
     // Check if binfmt_misc is mounted
     let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
-        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
-        .unwrap_or(false);
+        .is_ok_and(|content| content.lines().any(|line| line.contains("binfmt_misc")));
 
     if is_mounted {
         let output = new_ucmd!()

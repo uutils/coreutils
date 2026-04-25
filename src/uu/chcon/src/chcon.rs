@@ -537,33 +537,29 @@ fn process_file(
     let mut result = Ok(());
 
     match entry.flags() {
-        fts_sys::FTS_D => {
-            if options.recursive_mode.is_recursive() {
-                if root_dev_ino_check(root_dev_ino, file_dev_ino) {
-                    // This happens e.g., with "chcon -R --preserve-root ... /"
-                    // and with "chcon -RH --preserve-root ... symlink-to-root".
-                    root_dev_ino_warn(&file_full_name);
+        fts_sys::FTS_D if options.recursive_mode.is_recursive() => {
+            if root_dev_ino_check(root_dev_ino, file_dev_ino) {
+                // This happens e.g., with "chcon -R --preserve-root ... /"
+                // and with "chcon -RH --preserve-root ... symlink-to-root".
+                root_dev_ino_warn(&file_full_name);
 
-                    // Tell fts not to traverse into this hierarchy.
-                    let _ignored = fts.set(fts_sys::FTS_SKIP);
+                // Tell fts not to traverse into this hierarchy.
+                let _ignored = fts.set(fts_sys::FTS_SKIP);
 
-                    // Ensure that we do not process "/" on the second visit.
-                    let _ignored = fts.read_next_entry();
+                // Ensure that we do not process "/" on the second visit.
+                let _ignored = fts.read_next_entry();
 
-                    return Err(err(
-                        translate!("chcon-op-modifying-root-path"),
-                        io::ErrorKind::PermissionDenied,
-                    ));
-                }
-
-                return Ok(());
+                return Err(err(
+                    translate!("chcon-op-modifying-root-path"),
+                    io::ErrorKind::PermissionDenied,
+                ));
             }
+
+            return Ok(());
         }
 
-        fts_sys::FTS_DP => {
-            if !options.recursive_mode.is_recursive() {
-                return Ok(());
-            }
+        fts_sys::FTS_DP if !options.recursive_mode.is_recursive() => {
+            return Ok(());
         }
 
         fts_sys::FTS_NS => {
@@ -585,14 +581,14 @@ fn process_file(
 
         fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
 
-        fts_sys::FTS_DC => {
-            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
-                emit_cycle_warning(&file_full_name);
-                return Err(err(
-                    translate!("chcon-op-reading-cyclic-directory"),
-                    io::ErrorKind::InvalidData,
-                ));
-            }
+        fts_sys::FTS_DC
+            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) =>
+        {
+            emit_cycle_warning(&file_full_name);
+            return Err(err(
+                translate!("chcon-op-reading-cyclic-directory"),
+                io::ErrorKind::InvalidData,
+            ));
         }
 
         _ => {}

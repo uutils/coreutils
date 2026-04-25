@@ -3,7 +3,6 @@ name = "uu_groups"
 description = "groups ~ (uutils) display group memberships for USERNAME"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/groups"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/groups.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) seekable seek'd tail'ing ringbuffer ringbuf unwatch
+// spell-checker:ignore (ToDO) seek'd tail'ing ringbuffer ringbuf unwatch
 // spell-checker:ignore (ToDO) Uncategorized filehandle Signum memrchr
 // spell-checker:ignore (libs) kqueue
 // spell-checker:ignore (acronyms)
@@ -27,7 +27,6 @@ use chunks::ReverseChunks;
 use follow::Observer;
 use memchr::{memchr_iter, memrchr_iter};
 use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
-use same_file::Handle;
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
@@ -117,21 +116,21 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
-    let md = path.metadata();
-    if let Err(ref e) = md {
-        if e.kind() == ErrorKind::NotFound {
-            set_exit_code(1);
-            show_error!(
-                "{}",
-                translate!(
-                    "tail-error-cannot-open-no-such-file",
-                    "file" => input.display_name.clone(),
-                    "error" => translate!("tail-no-such-file-or-directory")
-                )
-            );
-            observer.add_bad_path(path, input.display_name.as_str(), false)?;
-            return Ok(());
-        }
+    if path
+        .metadata()
+        .is_err_and(|e| e.kind() == ErrorKind::NotFound)
+    {
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!(
+                "tail-error-cannot-open-no-such-file",
+                "file" => input.display_name.clone(),
+                "error" => translate!("tail-no-such-file-or-directory")
+            )
+        );
+        observer.add_bad_path(path, input.display_name.as_str(), false)?;
+        return Ok(());
     }
 
     if path.is_dir() {
@@ -175,7 +174,7 @@ fn tail_file(
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
                     && (!st.is_file() || st.len() > blksize_limit)
                 {
-                    bounded_tail(&mut file, settings);
+                    bounded_tail(&mut file, settings)?;
                     reader = BufReader::new(file);
                 } else {
                     reader = BufReader::new(file);
@@ -261,7 +260,7 @@ fn tail_stdin(
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
     {
-        if let Ok(mut stdin_handle) = Handle::stdin() {
+        if let Ok(mut stdin_handle) = same_file::Handle::stdin() {
             if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
                 if meta.file_type().is_dir() {
                     set_exit_code(1);
@@ -287,17 +286,14 @@ fn tail_stdin(
     }
 
     if let Some(path) = input.resolve() {
-        // fifo
-        let mut stdin_offset = 0;
-        if cfg!(unix) {
-            // Save the current seek position/offset of a stdin redirected file.
-            // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
-            if let Ok(mut stdin_handle) = Handle::stdin() {
-                if let Ok(offset) = stdin_handle.as_file_mut().stream_position() {
-                    stdin_offset = offset;
-                }
-            }
-        }
+        #[cfg(not(unix))]
+        let stdin_offset = 0;
+        // Save the current seek position/offset of a stdin redirected file.
+        // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
+        #[cfg(unix)]
+        let stdin_offset = same_file::Handle::stdin()
+            .and_then(|mut h| h.as_file_mut().stream_position())
+            .unwrap_or(0); // fifo
         tail_file(
             settings,
             header_printer,
@@ -433,10 +429,8 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 
         // Ignore a trailing newline in the last block, if there is one.
         if first_slice {
-            if let Some(c) = slice.last() {
-                if *c == delimiter {
-                    iter.next();
-                }
+            if slice.last().is_some_and(|&c| c == delimiter) {
+                iter.next();
             }
             first_slice = false;
         }
@@ -466,7 +460,7 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// end of the file, and then read the file "backwards" in blocks of size
 /// `BLOCK_SIZE` until we find the location of the first line/byte. This ends up
 /// being a nice performance win for very large files.
-fn bounded_tail(file: &mut File, settings: &Settings) {
+fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
     debug_assert!(!settings.presume_input_pipe);
     let mut limit = None;
 
@@ -499,7 +493,8 @@ fn bounded_tail(file: &mut File, settings: &Settings) {
         _ => {}
     }
 
-    print_target_section(file, limit);
+    print_target_section(file, limit)?;
+    Ok(())
 }
 
 fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UResult<()> {
@@ -580,7 +575,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     Ok(())
 }
 
-fn print_target_section<R>(file: &mut R, limit: Option<u64>)
+fn print_target_section<R>(file: &mut R, limit: Option<u64>) -> UResult<()>
 where
     R: Read + ?Sized,
 {
@@ -589,10 +584,11 @@ where
     let mut stdout = stdout.lock();
     if let Some(limit) = limit {
         let mut reader = file.take(limit);
-        io::copy(&mut reader, &mut stdout).unwrap();
+        io::copy(&mut reader, &mut stdout)?;
     } else {
-        io::copy(file, &mut stdout).unwrap();
+        io::copy(file, &mut stdout)?;
     }
+    Ok(())
 }
 
 #[cfg(test)]

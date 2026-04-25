@@ -4,7 +4,6 @@ description = "chcon ~ (uutils) change file security context"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chcon"
 keywords = ["coreutils", "uutils", "cli", "utility"]
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 categories.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/chcon.rs"
+test = false
+doctest = false
 
 # TODO: block fetching crates without feat_selinux
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]

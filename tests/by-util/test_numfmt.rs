@@ -1170,6 +1170,7 @@ fn test_zero_terminated_embedded_newline() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1393,7 +1394,6 @@ fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
 // https://github.com/uutils/coreutils/issues/11654
 // uutils parses large integers through f64, losing precision past 2^53.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11654"]
 fn test_large_integer_precision_loss_issue_11654() {
     new_ucmd!()
         .args(&["--from=iec", "9153396227555392131"])
@@ -1405,7 +1405,6 @@ fn test_large_integer_precision_loss_issue_11654() {
 // uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
 // as "invalid suffix in input".
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11655"]
 fn test_scientific_notation_rejected_by_gnu_issue_11655() {
     new_ucmd!()
         .arg("1e9")
@@ -1413,12 +1412,8 @@ fn test_scientific_notation_rejected_by_gnu_issue_11655() {
         .stderr_contains("invalid suffix in input");
 }
 
-// https://github.com/uutils/coreutils/issues/11662
-// `--to=auto` is accepted at parse time by uutils then rejected at runtime
-// with exit code 2; GNU rejects it in option parsing with exit code 1.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11662"]
-fn test_to_auto_rejected_at_parse_time_issue_11662() {
+fn test_to_auto_rejected_at_parse_time() {
     new_ucmd!()
         .args(&["--to=auto", "100"])
         .fails_with_code(1)
@@ -1459,7 +1454,6 @@ fn test_to_unit_prefix_selection() {
 // `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
 // the precision specifier `.0` is ignored.
 #[test]
-#[ignore = "GNU compat: see uutils/coreutils#11667"]
 fn test_format_precision_zero_with_to_scale_issue_11667() {
     new_ucmd!()
         .args(&["--to=iec", "--format=%.0f", "5183776"])
@@ -1475,4 +1469,47 @@ fn test_invalid_utf8_input() {
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_output() {
+    // Output uses the locale separator
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1,5K\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_input_comma() {
+    // fr_FR should take '1,5' as a number
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1,5"])
+        .succeeds()
+        .stdout_is("1,500\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_rejects_period() {
+    // '.' isn't valid in fr_FR, should bail
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1.5"])
+        .fails()
+        .stderr_contains("invalid");
+}
+
+#[test]
+fn test_locale_c_uses_period() {
+    // C locale should still use '.' as usual
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1.5K\n");
 }

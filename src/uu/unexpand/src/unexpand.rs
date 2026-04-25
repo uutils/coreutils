@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
+// spell-checker:ignore (ToDO) nums aflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -154,7 +154,7 @@ struct Options {
     files: Vec<OsString>,
     tab_config: TabConfig,
     aflag: bool,
-    uflag: bool,
+    utf8: bool,
 }
 
 impl Options {
@@ -170,7 +170,7 @@ impl Options {
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
             && !matches.get_flag(options::FIRST_ONLY);
-        let uflag = !matches.get_flag(options::NO_UTF8);
+        let utf8 = !matches.get_flag(options::NO_UTF8);
 
         let files = match matches.get_many::<OsString>(options::FILE) {
             Some(v) => v.cloned().collect(),
@@ -181,7 +181,7 @@ impl Options {
             files,
             tab_config,
             aflag,
-            uflag,
+            utf8,
         })
     }
 }
@@ -279,8 +279,21 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let file_buf;
+enum Input {
+    Stdin(Stdin),
+    File(File),
+}
+
+impl Read for Input {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
+}
+
+fn open(path: &OsString) -> UResult<BufReader<Input>> {
     let filename = Path::new(path);
     if filename.is_dir() {
         Err(USimpleError::new(
@@ -288,10 +301,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
         ))
     } else if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(Input::Stdin(stdin())))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        Ok(BufReader::new(Input::File(f)))
     }
 }
 
@@ -383,7 +396,7 @@ enum CharType {
     Other,
 }
 
-fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
+fn next_char_info(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
     use CharType::{Backspace, Other, Space, Tab};
     let b = buf[byte];
     if b.is_ascii() {
@@ -395,7 +408,7 @@ fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usi
         };
     }
 
-    if uflag {
+    if utf8 {
         let nbytes = char::from(b).len_utf8();
         // don't overrun the buffer because of invalid UTF-8
         if buf
@@ -461,7 +474,7 @@ fn unexpand_buf(
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
         // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-        if !options.uflag && !options.aflag && print_state.leading {
+        if !options.utf8 && !options.aflag && print_state.leading {
             // In default mode (not -a), we only convert leading spaces
             // So we can batch process them and then copy the rest
             while byte < buf.len() {
@@ -503,7 +516,7 @@ fn unexpand_buf(
         }
 
         // figure out how big the next char is, if it's UTF-8
-        let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
+        let (ctype, cwidth, nbytes) = next_char_info(options.utf8, buf, byte);
 
         // now figure out how many columns this char takes up, and maybe print it
         let tabs_buffered = print_state.leading || options.aflag;

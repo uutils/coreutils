@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -478,7 +478,7 @@ fn test_ls_devices() {
     at.mkdir("some-dir1");
 
     // Regex tests correct device ID and correct (no pad) spacing for a single file
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(target_vendor = "apple")]
     {
         scene
             .ucmd()
@@ -5054,17 +5054,7 @@ fn test_tabsize_formatting() {
         .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
@@ -5340,7 +5330,7 @@ fn test_ls_dired_recursive_multiple() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
@@ -5486,7 +5476,7 @@ fn test_ls_dired_complex() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
@@ -6212,6 +6202,56 @@ fn test_acl_display() {
         .succeeds()
         .stdout_matches(&re_with_acl)
         .stdout_matches(&re_without_acl);
+}
+
+// Regression test for https://github.com/uutils/coreutils/issues/10980
+// Each file with an ACL must not inflate the link-count column width.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_padding_not_inflated() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let uid = unsafe { libc::getuid() };
+    let names = ["file1", "file2", "file3", "file4", "file5"];
+    for name in &names {
+        at.touch(name);
+        let status = Command::new("setfacl")
+            .args(["-m", &format!("u:{uid}:rw"), &at.plus_as_string(name)])
+            .status()
+            .map(|s| s.code());
+        if !matches!(status, Ok(Some(0))) {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+    }
+
+    let out = scene
+        .ucmd()
+        .current_dir(at.as_string())
+        .arg("-l")
+        .succeeds()
+        .stdout_move_str();
+
+    // Each line with an ACL file should look like:
+    //   -rw-------+ 1 user group 0 <date> fileN
+    // i.e. single space between the `+` and the link count `1`.
+    // The bug inflates that gap to one extra space per ACL file.
+    let mut checked = 0;
+    for line in out.lines() {
+        if line.starts_with('-') && line.contains('+') {
+            let after_plus = line.split('+').nth(1).unwrap();
+            let leading_spaces = after_plus.len() - after_plus.trim_start().len();
+            assert_eq!(
+                leading_spaces, 1,
+                "expected exactly 1 space between '+' and link count, got {leading_spaces} in line: {line:?}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked > 0, "no ACL lines were validated");
 }
 
 // Make sure that "ls --color" correctly applies color "normal" to text and
@@ -7267,4 +7307,21 @@ fn test_ls_windows_non_ascii_filename() {
     at.touch("文件1");
 
     scene.ucmd().succeeds().stdout_contains("文件1").no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_al_no_capabilities_insufficient_on_wasi() {
+    // `ls -al` reads metadata for every entry including "..". Without the
+    // WASI fallback, stat on ".." at the preopened root returns
+    // ERRNO_NOTCAPABLE, which surfaces to the user as "Capabilities
+    // insufficient". Guard against that regression here.
+    let scene = TestScenario::new(util_name!());
+    let out = scene.ucmd().arg("-al").succeeds();
+    out.no_stderr();
+    assert!(
+        !out.stdout_str().contains("Capabilities insufficient"),
+        "ls -al stdout leaked a WASI capability error: {}",
+        out.stdout_str()
+    );
 }

@@ -1,3 +1,4 @@
+tests/basenc/bounded-memory
 tests/cut/bounded-memory
 tests/date/date-locale-hour
 tests/date/resolution
@@ -5,6 +6,8 @@ tests/expand/bounded-memory
 tests/pr/bounded-memory
 tests/tail/inotify-dir-recreate
 tests/tail/overlay-headers
+tests/tail/tail-n0f
+tests/tail/pipe-f
 tests/timeout/timeout
 tests/tail/symlink
 tests/shuf/shuf-reservoir

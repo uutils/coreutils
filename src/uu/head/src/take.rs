@@ -104,10 +104,8 @@ pub fn copy_all_but_n_bytes(
         loop {
             // Try to buffer at least enough to write the entire first buffer.
             let front_buffer = buffers.front();
-            if let Some(front_buffer) = front_buffer {
-                if buffered_bytes >= n + front_buffer.remaining_bytes() {
-                    break;
-                }
+            if front_buffer.is_some_and(|b| buffered_bytes >= n + b.remaining_bytes()) {
+                break;
             }
             let mut new_buffer = empty_buffer_pool.pop().unwrap_or_else(TakeAllBuffer::new);
             let filled_bytes = new_buffer.fill_buffer(reader)?;
@@ -163,15 +161,14 @@ impl TakeAllLinesBuffer {
         reader: &mut impl Read,
         separator: u8,
     ) -> std::io::Result<BytesAndLines> {
-        self.partial_line = false;
         let bytes_read = self.inner.fill_buffer(reader)?;
         // Count the number of lines...
         self.terminated_lines = memchr_iter(separator, self.inner.remaining_buffer()).count();
-        if let Some(last_char) = self.inner.remaining_buffer().last() {
-            if *last_char != separator {
-                self.partial_line = true;
-            }
-        }
+        self.partial_line = self
+            .inner
+            .remaining_buffer()
+            .last()
+            .is_some_and(|&c| c != separator);
         Ok(BytesAndLines {
             bytes: bytes_read,
             terminated_lines: self.terminated_lines,
@@ -266,10 +263,8 @@ pub fn copy_all_but_n_lines<R: Read, W: Write>(
             // First check if we have enough lines buffered that we can write out the entire
             // front buffer. If so, break.
             let front_buffer = buffers.front();
-            if let Some(front_buffer) = front_buffer {
-                if buffered_terminated_lines > n + front_buffer.terminated_lines() {
-                    break;
-                }
+            if front_buffer.is_some_and(|b| buffered_terminated_lines > n + b.terminated_lines()) {
+                break;
             }
             // Else we need to try to buffer more data...
             let mut new_buffer = empty_buffers.pop().unwrap_or_else(TakeAllLinesBuffer::new);

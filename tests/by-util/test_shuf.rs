@@ -383,6 +383,7 @@ fn test_echo_separators_in_arguments() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_echo_invalid_unicode_in_arguments() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -398,6 +399,7 @@ fn test_echo_invalid_unicode_in_arguments() {
 #[cfg(any(unix, target_os = "wasi"))]
 #[cfg(not(target_os = "macos"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_unicode_in_filename() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
@@ -853,6 +855,7 @@ fn test_range_repeat_empty_minus_one() {
 // This test fails if we forget to flush the `BufWriter`.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn write_errors_are_reported() {
     new_ucmd!()
         .arg("-i1-10")

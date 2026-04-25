@@ -3,7 +3,6 @@ name = "uu_whoami"
 description = "whoami ~ (uutils) display user name of current effective user ID"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/whoami"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/whoami.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

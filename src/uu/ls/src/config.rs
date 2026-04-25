@@ -311,9 +311,9 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     };
 
     let sort_index = options
-        .get_one::<String>(options::SORT)
-        .and_then(|_| options.indices_of(options::SORT))
-        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+        .indices_of(options::SORT)
+        .and_then(|mut it| it.next_back())
+        .unwrap_or(0);
     let time_index = get_last_index(options::sort::TIME);
     let size_index = get_last_index(options::sort::SIZE);
     let none_index = get_last_index(options::sort::NONE);
@@ -427,9 +427,9 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     };
 
     let color_index = options
-        .get_one::<String>(options::COLOR)
-        .and_then(|_| options.indices_of(options::COLOR))
-        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+        .indices_of(options::COLOR)
+        .and_then(|mut it| it.next_back())
+        .unwrap_or(0);
     let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
 
     let color_enabled = match options.get_one::<String>(options::COLOR) {
@@ -788,13 +788,10 @@ impl Config {
         };
         let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
-        #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
-            true
         } else {
-            !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
         };
 
         let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);

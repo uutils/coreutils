@@ -3,7 +3,6 @@ name = "uu_sync"
 description = "sync ~ (uutils) synchronize cache writes to storage"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sync"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/sync.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

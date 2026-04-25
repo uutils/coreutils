@@ -20,6 +20,7 @@ fn test_version() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_base64_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -277,6 +278,7 @@ cyBvdmVyIHRoZSBsYXp5IGRvZy4=
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")

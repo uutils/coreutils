@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -256,17 +256,17 @@ impl Source {
             }
             #[cfg(unix)]
             Self::StdinFile(f) => {
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 // Get file length before seeking to avoid race condition
                 let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
@@ -381,14 +381,16 @@ impl<'a> Input<'a> {
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
-            if settings.iflags.directory && !f.metadata()?.is_dir() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dd-error-not-directory", "file" => "standard input"),
-                ));
-            }
+        if let Source::StdinFile(f) = &src
+            && settings.iflags.directory
+            && !f.metadata()?.is_dir()
+        {
+            return Err(USimpleError::new(
+                1,
+                translate!("dd-error-not-directory", "file" => "standard input"),
+            ));
         }
+
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
@@ -568,7 +570,7 @@ impl Input<'_> {
                     bytes_total += rlen;
                     reads_partial += 1;
                     let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                    buf.splice(base_idx + rlen..next_blk, padding);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -655,17 +657,17 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
@@ -1174,10 +1176,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
     #[cfg(target_os = "linux")]
-    if let Err(e) = install_sigusr1_handler() {
-        if i.settings.status != Some(StatusLevel::None) {
-            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
-        }
+    if let Err(e) = install_sigusr1_handler()
+        && i.settings.status != Some(StatusLevel::None)
+    {
+        let _ = writeln!(
+            io::stderr(),
+            "{}\n\t{e}",
+            translate!("dd-warning-signal-handler")
+        );
     }
 
     // Index in the input file where we are reading bytes and in
@@ -1498,12 +1504,7 @@ fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
 /// Decide whether the named file is a named pipe, also known as a FIFO.
 #[cfg(unix)]
 fn is_fifo(filename: &str) -> bool {
-    if let Ok(metadata) = std::fs::metadata(filename) {
-        if metadata.file_type().is_fifo() {
-            return true;
-        }
-    }
-    false
+    std::fs::metadata(filename).is_ok_and(|m| m.file_type().is_fifo())
 }
 
 #[uucore::main]

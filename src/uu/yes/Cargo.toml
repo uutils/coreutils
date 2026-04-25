@@ -3,7 +3,6 @@ name = "uu_yes"
 description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/yes"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/yes.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -6,7 +6,6 @@ name = "uu_who"
 description = "who ~ (uutils) display information about currently logged-in users"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/who"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -23,6 +22,8 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/who.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

@@ -115,7 +115,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -179,7 +179,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -288,7 +288,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -331,7 +331,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -404,7 +404,7 @@ jobs:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -672,7 +672,7 @@ jobs:
         rm share/zsh/site-functions/_[ # not supported
         tar --zstd -cf docs.tar.zst share
     - name: Publish
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
@@ -682,7 +682,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Publish latest commit
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       if: github.event_name == 'push' && github.ref == 'refs/heads/main' && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         tag_name: latest-commit
@@ -713,13 +713,15 @@ jobs:
           # - { os: windows-latest , features: windows, toolchain: stable-x86_64-pc-windows-gnu }
     steps:
     - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
     - uses: taiki-e/install-action@v2
       with:
         tool: nextest,grcov@0.8.24
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'

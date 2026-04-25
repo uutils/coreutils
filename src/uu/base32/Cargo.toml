@@ -3,7 +3,6 @@ name = "uu_base32"
 description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/base32"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/base32.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

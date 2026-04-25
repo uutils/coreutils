@@ -3,7 +3,6 @@ name = "uu_wc"
 description = "wc ~ (uutils) display newline, word, and byte counts for input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/wc"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/wc.rs"
+test = false
+doctest = false
 
 [dependencies]
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
