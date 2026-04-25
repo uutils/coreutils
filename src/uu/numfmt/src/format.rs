@@ -620,7 +620,7 @@ fn transform_to(
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
 /// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
 fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.len();
+    let len = s.chars().count();
     if len >= width {
         return s.to_string();
     }
