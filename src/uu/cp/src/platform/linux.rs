@@ -50,7 +50,7 @@ enum CloneFallback {
     /// Raise an error.
     Error,
 
-    /// Use [`std::fs::copy`].
+    /// Use [`copy_source_to_dest`].
     FSCopy,
 
     /// Use [`sparse_copy`]
@@ -65,7 +65,7 @@ enum CloneFallback {
 enum CopyMethod {
     /// Do a sparse copy
     SparseCopy,
-    /// Use [`std::fs::copy`].
+    /// Use [`copy_source_to_dest`].
     FSCopy,
     /// Default (can either be [`CopyMethod::SparseCopy`] or [`CopyMethod::FSCopy`])
     Default,
@@ -248,8 +248,11 @@ fn check_dest_is_fifo(dest: &Path) -> bool {
     }
 }
 
-/// Copy the contents of a stream from `source` to `dest`.
-fn copy_stream<P>(source: P, dest: P, follow_symlinks: bool) -> std::io::Result<()>
+/// Copy the contents of `source` to `dest`.
+///
+/// Handles both regular files and streams (FIFOs, pipes). When the destination
+/// is not a stream, its length is truncated to avoid leftover data.
+fn copy_file_contents<P>(source: P, dest: P, follow_symlinks: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
@@ -281,7 +284,6 @@ where
 
     let dest_is_stream = is_stream(&dst_file.metadata()?);
     if !dest_is_stream {
-        // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
         dst_file.set_len(0)?;
     }
 
@@ -313,7 +315,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_always(source, dest, follow_symlinks);
@@ -333,7 +335,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let result = handle_reflink_never_sparse_never(source, follow_symlinks);
                 if let Ok(debug) = result {
@@ -347,7 +349,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_auto(source, dest, follow_symlinks);
@@ -369,7 +371,7 @@ pub(crate) fn copy_on_write(
             // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_always(source, dest, follow_symlinks);
@@ -391,7 +393,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let result = handle_reflink_auto_sparse_never(source, follow_symlinks);
                 if let Ok(debug) = result {
@@ -404,7 +406,7 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, SparseMode::Auto) => {
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Unsupported;
-                copy_stream(source, dest, follow_symlinks).map(|_| ())
+                copy_file_contents(source, dest, follow_symlinks).map(|_| ())
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_auto(source, dest, follow_symlinks);
