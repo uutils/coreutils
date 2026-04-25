@@ -117,7 +117,8 @@ where
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using normal read/write. Then
                     // we tell the caller to fall back.
-                    let mut drain = Vec::with_capacity(n); // bounded by pipe size
+                    debug_assert!(n <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
+                    let mut drain = Vec::with_capacity(n);
                     pipe_rd.take(n as u64).read_to_end(&mut drain)?;
                     dest.write_all(&drain)?;
                     return Ok(true);
@@ -184,7 +185,8 @@ pub fn send_n_bytes(
                             break false;
                         }
                     } else {
-                        let mut drain = Vec::with_capacity(s); // bounded by pipe size
+                        debug_assert!(s <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
+                        let mut drain = Vec::with_capacity(s);
                         broker_r.take(s as u64).read_to_end(&mut drain)?;
                         target.write_all(&drain)?;
                         break true;
