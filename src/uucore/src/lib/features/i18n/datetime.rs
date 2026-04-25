@@ -171,7 +171,7 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
 /// Unix implementation using nl_langinfo for exact match with `locale abmon` output.
 #[cfg(all(unix, not(target_os = "android"), not(target_os = "redox")))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
-    use nix::libc;
+    use libc;
     use std::ffi::CStr;
 
     let abmon_items: [libc::nl_item; 12] = [

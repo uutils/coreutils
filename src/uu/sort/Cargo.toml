@@ -51,7 +51,8 @@ foldhash = { workspace = true }
 ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["resource"] }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["process", "param"] }
 
 [dev-dependencies]
 divan = { workspace = true }

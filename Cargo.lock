@@ -3405,7 +3405,6 @@ dependencies = [
  "fluent",
  "indicatif",
  "libc",
- "nix",
  "selinux",
  "tempfile",
  "thiserror 2.0.18",
@@ -3466,7 +3465,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
- "nix",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3543,7 +3542,7 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "rust-ini",
  "thiserror 2.0.18",
  "uucore",
@@ -3708,7 +3707,7 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "uucore",
 ]
 
@@ -3787,7 +3786,7 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "uucore",
 ]
 
@@ -3797,7 +3796,7 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "uucore",
 ]
 
@@ -4156,9 +4155,9 @@ dependencies = [
  "foldhash 0.2.0",
  "itertools 0.14.0",
  "memchr",
- "nix",
  "rand 0.10.1",
  "rayon",
+ "rustix",
  "self_cell",
  "tempfile",
  "thiserror 2.0.18",
@@ -4215,7 +4214,8 @@ dependencies = [
  "cfg_aliases",
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
 ]
 
@@ -4234,7 +4234,8 @@ version = "0.8.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4299,7 +4300,6 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "libc",
- "nix",
  "uucore",
 ]
 
@@ -4523,7 +4523,6 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
  "num-traits",
  "os_display",
  "procfs",

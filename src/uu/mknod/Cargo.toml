@@ -24,7 +24,7 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["mode", "fs"] }
 fluent = { workspace = true }
-nix = { workspace = true }
+libc = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]

@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_pars
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
-use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
+use libc::{dev_t, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
@@ -2807,14 +2807,31 @@ fn copy_node(
         overwrite.verify(dest, debug)?;
         fs::remove_file(dest)?;
     }
-    let sflag = if source_metadata.file_type().is_char_device() {
-        SFlag::S_IFCHR
+    let sflag: mode_t = if source_metadata.file_type().is_char_device() {
+        libc::S_IFCHR
     } else {
-        SFlag::S_IFBLK
+        libc::S_IFBLK
     };
-    let mode = Mode::from_bits_truncate(source_metadata.mode() as mode_t);
-    nix_mknod(dest, sflag, mode, source_metadata.rdev() as dev_t)
-        .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.desc()).into())
+    let mode = (source_metadata.mode() as mode_t) & 0o7777;
+    use std::io;
+    let c_path = std::ffi::CString::new(dest.as_os_str().as_encoded_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path contains null byte"))?;
+    // SAFETY: c_path is a valid null-terminated C string
+    let ret = unsafe {
+        libc::mknod(
+            c_path.as_ptr(),
+            sflag | mode,
+            source_metadata.rdev() as dev_t,
+        )
+    };
+    if ret != 0 {
+        let e = io::Error::last_os_error();
+        return Err(
+            translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => uucore::error::strip_errno(&e))
+                .into(),
+        );
+    }
+    Ok(())
 }
 
 fn copy_link(

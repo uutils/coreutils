@@ -6,8 +6,6 @@
 // spell-checker:ignore (ToDO) signalname pids killpg
 
 use clap::{Arg, ArgAction, Command};
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
 use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
@@ -69,22 +67,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
 
             let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from EXIT
-            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
-            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
-                None
+            // Signal 0 (EXIT) means "check if process exists" - pass 0 to kill()
+            let sig_num: i32 = if sig_name.is_some_and(|name| name == "EXIT") {
+                0
             } else {
-                let sig = (sig as i32)
-                    .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
-                Some(sig)
+                sig as i32
             };
 
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
                 Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
             } else {
-                kill(sig, &pids);
+                kill(sig_num, &pids);
                 Ok(())
             }
         }
@@ -250,11 +244,13 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Option<Signal>, pids: &[i32]) {
+fn kill(sig: i32, pids: &[i32]) {
     for &pid in pids {
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
+        // SAFETY: kill() is a standard POSIX function. sig=0 checks process existence.
+        let ret = unsafe { libc::kill(pid, sig) };
+        if ret != 0 {
             show!(
-                Error::from_raw_os_error(e as i32)
+                Error::last_os_error()
                     .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
             );
         }

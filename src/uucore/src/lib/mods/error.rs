@@ -513,55 +513,56 @@ impl From<std::io::Error> for Box<dyn UError> {
     }
 }
 
-/// Enables the conversion from [`Result<T, nix::Error>`] to [`UResult<T>`].
+/// Enables the conversion from [`Result<T, rustix::io::Errno>`] to [`UResult<T>`].
 ///
 /// # Examples
 ///
 /// ```
 /// use uucore::error::FromIo;
-/// use nix::errno::Errno;
 ///
-/// let nix_err = Err::<(), nix::Error>(Errno::EACCES);
-/// let uio_result = nix_err.map_err_context(|| String::from("fix me please!"));
+/// let io_err = Err::<(), std::io::Error>(std::io::ErrorKind::PermissionDenied.into());
+/// let uio_result = io_err.map_err_context(|| String::from("fix me please!"));
 ///
 /// // prints "fix me please!: Permission denied"
 /// println!("{}", uio_result.unwrap_err());
 /// ```
+///
+/// Enables the conversion from [`Result<T, rustix::io::Errno>`] to [`UResult<T>`].
 #[cfg(unix)]
-impl<T> FromIo<UResult<T>> for Result<T, nix::Error> {
+impl<T> FromIo<UResult<T>> for Result<T, rustix::io::Errno> {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         self.map_err(|e| {
             Box::new(UIoError {
                 context: Some(context()),
-                inner: std::io::Error::from_raw_os_error(e as i32),
+                inner: std::io::Error::from(e),
             }) as Box<dyn UError>
         })
     }
 }
 
 #[cfg(unix)]
-impl<T> FromIo<UResult<T>> for nix::Error {
+impl<T> FromIo<UResult<T>> for rustix::io::Errno {
     fn map_err_context(self, context: impl FnOnce() -> String) -> UResult<T> {
         Err(Box::new(UIoError {
             context: Some(context()),
-            inner: std::io::Error::from_raw_os_error(self as i32),
+            inner: std::io::Error::from(self),
         }) as Box<dyn UError>)
     }
 }
 
 #[cfg(unix)]
-impl From<nix::Error> for UIoError {
-    fn from(f: nix::Error) -> Self {
+impl From<rustix::io::Errno> for UIoError {
+    fn from(f: rustix::io::Errno) -> Self {
         Self {
             context: None,
-            inner: std::io::Error::from_raw_os_error(f as i32),
+            inner: std::io::Error::from(f),
         }
     }
 }
 
 #[cfg(unix)]
-impl From<nix::Error> for Box<dyn UError> {
-    fn from(f: nix::Error) -> Self {
+impl From<rustix::io::Errno> for Box<dyn UError> {
+    fn from(f: rustix::io::Errno) -> Self {
         let u_error: UIoError = f.into();
         Box::new(u_error) as Self
     }
@@ -780,22 +781,22 @@ impl Display for ClapErrorWrapper {
 mod tests {
     #[test]
     #[cfg(unix)]
-    fn test_nix_error_conversion() {
+    fn test_rustix_errno_conversion() {
         use super::{FromIo, UIoError};
-        use nix::errno::Errno;
+        use rustix::io::Errno;
         use std::io::ErrorKind;
 
-        for (nix_error, expected_error_kind) in [
-            (Errno::EACCES, ErrorKind::PermissionDenied),
-            (Errno::ENOENT, ErrorKind::NotFound),
-            (Errno::EEXIST, ErrorKind::AlreadyExists),
+        for (errno, expected_error_kind) in [
+            (Errno::ACCESS, ErrorKind::PermissionDenied),
+            (Errno::NOENT, ErrorKind::NotFound),
+            (Errno::EXIST, ErrorKind::AlreadyExists),
         ] {
-            let error = UIoError::from(nix_error);
+            let error = UIoError::from(errno);
             assert_eq!(expected_error_kind, error.inner.kind());
         }
         assert_eq!(
             "test: Permission denied",
-            Err::<(), nix::Error>(Errno::EACCES)
+            Err::<(), Errno>(Errno::ACCESS)
                 .map_err_context(|| String::from("test"))
                 .unwrap_err()
                 .to_string()

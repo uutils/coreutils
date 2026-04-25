@@ -16,15 +16,13 @@ mod progress;
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 #[cfg(target_os = "linux")]
 use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::OFlags as RustixOFlags;
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
@@ -55,10 +53,7 @@ use std::time::{Duration, Instant};
 use clap::{Arg, Command};
 use gcd::Gcd;
 #[cfg(target_os = "linux")]
-use nix::{
-    errno::Errno,
-    fcntl::{PosixFadviseAdvice, posix_fadvise},
-};
+use rustix::fs::{Advice as PosixFadviseAdvice, fadvise};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
@@ -316,14 +311,16 @@ impl Source {
     /// portion of the source is no longer needed. If not possible,
     /// then this function returns an error.
     #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> io::Result<()> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                let advice = PosixFadviseAdvice::DontNeed;
+                let len = std::num::NonZeroU64::new(len as u64);
+                fadvise(f.as_fd(), offset as u64, len, advice)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            _ => Err(io::Error::from_raw_os_error(libc::ESPIPE)), // "Illegal seek"
         }
     }
 }
@@ -700,13 +697,15 @@ impl Dest {
     /// specified portion of the destination is no longer needed. If
     /// not possible, then this function returns an error.
     #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                let advice = PosixFadviseAdvice::DontNeed;
+                let len = std::num::NonZeroU64::new(len as u64);
+                fadvise(f.as_fd(), offset as u64, len, advice)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            _ => Err(io::Error::from_raw_os_error(libc::ESPIPE)), // "Illegal seek"
         }
     }
 }
@@ -720,31 +719,33 @@ fn is_sparse(buf: &[u8]) -> bool {
 /// This follows GNU dd behavior for partial block writes with O_DIRECT.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 
-    // Get current flags using nix
-    let oflags = match fcntl(&mut *f, FcntlArg::F_GETFL) {
-        Ok(flags) => OFlag::from_bits_retain(flags),
-        Err(_) => return Err(original_error),
+    // Get current flags
+    let Ok(oflags) = fcntl_getfl(&*f) else {
+        return Err(original_error);
     };
 
     // If O_DIRECT is set, try removing it temporarily
-    if oflags.contains(OFlag::O_DIRECT) {
-        let flags_without_direct = oflags - OFlag::O_DIRECT;
+    if oflags.contains(OFlags::DIRECT) {
+        let flags_without_direct = oflags & !OFlags::DIRECT;
 
-        // Remove O_DIRECT flag using nix
-        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
+        // Remove O_DIRECT flag
+        if fcntl_setfl(&*f, flags_without_direct).is_err() {
             return Err(original_error);
         }
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
-        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
+        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {os_err}");
+            show_error!(
+                "Failed to restore O_DIRECT flag: {}",
+                io::Error::from(os_err)
+            );
         }
 
         write_result
@@ -891,9 +892,9 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            nix::fcntl::fcntl(
+            rustix::fs::fcntl_setfl(
                 fx.as_raw().as_fd(),
-                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                RustixOFlags::from_bits_retain(libc_flags as _),
             )?;
         }
 
