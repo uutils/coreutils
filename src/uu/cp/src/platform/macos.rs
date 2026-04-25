@@ -120,13 +120,10 @@ pub(crate) fn copy_on_write(
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            let mut src_file =
-                open_source(source, follow_symlinks).map_err(|e| {
-                    CpError::IoErrContext(e, context.to_owned())
-                })?;
-            let mut dst_file = File::create(dest).map_err(|e| {
-                CpError::IoErrContext(e, context.to_owned())
-            })?;
+            let mut src_file = open_source(source, follow_symlinks)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut dst_file =
+                File::create(dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             buf_copy::copy_stream(&mut src_file, &mut dst_file)
                 .map_err(|e| std::io::Error::other(format!("{e}")))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;

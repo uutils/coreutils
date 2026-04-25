@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek
+// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek ELOOP
 
 use libc::{SEEK_DATA, SEEK_HOLE};
 use std::fs::{File, OpenOptions};
@@ -110,7 +110,10 @@ where
 /// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
 /// data, its size, no of blocks it has allocated in disk)
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn check_for_data(source: &Path, follow_symlinks: bool) -> Result<(bool, u64, u64), std::io::Error> {
+fn check_for_data(
+    source: &Path,
+    follow_symlinks: bool,
+) -> Result<(bool, u64, u64), std::io::Error> {
     let mut src_file = open_source(source, follow_symlinks)?;
     let metadata = src_file.metadata()?;
 
@@ -152,11 +155,7 @@ fn check_sparse_detection(source: &Path, follow_symlinks: bool) -> Result<bool, 
 /// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
 /// Used when `--sparse=auto`
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn sparse_copy_without_hole<P>(
-    source: P,
-    dest: P,
-    follow_symlinks: bool,
-) -> std::io::Result<()>
+fn sparse_copy_without_hole<P>(source: P, dest: P, follow_symlinks: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
@@ -415,9 +414,12 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::SparseCopyWithoutHole => {
-                        clone(source, dest, CloneFallback::SparseCopyWithoutHole, follow_symlinks)
-                    }
+                    CopyMethod::SparseCopyWithoutHole => clone(
+                        source,
+                        dest,
+                        CloneFallback::SparseCopyWithoutHole,
+                        follow_symlinks,
+                    ),
                     _ => clone(source, dest, CloneFallback::FSCopy, follow_symlinks),
                 }
             }

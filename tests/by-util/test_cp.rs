@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstdir
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -7953,7 +7953,12 @@ mod issue_10017_no_follow {
         at.mkdir("srcdir");
         at.write("srcdir/a", "file a");
         at.write("srcdir/b", "file b");
-        scene.ucmd().arg("-r").arg("srcdir").arg("dstdir").succeeds();
+        scene
+            .ucmd()
+            .arg("-r")
+            .arg("srcdir")
+            .arg("dstdir")
+            .succeeds();
         assert_eq!(at.read("dstdir/a"), "file a");
         assert_eq!(at.read("dstdir/b"), "file b");
     }
