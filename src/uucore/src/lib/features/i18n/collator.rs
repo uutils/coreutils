@@ -59,10 +59,12 @@ pub fn should_use_locale_collation() -> bool {
 /// }
 /// ```
 pub fn init_locale_collation() -> bool {
-    use crate::i18n::{UEncoding, get_locale_encoding};
+    use crate::i18n::UEncoding;
 
-    // Check if we need locale-aware collation
-    if get_locale_encoding() != UEncoding::Utf8 {
+    // Check if we need locale-aware collation. Collation is governed by
+    // LC_COLLATE, not LC_CTYPE, so read the encoding off the collating locale
+    // directly instead of going through get_locale_encoding().
+    if get_collating_locale().1 != UEncoding::Utf8 {
         // C/POSIX locale - no collator needed
         return false;
     }
