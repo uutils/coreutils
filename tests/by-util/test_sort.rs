@@ -2960,4 +2960,53 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
         .stdout_is(input);
 }
 
+#[test]
+fn test_locale_empty_lc_all_hungarian_lc_collate() {
+    // Regression test for issue #11136
+    // The host machine should have the hungarian locale
+    // for this test to pass
+    let input = "gx\ngy\ngz\n";
+    let output = "gx\ngz\ngy\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LC_COLLATE", "hu_HU.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_locale_empty_lc_all_hungarian_lang() {
+    // Regression test for issue #11136
+    // The host machine should have the hungarian locale
+    // for this test to pass
+    let input = "gx\ngy\ngz\n";
+    let output = "gx\ngz\ngy\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LANG", "hu_HU.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
+#[test]
+fn test_locale_empty_lc_vars_hungarian_lang() {
+    // Regression test for issue #11136
+    // The host machine should have the hungarian locale
+    // for this test to pass
+    let input = "gx\ngy\ngz\n";
+    let output = "gx\ngz\ngy\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LC_COLLATE", "")
+        .env("LANG", "hu_HU.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(output);
+}
+
 /* spell-checker: enable */
