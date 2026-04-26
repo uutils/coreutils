@@ -1922,7 +1922,7 @@ fn test_move_should_not_fallback_to_copy() {
 #[cfg(target_os = "linux")]
 mod inter_partition_copying {
     use std::fs::{self, set_permissions, write};
-    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::os::unix::fs::{MetadataExt, PermissionsExt, symlink};
     use tempfile::TempDir;
     use uutests::util::TestScenario;
     use uutests::util_name;
@@ -2471,6 +2471,28 @@ mod inter_partition_copying {
         assert!(!at.dir_exists("dir"));
         let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
         assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
+    }
+
+    #[test]
+    fn test_mv_preserves_ownership_across_partitions() {
+        if uucore::process::geteuid() != 0 {
+            print!("Test skipped; requires root user");
+            return;
+        }
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("file");
+        std::os::unix::fs::chown(at.plus("file"), Some(1000), Some(1000)).unwrap();
+        at.set_mode("file", 0o4644);
+
+        let dest = TempDir::new_in("/dev/shm/").unwrap();
+        scene.ucmd().arg("file").arg(dest.path()).succeeds();
+
+        let meta = dest.path().join("file").symlink_metadata().unwrap();
+        assert_eq!(meta.uid(), 1000);
+        assert_eq!(meta.gid(), 1000);
+        assert_ne!(meta.mode() & 0o4000, 0, "setuid bit lost");
     }
 }
 
