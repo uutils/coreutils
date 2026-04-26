@@ -82,5 +82,10 @@ name = "sort_locale_utf8_bench"
 harness = false
 
 [[bench]]
+name = "sort_bench_merge"
+harness = false
+
+[[bench]]
 name = "sort_locale_de_bench"
 harness = false
+
