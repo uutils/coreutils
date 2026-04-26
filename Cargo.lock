@@ -4504,7 +4504,7 @@ dependencies = [
  "crc-fast",
  "data-encoding",
  "data-encoding-macro",
- "digest 0.10.7",
+ "digest 0.11.2",
  "dns-lookup",
  "dunce",
  "fluent",
