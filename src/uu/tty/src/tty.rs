@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::display::OsWrite;
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
@@ -21,14 +20,11 @@ mod options {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
-    // Disable SIGPIPE so we can handle broken pipe errors gracefully
-    // and exit with code 3 instead of being killed by the signal.
     #[cfg(unix)]
     let _ = uucore::signals::disable_pipe_errors();
 
     let silent = matches.get_flag(options::SILENT);
 
-    // If silent, we don't need the name, only whether or not stdin is a tty.
     if silent {
         return if std::io::stdin().is_terminal() {
             Ok(())
@@ -42,17 +38,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
 
     let write_result = if let Ok(name) = name {
-        use std::os::unix::ffi::OsStrExt;
-        let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
-        stdout.write_all_os(os_name)
+        let mut buf = name.as_bytes().to_vec();
+        buf.push(b'\n');
+        stdout.write_all(&buf)
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
     };
 
     if write_result.is_err() || stdout.flush().is_err() {
-        // Don't return to prevent a panic later when another flush is attempted
-        // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
         std::process::exit(3);
     }
 
