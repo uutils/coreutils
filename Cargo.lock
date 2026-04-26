@@ -3585,6 +3585,7 @@ dependencies = [
  "memchr",
  "num-bigint",
  "num-prime",
+ "num-traits",
  "uucore",
 ]
 

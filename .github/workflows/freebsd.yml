@@ -132,7 +132,7 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        prepare: pkg install -y curl gmake sudo jq
+        prepare: pkg install -y curl sudo jq
         run: |
           ## Prepare, build, and test
           # implementation modelled after ref: <https://github.com/rust-lang/rustup/pull/2783>
