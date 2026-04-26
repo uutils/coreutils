@@ -22,16 +22,10 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd + Write>(
     write_fd: &mut S,
 ) -> CatResult<bool> {
     if splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
-        // fcntl improves throughput
-        // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
-        let _ = rustix::pipe::fcntl_setpipe_size(&mut *write_fd, MAX_ROOTLESS_PIPE_SIZE);
-        loop {
-            match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(1..) => {}
-                Ok(0) => return Ok(might_fuse(&handle.reader)),
-                Err(_) => return Ok(true),
-            }
-        }
+        Ok(
+            uucore::pipes::splice_unbounded(&handle.reader, write_fd)?
+                || might_fuse(&handle.reader),
+        )
     } else {
         Ok(
             uucore::pipes::splice_unbounded_broker(&handle.reader, write_fd)?
