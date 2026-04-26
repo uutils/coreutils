@@ -46,3 +46,7 @@ uucore = { workspace = true, features = ["benchmark"] }
 [[bench]]
 name = "rm_bench"
 harness = false
+
+[[bench]]
+name = "rm_alloc_count"
+harness = false
