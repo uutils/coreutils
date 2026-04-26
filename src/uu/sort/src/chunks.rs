@@ -316,6 +316,7 @@ fn parse_lines<'a>(
     let mut start = 0usize;
     let mut index = 0usize;
     for sep_idx in memchr_iter(separator, read) {
+        unsafe { std::hint::assert_unchecked(sep_idx < read.len()) };
         let line = &read[start..sep_idx];
         lines.push(Line::create(line, index, line_data, token_buffer, settings));
         index += 1;

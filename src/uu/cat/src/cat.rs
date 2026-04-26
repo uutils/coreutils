@@ -650,6 +650,7 @@ fn write_end<W: Write>(
 fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     // using memchr2 significantly improves performances
     if let Some(p) = memchr2(b'\n', b'\r', in_buf) {
+        unsafe { std::hint::assert_unchecked(p < in_buf.len()) };
         writer.write_all(&in_buf[..p])?;
         Ok(p)
     } else {

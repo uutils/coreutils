@@ -58,7 +58,10 @@ fn format_and_write<W: std::io::Write>(
 ) -> UResult<bool> {
     // GNU truncates at the first embedded null byte.
     let line = match memchr::memchr(b'\0', input_line) {
-        Some(i) => &input_line[..i],
+        Some(i) => {
+            unsafe { std::hint::assert_unchecked(i < input_line.len()) };
+            &input_line[..i]
+        }
         None => input_line,
     };
 
