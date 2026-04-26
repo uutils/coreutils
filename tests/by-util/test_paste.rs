@@ -488,8 +488,9 @@ fn test_dev_zero_write_error_dev_full() {
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
+        .env("RUST_SIGPIPE", "default")
         .arg("/dev/zero")
         .set_stdout(make_broken_pipe())
-        .run()
-        .fails_silently();
+        .fails()
+        .no_stderr();
 }
