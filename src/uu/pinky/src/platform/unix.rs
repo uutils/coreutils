@@ -15,12 +15,10 @@ use uucore::libc::S_IWGRP;
 use uucore::translate;
 use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
 
-use std::io::BufReader;
-use std::io::prelude::*;
-
 use std::fs::File;
+use std::io;
+use std::io::prelude::*;
 use std::os::unix::fs::MetadataExt;
-
 use std::path::PathBuf;
 
 fn get_long_usage() -> String {
@@ -96,9 +94,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if do_short_format {
-        pk.short_pinky();
+        pk.write_short(&mut io::stdout().lock())?;
     } else {
-        pk.long_pinky();
+        pk.write_long(&mut io::stdout().lock())?;
     }
     Ok(())
 }
@@ -167,7 +165,7 @@ fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
 }
 
 impl Pinky {
-    fn print_entry(&self, ut: &UtmpxRecord) {
+    fn write_entry(&self, writer: &mut impl Write, ut: &UtmpxRecord) -> io::Result<()> {
         let mut pts_path = PathBuf::from("/dev");
         pts_path.push(ut.tty_device().as_str());
 
@@ -187,7 +185,7 @@ impl Pinky {
             last_change = 0;
         }
 
-        print!("{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user());
+        write!(writer, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user())?;
 
         if self.include_fullname {
             let fullname = if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
@@ -196,23 +194,28 @@ impl Pinky {
                 None
             };
             if let Some(fullname) = fullname {
-                print!(" {fullname:<19.19}");
+                write!(writer, " {fullname:<19.19}")?;
             } else {
-                print!(" {:19}", "        ???");
+                write!(writer, " {:19}", "        ???")?;
             }
         }
 
-        print!(" {mesg}{:<8.*}", utmpx::UT_LINESIZE, ut.tty_device());
+        write!(
+            writer,
+            " {mesg}{:<8.*}",
+            utmpx::UT_LINESIZE,
+            ut.tty_device()
+        )?;
 
         if self.include_idle {
             if last_change == 0 {
-                print!(" {:<6}", "?????");
+                write!(writer, " {:<6}", "?????")?;
             } else {
-                print!(" {:<6}", idle_string(last_change));
+                write!(writer, " {:<6}", idle_string(last_change))?;
             }
         }
 
-        print!(" {}", time_string(ut));
+        write!(writer, " {}", time_string(ut))?;
 
         if self.include_where {
             let s: String = if self.do_lookup {
@@ -222,86 +225,87 @@ impl Pinky {
             };
 
             if !s.is_empty() {
-                print!(" {s}");
+                write!(writer, " {s}")?;
             }
         }
 
-        println!();
+        writeln!(writer)?;
+        Ok(())
     }
 
-    fn print_heading(&self) {
-        print!("{:<8}", translate!("pinky-column-login"));
+    fn write_heading(&self, writer: &mut impl Write) -> io::Result<()> {
+        write!(writer, "{:<8}", translate!("pinky-column-login"))?;
         if self.include_fullname {
-            print!(" {:<19}", translate!("pinky-column-name"));
+            write!(writer, " {:<19}", translate!("pinky-column-name"))?;
         }
-        print!(" {:<9}", translate!("pinky-column-tty"));
+        write!(writer, " {:<9}", translate!("pinky-column-tty"))?;
         if self.include_idle {
-            print!(" {:<6}", translate!("pinky-column-idle"));
+            write!(writer, " {:<6}", translate!("pinky-column-idle"))?;
         }
-        print!(" {:<16}", translate!("pinky-column-when"));
+        write!(writer, " {:<16}", translate!("pinky-column-when"))?;
         if self.include_where {
-            print!(" {}", translate!("pinky-column-where"));
+            write!(writer, " {}", translate!("pinky-column-where"))?;
         }
-        println!();
+        writeln!(writer)?;
+        Ok(())
     }
 
-    fn short_pinky(&self) {
+    fn write_short(&self, writer: &mut impl Write) -> io::Result<()> {
         if self.include_heading {
-            self.print_heading();
+            self.write_heading(writer)?;
         }
         for ut in Utmpx::iter_all_records() {
             if ut.is_user_process()
                 && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
             {
-                self.print_entry(&ut);
+                self.write_entry(writer, &ut)?;
             }
         }
+        Ok(())
     }
 
-    fn long_pinky(&self) {
+    fn write_long(&self, writer: &mut impl Write) -> io::Result<()> {
         for u in &self.names {
-            print!(
+            write!(
+                writer,
                 "{} {u:<28}{} ",
                 translate!("pinky-login-name-label"),
                 translate!("pinky-real-life-label")
-            );
+            )?;
             if let Ok(pw) = Passwd::locate(u.as_str()) {
                 let fullname = gecos_to_fullname(&pw).unwrap_or_default();
                 let user_dir = pw.user_dir.unwrap_or_default();
                 let user_shell = pw.user_shell.unwrap_or_default();
-                println!(" {fullname}");
+                writeln!(writer, " {fullname}")?;
                 if self.include_home_and_shell {
-                    print!("{} {user_dir:<29}", translate!("pinky-directory-label"));
-                    println!("{}  {user_shell}", translate!("pinky-shell-label"));
+                    write!(
+                        writer,
+                        "{} {user_dir:<29}",
+                        translate!("pinky-directory-label")
+                    )?;
+                    writeln!(writer, "{}  {user_shell}", translate!("pinky-shell-label"))?;
                 }
                 if self.include_project {
                     let mut p = PathBuf::from(&user_dir);
                     p.push(".project");
-                    if let Ok(f) = File::open(p) {
-                        print!("{} ", translate!("pinky-project-label"));
-                        read_to_console(f);
+                    if let Ok(mut reader) = File::open(p) {
+                        write!(writer, "{} ", translate!("pinky-project-label"))?;
+                        io::copy(&mut reader, writer)?;
                     }
                 }
                 if self.include_plan {
                     let mut p = PathBuf::from(&user_dir);
                     p.push(".plan");
-                    if let Ok(f) = File::open(p) {
-                        println!("{}:", translate!("pinky-plan-label"));
-                        read_to_console(f);
+                    if let Ok(mut reader) = File::open(p) {
+                        writeln!(writer, "{}:", translate!("pinky-plan-label"))?;
+                        io::copy(&mut reader, writer)?;
                     }
                 }
-                println!();
+                writeln!(writer)?;
             } else {
-                println!(" ???");
+                writeln!(writer, " ???")?;
             }
         }
-    }
-}
-
-fn read_to_console<F: Read>(f: F) {
-    let mut reader = BufReader::new(f);
-    let mut iobuf = Vec::new();
-    if reader.read_to_end(&mut iobuf).is_ok() {
-        print!("{}", String::from_utf8_lossy(&iobuf));
+        Ok(())
     }
 }
