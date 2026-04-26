@@ -6,7 +6,7 @@ To find all annotated tests: `grep -rn 'wasi_runner, ignore' tests/`
 
 ## Tools not yet covered by integration tests
 
-arch, b2sum, cat, cksum, cp, csplit, date, dir, dircolors, fmt, join, ln, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, sort, split, tail, touch, tsort, uname, uniq, vdir, yes
+arch, b2sum, cat, cksum, cp, csplit, date, dir, dircolors, fmt, join, ls, md5sum, mkdir, mv, nproc, pathchk, pr, printenv, ptx, pwd, readlink, realpath, rm, rmdir, seq, sha1sum, sha224sum, sha256sum, sha384sum, sha512sum, shred, sleep, sort, split, tail, touch, tsort, uname, uniq, vdir, yes
 
 ## WASI sandbox: host paths not visible
 
@@ -31,3 +31,7 @@ WASI does not support spawning child processes. Tests that shell out to other co
 ## WASI: stdin file position not preserved through wasmtime
 
 When stdin is a seekable file, wasmtime does not preserve the file position between the host and guest. Tests that validate stdin offset behavior after `head` reads are skipped.
+
+## WASI: read_link on absolute paths fails under wasmtime via spawned test harness
+
+`fs::read_link` on an absolute path inside the sandbox (e.g. `/file2`) returns `EPERM` when the WASI binary is launched through `std::process::Command` from the test harness, even though the same call works when wasmtime is invoked directly. This breaks `uucore::fs::canonicalize` for symlink sources, so tests that rely on following a symlink to compute a relative path are skipped.
