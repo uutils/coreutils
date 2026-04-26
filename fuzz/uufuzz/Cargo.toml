@@ -9,8 +9,8 @@ license.workspace = true
 
 [dependencies]
 console = "0.16.0"
-libc = "0.2.153"
+libc = "0.2.182"
 rand = { version = "0.10.1", features = ["std_rng"] }
 similar = "3.0.0"
 uucore = { version = "0.8.0", path = "../../src/uucore", features = ["parser"] }
-tempfile = "3.15.0"
+tempfile = "3.20.0"

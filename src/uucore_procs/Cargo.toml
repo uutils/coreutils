@@ -16,5 +16,5 @@ test = false
 doctest = false
 
 [dependencies]
-proc-macro2 = "1.0.81"
-quote = "1.0.36"
+proc-macro2 = "1.0.93"
+quote = "1.0.38"
