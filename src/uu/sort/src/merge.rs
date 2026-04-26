@@ -66,6 +66,40 @@ fn effective_merge_batch_size(settings: &GlobalSettings) -> usize {
     batch_size
 }
 
+/// If the output file is also listed as an input, use memory-map to load it before
+/// it gets opened for writing. This allows reading the original content
+/// via memory-map while writing to the same file, without needing a temp copy.
+fn load_output_as_input(
+    output: &Output,
+    files: &[OsString],
+) -> UResult<Option<(PathBuf, Arc<MemoryMap>)>> {
+    let Some(name) = output.as_output_name() else {
+        return Ok(None);
+    };
+    let output_path = Path::new(name).canonicalize()?;
+    let appears = files
+        .iter()
+        .any(|f| Path::new(f).canonicalize().is_ok_and(|p| p == output_path));
+    if appears {
+        let read_fd = File::open(name).map_err(|error| SortError::ReadFailed {
+            path: output_path.clone(),
+            error,
+        })?;
+        // SAFETY: We keep the read_fd open for the lifetime of the memory-map,
+        // and we only read from it. The file is not modified while the
+        // memory-map exists (writing happens later via a separate FD).
+        let output_as_input = Arc::new(unsafe { MemoryMap::map(&read_fd) }.map_err(|error| {
+            SortError::ReadFailed {
+                path: output_path.clone(),
+                error,
+            }
+        })?);
+        Ok(Some((output_path, output_as_input)))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Merge pre-sorted `Box<dyn Read>`s.
 ///
 /// If `settings.merge_batch_size` is greater than the length of `files`, intermediate files will be used.
@@ -76,36 +110,7 @@ pub fn merge(
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
 ) -> UResult<()> {
-    // If the output file is also listed as an input, Use memory-map to load it before
-    // it gets opened for writing. This allows reading the original content
-    // via memory-map while writing to the same file, without needing a temp copy.
-    let output_as_input = if let Some(name) = output.as_output_name() {
-        let output_path = Path::new(name).canonicalize()?;
-        let appears = files
-            .iter()
-            .any(|f| Path::new(f).canonicalize().is_ok_and(|p| p == output_path));
-        if appears {
-            let read_fd = File::open(name).map_err(|error| SortError::ReadFailed {
-                path: output_path.clone(),
-                error,
-            })?;
-            // SAFETY: We keep the read_fd open for the lifetime of the memory-map,
-            // and we only read from it. The file is not modified while the
-            // memory-map exists (writing happens later via a separate FD).
-            let output_as_input =
-                Arc::new(unsafe { MemoryMap::map(&read_fd) }.map_err(|error| {
-                    SortError::ReadFailed {
-                        path: output_path.clone(),
-                        error,
-                    }
-                })?);
-            Some((output_path, output_as_input))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
+    let output_as_input = load_output_as_input(&output, files)?;
 
     let sort_inputs = SortInputs::from_files_with_output(files, output_as_input)?;
     let files = sort_inputs
