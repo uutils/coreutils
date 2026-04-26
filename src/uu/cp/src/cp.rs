@@ -927,7 +927,7 @@ impl Attributes {
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
+        xattr: Preserve::No { explicit: false },
         ..Self::NONE
     };
 
@@ -1829,6 +1829,20 @@ pub(crate) fn copy_attributes(
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
+            // POSIX ACLs live in system.posix_acl_{access,default} xattrs and are
+            // part of "mode" in GNU cp semantics, so copy them even when the
+            // general xattr preservation is off and feat_acl is not compiled in.
+            #[cfg(all(unix, not(feature = "feat_acl")))]
+            for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+                let value = xattr::get(source, name)
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                if let Some(value) = value
+                    && let Err(e) = xattr::set(dest, name, &value)
+                    && e.raw_os_error() != Some(libc::ENOTSUP)
+                {
+                    return Err(CpError::IoErrContext(e, context.to_owned()));
+                }
+            }
         }
 
         Ok(())

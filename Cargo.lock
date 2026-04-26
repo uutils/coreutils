@@ -3411,6 +3411,7 @@ dependencies = [
  "thiserror 2.0.18",
  "uucore",
  "walkdir",
+ "xattr",
 ]
 
 [[package]]
