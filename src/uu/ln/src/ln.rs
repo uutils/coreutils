@@ -28,6 +28,8 @@ use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 
+/// Public visibility allows other apps to integrate with our
+/// `ln` utility by calling `exec` directly with their `Settings`.
 pub struct Settings {
     pub overwrite: OverwriteMode,
     pub backup: BackupMode,
@@ -264,6 +266,9 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Executes the `ln` utility with the given paths and settings.
+///
+/// This is made public to allow other apps to use `ln` as a library.
 pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
