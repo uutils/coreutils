@@ -519,8 +519,14 @@ fn consider_suffix(
         _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
+    // iec caps at 3 decimals to match gnu, si stays as is
+    let effective_precision = if matches!(u, Unit::Iec(_)) {
+        precision.min(3)
+    } else {
+        precision
+    };
     let v = if precision > 0 {
-        round_with_precision(n / bases[i], round_method, precision)
+        round_with_precision(n / bases[i], round_method, effective_precision)
     } else {
         div_round(n, bases[i], round_method)
     };
@@ -614,7 +620,7 @@ fn transform_to(
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
 /// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
 fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.len();
+    let len = s.chars().count();
     if len >= width {
         return s.to_string();
     }
