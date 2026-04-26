@@ -255,14 +255,26 @@ fn is_text_specifier(specifier: &str) -> bool {
     )
 }
 
+/// Returns true if the specifier is a composite strftime format.
+///
+/// GNU date applies flags/width to the rendered composite output as a whole,
+/// instead of propagating modifiers to inner sub-fields.
+fn is_atomic_composite_specifier(specifier: &str) -> bool {
+    matches!(
+        specifier.chars().last(),
+        Some('D' | 'F' | 'T' | 'r' | 'R' | 'c' | 'x' | 'X')
+    )
+}
+
 /// Returns true if the specifier defaults to space padding.
 /// This includes text specifiers and numeric specifiers like %e and %k
 /// that use blank-padding by default in GNU date.
 fn is_space_padded_specifier(specifier: &str) -> bool {
-    matches!(
-        specifier.chars().last(),
-        Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l')
-    )
+    is_atomic_composite_specifier(specifier)
+        || matches!(
+            specifier.chars().last(),
+            Some('A' | 'a' | 'B' | 'b' | 'h' | 'Z' | 'p' | 'P' | 'e' | 'k' | 'l')
+        )
 }
 
 /// Returns the default width for a specifier.
@@ -342,6 +354,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     let width = parsed.width;
     let specifier = parsed.spec;
     let mut result = value.to_string();
+    let is_atomic_composite = is_atomic_composite_specifier(specifier);
 
     // Determine default pad character based on specifier type
     // Determine default pad character based on specifier type.
@@ -411,6 +424,9 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
 
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
+        if is_atomic_composite {
+            return Ok(result);
+        }
         return Ok(strip_default_padding(&result));
     }
 
@@ -424,12 +440,12 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     };
 
     // When the requested width is narrower than the default formatted width, GNU first removes default padding and then reapplies the requested width.
-    if effective_width > 0 && effective_width < result.len() {
+    if !is_atomic_composite && effective_width > 0 && effective_width < result.len() {
         result = strip_default_padding(&result);
     }
 
     // Strip default padding when switching pad characters on numeric fields
-    if !is_text_specifier(specifier) && result.len() >= 2 {
+    if !is_atomic_composite && !is_text_specifier(specifier) && result.len() >= 2 {
         if pad_char == ' ' && result.starts_with('0') {
             // Switching to space padding: strip leading zeros
             result = strip_default_padding(&result);
@@ -443,7 +459,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     // GNU behavior: + only adds sign if:
     // 1. An explicit width is provided, OR
     // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
-    if force_sign && !result.starts_with('+') && !result.starts_with('-') {
+    if force_sign && !is_atomic_composite && !result.starts_with('+') && !result.starts_with('-') {
         if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
             let default_w = get_default_width(specifier);
             // Add sign only if explicit width provided OR result exceeds default width
