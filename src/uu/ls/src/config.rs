@@ -216,7 +216,7 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
-    pub(crate) indicator_style: IndicatorStyle,
+    pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     pub(crate) context: bool,
@@ -598,34 +598,28 @@ fn extract_quoting_style(
 /// # Returns
 ///
 /// An [`IndicatorStyle`] variant representing the indicator style to use.
-fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
+fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => IndicatorStyle::None,
-            "file-type" => IndicatorStyle::FileType,
-            "classify" => IndicatorStyle::Classify,
-            "slash" => IndicatorStyle::Slash,
-            &_ => IndicatorStyle::None,
+            "none" => None,
+            "file-type" => Some(IndicatorStyle::FileType),
+            "classify" => Some(IndicatorStyle::Classify),
+            "slash" => Some(IndicatorStyle::Slash),
+            &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => IndicatorStyle::None,
-            "always" | "yes" | "force" => IndicatorStyle::Classify,
-            "auto" | "tty" | "if-tty" => {
-                if stdout().is_terminal() {
-                    IndicatorStyle::Classify
-                } else {
-                    IndicatorStyle::None
-                }
-            }
-            &_ => IndicatorStyle::None,
+            "never" | "no" | "none" => None,
+            "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
+            &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
-        IndicatorStyle::Slash
+        Some(IndicatorStyle::Slash)
     } else if options.get_flag(options::indicator_style::FILE_TYPE) {
-        IndicatorStyle::FileType
+        Some(IndicatorStyle::FileType)
     } else {
-        IndicatorStyle::None
+        None
     }
 }
 
@@ -957,7 +951,7 @@ impl Config {
         } else if options.get_flag(options::dereference::DIR_ARGS) {
             Dereference::DirArgs
         } else if options.get_flag(options::DIRECTORY)
-            || indicator_style == IndicatorStyle::Classify
+            || indicator_style == Some(IndicatorStyle::Classify)
             || format == Format::Long
         {
             Dereference::None

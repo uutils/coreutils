@@ -3386,6 +3386,110 @@ fn test_ls_indicator_style() {
     }
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_ls_indicator_style_symlink_target_long() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    at.symlink_dir("dir", "dir_link");
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--classify")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> ")
+        .stdout_does_not_contain("dir_link@ -> ")
+        .stdout_contains("/dir/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_target_long() {
+    // GNU `ls -l --file-type` does append `/` to a symlink target that resolves to a
+    // directory unlike `ls -lp`
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir/")
+        .stdout_does_not_contain("dir_link/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_to_executable_target_long() {
+    use std::fs;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("exec_target");
+    let mut perms = fs::metadata(at.plus("exec_target")).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(at.plus("exec_target"), perms).unwrap();
+
+    symlink("exec_target", at.plus("link")).unwrap();
+    assert!(at.is_symlink("link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link -> exec_target")
+        .stdout_does_not_contain("exec_target*");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_slash_symlink_target_long() {
+    // GNU `ls -lp` does NOT append `/` to a symlink target that resolves to a
+    // directory — the slash indicator style only applies to real directories.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("-lp")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir\n")
+        .stdout_does_not_contain("dir_link/")
+        .stdout_does_not_contain("-> dir/");
+}
+
 // Essentially the same test as above, but only test symlinks and directories,
 // not pipes or sockets.
 #[test]
