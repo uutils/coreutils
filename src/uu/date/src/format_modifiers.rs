@@ -483,7 +483,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             }
         }
     }
-    
+
     Ok(result)
 }
 
