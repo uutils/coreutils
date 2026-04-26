@@ -355,10 +355,10 @@ mod tests {
             Arc::new(unsafe { MemoryMap::map(&file).expect("should memory_map temp file") });
         let mut input = SortInput::from_memory_map(memory_map);
 
-        let mut buf = [0u8; 14];
+        let mut buf = [0u8; 20];
         let n = input.read(&mut buf).expect("should read from input");
-        assert_eq!(n, 14);
-        assert_eq!(&buf, b"mmap test data");
+        assert_eq!(n, 20);
+        assert_eq!(&buf, b"memory_map test data");
     }
 
     #[test]
