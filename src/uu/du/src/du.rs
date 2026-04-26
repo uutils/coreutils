@@ -796,7 +796,6 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
             Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
         }
     }
-
     Ok(exclude_patterns)
 }
 
