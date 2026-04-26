@@ -3921,6 +3921,39 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
     }
 }
 
+// Regression test for https://github.com/uutils/coreutils/issues/12011:
+// LC_COLLATE governs sort order, not the encoding used to classify filename
+// bytes for display (that is LC_CTYPE). With a UTF-8 LC_CTYPE/LANG and
+// LC_COLLATE=C, a UTF-8 filename must still be printed as-is.
+#[test]
+#[cfg(unix)]
+#[ignore = "https://github.com/uutils/coreutils/issues/12011"]
+fn test_ls_lc_collate_does_not_affect_display() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("tést");
+
+    // Empty LC_ALL overrides the test harness default of LC_ALL=C so the
+    // LC_CTYPE / LANG fallback is what governs character classification.
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("--quoting-style=shell-escape")
+        .succeeds()
+        .stdout_only("tést\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("-b")
+        .succeeds()
+        .stdout_only("tést\n");
+}
+
 #[test]
 fn test_ls_quoting_and_color() {
     let scene = TestScenario::new(util_name!());
