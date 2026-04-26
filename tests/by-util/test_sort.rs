@@ -790,6 +790,27 @@ fn test_month_sort_japanese_locale() {
         .stdout_is(expected);
 }
 
+// Regression test: collation must follow LC_COLLATE, not LC_CTYPE. With a
+// UTF-8 LC_COLLATE and LC_CTYPE=C, the ICU collator should still be
+// initialized so accented characters sort near their base letters instead of
+// by raw byte value.
+#[test]
+#[cfg(unix)]
+fn test_sort_lc_collate_independent_of_lc_ctype() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LANG", "C")
+        .env("LC_COLLATE", locale)
+        .env("LC_CTYPE", "C")
+        .pipe_in("z\né\n")
+        .succeeds()
+        .stdout_only("é\nz\n");
+}
+
 #[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
