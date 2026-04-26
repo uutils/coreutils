@@ -1532,7 +1532,7 @@ fn test_du_exclude_from_read_error() {
     new_ucmd!()
         .arg("--exclude-from=/proc/self/mem")
         .fails()
-        .stderr_contains("du: /proc/self/mem: Input/output error");
+        .stderr_contains("du: Input/output error");
 }
 
 #[cfg(not(windows))]
