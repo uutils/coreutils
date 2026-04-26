@@ -34,6 +34,9 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 /// 2. `locale_name`
 /// 3. LANG
 ///
+/// Per POSIX, an empty value means "unset" for locale category resolution,
+/// so we skip empty values and fall through to the next variable.
+///
 /// Or fallback on Posix locale, with ASCII encoding.
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
@@ -154,6 +157,13 @@ pub fn get_collating_locale() -> &'static (Locale, UEncoding) {
     COLLATING_LOCALE.get_or_init(|| get_locale_from_env("LC_COLLATE"))
 }
 
+/// Get the character-classification locale from the environment.
+pub fn get_ctype_locale() -> &'static (Locale, UEncoding) {
+    static CTYPE_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
+
+    CTYPE_LOCALE.get_or_init(|| get_locale_from_env("LC_CTYPE"))
+}
+
 /// Get the numeric locale from the environment
 pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
     static NUMERIC_LOCALE: OnceLock<(Locale, UEncoding)> = OnceLock::new();
@@ -162,8 +172,11 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
 }
 
 /// Return the encoding deduced from the locale environment variable.
+///
+/// Character classification (used to decide whether bytes are printable) is
+/// governed by LC_CTYPE, not LC_COLLATE.
 pub fn get_locale_encoding() -> UEncoding {
-    get_collating_locale().1
+    get_ctype_locale().1
 }
 
 /// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.
