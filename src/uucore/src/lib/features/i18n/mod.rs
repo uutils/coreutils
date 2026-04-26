@@ -28,6 +28,24 @@ pub enum UEncoding {
 // This ensures real locales like "en-US" won't match
 const DEFAULT_LOCALE: Locale = locale!("und");
 
+/// On Windows, detect the encoding from the system ANSI code page.
+/// Returns `UEncoding::Utf8` if the active code page is 65001 (UTF-8),
+/// otherwise `UEncoding::Ascii`.
+///
+/// This mirrors the GNU lib approach where `locale_charset()` calls `GetACP()` on Windows.
+#[cfg(target_os = "windows")]
+fn get_windows_encoding() -> UEncoding {
+    unsafe extern "system" {
+        fn GetACP() -> u32;
+    }
+    let acp = unsafe { GetACP() };
+    if acp == 65001 {
+        UEncoding::Utf8
+    } else {
+        UEncoding::Ascii
+    }
+}
+
 /// Look at 3 environment variables in the following order
 ///
 /// 1. LC_ALL
@@ -70,8 +88,18 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
             return (locale, encoding);
         }
     }
-    // Default POSIX locale representing LC_ALL=C
-    (DEFAULT_LOCALE, UEncoding::Ascii)
+    // No locale environment variables set.
+    // On Windows, check the system ANSI code page to determine encoding,
+    // matching GNU coreutils' approach (locale_charset -> GetACP).
+    #[cfg(target_os = "windows")]
+    {
+        (DEFAULT_LOCALE, get_windows_encoding())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Default POSIX locale representing LC_ALL=C
+        (DEFAULT_LOCALE, UEncoding::Ascii)
+    }
 }
 
 /// Get the collating locale from the environment
