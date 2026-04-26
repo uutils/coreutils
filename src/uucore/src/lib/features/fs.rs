@@ -367,7 +367,6 @@ impl<'a> From<Component<'a>> for OwningComponent {
 /// * [`ResolveMode::Logical`] makes this function resolve '..' components
 ///   before symlinks
 ///
-#[allow(clippy::cognitive_complexity)]
 pub fn canonicalize<P: AsRef<Path>>(
     original: P,
     miss_mode: MissingHandling,
@@ -559,7 +558,6 @@ fn get_file_display(mode: u32) -> char {
 
 // The logic below is more readable written this way.
 #[allow(clippy::if_not_else)]
-#[allow(clippy::cognitive_complexity)]
 /// Display the unix permissions of a file
 pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
     use mode::{

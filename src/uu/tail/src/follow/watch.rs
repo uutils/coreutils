@@ -292,7 +292,7 @@ impl Observer {
         Ok(())
     }
 
-    #[allow(clippy::cognitive_complexity)]
+    #[expect(clippy::cognitive_complexity)]
     fn handle_event(
         &mut self,
         event: &notify::Event,
@@ -478,7 +478,6 @@ impl Observer {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));

@@ -1995,7 +1995,7 @@ fn emit_debug_warnings(
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
+#[expect(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut settings = GlobalSettings {
         numeric_locale: detect_numeric_locale(),
@@ -2832,7 +2832,6 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // In contrast to numeric compare, GNU general numeric/FP sort *should* recognize positive signs and
 // scientific notation, so we strip those lines only after the end of the following numeric string.
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
-#[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
