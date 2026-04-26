@@ -578,7 +578,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 // Print the target section of the file
 fn print_target_section<
     #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
-    #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read + ?Sized,
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
 >(
     file: &mut R,
     limit: Option<u64>,
