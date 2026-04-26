@@ -13,6 +13,8 @@ use std::io::{BufRead, BufReader, Read, StdinLock};
 #[cfg(unix)]
 use std::os::fd::{AsFd, AsRawFd};
 
+const WORD_COUNT_BUF_SIZE: usize = 256 * 1024;
+
 #[cfg(unix)]
 pub trait WordCountable: AsFd + AsRawFd + Read {
     type Buffered: BufRead;
@@ -35,10 +37,10 @@ pub trait WordCountable: Read {
 
 #[cfg(not(target_os = "wasi"))]
 impl WordCountable for StdinLock<'_> {
-    type Buffered = Self;
+    type Buffered = BufReader<Self>;
 
     fn buffered(self) -> Self::Buffered {
-        self
+        BufReader::with_capacity(WORD_COUNT_BUF_SIZE, self)
     }
     fn inner_file(&mut self) -> Option<&mut File> {
         None
@@ -59,7 +61,7 @@ impl WordCountable for File {
     type Buffered = BufReader<Self>;
 
     fn buffered(self) -> Self::Buffered {
-        BufReader::new(self)
+        BufReader::with_capacity(WORD_COUNT_BUF_SIZE, self)
     }
 
     fn inner_file(&mut self) -> Option<&mut File> {
