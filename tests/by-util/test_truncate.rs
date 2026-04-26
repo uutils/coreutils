@@ -488,3 +488,14 @@ fn test_truncate_non_utf8_paths() {
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
 }
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_truncate_stdin_reference() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["-r", "/dev/stdin", "dst"])
+        .terminal_simulation(true)
+        .fails()
+        .stderr_contains("Illegal seek");
+}
