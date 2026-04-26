@@ -476,7 +476,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     } else if specifier.ends_with('N') {
         if effective_width <= get_default_width(specifier) {
-            result.truncate(3);
+            result.truncate(effective_width);
         }
     }
 
