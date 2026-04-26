@@ -119,6 +119,8 @@ impl UError for LsError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
+    uucore::i18n::collator::init_locale_collation();
+
     let config = Config::from(&matches)?;
 
     let locs = matches
@@ -1470,7 +1472,18 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             entries.sort_unstable_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Name => {
+            if uucore::i18n::collator::should_use_locale_collation() {
+                entries.sort_unstable_by(|a, b| {
+                    uucore::i18n::collator::locale_cmp(
+                        os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                        os_str_as_bytes_lossy(b.display_name()).as_ref(),
+                    )
+                });
+            } else {
+                entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name()));
+            }
+        }
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
