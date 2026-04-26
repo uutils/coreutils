@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
+
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
@@ -412,6 +413,19 @@ fn test_default_body_numbering_multiple_files_and_stdin() {
         .pipe_in("b")
         .succeeds()
         .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files_with_non_existing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+
+    ucmd.args(&["a.txt", "non_existing", "b.txt"])
+        .fails_with_code(1)
+        .stdout_is("     1\ta\n     2\tb\n")
+        .stderr_is("nl: non_existing: No such file or directory\n");
 }
 
 #[test]

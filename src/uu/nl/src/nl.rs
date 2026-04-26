@@ -254,9 +254,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
                 set_exit_code(1);
             } else {
-                let reader = File::open(path).map_err_context(|| file.maybe_quote().to_string())?;
-                let mut buffer = BufReader::new(reader);
-                nl(&mut buffer, &mut stats, &settings)?;
+                match File::open(path) {
+                    Ok(reader) => {
+                        let mut buffer = BufReader::new(reader);
+                        nl(&mut buffer, &mut stats, &settings)?;
+                    }
+                    Err(e) => {
+                        show_error!("{}", e.map_err_context(|| file.maybe_quote().to_string()));
+                        set_exit_code(1);
+                    }
+                }
             }
         }
     }
