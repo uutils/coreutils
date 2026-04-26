@@ -1472,6 +1472,32 @@ fn test_invalid_utf8_input() {
 }
 
 #[test]
+fn test_format_value_too_large_issue_11936() {
+    // value * 10^precision needing 20+ digits should be rejected
+    let cases = [
+        (vec!["--format=%5.1f", "1000000000000000000"], "1e+18/1"),
+        (vec!["--format=%.2f", "100000000000000000"], "1e+17/2"),
+        (vec!["--format=%.3f", "10000000000000000"], "1e+16/3"),
+    ];
+    for (args, hint) in cases {
+        new_ucmd!()
+            .args(&args)
+            .fails_with_code(2)
+            .stderr_contains("value/precision too large")
+            .stderr_contains(hint);
+    }
+}
+
+#[test]
+fn test_format_value_below_large_threshold_ok() {
+    // one below the cutoff still formats
+    new_ucmd!()
+        .args(&["--format=%5.1f", "999999999999999999"])
+        .succeeds()
+        .stdout_is("999999999999999999.0\n");
+}
+
+#[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
 fn test_locale_fr_output() {
     // Output uses the locale separator
