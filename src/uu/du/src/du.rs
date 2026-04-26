@@ -754,14 +754,17 @@ enum DuError {
 
 impl UError for DuError {}
 
-/// Read a file and return each line in a vector of String
-fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
-    let file = File::open(filename).expect("no such file");
-    let buf = BufReader::new(file);
-
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .collect()
+/// Read a file and return each line in a vector of String.
+/// If opening the file failed, return an error.
+fn file_as_vec(filename: impl AsRef<Path> + Clone) -> UResult<Vec<String>> {
+    let file = match File::open(filename.clone()) {
+		Ok(file) => file,
+        Err(e) => return Err(USimpleError::new(1, format!("{}: {e}", filename.as_ref().maybe_quote()))),
+    };
+    let lines = BufReader::new(file)
+        .lines()
+        .collect::<Result<Vec<_>, std::io::Error>>()?;
+    Ok(lines)
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -770,7 +773,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(file_as_vec);
+        .map(file_as_vec)
+        .collect::<UResult<Vec<_>>>()?
+        .into_iter()
+        .flatten();
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
@@ -790,6 +796,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
             Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
         }
     }
+
     Ok(exclude_patterns)
 }
 
