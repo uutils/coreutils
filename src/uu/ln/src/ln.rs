@@ -510,7 +510,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 }
 
 #[cfg(windows)]
-pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::Result<()> {
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
@@ -519,9 +519,9 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> std::io::R
 }
 
 #[cfg(target_os = "wasi")]
-fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> std::io::Result<()> {
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
+fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
         "symlinks not supported on this platform",
     ))
 }
