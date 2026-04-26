@@ -758,8 +758,13 @@ impl UError for DuError {}
 /// If opening the file failed, return an error.
 fn file_as_vec(filename: impl AsRef<Path> + Clone) -> UResult<Vec<String>> {
     let file = match File::open(filename.clone()) {
-		Ok(file) => file,
-        Err(e) => return Err(USimpleError::new(1, format!("{}: {e}", filename.as_ref().maybe_quote()))),
+        Ok(file) => file,
+        Err(e) => {
+            return Err(USimpleError::new(
+                1,
+                format!("{}: {e}", filename.as_ref().maybe_quote()),
+            ));
+        }
     };
     let lines = BufReader::new(file)
         .lines()
