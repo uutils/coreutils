@@ -29,6 +29,8 @@ use uucore::{display::Quotable, show};
 
 use uucore::translate;
 
+mod parse;
+
 #[derive(Debug)]
 enum MoreError {
     IsDirectory(PathBuf),
@@ -152,6 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         print!("\r");
         println!("{panic_info}");
     }));
+    let args = parse::preprocess_args(args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let mut options = Options::from(&matches);
     if let Some(files) = matches.get_many::<OsString>(options::FILES) {
