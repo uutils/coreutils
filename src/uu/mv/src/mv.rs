@@ -43,7 +43,7 @@ use uucore::fs::display_permissions_unix;
 use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
-    are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
+    are_hardlinks_to_same_file, canonicalize, is_symlink_with_trailing, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
@@ -372,6 +372,8 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
+
+    // Path("symlink/").symlink_metadata() will resolve to destination of symlink
     if source.symlink_metadata().is_err() {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
@@ -386,6 +388,23 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
     } else {
         target.is_dir()
     };
+
+    if is_symlink_with_trailing(source) {
+        if !source_is_dir {
+            return Err(MvError::CannotStatNotADirectory(source.quote().to_string()).into());
+        } else if target_is_dir {
+            let target_with_source_filename = match source.file_name() {
+                Some(name) => target.join(name),
+                None => target.to_path_buf(),
+            };
+
+            return Err(MvError::CannotMoveNotADirectory(
+                source.quote().to_string(),
+                target_with_source_filename.quote().to_string(),
+            )
+            .into());
+        }
+    }
 
     if path_ends_with_terminator(target)
         && (!target_is_dir && !source_is_dir)
