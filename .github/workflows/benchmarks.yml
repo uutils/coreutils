@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-C target-cpu=x86-64-v3"
     strategy:
       matrix:
         type: [simulation, memory]
