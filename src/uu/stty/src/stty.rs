@@ -19,14 +19,14 @@ mod flags;
 use crate::flags::AllFlags;
 use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
+use libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
 #[cfg(all(
     target_os = "linux",
     not(target_arch = "powerpc"),
     not(target_arch = "powerpc64")
 ))]
-use nix::libc::{TCGETS2, termios2};
+use libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
@@ -520,7 +520,7 @@ fn parse_rows_cols(arg: &str) -> Option<u16> {
 /// - Returns `None` if format is invalid
 fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     let parts: Vec<&str> = arg.split(':').collect();
-    let expected_parts = 4 + nix::libc::NCCS;
+    let expected_parts = 4 + libc::NCCS;
 
     // GNU requires exactly the right number of parts for this platform
     if parts.len() != expected_parts {
@@ -692,7 +692,7 @@ fn print_terminal_size(
     {
         // For some reason the normal nix Termios struct does not expose the line,
         // so we get the underlying libc::termios struct to get that information.
-        let libc_termios: nix::libc::termios = termios.clone().into();
+        let libc_termios: libc::termios = termios.clone().into();
         let line = libc_termios.c_line;
         printer.print(&translate!("stty-output-line", "line" => line));
     }
@@ -824,7 +824,7 @@ fn string_to_flag(option: &str) -> Option<AllFlags<'_>> {
     None
 }
 
-fn control_char_to_string(cc: nix::libc::cc_t) -> nix::Result<String> {
+fn control_char_to_string(cc: libc::cc_t) -> nix::Result<String> {
     if cc == 0 {
         return Ok(translate!("stty-output-undef"));
     }
