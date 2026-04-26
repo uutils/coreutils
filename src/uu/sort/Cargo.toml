@@ -88,4 +88,3 @@ harness = false
 [[bench]]
 name = "sort_locale_de_bench"
 harness = false
-
