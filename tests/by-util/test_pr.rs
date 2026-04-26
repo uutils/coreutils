@@ -2,11 +2,13 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) Sdivide ading
+// spell-checker:ignore (ToDO) Sdivide ading IRWXU
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use std::fs::metadata;
+#[cfg(unix)]
+use uutests::at_and_ts;
 use uutests::util::UCommand;
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -43,6 +45,36 @@ fn valid_last_modified_template_vars(from: Timestamp) -> Vec<Vec<(String, String
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
+}
+
+#[cfg(unix)]
+fn assert_file_and_fifo_outputs_match(args: &[&str], input: &[u8]) {
+    let (at, ts) = at_and_ts!();
+    at.write_bytes("input.txt", input);
+
+    let expected = ts
+        .ucmd()
+        .args(args)
+        .arg("input.txt")
+        .succeeds()
+        .stdout_move_bytes();
+
+    at.mkfifo("input.fifo");
+    let writer_path = at.plus("input.fifo");
+    let writer_input = input.to_vec();
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, writer_input).unwrap();
+    });
+
+    let actual = ts
+        .ucmd()
+        .args(args)
+        .arg("input.fifo")
+        .succeeds()
+        .stdout_move_bytes();
+
+    writer.join().unwrap();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -564,6 +596,61 @@ fn test_version() {
 #[test]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_char_device_from_infinite_source() {
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    let mut cmd = new_ucmd!();
+    cmd.timeout(Duration::from_secs(5));
+
+    let mut child = cmd
+        .arg("/dev/zero")
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // `pr` should start writing promptly and terminate quietly on a closed pipe.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_with_invalid_utf8_fails() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let fifo_path = at.plus_as_string("fifo");
+
+    nix::unistd::mkfifo(fifo_path.as_str(), nix::sys::stat::Mode::S_IRWXU).unwrap();
+
+    let writer_path = at.plus("fifo");
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, [0xFF_u8, b'\n']).unwrap();
+    });
+
+    ucmd.timeout(Duration::from_secs(5));
+    ucmd.arg("fifo")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_contains("invalid utf-8 sequence");
+
+    writer.join().unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_falls_back_when_page_has_no_content_lines() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-l", "10"], b"line1\nline2\nline3\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_streaming_fifo_falls_back_when_double_spacing_eliminates_content_lines() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-d", "-l", "11"], b"line1\nline2\nline3\n");
 }
 
 #[test]
