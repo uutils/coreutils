@@ -13,6 +13,9 @@ use unicode_width::UnicodeWidthChar;
 use crate::FileOrStdReader;
 use crate::FmtOptions;
 
+// Prevent unbounded buffering on inputs without newlines.
+const MAX_LINE_BYTES: usize = 1024 * 1024; // 1 MiB
+
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
         // if it is ASCII, call it exactly 1 wide (including control chars)
@@ -167,11 +170,80 @@ pub struct FileLine {
 pub struct FileLines<'a> {
     opts: &'a FmtOptions,
     reader: &'a mut FileOrStdReader,
+    /// Leftover bytes from a previous read that exceeded MAX_LINE_BYTES
+    pending: Vec<u8>,
 }
 
 impl FileLines<'_> {
     fn new<'b>(opts: &'b FmtOptions, reader: &'b mut FileOrStdReader) -> FileLines<'b> {
-        FileLines { opts, reader }
+        FileLines {
+            opts,
+            reader,
+            pending: Vec::new(),
+        }
+    }
+
+    /// Remove trailing LF or CRLF from a buffer.
+    fn strip_line_ending(buf: &mut Vec<u8>) {
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+    }
+
+    /// Read a line, limiting memory usage on inputs without newlines.
+    fn read_limited_line(&mut self) -> Option<Vec<u8>> {
+        // First, drain any pending bytes from a previous split
+        if !self.pending.is_empty() {
+            if let Some(pos) = self.pending.iter().position(|&b| b == b'\n') {
+                let mut line: Vec<u8> = self.pending.drain(..=pos).collect();
+                Self::strip_line_ending(&mut line);
+                return Some(line);
+            }
+            // No newline in pending, check if we need to return it as-is or read more
+            if self.pending.len() >= MAX_LINE_BYTES {
+                return Some(std::mem::take(&mut self.pending));
+            }
+        }
+
+        let mut buf = std::mem::take(&mut self.pending);
+        match self.reader.read_until(b'\n', &mut buf) {
+            Ok(0) => {
+                if buf.is_empty() {
+                    return None;
+                }
+                // EOF reached, return remaining buffer
+                Self::strip_line_ending(&mut buf);
+                return Some(buf);
+            }
+            Ok(_) => {}
+            Err(_) => return None,
+        }
+
+        // If buffer exceeds limit, split it
+        if buf.len() > MAX_LINE_BYTES {
+            // Check if the byte after MAX_LINE_BYTES is a newline (handle CRLF)
+            let split_pos = if buf.len() > MAX_LINE_BYTES + 1
+                && buf[MAX_LINE_BYTES] == b'\r'
+                && buf[MAX_LINE_BYTES + 1] == b'\n'
+            {
+                MAX_LINE_BYTES + 2
+            } else if buf.len() > MAX_LINE_BYTES && buf[MAX_LINE_BYTES] == b'\n' {
+                MAX_LINE_BYTES + 1
+            } else {
+                MAX_LINE_BYTES
+            };
+
+            self.pending = buf.split_off(split_pos);
+            // If we split at a newline boundary, consume it
+            Self::strip_line_ending(&mut buf);
+        } else {
+            Self::strip_line_ending(&mut buf);
+        }
+
+        Some(buf)
     }
 
     /// returns true if this line should be formatted
@@ -254,19 +326,7 @@ impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let mut buf = Vec::new();
-        match self.reader.read_until(b'\n', &mut buf) {
-            Ok(0) => return None,
-            Ok(_) => {}
-            Err(_) => return None,
-        }
-        if buf.ends_with(b"\n") {
-            buf.pop();
-            if buf.ends_with(b"\r") {
-                buf.pop();
-            }
-        }
-        let n = buf;
+        let n = self.read_limited_line()?;
 
         // if this line is entirely whitespace,
         // emit a blank line
