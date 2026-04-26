@@ -86,6 +86,31 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
     rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
 }
 
+/// splice all of source to dest
+/// return true if we need read/write fallback
+/// fails if one of in/output should be pipe
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn splice_unbounded<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+where
+    R: Read + AsFd,
+    S: AsFd + std::io::Write,
+{
+    // improve throughput
+    // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+    loop {
+        match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(1..) => {}
+            Ok(0) => return Ok(false),
+            Err(_) => return Ok(true),
+        }
+    }
+}
+
 /// force-splice source to dest even both of them are not pipe
 /// return true if we need read/write fallback
 ///
