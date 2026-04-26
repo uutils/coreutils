@@ -876,21 +876,71 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Me
     }
 }
 
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+/// Checks if the path is referring to current or parent directory.
+///
+/// Strips trailing separators, then checks if the last component is "." or "..".
+///
+/// Examples:
+/// - ".", "./" -> true
+/// - "..", "../" -> true
+/// - "foo/.", "foo/.." -> true
+/// - "foo/bar" -> false
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = os_str_as_bytes(path.as_os_str());
-    let dir_separator = MAIN_SEPARATOR as u8;
-    if let Ok(path_bytes) = path_str {
-        return path_bytes == ([b'.'])
-            || path_bytes == ([b'.', dir_separator])
-            || path_bytes == ([b'.', b'.'])
-            || path_bytes == ([b'.', b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    let Ok(bytes) = os_str_as_bytes(path.as_os_str()) else {
+        return false;
+    };
+
+    // Strip all trailing separators
+    let trimmed = match bytes.iter().rposition(|&b| !is_separator(b)) {
+        Some(i) => &bytes[..=i],
+        None => return false, // all separators or empty
+    };
+
+    // Extract the last component (after the last separator)
+    let last = match trimmed.iter().rposition(|&b| is_separator(b)) {
+        Some(i) => &trimmed[i + 1..],
+        None => trimmed,
+    };
+
+    last == b"." || last == b".."
+}
+
+fn is_separator(b: u8) -> bool {
+    b == MAIN_SEPARATOR as u8 || cfg!(windows) && b == b'/'
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_path_is_current_or_parent_directory() {
+        // Current directory
+        assert!(path_is_current_or_parent_directory(Path::new(".")));
+        assert!(path_is_current_or_parent_directory(Path::new("./")));
+        assert!(path_is_current_or_parent_directory(Path::new(".//")));
+
+        // Parent directory
+        assert!(path_is_current_or_parent_directory(Path::new("..")));
+        assert!(path_is_current_or_parent_directory(Path::new("../")));
+        assert!(path_is_current_or_parent_directory(Path::new("..//")));
+
+        // Nested paths ending in dot/dotdot
+        assert!(path_is_current_or_parent_directory(Path::new("d/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/./")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/..")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/../")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/..")));
+
+        // Not current/parent directory
+        assert!(!path_is_current_or_parent_directory(Path::new("file")));
+        assert!(!path_is_current_or_parent_directory(Path::new(".hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("..hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("dir/file")));
+        assert!(!path_is_current_or_parent_directory(Path::new("...")));
     }
-    false
 }
 
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik
