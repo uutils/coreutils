@@ -3927,7 +3927,6 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
 // LC_COLLATE=C, a UTF-8 filename must still be printed as-is.
 #[test]
 #[cfg(unix)]
-#[ignore = "https://github.com/uutils/coreutils/issues/12011"]
 fn test_ls_lc_collate_does_not_affect_display() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
