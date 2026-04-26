@@ -194,64 +194,46 @@ fn fold_file_bytewise<T: Read, W: Write>(
     let mut line = Vec::new();
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        // Ensures that our line always has enough bytes to either
+        // come across a newline, a whitespace or just wrap around.
+        while width > line.len() {
+            let buf = file
+                .fill_buf()
+                .map_err_context(|| translate!("fold-error-readline"))?;
+            if buf.is_empty() {
+                break;
+            }
+            line.extend_from_slice(buf);
+            let len = buf.len();
+            file.consume(len);
+        }
+
+        // The width exceeds the line read so far if we have
+        // reached EOF.
+        if width > line.len() {
+            output.write_all(&line)?;
             break;
         }
 
-        if line == [NL] {
+        let chunk = &line[..width];
+        let newline_end = chunk.iter().position(|c| NL.eq(c)).map(|v| v + 1);
+
+        let space_end = chunk
+            .iter()
+            .rposition(|c| spaces && c.is_ascii_whitespace() && !CR.eq(c))
+            .map(|v| v + 1);
+
+        let end = newline_end.or(space_end).unwrap_or(width);
+        let slice = &line[..end];
+
+        output.write_all(slice)?;
+        let slice_ends_without_newline = line[end - 1] != NL;
+        let no_newline_follows_slice = line.get(end).is_some_and(|c| *c != NL);
+        if slice_ends_without_newline && no_newline_follows_slice {
             output.write_all(&[NL])?;
-            line.clear();
-            continue;
         }
-
-        let len = line.len();
-        let mut i = 0;
-
-        while i < len {
-            let width = if len - i >= width { width } else { len - i };
-            let slice = {
-                let slice = &line[i..i + width];
-                if spaces && i + width < len {
-                    match slice
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
-                    {
-                        Some((m, _)) => &slice[..=m],
-                        None => slice,
-                    }
-                } else {
-                    slice
-                }
-            };
-
-            // Don't duplicate trailing newlines: if the slice is "\n", the
-            // previous iteration folded just before the end of the line and
-            // has already printed this newline.
-            if slice == [NL] {
-                break;
-            }
-
-            i += slice.len();
-
-            let at_eol = i >= len;
-
-            if at_eol {
-                output.write_all(slice)?;
-            } else {
-                output.write_all(slice)?;
-                output.write_all(&[NL])?;
-            }
-        }
-
-        line.clear();
+        line.drain(..end);
     }
-
     Ok(())
 }
 
