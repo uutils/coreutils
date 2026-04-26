@@ -809,6 +809,19 @@ fn test_sort_lc_collate_independent_of_lc_ctype() {
         .pipe_in("z\né\n")
         .succeeds()
         .stdout_only("é\nz\n");
+
+    // Inverse direction, from
+    // https://github.com/uutils/coreutils/pull/9303#issuecomment-4322263665:
+    // LC_CTYPE=UTF-8 with LC_COLLATE=C must produce byte-wise ordering, not
+    // UTF-8 collation. Byte order: B (0x42) < a (0x61) < z (0x7a) < é (0xc3a9).
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LANG", "C")
+        .env("LC_CTYPE", locale)
+        .env("LC_COLLATE", "C")
+        .pipe_in("z\né\na\nB\n")
+        .succeeds()
+        .stdout_only("B\na\nz\né\n");
 }
 
 #[test]

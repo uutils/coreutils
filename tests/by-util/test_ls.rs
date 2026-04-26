@@ -3951,6 +3951,18 @@ fn test_ls_lc_collate_does_not_affect_display() {
         .arg("-b")
         .succeeds()
         .stdout_only("tést\n");
+
+    // Reproducer from https://github.com/uutils/coreutils/pull/9303#issuecomment-4322263665:
+    // explicit LC_CTYPE=UTF-8 with LC_COLLATE=C must still print UTF-8 names as-is.
+    at.touch("あいうえお");
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("あいうえお")
+        .succeeds()
+        .stdout_only("あいうえお\n");
 }
 
 #[test]
