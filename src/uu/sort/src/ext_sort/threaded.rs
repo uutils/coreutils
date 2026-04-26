@@ -7,9 +7,7 @@
 //! thread, and spill to temporary files when memory is exceeded.
 
 use std::cmp::Ordering;
-use std::fs::File;
 use std::io::{Read, Write, stderr};
-use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
 
@@ -17,20 +15,12 @@ use itertools::Itertools;
 use uucore::error::{UResult, strip_errno};
 
 use crate::Output;
-use crate::chunks::RecycledChunk;
-use crate::merge::WriteableCompressedTmpFile;
-use crate::merge::WriteablePlainTmpFile;
-use crate::merge::WriteableTmpFile;
+use crate::chunks::{self, Chunk, RecycledChunk};
+use crate::merge::{self, WriteableCompressedTmpFile, WriteablePlainTmpFile, WriteableTmpFile};
 use crate::tmp_dir::TmpDirWrapper;
-use crate::{
-    GlobalSettings, Line,
-    chunks::{self, Chunk},
-    compare_by, merge, print_sorted, sort_by,
-};
+use crate::{GlobalSettings, compare_by, print_sorted, sort_by};
 
-// Note: update `test_sort::test_start_buffer` if this size is changed
-// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
-const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+use super::{DEFAULT_BUF_SIZE, write};
 
 /// Sort files by using auxiliary files for storing intermediate chunks (if needed), and output the result.
 ///
@@ -281,25 +271,5 @@ fn read_write_loop<I: WriteableTmpFile>(
                 sender_option = None;
             }
         }
-    }
-}
-
-/// Write the lines in `chunk` to `file`, separated by `separator`.
-/// `compress_prog` is used to optionally compress file contents.
-fn write<I: WriteableTmpFile>(
-    chunk: &Chunk,
-    file: (File, PathBuf),
-    compress_prog: Option<&str>,
-    separator: u8,
-) -> UResult<I::Closed> {
-    let mut tmp_file = I::create(file, compress_prog)?;
-    write_lines(chunk.lines(), tmp_file.as_write(), separator);
-    tmp_file.finished_writing()
-}
-
-fn write_lines<T: Write>(lines: &[Line], writer: &mut T, separator: u8) {
-    for s in lines {
-        writer.write_all(s.line).unwrap();
-        writer.write_all(&[separator]).unwrap();
     }
 }

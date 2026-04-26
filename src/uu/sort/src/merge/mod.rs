@@ -4,35 +4,36 @@
 // file that was distributed with this source code.
 //! Merge already sorted files.
 //!
-//! We achieve performance by splitting the tasks of sorting and writing, and reading and parsing between two threads.
-//! The threads communicate over channels. There's one channel per file in the direction reader -> sorter, but only
-//! one channel from the sorter back to the reader. The channels to the sorter are used to send the read chunks.
-//! The sorter reads the next chunk from the channel whenever it needs the next chunk after running out of lines
-//! from the previous read of the file. The channel back from the sorter to the reader has two purposes: To allow the reader
-//! to reuse memory allocations and to tell the reader which file to read from next.
+//! On most platforms this uses a multi-threaded reader/merger setup. On WASI
+//! without atomics, a synchronous variant is used instead. The two
+//! implementations live in sibling modules and are selected via cfg at the
+//! module boundary.
 
 use std::{
-    cmp::Ordering,
     ffi::{OsStr, OsString},
     fs::{self, File},
     io::{BufWriter, Read, Write},
-    iter,
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
-    thread::{self, JoinHandle},
 };
 
-use compare::Compare;
-use uucore::error::{FromIo, UResult};
+use uucore::error::UResult;
 
 use crate::{
-    GlobalSettings, Output, SortError,
-    chunks::{self, Chunk, RecycledChunk},
-    compare_by, current_open_fd_count, fd_soft_limit, open,
+    GlobalSettings, Output, SortError, chunks::Chunk, current_open_fd_count, fd_soft_limit, open,
     tmp_dir::TmpDirWrapper,
 };
+
+#[cfg(not(wasi_no_threads))]
+mod threaded;
+#[cfg(not(wasi_no_threads))]
+use threaded as runner;
+
+#[cfg(wasi_no_threads)]
+mod sync;
+#[cfg(wasi_no_threads)]
+use sync as runner;
 
 /// If the output file occurs in the input files as well, copy the contents of the output file
 /// and replace its occurrences in the inputs with that copy.
@@ -103,11 +104,40 @@ pub fn merge(
     let files = files
         .iter()
         .map(|file| open(file).map(|file| PlainMergeInput { inner: file }));
+
+    if !runner::SUPPORTS_COMPRESSION && settings.compress_prog.is_some() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "sort: warning: --compress-program is ignored on this platform"
+        );
+        return merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
+            files, settings, output, tmp_dir,
+        );
+    }
+
     if settings.compress_prog.is_none() {
         merge_with_file_limit::<_, _, WriteablePlainTmpFile>(files, settings, output, tmp_dir)
     } else {
         merge_with_file_limit::<_, _, WriteableCompressedTmpFile>(files, settings, output, tmp_dir)
     }
+}
+
+/// Merge and write to output, dispatching to the active runner.
+fn do_merge_to_output<M: MergeInput + 'static>(
+    files: impl Iterator<Item = UResult<M>>,
+    settings: &GlobalSettings,
+    output: Output,
+) -> UResult<()> {
+    runner::merge_without_limit(files, settings)?.write_all(settings, output)
+}
+
+/// Merge and write to a writer, dispatching to the active runner.
+fn do_merge_to_writer<M: MergeInput + 'static>(
+    files: impl Iterator<Item = UResult<M>>,
+    settings: &GlobalSettings,
+    out: &mut impl Write,
+) -> UResult<()> {
+    runner::merge_without_limit(files, settings)?.write_all_to(settings, out)
 }
 
 // Merge already sorted `MergeInput`s.
@@ -125,8 +155,7 @@ pub fn merge_with_file_limit<
     debug_assert!(batch_size >= 2);
 
     if files.len() <= batch_size {
-        let merger = merge_without_limit(files, settings);
-        merger?.write_all(settings, output)
+        do_merge_to_output(files, settings, output)
     } else {
         let mut temporary_files = vec![];
         let mut batch = Vec::with_capacity(batch_size);
@@ -134,23 +163,21 @@ pub fn merge_with_file_limit<
             batch.push(file);
             if batch.len() >= batch_size {
                 assert_eq!(batch.len(), batch_size);
-                let merger = merge_without_limit(batch.into_iter(), settings)?;
-                batch = Vec::with_capacity(batch_size);
+                let full_batch = std::mem::replace(&mut batch, Vec::with_capacity(batch_size));
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                merger.write_all_to(settings, tmp_file.as_write())?;
+                do_merge_to_writer(full_batch.into_iter(), settings, tmp_file.as_write())?;
                 temporary_files.push(tmp_file.finished_writing()?);
             }
         }
         // Merge any remaining files that didn't get merged in a full batch above.
         if !batch.is_empty() {
             assert!(batch.len() < batch_size);
-            let merger = merge_without_limit(batch.into_iter(), settings)?;
 
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            merger.write_all_to(settings, tmp_file.as_write())?;
+            do_merge_to_writer(batch.into_iter(), settings, tmp_file.as_write())?;
             temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
@@ -167,237 +194,20 @@ pub fn merge_with_file_limit<
     }
 }
 
-/// Merge files without limiting how many files are concurrently open.
-///
-/// It is the responsibility of the caller to ensure that `files` yields only
-/// as many files as we are allowed to open concurrently.
-fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
-    files: F,
-    settings: &GlobalSettings,
-) -> UResult<FileMerger<'_>> {
-    let (request_sender, request_receiver) = channel();
-    let mut reader_files = Vec::with_capacity(files.size_hint().0);
-    let mut loaded_receivers = Vec::with_capacity(files.size_hint().0);
-    for (file_number, file) in files.enumerate() {
-        let (sender, receiver) = sync_channel(2);
-        loaded_receivers.push(receiver);
-        reader_files.push(Some(ReaderFile {
-            file: file?,
-            sender,
-            carry_over: vec![],
-        }));
-        // Send the initial chunk to trigger a read for each file
-        request_sender
-            .send((file_number, RecycledChunk::new(8 * 1024)))
-            .unwrap();
-    }
-
-    // Send the second chunk for each file
-    for file_number in 0..reader_files.len() {
-        request_sender
-            .send((file_number, RecycledChunk::new(8 * 1024)))
-            .unwrap();
-    }
-
-    let reader_join_handle = thread::spawn({
-        let settings = settings.clone();
-        move || {
-            reader(
-                &request_receiver,
-                &mut reader_files,
-                &settings,
-                settings.line_ending.into(),
-            )
-        }
-    });
-
-    let mut mergeable_files = vec![];
-
-    for (file_number, receiver) in loaded_receivers.into_iter().enumerate() {
-        if let Ok(chunk) = receiver.recv() {
-            mergeable_files.push(MergeableFile {
-                current_chunk: Rc::new(chunk),
-                file_number,
-                line_idx: 0,
-                receiver,
-            });
-        }
-    }
-
-    Ok(FileMerger {
-        heap: binary_heap_plus::BinaryHeap::from_vec_cmp(
-            mergeable_files,
-            FileComparator { settings },
-        ),
-        request_sender,
-        prev: None,
-        reader_join_handle,
-    })
-}
-/// The struct on the reader thread representing an input file
-struct ReaderFile<M: MergeInput> {
-    file: M,
-    sender: SyncSender<Chunk>,
-    carry_over: Vec<u8>,
-}
-
-/// The function running on the reader thread.
-fn reader(
-    recycled_receiver: &Receiver<(usize, RecycledChunk)>,
-    files: &mut [Option<ReaderFile<impl MergeInput>>],
-    settings: &GlobalSettings,
-    separator: u8,
-) -> UResult<()> {
-    for (file_idx, recycled_chunk) in recycled_receiver {
-        if let Some(ReaderFile {
-            file,
-            sender,
-            carry_over,
-        }) = &mut files[file_idx]
-        {
-            let should_continue = chunks::read(
-                sender,
-                recycled_chunk,
-                None,
-                carry_over,
-                file.as_read(),
-                &mut iter::empty(),
-                separator,
-                settings,
-            )?;
-            if !should_continue {
-                // Remove the file from the list by replacing it with `None`.
-                let ReaderFile { file, .. } = files[file_idx].take().unwrap();
-                // Depending on the kind of the `MergeInput`, this may delete the file:
-                file.finished_reading()?;
-            }
-        }
-    }
-    Ok(())
-}
-/// The struct on the main thread representing an input file
-pub struct MergeableFile {
-    current_chunk: Rc<Chunk>,
-    line_idx: usize,
-    receiver: Receiver<Chunk>,
-    file_number: usize,
-}
-
 /// A struct to keep track of the previous line we encountered.
 ///
 /// This is required for deduplication purposes.
-struct PreviousLine {
-    chunk: Rc<Chunk>,
-    line_idx: usize,
-    file_number: usize,
-}
-
-/// Merges files together. This is **not** an iterator because of lifetime problems.
-struct FileMerger<'a> {
-    heap: binary_heap_plus::BinaryHeap<MergeableFile, FileComparator<'a>>,
-    request_sender: Sender<(usize, RecycledChunk)>,
-    prev: Option<PreviousLine>,
-    reader_join_handle: JoinHandle<UResult<()>>,
-}
-
-impl FileMerger<'_> {
-    /// Write the merged contents to the output file.
-    fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
-    }
-
-    fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        while self
-            .write_next(settings, out)
-            .map_err_context(|| "write failed".into())?
-        {}
-        drop(self.request_sender);
-        self.reader_join_handle.join().unwrap()
-    }
-
-    fn write_next(
-        &mut self,
-        settings: &GlobalSettings,
-        out: &mut impl Write,
-    ) -> std::io::Result<bool> {
-        if let Some(file) = self.heap.peek() {
-            let prev = self.prev.replace(PreviousLine {
-                chunk: file.current_chunk.clone(),
-                line_idx: file.line_idx,
-                file_number: file.file_number,
-            });
-
-            file.current_chunk.with_dependent(|_, contents| {
-                let current_line = &contents.lines[file.line_idx];
-                if settings.unique {
-                    if let Some(prev) = &prev {
-                        let cmp = compare_by(
-                            &prev.chunk.lines()[prev.line_idx],
-                            current_line,
-                            settings,
-                            prev.chunk.line_data(),
-                            file.current_chunk.line_data(),
-                        );
-                        if cmp == Ordering::Equal {
-                            return Ok(());
-                        }
-                    }
-                }
-                current_line.print(out, settings)
-            })?;
-
-            let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;
-
-            if was_last_line_for_file {
-                if let Ok(next_chunk) = file.receiver.recv() {
-                    let mut file = self.heap.peek_mut().unwrap();
-                    file.current_chunk = Rc::new(next_chunk);
-                    file.line_idx = 0;
-                } else {
-                    self.heap.pop();
-                }
-            } else {
-                // This will cause the comparison to use a different line and the heap to readjust.
-                self.heap.peek_mut().unwrap().line_idx += 1;
-            }
-
-            if let Some(prev) = prev {
-                if let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk) {
-                    // If nothing is referencing the previous chunk anymore, this means that the previous line
-                    // was the last line of the chunk. We can recycle the chunk.
-                    self.request_sender
-                        .send((prev.file_number, prev_chunk.recycle()))
-                        .ok();
-                }
-            }
-        }
-        Ok(!self.heap.is_empty())
-    }
+pub(super) struct PreviousLine {
+    pub chunk: Rc<Chunk>,
+    pub line_idx: usize,
+    // Only the threaded merger reads this back to recycle chunks.
+    #[cfg_attr(wasi_no_threads, allow(dead_code))]
+    pub file_number: usize,
 }
 
 /// Compares files by their current line.
-struct FileComparator<'a> {
-    settings: &'a GlobalSettings,
-}
-
-impl Compare<MergeableFile> for FileComparator<'_> {
-    fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
-        let mut cmp = compare_by(
-            &a.current_chunk.lines()[a.line_idx],
-            &b.current_chunk.lines()[b.line_idx],
-            self.settings,
-            a.current_chunk.line_data(),
-            b.current_chunk.line_data(),
-        );
-        if cmp == Ordering::Equal {
-            // To make sorting stable, we need to consider the file number as well,
-            // as lines from a file with a lower number are to be considered "earlier".
-            cmp = a.file_number.cmp(&b.file_number);
-        }
-        // BinaryHeap is a max heap. We use it as a min heap, so we need to reverse the ordering.
-        cmp.reverse()
-    }
+pub(super) struct FileComparator<'a> {
+    pub settings: &'a GlobalSettings,
 }
 
 /// Wait for the child to exit and check its exit code.

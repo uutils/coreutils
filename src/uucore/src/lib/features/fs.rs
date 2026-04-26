@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport preopen
 
 #[cfg(unix)]
 use libc::mkfifo;
@@ -22,7 +22,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -43,15 +43,13 @@ macro_rules! has {
 
 /// Information to uniquely identify a file
 pub struct FileInformation(
-    #[cfg(unix)] rustix::fs::Stat,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
-    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -69,7 +67,7 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -93,20 +91,10 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
-        #[cfg(target_os = "wasi")]
-        {
-            let metadata = if dereference {
-                fs::metadata(path.as_ref())
-            } else {
-                fs::symlink_metadata(path.as_ref())
-            };
-            Ok(Self(metadata?))
-        }
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -114,10 +102,6 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len()
         }
     }
 
@@ -145,6 +129,8 @@ impl FileInformation {
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
+        #[cfg(target_os = "wasi")]
+        return self.0.st_nlink;
         #[cfg(all(
             unix,
             any(
@@ -169,12 +155,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
-        // WASI: nlink is not available in std::fs::Metadata, return 1
-        #[cfg(target_os = "wasi")]
-        return 1;
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
@@ -184,19 +167,10 @@ impl FileInformation {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
-    }
-}
-
-// WASI: compare by file type and size as a basic heuristic since
-// device/inode numbers are not available through std::fs::Metadata.
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -212,7 +186,7 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -221,11 +195,6 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len().hash(state);
-            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -254,6 +223,26 @@ pub enum ResolveMode {
 
     /// Resolve '..' elements before symlinks
     Logical,
+}
+
+/// WASI fallback used when neither `--tmp-dir` nor `TMPDIR` is set and
+/// `env::temp_dir()` would be inapplicable.
+///
+/// The WASI sandbox only exposes explicitly preopened directories, and
+/// `/tmp` is not one by default. This returns `/tmp` when a host preopen
+/// has made it visible as a directory, and the current directory otherwise
+/// — the current directory is always accessible under a preopen mapped
+/// to `/`.
+///
+/// Callers on WASI should prefer `--tmp-dir` and `TMPDIR` before falling
+/// back to this helper.
+#[cfg(target_os = "wasi")]
+pub fn wasi_default_tmp_dir() -> PathBuf {
+    if fs::metadata("/tmp").is_ok_and(|m| m.is_dir()) {
+        PathBuf::from("/tmp")
+    } else {
+        PathBuf::from(".")
+    }
 }
 
 /// Normalize a path by removing relative information

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore (ToDO) copydir ficlone fiemap filestat ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs utimensat xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -20,6 +20,7 @@ use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
+#[cfg(not(target_os = "wasi"))]
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -1333,9 +1334,9 @@ fn parse_path_args(
 /// Check if an error is ENOTSUP/EOPNOTSUPP (operation not supported).
 /// This is used to suppress xattr errors on filesystems that don't support them.
 fn is_enotsup_error(error: &CpError) -> bool {
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     const EOPNOTSUPP: i32 = libc::EOPNOTSUPP;
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_os = "wasi")))]
     const EOPNOTSUPP: i32 = 95;
 
     match error {
@@ -1754,6 +1755,55 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
     Ok(())
 }
 
+/// Copy the access and modification timestamps from `source_metadata` onto `dest`.
+/// If `dest` is a symlink, the symlink's own timestamps are set rather than the
+/// target's.
+///
+/// On WASI this calls `rustix::fs::utimensat` directly because `filetime`'s
+/// WASI backend panics in `from_last_{access,modification}_time`. `SystemTime`
+/// values are converted to `Timespec` against `UNIX_EPOCH`, matching WASI's
+/// `path_filestat_set_times` contract (unsigned nanosecond count — pre-epoch
+/// source times can't be represented).
+fn set_timestamps(source_metadata: &Metadata, dest: &Path) -> CopyResult<()> {
+    #[cfg(target_os = "wasi")]
+    {
+        use std::time::UNIX_EPOCH;
+        let to_timespec = |t: std::time::SystemTime| -> io::Result<rustix::fs::Timespec> {
+            let d = t
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| io::Error::new(io::ErrorKind::Unsupported, e))?;
+            Ok(rustix::fs::Timespec {
+                tv_sec: d.as_secs() as i64,
+                tv_nsec: d.subsec_nanos() as i32,
+            })
+        };
+        let timestamps = rustix::fs::Timestamps {
+            last_access: to_timespec(source_metadata.accessed()?)?,
+            last_modification: to_timespec(source_metadata.modified()?)?,
+        };
+        let flags = if dest.is_symlink() {
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+        } else {
+            rustix::fs::AtFlags::empty()
+        };
+        rustix::fs::utimensat(rustix::fs::CWD, dest, &timestamps, flags)
+            .map_err(io::Error::from)?;
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let atime = FileTime::from_last_access_time(source_metadata);
+        let mtime = FileTime::from_last_modification_time(source_metadata);
+        if dest.is_symlink() {
+            filetime::set_symlink_file_times(dest, atime, mtime)?;
+        } else {
+            filetime::set_file_times(dest, atime, mtime)?;
+        }
+        Ok(())
+    }
+}
+
 /// Copy the specified attributes from one path to another.
 /// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
 /// (used when -Z is specified to set the default context instead).
@@ -1834,16 +1884,8 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&source_metadata);
-        let mtime = FileTime::from_last_modification_time(&source_metadata);
-        if dest.is_symlink() {
-            filetime::set_symlink_file_times(dest, atime, mtime)?;
-        } else {
-            filetime::set_file_times(dest, atime, mtime)?;
-        }
-
-        Ok(())
+    handle_preserve(attributes.timestamps, || {
+        set_timestamps(&source_metadata, dest)
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -1894,19 +1936,9 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
-    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(target_os = "wasi")]
-    {
-        Err(CpError::IoErrContext(
-            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
-            translate!("cp-error-cannot-create-symlink",
-                       "dest" => get_filename(dest).unwrap_or("?").quote(),
-                       "source" => get_filename(source).unwrap_or("?").quote()),
-        ))
-    }
-    #[cfg(not(any(windows, target_os = "wasi")))]
+    #[cfg(unix)]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
@@ -1928,13 +1960,21 @@ fn symlink_file(
             )
         })?;
     }
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(target_os = "wasi")]
     {
-        if let Ok(file_info) = FileInformation::from_path(dest, false) {
-            symlinked_files.insert(file_info);
-        }
-        Ok(())
+        rustix::fs::symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                io::Error::from(e),
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
+            )
+        })?;
     }
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
+        symlinked_files.insert(file_info);
+    }
+    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {

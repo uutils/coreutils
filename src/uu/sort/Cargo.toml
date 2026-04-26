@@ -32,7 +32,6 @@ compare = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
-rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -46,6 +45,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 foldhash = { workspace = true }
+
+[target.'cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))'.dependencies]
+rayon = { workspace = true }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
