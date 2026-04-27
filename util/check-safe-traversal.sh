@@ -81,12 +81,26 @@ check_utility() {
     # Check for expected safe syscalls
     local found_safe=0
     for syscall in $expected_syscalls; do
-        if grep -q "$syscall" "$strace_log"; then
-            echo "✓ Found $syscall() (safe traversal)"
-            found_safe=$((found_safe + 1))
-        else
-            fail_immediately "Missing $syscall() (safe traversal not active for $util)"
-        fi
+        # fchmodat2 is the modern replacement for fchmodat on Linux 6.6+
+        # Accept either as a valid safe traversal syscall
+        case "$syscall" in
+            fchmodat)
+                if grep -qE "fchmodat2?\(" "$strace_log"; then
+                    echo "✓ Found fchmodat/fchmodat2() (safe traversal)"
+                    found_safe=$((found_safe + 1))
+                else
+                    fail_immediately "Missing fchmodat() or fchmodat2() (safe traversal not active for $util)"
+                fi
+                ;;
+            *)
+                if grep -q "$syscall" "$strace_log"; then
+                    echo "✓ Found $syscall() (safe traversal)"
+                    found_safe=$((found_safe + 1))
+                else
+                    fail_immediately "Missing $syscall() (safe traversal not active for $util)"
+                fi
+                ;;
+        esac
     done
 
     # Count detailed syscall statistics
@@ -95,7 +109,7 @@ check_utility() {
 
     openat_count=$(grep -c "openat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     unlinkat_count=$(grep -c "unlinkat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
-    fchmodat_count=$(grep -c "fchmodat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
+    fchmodat_count=$(grep -cE "fchmodat2?\(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     fchownat_count=$(grep -c "fchownat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     newfstatat_count=$(grep -c "newfstatat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     renameat_count=$(grep -c "renameat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
@@ -183,7 +197,7 @@ fi
 # Test chmod - should use openat, fchmodat, newfstatat
 if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
     cp -r test_dir test_chmod
-    check_utility "chmod" "openat,fchmodat,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
+    check_utility "chmod" "openat,fchmodat,fchmodat2,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
 
     # Additional regression guard: ensure recursion uses dirfd-relative openat, not AT_FDCWD with a multi-component path
     if grep -q 'openat(AT_FDCWD, "test_chmod/' strace_chmod_recursive_chmod.log; then

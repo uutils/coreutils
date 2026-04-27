@@ -519,9 +519,18 @@ impl Chmoder {
                     .handle_symlink_during_safe_recursion(&entry_path, dir_fd, &entry_name)
                     .and(r);
             } else {
-                // For regular files and directories, chmod them
+                // For regular files and directories, chmod them.
+                // Always use NoFollow: we already confirmed via stat that the entry
+                // is not a symlink, so this prevents TOCTOU races where an attacker
+                // replaces the entry with a symlink between stat and chmod.
                 r = self
-                    .safe_chmod_file(&entry_path, dir_fd, &entry_name, meta.mode() & 0o7777)
+                    .safe_chmod_file(
+                        &entry_path,
+                        dir_fd,
+                        &entry_name,
+                        meta.mode() & 0o7777,
+                        SymlinkBehavior::NoFollow,
+                    )
                     .and(r);
 
                 // Recurse into subdirectories using the existing directory fd
@@ -555,13 +564,23 @@ impl Chmoder {
         // During recursion, determine behavior based on traversal mode
         match self.traverse_symlinks {
             TraverseSymlinks::All => {
-                // Follow all symlinks during recursion
+                // Follow all symlinks during recursion.
+                // NOTE: This path-based stat + Follow is only reachable when the user
+                // explicitly specifies -L (--dereference). In that case the user has
+                // consciously opted in to following symlinks, so a path-based stat
+                // followed by Follow is the intended behavior and not a TOCTOU concern.
                 // Check if the symlink target is a directory, but handle dangling symlinks gracefully
                 match fs::metadata(path) {
                     Ok(meta) if meta.is_dir() => self.walk_dir_with_context(path, false),
                     Ok(meta) => {
                         // It's a file symlink, chmod it using safe traversal
-                        self.safe_chmod_file(path, dir_fd, entry_name, meta.mode() & 0o7777)
+                        self.safe_chmod_file(
+                            path,
+                            dir_fd,
+                            entry_name,
+                            meta.mode() & 0o7777,
+                            self.dereference.into(),
+                        )
                     }
                     Err(_) => {
                         // Dangling symlink, chmod it without dereferencing
@@ -584,13 +603,13 @@ impl Chmoder {
         dir_fd: &DirFd,
         entry_name: &std::ffi::OsStr,
         current_mode: u32,
+        symlink_behavior: SymlinkBehavior,
     ) -> UResult<()> {
         // Calculate the new mode using the helper method
         let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
 
         // Use safe traversal to change the mode
-        let follow_symlinks = self.dereference;
-        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, follow_symlinks.into()) {
+        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
