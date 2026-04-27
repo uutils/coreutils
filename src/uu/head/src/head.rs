@@ -169,8 +169,11 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
 // zero-copy fast-path
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn print_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
-    let out = io::stdout();
-    uucore::pipes::send_n_bytes(input, out, n).map_err(wrap_in_stdout_error)
+    let mut out = io::stdout();
+    let res = uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error);
+    // flush prevents ignoring I/O error
+    out.flush().map_err(wrap_in_stdout_error)?;
+    res
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -184,9 +187,7 @@ fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
 
     let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
 
-    // Make sure we finish writing everything to the target before
-    // exiting. Otherwise, when Rust is implicitly flushing, any
-    // error will be silently ignored.
+    // flush prevents ignoring I/O error
     stdout.flush().map_err(wrap_in_stdout_error)?;
 
     Ok(bytes_written)
