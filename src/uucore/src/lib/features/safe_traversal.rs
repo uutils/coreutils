@@ -19,7 +19,7 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd};
+use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
 use nix::dir::Dir;
@@ -348,9 +348,7 @@ impl DirFd {
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
-        // Convert OwnedFd to raw fd and create File
-        let raw_fd = fd.into_raw_fd();
-        Ok(unsafe { fs::File::from_raw_fd(raw_fd) })
+        Ok(fs::File::from(fd))
     }
 
     /// Create a DirFd from an existing file descriptor (takes ownership)
