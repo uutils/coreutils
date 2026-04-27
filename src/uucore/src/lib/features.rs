@@ -87,7 +87,7 @@ pub mod selinux;
 pub mod signals;
 #[cfg(all(target_os = "linux", feature = "smack"))]
 pub mod smack;
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(target_os = "linux", feature = "feat_systemd_logind"))]
 pub mod systemd_logind;
 #[cfg(all(
     unix,
