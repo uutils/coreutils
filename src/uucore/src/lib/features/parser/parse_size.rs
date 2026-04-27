@@ -42,7 +42,6 @@ pub const IEC_BASES: [u128; 11] = [
     1_267_650_600_228_229_401_496_703_205_376,
 ];
 
-use std::error::Error;
 use std::fmt;
 use std::num::{IntErrorKind, ParseIntError};
 
@@ -485,7 +484,7 @@ pub enum ParseSizeError {
     PhysicalMem(String),
 }
 
-impl Error for ParseSizeError {
+impl core::error::Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
             Self::InvalidSuffix(ref s) => s,

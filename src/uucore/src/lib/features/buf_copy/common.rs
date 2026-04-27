@@ -21,7 +21,7 @@ impl std::fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 impl UError for Error {
     fn code(&self) -> i32 {

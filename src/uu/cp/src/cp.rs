@@ -128,7 +128,7 @@ impl Display for BackupError {
     }
 }
 
-impl std::error::Error for BackupError {}
+impl core::error::Error for BackupError {}
 
 impl UError for CpError {
     fn code(&self) -> i32 {

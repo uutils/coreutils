@@ -14,7 +14,6 @@
 //!
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
-use std::error::Error;
 use std::fmt::{self, Display, Formatter, Write};
 use uucore::translate;
 
@@ -28,7 +27,7 @@ impl Display for Overflow {
     }
 }
 
-impl Error for Overflow {}
+impl core::error::Error for Overflow {}
 
 /// A number in arbitrary radix expressed in a positional notation.
 ///

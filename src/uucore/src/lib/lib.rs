@@ -429,7 +429,7 @@ impl std::fmt::Display for NonUtf8OsStrError {
     }
 }
 
-impl std::error::Error for NonUtf8OsStrError {}
+impl core::error::Error for NonUtf8OsStrError {}
 impl error::UError for NonUtf8OsStrError {}
 
 /// Converts an `OsStr` to a UTF-8 `&[u8]`.

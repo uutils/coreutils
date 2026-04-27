@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> Result<(), Box<dyn core::error::Error>> {
     let out_dir = env::var("OUT_DIR")?;
 
     let mut embedded_file = File::create(Path::new(&out_dir).join("embedded_locales.rs"))?;
@@ -63,7 +63,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 /// Returns an error if the `CARGO_MANIFEST_DIR` environment variable is not set
 /// or if the current directory structure does not allow determining the project root.
-fn project_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn project_root() -> Result<PathBuf, Box<dyn core::error::Error>> {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR")?;
     let uucore_path = Path::new(&manifest_dir);
 
@@ -135,7 +135,7 @@ fn embed_single_utility_locale(
     project_root: &Path,
     util_name: &str,
     locales_to_embed: &(String, Option<String>),
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn core::error::Error>> {
     // Embed utility-specific locales
     embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
         project_root
@@ -171,7 +171,7 @@ fn embed_all_utility_locales(
     embedded_file: &mut File,
     project_root: &Path,
     locales_to_embed: &(String, Option<String>),
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn core::error::Error>> {
     use std::fs;
 
     // Discover all uu_* directories
@@ -221,7 +221,7 @@ fn embed_all_utility_locales(
 fn embed_static_utility_locales(
     embedded_file: &mut File,
     locales_to_embed: &(String, Option<String>),
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn core::error::Error>> {
     use std::env;
 
     writeln!(
@@ -294,9 +294,9 @@ fn get_locales_to_embed() -> (String, Option<String>) {
 fn for_each_locale<F>(
     locales: &(String, Option<String>),
     mut f: F,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<(), Box<dyn core::error::Error>>
 where
-    F: FnMut(&str) -> Result<(), Box<dyn std::error::Error>>,
+    F: FnMut(&str) -> Result<(), Box<dyn core::error::Error>>,
 {
     f(&locales.0)?;
     if let Some(ref system_locale) = locales.1 {
@@ -317,7 +317,7 @@ fn embed_locale_file(
     locale_key: &str,
     locale: &str,
     component: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<(), Box<dyn core::error::Error>> {
     use std::fs;
 
     if locale_path.exists() || locale_path.is_file() {
@@ -359,7 +359,7 @@ fn embed_all_locales_for_component<F>(
     embedded_file: &mut File,
     component_name: &str,
     path_builder: &F,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<(), Box<dyn core::error::Error>>
 where
     F: Fn(&str) -> PathBuf,
 {
@@ -391,7 +391,7 @@ fn embed_component_locales<F>(
     locales: &(String, Option<String>),
     component_name: &str,
     path_builder: F,
-) -> Result<(), Box<dyn std::error::Error>>
+) -> Result<(), Box<dyn core::error::Error>>
 where
     F: Fn(&str) -> PathBuf,
 {
