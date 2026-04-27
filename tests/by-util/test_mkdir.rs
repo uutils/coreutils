@@ -361,6 +361,60 @@ fn test_mkdir_acl() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_mkdir_acl_inheritance_with_restrictive_mask() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("parent");
+
+    let mut map: FxHashMap<OsString, Vec<u8>> = FxHashMap::default();
+
+    // Default ACL with mask::r-x (0o5) — more restrictive than a umask of 0o022 would allow.
+    // With umask 0o022, group bits would be r-x already, but the mask enforces this
+    // regardless of what umask would permit. With umask 0o000, without ACL mask the
+    // child would get rwx for group, but mask caps it to r-x.
+    //
+    // Encoding: header(0x0002) + entries:
+    //   ACL_USER_OBJ  (0x0001) perm=7 (rwx)
+    //   ACL_GROUP_OBJ (0x0004) perm=7 (rwx) — would be rwx without mask
+    //   ACL_MASK      (0x0010) perm=5 (r-x) — restricts group effective to r-x
+    //   ACL_OTHER     (0x0020) perm=0 (---)
+    let xattr_val: Vec<u8> = vec![
+        2, 0, 0, 0, // header
+        1, 0, 7, 0, 255, 255, 255, 255, // ACL_USER_OBJ  rwx
+        4, 0, 7, 0, 255, 255, 255, 255, // ACL_GROUP_OBJ rwx (masked to r-x)
+        16, 0, 5, 0, 255, 255, 255, 255, // ACL_MASK      r-x
+        32, 0, 0, 0, 255, 255, 255, 255, // ACL_OTHER     ---
+    ];
+
+    map.insert(OsString::from("system.posix_acl_default"), xattr_val);
+    uucore::fsxattr::apply_xattrs(at.plus("parent"), map).unwrap();
+
+    // umask 0o000 — without correct ACL inheritance, group would get rwx (7)
+    // With correct inheritance the mask restricts group to r-x (5)
+    ucmd.arg("-p").arg("parent/child").umask(0o000).succeeds();
+
+    let perms = at.metadata("parent/child").permissions().mode();
+    // Expected: user=rwx(7), group=r-x(5 from mask), other=---(0)
+    // mode bits: 0o750 = 0o40750 with directory bit
+    assert_eq!(
+        perms & 0o777,
+        0o750,
+        "Expected group bits capped to r-x by ACL mask, got {:o}",
+        perms & 0o777
+    );
+
+    // Verify the child itself has an ACL (indicated by presence of xattr)
+    assert!(
+        uucore::fsxattr::has_acl(at.plus("parent/child")),
+        "Child directory should have inherited ACL entries"
+    );
+}
+
+#[test]
 fn test_mkdir_trailing_dot() {
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 
