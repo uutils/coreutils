@@ -24,6 +24,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "parser", "signals"] }
 fluent = { workspace = true }
 
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { workspace = true }
+
 [[bin]]
 name = "tee"
 path = "src/main.rs"

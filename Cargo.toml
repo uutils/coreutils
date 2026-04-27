@@ -672,6 +672,7 @@ nix = { workspace = true, features = [
   "user",
 ] }
 rlimit = { workspace = true }
+rustix.workspace = true
 
 
 [build-dependencies]
