@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin};
+use std::io::{ErrorKind, Read, Result, Write, stderr, stdin};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -63,10 +63,10 @@ fn tee(options: &Options) -> Result<()> {
         // This is therefore just a clever way to stop all writers
 
         if options.ignore_interrupts {
-            ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
+            ignore_interrupts().map_err(|_| std::io::Error::from(ErrorKind::Other))?;
         }
         if options.output_error.is_some() {
-            disable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
+            disable_pipe_errors().map_err(|_| std::io::Error::from(ErrorKind::Other))?;
         }
     }
     let mut writers: Vec<NamedWriter> = options
@@ -107,7 +107,7 @@ fn tee(options: &Options) -> Result<()> {
     };
 
     if had_open_errors || res.is_err() || output.error_occurred() {
-        Err(Error::from(ErrorKind::Other))
+        Err(std::io::Error::from(ErrorKind::Other))
     } else {
         Ok(())
     }
@@ -147,7 +147,7 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
-    aborted: Option<Error>,
+    aborted: Option<std::io::Error>,
 }
 
 impl MultiWriter {
@@ -209,7 +209,7 @@ impl MultiWriter {
         match self.aborted.take() {
             Some(e) => Err(e),
             // This error kind will never be raised by std, so we can use it for termination when all writers exited
-            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None if self.writers.is_empty() => Err(std::io::Error::from(ErrorKind::Other)),
             None => Ok(()),
         }
     }
@@ -217,7 +217,7 @@ impl MultiWriter {
 
 fn process_error(
     mode: Option<OutputErrorMode>,
-    e: Error,
+    e: std::io::Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {

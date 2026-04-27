@@ -39,7 +39,6 @@ use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
 
 use std::ffi::{CStr, CString};
-use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
@@ -264,7 +263,7 @@ macro_rules! f {
                         // errno must be set to zero before the call. We can
                         // use libc::__errno_location() on some platforms.
                         // The same applies for the two cases below.
-                        Err(IOError::new(
+                        Err(std::io::Error::new(
                             ErrorKind::NotFound,
                             format!("No such id: {k}"),
                         ))
@@ -291,13 +290,16 @@ macro_rules! f {
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data.cast_const())))
                         } else {
-                            Err(IOError::new(
+                            Err(std::io::Error::new(
                                 ErrorKind::NotFound,
                                 format!("No such id: {id}"),
                             ))
                         }
                     } else {
-                        Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                        Err(std::io::Error::new(
+                            ErrorKind::NotFound,
+                            format!("Not found: {k}"),
+                        ))
                     }
                 }
             }

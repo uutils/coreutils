@@ -575,12 +575,12 @@ mod tests {
         FormatOptions, InvalidModes, NumfmtOptions, Range, RoundMethod, TransformOptions, Unit,
         handle_args, handle_buffer, parse_unit_size, parse_unit_size_suffix,
     };
-    use std::io::{BufReader, Error, ErrorKind, Read};
+    use std::io::{BufReader, ErrorKind, Read};
     struct MockBuffer {}
 
     impl Read for MockBuffer {
-        fn read(&mut self, _: &mut [u8]) -> Result<usize, Error> {
-            Err(Error::new(ErrorKind::BrokenPipe, "broken pipe"))
+        fn read(&mut self, _: &mut [u8]) -> Result<usize, std::io::Error> {
+            Err(std::io::Error::new(ErrorKind::BrokenPipe, "broken pipe"))
         }
     }
 

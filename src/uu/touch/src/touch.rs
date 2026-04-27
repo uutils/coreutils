@@ -26,7 +26,7 @@ use std::ffi::{OsStr, OsString};
 #[cfg(unix)]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
@@ -497,7 +497,8 @@ fn touch_file(
                 false
             };
             if is_directory {
-                let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
+                let custom_err =
+                    std::io::Error::other(translate!("touch-error-no-such-file-or-directory"));
                 return Err(custom_err.map_err_context(
                     || translate!("touch-error-cannot-touch", "filename" => filename.quote()),
                 ));
@@ -628,7 +629,7 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
         },
     };
 
-    futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    futimens(&file, &timestamps).map_err(|e| std::io::Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Get metadata of the provided path
