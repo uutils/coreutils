@@ -592,10 +592,15 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None => localize(format!(
+        None if opts.to == Unit::None => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
+        None if is_precision_specified => {
+            let i2 = round_with_precision(i2, round_method, 0);
+            localize(format!("{i2:.precision$}"))
+        }
+        None => localize(format!("{i2:.0}")),
         Some(s) if precision > 0 => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
