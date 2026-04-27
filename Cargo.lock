@@ -4488,6 +4488,7 @@ dependencies = [
  "clap",
  "fluent",
  "itertools 0.14.0",
+ "rustix",
  "uucore",
 ]
 

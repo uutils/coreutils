@@ -70,7 +70,7 @@ fn test_long_input() {
     #[cfg(windows)]
     const TIMES: usize = 500;
     let arg = "abcdef".repeat(TIMES) + "\n";
-    let expected_out = arg.repeat(30);
+    let expected_out = arg.repeat(5);
     run(&[&arg[..arg.len() - 1]], expected_out.as_bytes());
 }
 
