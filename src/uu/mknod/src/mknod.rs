@@ -6,8 +6,7 @@
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -28,20 +27,10 @@ mod options {
 }
 
 #[derive(Clone, PartialEq)]
-enum FileType {
+enum FileTypeArg {
     Block,
     Character,
     Fifo,
-}
-
-impl FileType {
-    fn as_sflag(&self) -> SFlag {
-        match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
-        }
-    }
 }
 
 /// Configuration for special inode creation.
@@ -49,7 +38,7 @@ struct Config {
     /// Permission bits for the inode
     mode: Mode,
 
-    file_type: FileType,
+    file_type: FileTypeArg,
 
     /// when false, the exact mode bits will be set
     use_umask: bool,
@@ -66,34 +55,46 @@ struct Config {
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
+    use rustix::fs::Mode;
+    use rustix::process::umask;
+
     // set umask to 0 and store previous umask
     let have_prev_umask = if config.use_umask {
         None
     } else {
-        Some(nix_umask(Mode::empty()))
+        Some(umask(Mode::empty()))
     };
 
-    let mknod_err = nix_mknod(
-        file_name,
-        config.file_type.as_sflag(),
-        config.mode,
-        config.dev as _,
-    )
-    .err();
-    let errno = if mknod_err.is_some() { -1 } else { 0 };
+    let file_type_bits: mode_t = match config.file_type {
+        FileTypeArg::Block => libc::S_IFBLK,
+        FileTypeArg::Character => libc::S_IFCHR,
+        FileTypeArg::Fifo => libc::S_IFIFO,
+    };
+    let c_path = std::ffi::CString::new(file_name).unwrap();
+    // SAFETY: c_path is a valid null-terminated C string
+    let ret = unsafe {
+        libc::mknod(
+            c_path.as_ptr(),
+            file_type_bits | config.mode as mode_t,
+            config.dev as _,
+        )
+    };
 
     // set umask back to original value
     if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
+        umask(prev_umask);
     }
 
-    if let Some(err) = mknod_err {
+    let errno = if ret != 0 {
         eprintln!(
             "{}: {}",
             uucore::execution_phrase(),
             std::io::Error::from(err)
         );
-    }
+        -1
+    } else {
+        0
+    };
 
     // Apply SELinux context if requested
     #[cfg(feature = "selinux")]
@@ -131,7 +132,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let file_type = matches.get_one::<FileType>("type").unwrap();
+    let file_type = matches.get_one::<FileTypeArg>("type").unwrap();
 
     let mut use_umask = true;
     let mode_permissions = match matches.get_one::<String>("mode") {
@@ -158,8 +159,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         matches.get_one::<u32>(options::MAJOR),
         matches.get_one::<u32>(options::MINOR),
     ) {
-        (FileType::Fifo, None, None) => 0,
-        (FileType::Fifo, _, _) => {
+        (FileTypeArg::Fifo, None, None) => 0,
+        (FileTypeArg::Fifo, _, _) => {
             return Err(UUsageError::new(
                 1,
                 translate!("mknod-error-fifo-no-major-minor"),
@@ -266,16 +267,16 @@ fn parse_mode(str_mode: &str) -> Result<u32, String> {
         })
 }
 
-fn parse_type(tpe: &str) -> Result<FileType, String> {
+fn parse_type(tpe: &str) -> Result<FileTypeArg, String> {
     // Only check the first character, to allow mnemonic usage like
     // 'mknod /dev/rst0 character 18 0'.
     tpe.chars()
         .next()
         .ok_or_else(|| translate!("mknod-error-missing-device-type"))
         .and_then(|first_char| match first_char {
-            'b' => Ok(FileType::Block),
-            'c' | 'u' => Ok(FileType::Character),
-            'p' => Ok(FileType::Fifo),
+            'b' => Ok(FileTypeArg::Block),
+            'c' | 'u' => Ok(FileTypeArg::Character),
+            'p' => Ok(FileTypeArg::Fifo),
             _ => Err(translate!("mknod-error-invalid-device-type", "type" => tpe.quote())),
         })
 }
