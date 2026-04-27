@@ -19,7 +19,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
-use thiserror::Error;
 use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
@@ -67,7 +66,7 @@ pub struct Behavior {
     privileged: bool,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum InstallError {
     #[error("{}", translate!("install-error-dir-needs-arg", "util_name" => "install"))]
     DirNeedsArg,

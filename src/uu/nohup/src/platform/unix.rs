@@ -9,13 +9,12 @@ use std::fs::{File, OpenOptions};
 use std::io::{Error, IsTerminal as _};
 use std::os::unix::{fs::OpenOptionsExt as _, process::CommandExt as _};
 use std::process::Command;
-use thiserror::Error as ThisError;
 use uucore::error::{UError, UResult};
 use uucore::translate;
 
 use crate::find_stdout;
 
-#[derive(Debug, ThisError)]
+#[derive(Debug, thiserror::Error)]
 enum PlatformError {
     #[cfg(target_vendor = "apple")]
     #[error("{}", translate!("nohup-error-cannot-detach"))]

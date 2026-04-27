@@ -21,7 +21,6 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::error::{UError, UResult, strip_errno};
@@ -87,7 +86,7 @@ const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum DateError {
     #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
     Write(std::io::Error),

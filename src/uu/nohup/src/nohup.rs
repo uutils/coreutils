@@ -11,7 +11,6 @@ use std::fs::File;
 use std::io::{Error, ErrorKind};
 use std::process;
 use std::sync::LazyLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
@@ -35,7 +34,7 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum NohupError {
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
     OpenFailed(i32, #[source] Error),

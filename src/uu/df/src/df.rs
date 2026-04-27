@@ -27,7 +27,6 @@ use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
 use std::path::Path;
-use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
@@ -133,7 +132,7 @@ impl Options {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
@@ -437,7 +436,7 @@ where
     Ok(result)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum DfError {
     /// A problem while parsing command-line options.
     #[error("{}", .0)]

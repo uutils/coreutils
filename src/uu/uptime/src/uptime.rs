@@ -11,7 +11,6 @@ use clap::{Arg, ArgAction, Command};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use std::io::{self, Write, stdout};
-use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
 use uucore::libc::time_t;
@@ -27,7 +26,7 @@ pub mod options {
     pub static PRETTY: &str = "pretty";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum UptimeError {
     // io::Error wrapper
     #[error("{}", translate!("uptime-error-io", "error" => format!("{}", .0)))]
