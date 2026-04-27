@@ -3073,7 +3073,9 @@ fn test_cp_dangling_symlink_inside_directory() {
 }
 
 /// Test for copying a dangling symbolic link and its permissions.
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))] // FIXME: fix this test for FreeBSD/OpenBSD
+// FIXME: fix this test for FreeBSD/OpenBSD
+// FIXME: macos use umask permission mode
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "macos")))]
 #[test]
 fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3093,9 +3095,9 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
         .no_stdout();
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
-    // `-p` means `--preserve=mode,ownership,timestamps`
-    #[cfg(all(unix, not(target_os = "freebsd"), not(target_os = "openbsd")))]
+    #[cfg(unix)]
     {
+        // `-p` means `--preserve=mode,ownership,timestamps`
         let metadata1 = at.symlink_metadata("dangle");
         let metadata2 = at.symlink_metadata("d2");
         assert_metadata_eq!(metadata1, metadata2);
@@ -7876,4 +7878,135 @@ fn test_cp_recursive_non_utf8_source() {
         .no_output();
 
     assert!(at.plus("dir2").join("a").exists());
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_cp_file_mode(
+    #[values(true, false)] is_existing: bool,
+    #[values(Some(true), None, Some(false))] preserve: Option<bool>,
+) {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("touch").arg("f1").succeeds();
+    scene.cmd("chmod").arg("770").arg("f1").succeeds();
+
+    let f1_mode = at.metadata("f1").mode();
+    let f2_mode = if is_existing {
+        scene.cmd("touch").arg("f2").succeeds();
+        scene.cmd("chmod").arg("666").arg("f2").succeeds();
+        Some(at.metadata("f2").mode())
+    } else {
+        None
+    };
+
+    let mut command = scene.ucmd();
+    match preserve {
+        Some(true) => command.arg("--preserve=mode"),
+        Some(false) => command.arg("--no-preserve=mode"),
+        _ => &mut command,
+    }
+    .umask(0o700)
+    .arg("f1")
+    .arg("f2")
+    .set_stdout(io::stdout())
+    .succeeds();
+
+    let f2_new_mode = at.metadata("f2").mode();
+
+    match (is_existing, preserve) {
+        (true, Some(false) | None) => {
+            assert_eq!(f2_mode.unwrap(), f2_new_mode);
+        }
+        (false, Some(false)) => assert_eq!(0o666 & !0o700, f2_new_mode & 0o777),
+        (false, None) => assert_eq!(!0o700 & 0o770, f2_new_mode & 0o777),
+        (_, Some(true)) => assert_eq!(f1_mode, f2_new_mode),
+    }
+}
+
+#[rstest]
+#[cfg(unix)]
+fn test_cp_dir_mode(
+    #[values(true, false)] is_existing: bool,
+    #[values(Some(true), None, Some(false))] preserve: Option<bool>,
+) {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+
+    let d1_mode = at.metadata("d1").mode();
+    let d2_mode = if is_existing {
+        scene.cmd("mkdir").arg("d2").succeeds();
+        scene.cmd("chmod").arg("707").arg("d2").succeeds();
+        Some(at.metadata("d2").mode())
+    } else {
+        None
+    };
+
+    let mut command = scene.ucmd();
+    match preserve {
+        Some(true) => command.arg("--preserve=mode"),
+        Some(false) => command.arg("--no-preserve=mode"),
+        _ => &mut command,
+    }
+    .umask(0o700)
+    .arg("-r")
+    .arg("d1/.")
+    .arg("d2")
+    .set_stdout(io::stdout())
+    .succeeds();
+
+    let d2_new_mode = at.metadata("d2").mode();
+
+    match (is_existing, preserve) {
+        (true, Some(false) | None) => {
+            assert_eq!(d2_mode.unwrap(), d2_new_mode);
+        }
+        (false, Some(false)) => assert_eq!(!0o700 & 0o777, d2_new_mode & 0o777),
+        (false, None) => assert_eq!(!0o700 & 0o770, d2_new_mode & 0o777),
+        (_, Some(true)) => assert_eq!(d1_mode, d2_new_mode),
+    }
+}
+
+#[test]
+#[cfg(unix)]
+// adapted from GNU tests/cp/cp-parents
+fn test_cp_not_existing_no_preserve_file_parents() {
+    use std::io;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    scene.cmd("mkdir").arg("d1").succeeds();
+    scene.cmd("mkdir").arg("d1/d2").succeeds();
+    scene.cmd("touch").arg("d1/d2/f").succeeds();
+    scene.cmd("chmod").arg("770").arg("d1").succeeds();
+    scene.cmd("chmod").arg("700").arg("d1/d2").succeeds();
+    scene.cmd("chmod").arg("775").arg("d1/d2/f").succeeds();
+    scene.cmd("mkdir").arg("d3").succeeds();
+
+    scene
+        .ucmd()
+        .umask(0o022)
+        .arg("--no-preserve=mode")
+        .arg("--parents")
+        .arg("d1/d2/f")
+        .arg("d3")
+        .set_stdout(io::stdout())
+        .succeeds();
+
+    let d1_mode = at.metadata("d3/d1").mode();
+    let d2_mode = at.metadata("d3/d1/d2").mode();
+    let f_mode = at.metadata("d3/d1/d2/f").mode();
+
+    assert_eq!(!0o022 & 0o777, d1_mode & 0o777);
+    assert_eq!(!0o022 & 0o777, d2_mode & 0o777);
+    assert_eq!(!0o022 & 0o666, f_mode & 0o777);
 }
