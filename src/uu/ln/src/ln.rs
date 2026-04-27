@@ -353,22 +353,15 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 }
             }
             target_dir.to_path_buf()
-        } else if let Some(name) = srcpath.as_os_str().to_str() {
-            match Path::new(name).file_name() {
+        } else {
+            match srcpath.file_name() {
                 Some(basename) => target_dir.join(basename),
                 // This can be None only for "." or "..". Trying
                 // to create a link with such name will fail with
                 // EEXIST, which agrees with the behavior of GNU
                 // coreutils.
-                None => target_dir.join(name),
+                None => target_dir.join(srcpath),
             }
-        } else {
-            show_error!(
-                "{}",
-                translate!("ln-error-cannot-stat", "path" => srcpath.quote())
-            );
-            all_successful = false;
-            continue;
         };
 
         if linked_destinations.contains(&targetpath) {
