@@ -7,14 +7,13 @@
 use std::ffi::OsString;
 use std::io::Error;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::libc;
 use uucore::translate;
 
 /// Errors that can happen while executing chroot.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ChrootError {
     /// Failed to enter the specified directory.
     #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => _1))]

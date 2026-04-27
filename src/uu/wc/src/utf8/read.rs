@@ -5,7 +5,6 @@
 // spell-checker:ignore bytestream
 use super::{Incomplete, str};
 use std::io::{self, BufRead};
-use thiserror::Error;
 use uucore::translate;
 
 /// Wraps a `std::io::BufRead` buffered byte stream and decode it as UTF-8.
@@ -15,7 +14,7 @@ pub struct BufReadDecoder<B: BufRead> {
     incomplete: Incomplete,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum BufReadDecoderError<'a> {
     /// Represents one UTF-8 error in the byte stream.
     ///

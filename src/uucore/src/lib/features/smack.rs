@@ -12,12 +12,11 @@ use std::io::{self, Read, Write};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use thiserror::Error;
 
 use crate::error::{UError, USimpleError, strip_errno};
 use crate::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SmackError {
     #[error("{}", translate!("smack-error-not-enabled"))]
     SmackNotEnabled,

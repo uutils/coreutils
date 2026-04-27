@@ -15,7 +15,6 @@ use std::io::{Read, Write, stderr, stdin, stdout};
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
-use thiserror::Error;
 
 use uucore::display::Quotable;
 use uucore::error::UResult;
@@ -185,7 +184,7 @@ impl From<Utf8Error> for PrError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },

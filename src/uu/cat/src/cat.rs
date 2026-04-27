@@ -17,7 +17,6 @@ use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
@@ -79,7 +78,7 @@ impl LineNumber {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]

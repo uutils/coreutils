@@ -7,7 +7,6 @@
 
 use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
 use clap::{ArgMatches, parser::ValueSource};
-use thiserror::Error;
 use uucore::{
     display::Quotable,
     parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
@@ -55,7 +54,7 @@ impl NumberType {
 }
 
 /// An error due to an invalid parameter to the `-n` command-line option.
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum NumberTypeError {
     /// The number of chunks was invalid.
     ///
@@ -196,7 +195,7 @@ pub enum Strategy {
 }
 
 /// An error when parsing a chunking strategy from command-line arguments.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
     #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]

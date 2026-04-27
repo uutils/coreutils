@@ -18,7 +18,6 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 use std::ffi::OsString;
 use std::fs;
-use thiserror::Error;
 
 #[cfg(any(unix, target_os = "redox"))]
 use std::os::unix::fs::symlink;
@@ -50,7 +49,7 @@ pub enum OverwriteMode {
     Force,
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LnError {
     #[error("{}", translate!("ln-error-target-is-not-directory", "target" => _0.quote()))]
     TargetIsNotADirectory(PathBuf),

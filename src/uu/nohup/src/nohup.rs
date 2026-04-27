@@ -17,7 +17,6 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code};
 use uucore::translate;
@@ -34,7 +33,7 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum NohupError {
     #[error("{}", translate!("nohup-error-cannot-detach"))]
     CannotDetach,

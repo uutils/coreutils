@@ -3,11 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use thiserror::Error;
 use uucore::translate;
 
 /// Represents an error encountered while parsing a test expression
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum ParseError {
     #[error("{}", translate!("test-error-expected-value"))]
     ExpectedValue,
