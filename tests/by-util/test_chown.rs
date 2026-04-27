@@ -899,3 +899,47 @@ fn test_chown_reference_file() {
         .stderr_contains("ownership of 'b' retained as")
         .no_stdout();
 }
+
+#[test]
+fn test_chown_symlink_cycles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    at.mkdir_all("a/b/c");
+    at.symlink_dir("a", "a/b/c/d");
+
+    let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
+
+    if cfg!(target_os = "macos") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+        result
+            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+            ));
+    } else {
+        result
+            .success()
+            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+            ))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
+            ));
+    }
+}

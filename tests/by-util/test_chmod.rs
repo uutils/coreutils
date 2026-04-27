@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -1438,4 +1438,39 @@ fn test_chmod_colored_output() {
         .code_is(1)
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
         .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+}
+
+#[test]
+fn test_chmod_symlink_cycles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.symlink_dir("a", "a/b/c/d");
+
+    let result = scene.ucmd().arg("-vRL").arg("+r").arg("a").run();
+
+    if cfg!(target_os = "android") {
+        result
+            // cSpell:disable
+            .stdout_contains_line("mode of 'a' retained as 0700 (rwx------)")
+            .stdout_contains_line("mode of 'a/b' retained as 0700 (rwx------)")
+            .stdout_contains_line("mode of 'a/b/c' retained as 0700 (rwx------)")
+            .stdout_contains_line("mode of 'a/b/c/d' retained as 0700 (rwx------)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0700 (rwx------)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0700 (rwx------)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0700 (rwx------)");
+        // cSpell:enable
+    } else {
+        result
+            // cSpell:disable
+            .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
+            .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
+            .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
+            .stdout_contains_line("mode of 'a/b/c/d' retained as 0755 (rwxr-xr-x)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
+            .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
+        // cSpell:enable
+    }
 }
