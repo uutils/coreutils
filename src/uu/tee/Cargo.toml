@@ -24,6 +24,10 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["libc", "parser", "signals"] }
 fluent = { workspace = true }
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+rustix = { workspace = true, features = ["pipe"] }
+uucore = { workspace = true, features = ["pipes"] }
+
 [target.'cfg(unix)'.dev-dependencies]
 rustix = { workspace = true }
 
