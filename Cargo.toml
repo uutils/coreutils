@@ -434,7 +434,8 @@ notify = { version = "=8.2.0", features = ["macos_kqueue"] }
 num-bigint = "0.4.4"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
-onig = { version = "~6.5.1", default-features = false }
+#onig = { version = "~6.5.1", default-features = false }
+onig = { git = "https://github.com/rust-onig/rust-onig.git", default-features = false }
 parse_datetime = "0.14.0"
 phf = "0.13.1"
 phf_codegen = "0.13.1"
