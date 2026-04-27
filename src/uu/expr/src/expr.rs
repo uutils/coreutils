@@ -6,7 +6,6 @@
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
 use syntax_tree::{AstNode, is_truthy};
-use thiserror::Error;
 use uucore::os_string_to_vec;
 use uucore::translate;
 use uucore::{
@@ -26,7 +25,7 @@ mod options {
 
 pub type ExprResult<T> = Result<T, ExprError>;
 
-#[derive(Error, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ExprError {
     #[error("{}", translate!("expr-error-unexpected-argument", "arg" => _0.quote()))]
     UnexpectedArgument(String),

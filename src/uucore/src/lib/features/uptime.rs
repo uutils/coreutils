@@ -17,9 +17,8 @@ use crate::translate;
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use libc::time_t;
-use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum UptimeError {
     #[error("{}", translate!("uptime-lib-error-system-uptime"))]
     SystemUptime,

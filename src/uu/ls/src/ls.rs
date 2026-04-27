@@ -28,7 +28,6 @@ use std::{
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use thiserror::Error;
 
 #[cfg(unix)]
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
@@ -60,7 +59,7 @@ use config::{Dereference, Files, Sort};
 use dired::DiredOutput;
 use display::{display_items, display_size, should_display, show_dir_name};
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum LsError {
     #[error("{}", translate!("ls-error-invalid-line-width", "width" => format!("'{_0}'")))]
     InvalidLineWidth(String),

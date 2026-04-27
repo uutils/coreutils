@@ -9,13 +9,12 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("chcon-error-no-context-specified"))]
     MissingContext,

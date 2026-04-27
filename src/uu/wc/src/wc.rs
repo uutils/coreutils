@@ -23,7 +23,6 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
-use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
 use uucore::{display::Quotable, translate};
@@ -345,7 +344,7 @@ impl TotalWhen {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum WcError {
     #[error("{}", translate!("wc-error-files-disabled", "extra" => extra.quote()))]
     FilesDisabled { extra: Cow<'static, OsStr> },

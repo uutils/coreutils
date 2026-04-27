@@ -19,7 +19,6 @@ use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::translate;
@@ -420,7 +419,7 @@ struct Settings {
     io_blksize: Option<u64>,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 /// An error when parsing settings from command-line arguments.
 enum SettingsError {
     /// Invalid chunking strategy.

@@ -12,7 +12,6 @@ use std::io::{BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
-use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
@@ -55,7 +54,7 @@ fn is_digit_or_comma(c: char) -> bool {
 }
 
 /// Errors that can occur when parsing a `--tabs` argument.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ParseError {
     #[error("{}", translate!("expand-error-invalid-character", "char" => .0.quote()))]
     InvalidCharacter(String),

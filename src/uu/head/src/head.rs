@@ -14,7 +14,6 @@ use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
-use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -33,7 +32,7 @@ use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
 use take::take_lines;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 enum HeadError {
     /// Wrapper around `io::Error`
     #[error("{}", translate!("head-error-reading-file", "name" => name.quote(), "err" => err))]

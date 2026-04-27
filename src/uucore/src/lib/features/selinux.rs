@@ -9,11 +9,10 @@ use std::path::Path;
 
 use crate::translate;
 use selinux::SecurityContext;
-use thiserror::Error;
 
 use crate::error::UError;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
     SELinuxNotEnabled,
