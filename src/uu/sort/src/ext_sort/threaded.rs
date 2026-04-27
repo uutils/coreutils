@@ -9,6 +9,7 @@
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{Read, Write, stderr};
+use std::iter;
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, SyncSender};
 use std::thread;
@@ -175,7 +176,8 @@ fn reader_writer<
             }
         }
         ReadResult::EmptyInput => {
-            // don't output anything
+            // output empty too, as coreutils does
+            print_sorted(iter::empty<&[u8]>(), settings, output)?;
         }
     }
     Ok(())

@@ -2960,4 +2960,17 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
         .stdout_is(input);
 }
 
+#[test]
+fn test_empty_input_empty_output() {
+    // check for inconsistency #11958
+    let input = "test test test";
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("file");
+    at.append("file", input);
+
+    ucmd.args(&["-o", "file"]).pipe_in("").succeeds();
+    assert_eq!(at.read("file"), "");
+}
+
 /* spell-checker: enable */
