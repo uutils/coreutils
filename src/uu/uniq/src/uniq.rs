@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore badoption CTYPE
 use clap::{
-    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
-    error::ErrorKind,
+    Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::ErrorKind,
 };
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -606,7 +605,7 @@ fn handle_extract_obs_skip_chars(
 /// Unfortunately these overrides are necessary, since several GNU tests
 /// for `uniq` hardcode and require the exact wording of the error message
 /// and it is not compatible with how Clap formats and displays those error messages.
-fn map_clap_errors(clap_error: Error) -> Box<dyn UError> {
+fn map_clap_errors(clap_error: clap::error::Error) -> Box<dyn UError> {
     let footer = translate!("uniq-error-try-help");
     let override_arg_conflict = translate!("uniq-error-group-mutually-exclusive") + "\n" + &footer;
     let override_group_badoption = translate!("uniq-error-group-badoption") + "\n" + &footer;
