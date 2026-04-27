@@ -56,10 +56,10 @@ pub enum LnError {
     TargetIsNotADirectory(PathBuf),
 
     #[error("{0}")]
-    IoErr(#[from] UIoError),
+    Io(#[from] UIoError),
 
     #[error("{1}: {0}")]
-    IoErrContext(UIoError, String),
+    IoContext(UIoError, String),
 
     #[error("")]
     SomeLinksFailed,
@@ -86,7 +86,7 @@ pub type LnResult<T> = Result<T, LnError>;
 
 impl From<io::Error> for LnError {
     fn from(err: io::Error) -> Self {
-        Self::IoErr(UIoError::from(err))
+        Self::Io(UIoError::from(err))
     }
 }
 
@@ -424,7 +424,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         }
         if let Some(ref p) = backup_path {
             fs::rename(dst, p).map_err(|e| {
-                LnError::IoErrContext(
+                LnError::IoContext(
                     UIoError::from(e),
                     translate!("ln-cannot-backup", "file" => dst.quote()),
                 )
@@ -465,7 +465,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     } else {
         let p = if settings.logical && source.is_symlink() {
             fs::canonicalize(&source).map_err(|e| {
-                LnError::IoErrContext(
+                LnError::IoContext(
                     UIoError::from(e),
                     translate!("ln-failed-to-access", "file" => source.quote()),
                 )
@@ -476,7 +476,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         match fs::hard_link(&p, dst) {
             Ok(()) => Ok(()),
             Err(_) if p.is_dir() => Err(LnError::FailedToCreateHardLinkDir(source.to_path_buf())),
-            Err(e) => Err(LnError::IoErrContext(
+            Err(e) => Err(LnError::IoContext(
                 UIoError::from(e),
                 translate!(
                     "ln-failed-to-create-hard-link",
@@ -490,7 +490,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     if let Err(e) = res {
         if let Some(ref p) = backup_path {
             fs::rename(p, dst).map_err(|e| {
-                LnError::IoErrContext(
+                LnError::IoContext(
                     UIoError::from(e),
                     translate!("ln-cannot-backup", "file" => dst.quote()),
                 )
