@@ -145,21 +145,28 @@ fn create_bundle(
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
 
-    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| {
+    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| -> bool {
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .and_then(|ftl| FluentResource::try_new(ftl).ok())
+            .map(|ftl| match FluentResource::try_new(ftl) {
+                Ok(resource) => resource,
+                // Use the partial resource which contains all successfully parsed messages
+                Err((partial, _)) => partial,
+            })
         {
             // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
             bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            true
+        } else {
+            false
         }
     };
 
     // Load common strings from uucore locales directory
     try_add_resource_from(find_uucore_locales_dir(locales_dir));
     // Then, try to load utility-specific strings from the utility's locale directory
-    try_add_resource_from(get_locales_dir(util_name).ok());
+    let util_loaded = try_add_resource_from(get_locales_dir(util_name).ok());
 
     // checksum binaries also require fluent files from the checksum_common crate
     if [
@@ -177,8 +184,12 @@ fn create_bundle(
         try_add_resource_from(get_locales_dir("checksum_common").ok());
     }
 
-    // If we have at least one resource, return the bundle
-    if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
+    // Require that the utility locale file was actually loaded.
+    // If only common strings were loaded (but utility strings weren't),
+    // return Err so init_localization can fall back to embedded locales.
+    if util_loaded
+        && (bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")))
+    {
         Ok(bundle)
     } else {
         Err(LocalizationError::LocalesDirNotFound(format!(
@@ -297,7 +308,9 @@ fn create_english_bundle_from_embedded(
         bundle.add_resource_overriding(resource);
     }
 
-    // Return the bundle if we have either common strings or utility-specific strings
+    // Return the bundle if we have at least common or utility-specific strings.
+    // For embedded locales this is the last resort, so accept partial bundles
+    // rather than failing entirely.
     if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
         Ok(bundle)
     } else {
