@@ -559,6 +559,7 @@ impl Write for DigestWriter<'_> {
         // the beginning of this "\r\n".
         let mut i_prev = 0;
         for i in memmem::find_iter(buf, b"\r\n") {
+            unsafe { std::hint::assert_unchecked(i < buf.len()) };
             self.digest.hash_update(&buf[i_prev..i]);
             i_prev = i + 1;
         }

@@ -209,6 +209,7 @@ fn buffer_tac(data: &[u8], before: bool, separator: &OsStr) -> std::io::Result<(
     // the end of the line (as in "abc\ndef\n") or at the beginning of
     // the line (as in "/abc/def").
     for i in memmem::rfind_iter(data, separator.as_encoded_bytes()) {
+        unsafe { std::hint::assert_unchecked(i < data.len()) };
         if before {
             out.write_all(&data[i..following_line_start])?;
             following_line_start = i;

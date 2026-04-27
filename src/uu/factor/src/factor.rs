@@ -194,6 +194,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     let (mut display, mut prev) = (true, 0);
                     for i in memchr3_iter(DELIM_SPACE, DELIM_TAB, DELIM_NULL, &line).chain(once(le))
                     {
+                        unsafe { std::hint::assert_unchecked(i <= line.len()) };
                         let has_null = line.get(i) == Some(&DELIM_NULL);
                         if display && (prev != i || has_null) {
                             write_factors_str(&line[prev..i], &mut w, print_exponents)?;

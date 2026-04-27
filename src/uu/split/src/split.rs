@@ -879,6 +879,7 @@ impl Write for LineChunkWriter<'_> {
         let mut total_bytes_written = 0;
         let sep = self.settings.separator;
         for i in memchr::memchr_iter(sep, buf) {
+            unsafe { std::hint::assert_unchecked(i < buf.len()) };
             // If we have exceeded the number of lines to write in the
             // current chunk, then start a new chunk and its
             // corresponding writer.

@@ -294,6 +294,7 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
                 has_processed_data = true;
 
                 if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    unsafe { std::hint::assert_unchecked(pos < buf.len()) };
                     let amt = pos + 1;
                     line.extend_from_slice(&buf[..amt]);
                     reader.consume(amt);
@@ -315,6 +316,7 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
                 has_processed_data = true;
 
                 if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    unsafe { std::hint::assert_unchecked(pos < buf.len()) };
                     let bytes_to_consume = pos + 1;
                     reader.consume(bytes_to_consume);
                     break;

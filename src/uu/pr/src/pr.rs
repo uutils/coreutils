@@ -934,6 +934,7 @@ fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize,
     // and a page comprises several lines. A form feed character marks
     // the end of a page regardless of how many lines have been read.
     for i in memchr::memchr2_iter(FF, NL, buf) {
+        unsafe { std::hint::assert_unchecked(i < buf.len()) };
         if buf[i] == FF {
             // Treat everything up to (but not including) the form feed
             // character as the last line of the page.
