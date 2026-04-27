@@ -21,7 +21,7 @@ use std::fs;
 use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
-use std::io::{Error, ErrorKind, Result as IOResult};
+use std::io::{ErrorKind, Result as IOResult};
 #[cfg(unix)]
 use std::os::fd::AsFd;
 #[cfg(unix)]
@@ -427,7 +427,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::new(
+                        return Err(std::io::Error::new(
                             ErrorKind::InvalidInput,
                             "Too many levels of symbolic links",
                         )); // TODO use ErrorKind::FilesystemLoop when stable
@@ -917,7 +917,7 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let name = CString::new(path.to_str().unwrap()).unwrap();
     let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
-        Err(Error::from_raw_os_error(err))
+        Err(std::io::Error::from_raw_os_error(err))
     } else {
         Ok(())
     }

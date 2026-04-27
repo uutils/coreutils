@@ -115,7 +115,9 @@ mod login {
     }
 
     /// Get TTY for a session
-    pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn core::error::Error>> {
+    pub fn get_session_tty(
+        session_id: &str,
+    ) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 

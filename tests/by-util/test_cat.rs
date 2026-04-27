@@ -876,7 +876,7 @@ fn test_version_help_dev_full() {
 fn test_cat_eintr_handling() {
     // Test that cat properly handles EINTR (ErrorKind::Interrupted) during I/O operations
     // This verifies the signal interruption retry logic added in the EINTR handling fix
-    use std::io::{Error, ErrorKind, Read};
+    use std::io::{ErrorKind, Read};
     use std::sync::{Arc, Mutex};
 
     // Create a mock reader that simulates EINTR interruptions
@@ -893,7 +893,7 @@ fn test_cat_eintr_handling() {
                 let mut count = self.interrupt_count.lock().unwrap();
                 if *count == 0 {
                     *count += 1;
-                    return Err(Error::new(
+                    return Err(std::io::Error::new(
                         ErrorKind::Interrupted,
                         "Simulated signal interruption",
                     ));

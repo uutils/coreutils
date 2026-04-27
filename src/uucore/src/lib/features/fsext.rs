@@ -65,8 +65,6 @@ use libc::{
 };
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
-#[cfg(not(target_os = "wasi"))]
-use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
 #[cfg(windows)]
@@ -501,7 +499,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
         if INVALID_HANDLE_VALUE == find_handle {
-            let os_err = IOError::last_os_error();
+            let os_err = std::io::Error::last_os_error();
             let msg = format!("FindFirstVolumeW failed: {os_err}");
             return Err(USimpleError::new(EXIT_ERR, msg));
         }
@@ -522,7 +520,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
                     volume_name_buf.len() as u32,
                 )
             } {
-                let err = IOError::last_os_error();
+                let err = std::io::Error::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
                     let msg = format!("FindNextVolumeW failed: {err}");
                     return Err(USimpleError::new(EXIT_ERR, msg));
@@ -638,7 +636,7 @@ impl FsUsage {
         if 0 == success {
             let msg = format!(
                 "GetVolumePathNamesForVolumeNameW failed: {}",
-                IOError::last_os_error()
+                std::io::Error::last_os_error()
             );
             return Err(USimpleError::new(EXIT_ERR, msg));
         }
@@ -924,7 +922,7 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
                 if statfs_fn(p.as_ptr(), &raw mut buffer) == 0 {
                     Ok(buffer)
                 } else {
-                    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+                    let errno = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
                     Err(CStr::from_ptr(strerror(errno))
                         .to_str()
                         .map_err(|_| "Error message contains invalid UTF-8".to_owned())?

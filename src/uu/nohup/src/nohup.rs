@@ -11,7 +11,7 @@ use clap::{Arg, ArgAction, Command};
 use libc::{SIG_IGN, SIGHUP, dup2, signal};
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, IsTerminal};
+use std::io::{ErrorKind, IsTerminal};
 use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -39,13 +39,13 @@ enum NohupError {
     CannotDetach,
 
     #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
-    CannotReplace(&'static str, #[source] Error),
+    CannotReplace(&'static str, #[source] std::io::Error),
 
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
-    OpenFailed(i32, #[source] Error),
+    OpenFailed(i32, #[source] std::io::Error),
 
     #[error("{}", translate!("nohup-error-open-failed-both", "first_path" => NOHUP_OUT.quote(), "first_err" => _1, "second_path" => _2.quote(), "second_err" => _3))]
-    OpenFailed2(i32, #[source] Error, String, Error),
+    OpenFailed2(i32, #[source] std::io::Error, String, std::io::Error),
 }
 
 impl UError for NohupError {
@@ -118,7 +118,7 @@ fn replace_fds() -> UResult<()> {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
         if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
+            return Err(NohupError::CannotReplace("STDIN", std::io::Error::last_os_error()).into());
         }
     }
 
@@ -127,12 +127,14 @@ fn replace_fds() -> UResult<()> {
         let fd = new_stdout.as_raw_fd();
 
         if unsafe { dup2(fd, 1) } != 1 {
-            return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
+            return Err(
+                NohupError::CannotReplace("STDOUT", std::io::Error::last_os_error()).into(),
+            );
         }
     }
 
     if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
-        return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+        return Err(NohupError::CannotReplace("STDERR", std::io::Error::last_os_error()).into());
     }
     Ok(())
 }
