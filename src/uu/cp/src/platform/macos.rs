@@ -20,6 +20,16 @@ use crate::{
     is_stream,
 };
 
+/// Open a source file for reading, optionally preventing symlink following.
+fn open_source(path: &Path, follow_symlinks: bool) -> std::io::Result<File> {
+    let mut opts = OpenOptions::new();
+    opts.read(true);
+    if !follow_symlinks {
+        opts.custom_flags(libc::O_NOFOLLOW);
+    }
+    opts.open(path)
+}
+
 /// Copies `source` to `dest` using copy-on-write if possible.
 pub(crate) fn copy_on_write(
     source: &Path,
@@ -28,6 +38,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_stream: bool,
+    follow_symlinks: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported")
@@ -91,7 +102,7 @@ pub(crate) fn copy_on_write(
         }
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
-            let mut src_file = File::open(source)?;
+            let mut src_file = open_source(source, follow_symlinks)?;
             let mode = 0o622 & !get_umask();
             let mut dst_file = OpenOptions::new()
                 .create(true)
@@ -109,7 +120,13 @@ pub(crate) fn copy_on_write(
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut src_file = open_source(source, follow_symlinks)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut dst_file =
+                File::create(dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            buf_copy::copy_stream(&mut src_file, &mut dst_file)
+                .map_err(|e| std::io::Error::other(format!("{e}")))
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
