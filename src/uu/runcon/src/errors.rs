@@ -81,7 +81,7 @@ impl Error {
     }
 }
 
-pub(crate) fn write_full_error<W>(writer: &mut W, err: &dyn std::error::Error) -> std::fmt::Result
+pub(crate) fn write_full_error<W>(writer: &mut W, err: &dyn core::error::Error) -> std::fmt::Result
 where
     W: Write,
 {
@@ -110,7 +110,7 @@ impl RunconError {
     }
 }
 
-impl std::error::Error for RunconError {}
+impl core::error::Error for RunconError {}
 impl UError for RunconError {
     fn code(&self) -> i32 {
         self.code

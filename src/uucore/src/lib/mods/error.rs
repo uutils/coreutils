@@ -24,7 +24,7 @@
 //! }
 //! ```
 //! [`UResult`] is a simple wrapper around [`Result`] with a custom error trait: [`UError`]. The
-//! most important difference with types implementing [`std::error::Error`] is that [`UError`]s
+//! most important difference with types implementing [`core::error::Error`] is that [`UError`]s
 //! can specify the exit code of the program when they are returned from `uumain`:
 //! * When `Ok` is returned, the code set with [`set_exit_code`] is used as exit code. If
 //!   [`set_exit_code`] was not used, then `0` is used.
@@ -56,7 +56,6 @@
 
 use std::{
     cell::Cell,
-    error::Error,
     fmt::{Display, Formatter},
     io::Write,
     sync::atomic::{AtomicI32, Ordering},
@@ -98,7 +97,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 
 /// Custom errors defined by the utils and `uucore`.
 ///
-/// All errors should implement [`std::error::Error`], [`std::fmt::Display`] and
+/// All errors should implement [`core::error::Error`], [`std::fmt::Display`] and
 /// [`std::fmt::Debug`] and have an additional `code` method that specifies the
 /// exit code of the program if the error is returned from `uumain`.
 ///
@@ -110,7 +109,6 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 ///     error::{UError, UResult}
 /// };
 /// use std::{
-///     error::Error,
 ///     fmt::{Display, Debug},
 ///     path::PathBuf
 /// };
@@ -130,7 +128,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 ///     }
 /// }
 ///
-/// impl Error for LsError {}
+/// impl core::error::Error for LsError {}
 ///
 /// impl Display for LsError {
 ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -157,7 +155,7 @@ pub type UResult<T> = Result<T, Box<dyn UError>>;
 ///
 /// A crate like [`quick_error`](https://crates.io/crates/quick-error) might
 /// also be used, but will still require an `impl` for the `code` method.
-pub trait UError: Error + Send {
+pub trait UError: core::error::Error + Send {
     /// Error code of a custom error.
     ///
     /// Set a return value for each variant of an enum-type to associate an
@@ -172,7 +170,6 @@ pub trait UError: Error + Send {
     ///     error::UError
     /// };
     /// use std::{
-    ///     error::Error,
     ///     fmt::{Display, Debug},
     ///     path::PathBuf
     /// };
@@ -195,7 +192,7 @@ pub trait UError: Error + Send {
     ///     }
     /// }
     ///
-    /// impl Error for MyError {}
+    /// impl core::error::Error for MyError {}
     ///
     /// impl Display for MyError {
     ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -226,7 +223,6 @@ pub trait UError: Error + Send {
     ///     error::UError
     /// };
     /// use std::{
-    ///     error::Error,
     ///     fmt::{Display, Debug},
     ///     path::PathBuf
     /// };
@@ -249,7 +245,7 @@ pub trait UError: Error + Send {
     ///     }
     /// }
     ///
-    /// impl Error for MyError {}
+    /// impl core::error::Error for MyError {}
     ///
     /// impl Display for MyError {
     ///     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -305,7 +301,7 @@ impl USimpleError {
     }
 }
 
-impl Error for USimpleError {}
+impl core::error::Error for USimpleError {}
 
 impl Display for USimpleError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -340,7 +336,7 @@ impl UUsageError {
     }
 }
 
-impl Error for UUsageError {}
+impl core::error::Error for UUsageError {}
 
 impl Display for UUsageError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -403,7 +399,7 @@ impl UIoError {
 
 impl UError for UIoError {}
 
-impl Error for UIoError {}
+impl core::error::Error for UIoError {}
 
 impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -659,7 +655,7 @@ impl ExitCode {
     }
 }
 
-impl Error for ExitCode {}
+impl core::error::Error for ExitCode {}
 
 impl Display for ExitCode {
     fn fmt(&self, _: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -753,7 +749,7 @@ impl UError for ClapErrorWrapper {
     }
 }
 
-impl Error for ClapErrorWrapper {}
+impl core::error::Error for ClapErrorWrapper {}
 
 // This is abuse of the Display trait
 impl Display for ClapErrorWrapper {

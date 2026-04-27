@@ -78,7 +78,7 @@ impl std::fmt::Display for MoreError {
     }
 }
 
-impl std::error::Error for MoreError {}
+impl core::error::Error for MoreError {}
 
 const BELL: char = '\x07'; // Printing this character will ring the bell
 

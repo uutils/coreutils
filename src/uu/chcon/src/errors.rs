@@ -86,7 +86,7 @@ impl Error {
     }
 }
 
-pub(crate) fn report_full_error(mut err: &dyn std::error::Error) -> String {
+pub(crate) fn report_full_error(mut err: &dyn core::error::Error) -> String {
     let mut desc = String::with_capacity(256);
     write!(desc, "{err}").unwrap();
     while let Some(source) = err.source() {

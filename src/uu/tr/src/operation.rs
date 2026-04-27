@@ -17,7 +17,6 @@ use nom::{
 };
 use std::{
     char,
-    error::Error,
     fmt::{Debug, Display},
     io::{BufRead, Write},
 };
@@ -136,7 +135,7 @@ impl Display for BadSequence {
     }
 }
 
-impl Error for BadSequence {}
+impl core::error::Error for BadSequence {}
 impl UError for BadSequence {}
 
 #[derive(Debug, Clone, Copy)]

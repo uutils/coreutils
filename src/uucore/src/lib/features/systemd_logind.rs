@@ -49,7 +49,7 @@ mod login {
     use std::time::SystemTime;
 
     /// Get all active sessions
-    pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_sessions() -> Result<Vec<String>, Box<dyn core::error::Error>> {
         let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
         let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
@@ -81,7 +81,7 @@ mod login {
     }
 
     /// Get UID for a session
-    pub fn get_session_uid(session_id: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    pub fn get_session_uid(session_id: &str) -> Result<u32, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut uid: std::os::raw::c_uint = 0;
 
@@ -97,7 +97,7 @@ mod login {
     }
 
     /// Get start time for a session (in microseconds since Unix epoch)
-    pub fn get_session_start_time(session_id: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    pub fn get_session_start_time(session_id: &str) -> Result<u64, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
@@ -115,7 +115,7 @@ mod login {
     }
 
     /// Get TTY for a session
-    pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
@@ -142,7 +142,7 @@ mod login {
     /// Get remote host for a session
     pub fn get_session_remote_host(
         session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
@@ -171,7 +171,7 @@ mod login {
     /// Get display for a session
     pub fn get_session_display(
         session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
@@ -200,7 +200,7 @@ mod login {
     /// Get type for a session
     pub fn get_session_type(
         session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
@@ -228,7 +228,7 @@ mod login {
     /// Get seat for a session
     pub fn get_session_seat(
         session_id: &str,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<String>, Box<dyn core::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
@@ -263,7 +263,7 @@ mod login {
     ///
     /// Ideally, both should use the same source (KernelTimestamp) for semantic consistency.
     /// Consider proposing to GNU coreutils to use systemd's KernelTimestamp property instead.
-    pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
+    pub fn get_boot_time() -> Result<SystemTime, Box<dyn core::error::Error>> {
         use std::fs;
 
         let metadata = fs::metadata("/var/lib/systemd/random-seed")
