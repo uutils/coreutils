@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE tést
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -3919,6 +3919,50 @@ fn test_ls_quoting_style_arg_overrides_env_var() {
             .succeeds()
             .stdout_only(format!("{correct}\n"));
     }
+}
+
+// Regression test for https://github.com/uutils/coreutils/issues/12011:
+// LC_COLLATE governs sort order, not the encoding used to classify filename
+// bytes for display (that is LC_CTYPE). With a UTF-8 LC_CTYPE/LANG and
+// LC_COLLATE=C, a UTF-8 filename must still be printed as-is.
+#[test]
+#[cfg(unix)]
+fn test_ls_lc_collate_does_not_affect_display() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("tést");
+
+    // Empty LC_ALL overrides the test harness default of LC_ALL=C so the
+    // LC_CTYPE / LANG fallback is what governs character classification.
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("--quoting-style=shell-escape")
+        .succeeds()
+        .stdout_only("tést\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("-b")
+        .succeeds()
+        .stdout_only("tést\n");
+
+    // Reproducer from https://github.com/uutils/coreutils/pull/9303#issuecomment-4322263665:
+    // explicit LC_CTYPE=UTF-8 with LC_COLLATE=C must still print UTF-8 names as-is.
+    at.touch("あいうえお");
+    scene
+        .ucmd()
+        .env("LC_ALL", "")
+        .env("LC_CTYPE", "en_US.UTF-8")
+        .env("LC_COLLATE", "C")
+        .arg("あいうえお")
+        .succeeds()
+        .stdout_only("あいうえお\n");
 }
 
 #[test]

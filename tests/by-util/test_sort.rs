@@ -790,6 +790,40 @@ fn test_month_sort_japanese_locale() {
         .stdout_is(expected);
 }
 
+// Regression test: collation must follow LC_COLLATE, not LC_CTYPE. With a
+// UTF-8 LC_COLLATE and LC_CTYPE=C, the ICU collator should still be
+// initialized so accented characters sort near their base letters instead of
+// by raw byte value.
+#[test]
+#[cfg(unix)]
+fn test_sort_lc_collate_independent_of_lc_ctype() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LANG", "C")
+        .env("LC_COLLATE", locale)
+        .env("LC_CTYPE", "C")
+        .pipe_in("z\né\n")
+        .succeeds()
+        .stdout_only("é\nz\n");
+
+    // Inverse direction, from
+    // https://github.com/uutils/coreutils/pull/9303#issuecomment-4322263665:
+    // LC_CTYPE=UTF-8 with LC_COLLATE=C must produce byte-wise ordering, not
+    // UTF-8 collation. Byte order: B (0x42) < a (0x61) < z (0x7a) < é (0xc3a9).
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .env("LANG", "C")
+        .env("LC_CTYPE", locale)
+        .env("LC_COLLATE", "C")
+        .pipe_in("z\né\na\nB\n")
+        .succeeds()
+        .stdout_only("B\na\nz\né\n");
+}
+
 #[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
