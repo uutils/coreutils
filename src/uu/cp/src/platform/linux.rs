@@ -58,8 +58,7 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(&source)?;
-    let dst_file = File::create(&dest)?;
+    let (src_file, dst_file) = open_files(&source, &dest)?;
     let src_fd = src_file.as_raw_fd();
     let dst_fd = dst_file.as_raw_fd();
     let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
@@ -72,6 +71,66 @@ where
         CloneFallback::SparseCopy => sparse_copy(source, dest),
         CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
     }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn open_files<P>(source: P, dest: P) -> std::io::Result<(File, File)>
+where
+    P: AsRef<Path>,
+{
+    use std::os::unix::fs::PermissionsExt;
+
+    let src_file = File::open(&source)?;
+    let dst_file = match create_new_file(&dest) {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let dest_metadata = match std::fs::metadata(&dest) {
+                Ok(metadata) => Some(metadata),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+                Err(e) => Err(e)?,
+            };
+
+            // The file or pipe actually already exists
+            if let Some(dest_metadata) = dest_metadata {
+                let mut desired_permissions = dest_metadata.permissions();
+                // This will be reset to the correct permissions later, this is defensive as it is
+                // the most restrictive
+                let dst = OpenOptions::new().write(true).open(&dest)?;
+                if dest_metadata.is_file() {
+                    // Alternatively it is something we cannot modify the permissions of like a
+                    // pipe.
+                    desired_permissions.set_mode(0o600);
+
+                    // Use this instead of std::fs::set_permissions before opening as
+                    // std::fs::set_permissions doesn't fail on a readonly file, setting it to readable
+                    // allowing for the open to succeed when it shouldn't
+                    dst.set_permissions(desired_permissions)?;
+                    dst.set_len(0)?;
+                }
+                dst
+            } else {
+                // If a symlink exists in the position we want to write the file to, and it symlinks to
+                // a nonexistent file, we should just overwrite the symlink
+                create_new_file(std::fs::read_link(&dest)?)?
+            }
+        }
+        Err(e) => Err(e)?,
+    };
+
+    Ok((src_file, dst_file))
+}
+
+/// Helper function to create a new file with set destination, returning Err if file already exists
+/// or other errors
+fn create_new_file<P>(dest: P) -> std::io::Result<File>
+where
+    P: AsRef<Path>,
+{
+    OpenOptions::new()
+        .create_new(true)
+        .write(true)
+        .mode(0o600)
+        .open(&dest)
 }
 
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
@@ -124,8 +183,7 @@ fn sparse_copy_without_hole<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let (src_file, dst_file) = open_files(&source, &dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
@@ -174,8 +232,7 @@ fn sparse_copy<P>(source: P, dest: P) -> std::io::Result<()>
 where
     P: AsRef<Path>,
 {
-    let mut src_file = File::open(source)?;
-    let dst_file = File::create(dest)?;
+    let (mut src_file, dst_file) = open_files(&source, &dest)?;
     let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
