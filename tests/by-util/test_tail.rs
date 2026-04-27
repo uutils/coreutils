@@ -580,7 +580,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         return;
     }
 
