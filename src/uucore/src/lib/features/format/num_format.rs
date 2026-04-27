@@ -534,6 +534,9 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
+    // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
+    const BEFORE_BITS: usize = 4;
+
     debug_assert!(!bd.is_negative());
     // Default precision for %a is supposed to be sufficient to represent the
     // exact value. This is platform specific, GNU coreutils uses a `long double`,
@@ -611,8 +614,6 @@ fn format_float_hexadecimal(
 
     // Emulate x86(-64) behavior, we display 4 binary digits before the decimal point,
     // so the value will always be between 0x8 and 0xf.
-    // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
-    const BEFORE_BITS: usize = 4;
     let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
     let bits = frac2.bits();
 

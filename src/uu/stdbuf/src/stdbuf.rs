@@ -145,11 +145,11 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    let (preload, extension) = preload_strings();
-
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
     const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+
+    let (preload, extension) = preload_strings();
 
     // Search paths in order:
     // 1. Directory where stdbuf is located (program_path)

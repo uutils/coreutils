@@ -22,8 +22,6 @@ use uucore::translate;
 /// 2>/dev/full does not abort
 /// This matches GNU cksum's --debug behavior
 fn print_cpu_debug_info() {
-    let features = SimdPolicy::detect();
-
     fn print_feature(name: &str, available: bool) {
         if available {
             let _ = writeln!(stderr(), "using {name} hardware support");
@@ -31,6 +29,8 @@ fn print_cpu_debug_info() {
             let _ = writeln!(stderr(), "{name} support not detected");
         }
     }
+
+    let features = SimdPolicy::detect();
 
     // x86/x86_64
     print_feature("avx512", features.has_avx512());

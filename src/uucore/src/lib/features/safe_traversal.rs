@@ -1102,11 +1102,12 @@ mod tests {
 
     #[test]
     fn test_open_file_at_creates_file() {
+        use std::io::Write;
+
         let temp_dir = TempDir::new().unwrap();
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
 
         let mut file = dir_fd.open_file_at(OsStr::new("new_file.txt")).unwrap();
-        use std::io::Write;
         file.write_all(b"test content").unwrap();
 
         let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
@@ -1115,13 +1116,14 @@ mod tests {
 
     #[test]
     fn test_open_file_at_truncates_existing() {
+        use std::io::Write;
+
         let temp_dir = TempDir::new().unwrap();
         let file_path = temp_dir.path().join("existing.txt");
         fs::write(&file_path, "old content that is longer").unwrap();
 
         let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
         let mut file = dir_fd.open_file_at(OsStr::new("existing.txt")).unwrap();
-        use std::io::Write;
         file.write_all(b"new").unwrap();
         drop(file);
 

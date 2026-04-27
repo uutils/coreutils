@@ -269,6 +269,8 @@ fn parse_lines<'a>(
     separator: u8,
     settings: &GlobalSettings,
 ) {
+    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
+
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
     assert!(lines.is_empty());
@@ -279,7 +281,6 @@ fn parse_lines<'a>(
     assert!(line_data.collation_key_buffer.is_empty());
     assert!(line_data.collation_key_ends.is_empty());
     token_buffer.clear();
-    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
     let mut exact_line_count = None;
     if *line_count_hint == 0 || read.len() <= SMALL_CHUNK_BYTES {
