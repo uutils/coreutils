@@ -488,12 +488,12 @@ fluent = "0.17.0"
 unic-langid = "0.9.6"
 fluent-syntax = "0.12.0"
 
-uucore = { version = "0.8.0", package = "uucore", path = "src/uucore" }
-uucore_procs = { version = "0.8.0", package = "uucore_procs", path = "src/uucore_procs" }
+uucore = { version = "0.8.0", path = "src/uucore" }
+uucore_procs = { version = "0.8.0", path = "src/uucore_procs" }
 uu_ls = { version = "0.8.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.8.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.8.0", path = "src/uu/checksum_common" }
-uutests = { version = "0.8.0", package = "uutests", path = "tests/uutests" }
+uutests = { version = "0.8.0", path = "tests/uutests" }
 
 [dependencies]
 clap.workspace = true
@@ -511,7 +511,7 @@ zip = { workspace = true, optional = true }
 
 
 # * uutils
-uu_test = { optional = true, version = "0.8.0", package = "uu_test", path = "src/uu/test" }
+uu_test = { optional = true, version = "0.8.0", path = "src/uu/test" }
 #
 arch = { optional = true, version = "0.8.0", package = "uu_arch", path = "src/uu/arch" }
 base32 = { optional = true, version = "0.8.0", package = "uu_base32", path = "src/uu/base32" }
