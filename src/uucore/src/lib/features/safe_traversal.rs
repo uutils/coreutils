@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec
+// spell-checker:ignore atimensec mtimensec ctimensec EOVERFLOW getdents
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -22,12 +22,19 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
 use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
 use os_display::Quotable;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use std::mem::MaybeUninit;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use rustix::fs::RawDir;
 
 use crate::translate;
 
@@ -108,7 +115,27 @@ impl From<SafeTraversalError> for io::Error {
     }
 }
 
-// Helper function to read directory entries using nix
+// Helper function to read directory entries.
+// On Linux, use [`rustix::fs::RawDir`](https://docs.rs/rustix/latest/rustix/fs/struct.RawDir.html) which calls getdents64 directly,
+// avoiding EOVERFLOW on 32-bit architectures where libc readdir() uses
+// 32-bit d_ino.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
+    let mut entries = Vec::new();
+    let mut buf = [MaybeUninit::uninit(); 8192];
+    let mut iter = RawDir::new(fd, &mut buf);
+    while let Some(entry_result) = iter.next() {
+        let entry = entry_result.map_err(io::Error::from)?;
+        let name_bytes = entry.file_name().to_bytes();
+        let name_os = OsStr::from_bytes(name_bytes);
+        if name_os != "." && name_os != ".." {
+            entries.push(name_os.to_os_string());
+        }
+    }
+    Ok(entries)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn read_dir_entries(fd: &OwnedFd) -> io::Result<Vec<OsString>> {
     let mut entries = Vec::new();
 
