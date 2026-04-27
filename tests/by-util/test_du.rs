@@ -1518,6 +1518,23 @@ fn test_du_exclude_invalid_syntax() {
         .stderr_contains("du: Invalid exclude syntax");
 }
 
+#[test]
+fn test_du_exclude_from_nonexistent_file() {
+    new_ucmd!()
+        .arg("--exclude-from=nonexistent-file")
+        .fails()
+        .stderr_contains("du: No such file or directory");
+}
+
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[test]
+fn test_du_exclude_from_read_error() {
+    new_ucmd!()
+        .arg("--exclude-from=/proc/self/mem")
+        .fails()
+        .stderr_contains("du: Input/output error");
+}
+
 #[cfg(not(windows))]
 #[test]
 fn test_du_symlink_fail() {

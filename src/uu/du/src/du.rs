@@ -755,13 +755,11 @@ enum DuError {
 impl UError for DuError {}
 
 /// Read a file and return each line in a vector of String
-fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
-    let file = File::open(filename).expect("no such file");
+fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
+    let file = File::open(filename)?;
     let buf = BufReader::new(file);
-
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .collect()
+    let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
+    Ok(lines)
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -770,7 +768,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(file_as_vec);
+        .map(file_as_vec)
+        .collect::<UResult<Vec<Vec<String>>>>()?
+        .into_iter()
+        .flatten();
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
