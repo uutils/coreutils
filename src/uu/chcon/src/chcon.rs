@@ -627,6 +627,8 @@ fn change_file_context(
     context: &SELinuxSecurityContext,
     path: &Path,
 ) -> Result<()> {
+    type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
+
     match &options.mode {
         CommandLineMode::Custom {
             user,
@@ -672,8 +674,6 @@ fn change_file_context(
                     let err = io::ErrorKind::InvalidInput.into();
                     Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                 })?;
-
-            type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
 
             let list: &[(&Option<OsString>, SetValueProc)] = &[
                 (user, OpaqueSecurityContext::set_user),

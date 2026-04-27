@@ -950,7 +950,6 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_round_up_byte_values() {
-        init();
         fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
                 block_size: BlockSize::Bytes(1000),
@@ -966,6 +965,8 @@ mod tests {
             };
             RowFormatter::new(&row, &options, false).get_cells()
         }
+
+        init();
 
         assert!(compare_cell_content(
             get_formatted_values(100, 100, 0),

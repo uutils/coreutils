@@ -268,9 +268,9 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
 /// Build a regex from a pattern string with locale-aware encoding
 fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
     use onig::EncodedBytes;
-    use uucore::i18n::{UEncoding, get_locale_encoding};
+    use uucore::i18n::UEncoding;
 
-    let encoding = get_locale_encoding();
+    let encoding = uucore::i18n::get_locale_encoding();
 
     // For pattern processing, we need to handle it based on locale
     let pattern_str = String::from_utf8(pattern_bytes.clone())
@@ -388,9 +388,9 @@ fn regex_search<T: onig::EncodedChars>(
 /// Find matches in the input using the compiled regex
 fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
     use onig::EncodedBytes;
-    use uucore::i18n::{UEncoding, get_locale_encoding};
+    use uucore::i18n::UEncoding;
 
-    let encoding = get_locale_encoding();
+    let encoding = uucore::i18n::get_locale_encoding();
 
     // Match against the input using the appropriate encoding
     let mut region = onig::Region::new();
@@ -506,11 +506,12 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
 
 /// Evaluate a match expression with locale-aware regex matching
 fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprResult<NumOrStr> {
+    use uucore::i18n::UEncoding;
+
     let (regex, re_string) = build_regex(right_bytes)?;
 
     // Special case for ASCII locale with capture groups that need to return raw bytes
-    use uucore::i18n::{UEncoding, get_locale_encoding};
-    let encoding = get_locale_encoding();
+    let encoding = uucore::i18n::get_locale_encoding();
 
     if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 0 {
         // Try to find the actual capture bytes for ASCII locale
