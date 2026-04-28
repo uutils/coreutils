@@ -611,6 +611,7 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
 }
 
 #[cfg(test)]
+#[cfg(not(target_os = "wasi"))]
 mod tests {
     use super::*;
     use std::io::Write;

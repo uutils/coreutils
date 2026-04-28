@@ -315,10 +315,13 @@ impl IntoIterator for SortInputs {
 mod tests {
     use super::*;
     use std::ffi::OsString;
+    #[cfg(not(target_os = "wasi"))]
     use std::io::Write;
+    #[cfg(not(target_os = "wasi"))]
     use tempfile::NamedTempFile;
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_input_new_file() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -343,6 +346,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_input_memory_map_read() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -362,6 +366,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_input_into_box_read() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -382,6 +387,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_input_mmap_independent_reads() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -417,6 +423,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_single_file() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -431,6 +438,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_multiple_unique() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
         tmpfile1
@@ -456,6 +464,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_with_duplicates() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
         tmpfile1
@@ -478,6 +487,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_duplicate_mmap_independent() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -546,6 +556,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_mixed_stdin_and_files_allowed() {
         // Verify that mixing stdin with files is allowed (GNU Coreutils compatible)
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
@@ -562,6 +573,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_order_preserved() {
         let mut tmpfile1 = NamedTempFile::new().expect("should create temp file");
         tmpfile1
@@ -582,6 +594,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_from_files_error() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
@@ -599,6 +612,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "wasi"))]
     fn test_sort_inputs_into_iter() {
         let mut tmpfile = NamedTempFile::new().expect("should create temp file");
         tmpfile
