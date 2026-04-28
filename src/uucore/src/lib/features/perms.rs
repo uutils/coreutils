@@ -26,7 +26,6 @@ use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
 use std::ffi::CString;
 use std::fs::Metadata;
-use std::io::Error as IOError;
 use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
@@ -71,7 +70,7 @@ fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IORes
     if ret == 0 {
         Ok(())
     } else {
-        Err(IOError::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 

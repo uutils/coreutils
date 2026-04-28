@@ -6,12 +6,11 @@
 // spell-checker:ignore (misc) uioerror
 use filetime::FileTime;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError};
 use uucore::translate;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum TouchError {
     #[error("{}", translate!("touch-error-unable-to-parse-date", "date" => .0.clone()))]
     InvalidDateFormat(String),

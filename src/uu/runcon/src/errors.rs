@@ -25,7 +25,7 @@ pub(crate) mod error_exit_status {
     pub const ANOTHER_ERROR: i32 = libc::EXIT_FAILURE;
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("runcon-error-no-command"))]
     MissingCommand,
@@ -81,7 +81,7 @@ impl Error {
     }
 }
 
-pub(crate) fn write_full_error<W>(writer: &mut W, err: &dyn std::error::Error) -> std::fmt::Result
+pub(crate) fn write_full_error<W>(writer: &mut W, err: &dyn core::error::Error) -> std::fmt::Result
 where
     W: Write,
 {
@@ -110,7 +110,7 @@ impl RunconError {
     }
 }
 
-impl std::error::Error for RunconError {}
+impl core::error::Error for RunconError {}
 impl UError for RunconError {
     fn code(&self) -> i32 {
         self.code

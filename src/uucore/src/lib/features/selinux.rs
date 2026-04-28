@@ -5,16 +5,14 @@
 
 //! Set of functions to manage SELinux security contexts
 
-use std::error::Error;
 use std::path::Path;
 
 use crate::translate;
 use selinux::SecurityContext;
-use thiserror::Error;
 
 use crate::error::UError;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
     SELinuxNotEnabled,
@@ -63,7 +61,7 @@ pub fn is_selinux_enabled() -> bool {
 }
 
 /// Returns a string describing the error and its causes.
-pub fn selinux_error_description(mut error: &dyn Error) -> String {
+pub fn selinux_error_description(mut error: &dyn core::error::Error) -> String {
     let mut description = String::new();
     while let Some(source) = error.source() {
         let error_text = source.to_string();

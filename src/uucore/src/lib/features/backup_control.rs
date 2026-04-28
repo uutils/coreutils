@@ -88,7 +88,6 @@ use crate::{
 use clap::ArgMatches;
 use std::{
     env,
-    error::Error,
     ffi::{OsStr, OsString},
     fmt::{Debug, Display},
     path::{Path, PathBuf},
@@ -169,7 +168,7 @@ impl UError for BackupError {
     }
 }
 
-impl Error for BackupError {}
+impl core::error::Error for BackupError {}
 
 impl Display for BackupError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

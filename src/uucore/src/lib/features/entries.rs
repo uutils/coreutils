@@ -39,7 +39,6 @@ use libc::{getgrgid, getgrnam, getgroups};
 use libc::{getpwnam, getpwuid, group, passwd};
 
 use std::ffi::{CStr, CString};
-use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
 use std::ptr;
@@ -68,7 +67,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
     let mut groups = Vec::new();
     loop {
         let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
-            -1 => return Err(IOError::last_os_error()),
+            -1 => return Err(std::io::Error::last_os_error()),
             // Not just optimization; 0 would mess up the next call
             0 => return Ok(Vec::new()),
             n => n,
@@ -79,7 +78,7 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
         groups.resize(ngroups.try_into().unwrap(), 0);
         let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
         if res == -1 {
-            let err = IOError::last_os_error();
+            let err = std::io::Error::last_os_error();
             if err.raw_os_error() == Some(libc::EINVAL) {
                 // Number of groups has increased, retry
             } else {
@@ -299,7 +298,7 @@ macro_rules! f {
                         // errno must be set to zero before the call. We can
                         // use libc::__errno_location() on some platforms.
                         // The same applies for the two cases below.
-                        Err(IOError::new(
+                        Err(std::io::Error::new(
                             ErrorKind::NotFound,
                             format!("No such id: {k}"),
                         ))
@@ -326,13 +325,16 @@ macro_rules! f {
                         if !data.is_null() {
                             Ok($st::from_raw(ptr::read(data.cast_const())))
                         } else {
-                            Err(IOError::new(
+                            Err(std::io::Error::new(
                                 ErrorKind::NotFound,
                                 format!("No such id: {id}"),
                             ))
                         }
                     } else {
-                        Err(IOError::new(ErrorKind::NotFound, format!("Not found: {k}")))
+                        Err(std::io::Error::new(
+                            ErrorKind::NotFound,
+                            format!("Not found: {k}"),
+                        ))
                     }
                 }
             }

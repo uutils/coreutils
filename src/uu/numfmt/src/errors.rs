@@ -4,10 +4,9 @@
 // file that was distributed with this source code.
 
 use std::fmt::Debug;
-use thiserror::Error;
 use uucore::error::UError;
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("{0}")]
 pub enum NumfmtError {
     IoError(String),

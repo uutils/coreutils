@@ -8,7 +8,6 @@
 use clap::{Arg, ArgAction, Command};
 use nix::sys::signal::{self, Signal};
 use nix::unistd::Pid;
-use std::io::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
@@ -76,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             } else {
                 let sig = (sig as i32)
                     .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
+                    .map_err(|e| std::io::Error::from_raw_os_error(e as i32))?;
                 Some(sig)
             };
 
@@ -254,7 +253,7 @@ fn kill(sig: Option<Signal>, pids: &[i32]) {
     for &pid in pids {
         if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
             show!(
-                Error::from_raw_os_error(e as i32)
+                std::io::Error::from_raw_os_error(e as i32)
                     .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
             );
         }

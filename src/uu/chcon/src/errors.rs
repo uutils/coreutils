@@ -9,13 +9,12 @@ use std::ffi::OsString;
 use std::fmt::Write;
 use std::io;
 
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     #[error("{}", translate!("chcon-error-no-context-specified"))]
     MissingContext,
@@ -86,7 +85,7 @@ impl Error {
     }
 }
 
-pub(crate) fn report_full_error(mut err: &dyn std::error::Error) -> String {
+pub(crate) fn report_full_error(mut err: &dyn core::error::Error) -> String {
     let mut desc = String::with_capacity(256);
     write!(desc, "{err}").unwrap();
     while let Some(source) = err.source() {

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::io::{BufWriter, Error, Result};
+use std::io::{BufWriter, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -27,10 +27,10 @@ pub fn instantiate_current_writer(
             .truncate(true)
             .open(Path::new(filename))
             .map_err(|e| match e.kind() {
-                ErrorKind::IsADirectory => Error::other(
+                ErrorKind::IsADirectory => std::io::Error::other(
                     translate!("split-error-is-a-directory", "dir" => filename.quote()),
                 ),
-                _ => Error::other(
+                _ => std::io::Error::other(
                     translate!("split-error-unable-to-open-file", "file" => filename.quote()),
                 ),
             })?
@@ -40,7 +40,7 @@ pub fn instantiate_current_writer(
             .append(true)
             .open(Path::new(filename))
             .map_err(|_| {
-                Error::other(
+                std::io::Error::other(
                     translate!("split-error-unable-to-reopen-file", "file" => filename.quote()),
                 )
             })?

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // https://github.com/lazy-bitfield/rust-mockstream/pull/2
 
-use std::io::{Cursor, Error, ErrorKind, Read, Result};
+use std::io::{Cursor, ErrorKind, Read, Result};
 
 /// `FailingMockStream` mocks a stream which will fail upon read or write
 ///
@@ -73,7 +73,7 @@ impl FailingMockStream {
             if self.repeat_count > 0 {
                 self.repeat_count -= 1;
             }
-            Err(Error::new(self.kind, self.message))
+            Err(std::io::Error::new(self.kind, self.message))
         }
     }
 }

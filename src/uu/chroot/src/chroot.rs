@@ -9,7 +9,7 @@ mod error;
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::{CString, OsStr};
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -318,7 +318,7 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -328,7 +328,7 @@ fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -338,7 +338,7 @@ fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -440,6 +440,6 @@ fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
         }
         Ok(())
     } else {
-        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
+        Err(ChrootError::CannotEnter(root.into(), std::io::Error::last_os_error()).into())
     }
 }

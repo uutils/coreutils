@@ -15,7 +15,6 @@ use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
-use thiserror::Error;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
@@ -69,7 +68,7 @@ impl TryFrom<&ArgMatches> for ProgramOptions {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum ProgramOptionsError {
     #[error("{}", translate!("stdbuf-error-line-buffering-stdin-meaningless"))]
     LineBufferingStdinMeaningless,

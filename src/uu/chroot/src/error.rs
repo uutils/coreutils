@@ -5,28 +5,26 @@
 // spell-checker:ignore NEWROOT Userspec userspec
 //! Errors returned by chroot.
 use std::ffi::OsString;
-use std::io::Error;
 use std::path::PathBuf;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::libc;
 use uucore::translate;
 
 /// Errors that can happen while executing chroot.
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ChrootError {
     /// Failed to enter the specified directory.
     #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => _1))]
-    CannotEnter(PathBuf, #[source] Error),
+    CannotEnter(PathBuf, #[source] std::io::Error),
 
     /// Failed to execute the specified command.
     #[error("{}", translate!("chroot-error-command-failed", "cmd" => _0.quote(), "err" => _1))]
-    CommandFailed(OsString, #[source] Error),
+    CommandFailed(OsString, #[source] std::io::Error),
 
     /// Failed to find the specified command.
     #[error("{}", translate!("chroot-error-command-not-found", "cmd" => _0.quote(), "err" => _1))]
-    CommandNotFound(OsString, #[source] Error),
+    CommandNotFound(OsString, #[source] std::io::Error),
 
     #[error("{}", translate!("chroot-error-groups-parsing-failed"))]
     GroupsParsingFailed,
@@ -58,15 +56,15 @@ pub enum ChrootError {
 
     /// The call to `setgid()` failed.
     #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]
-    SetGidFailed(String, #[source] Error),
+    SetGidFailed(String, #[source] std::io::Error),
 
     /// The call to `setgroups()` failed.
     #[error("{}", translate!("chroot-error-set-groups-failed", "err" => _0))]
-    SetGroupsFailed(Error),
+    SetGroupsFailed(std::io::Error),
 
     /// The call to `setuid()` failed.
     #[error("{}", translate!("chroot-error-set-user-failed", "user" => _0.maybe_quote(), "err" => _1))]
-    SetUserFailed(String, #[source] Error),
+    SetUserFailed(String, #[source] std::io::Error),
 }
 
 impl UError for ChrootError {

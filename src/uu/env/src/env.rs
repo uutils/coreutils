@@ -47,9 +47,7 @@ use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_numb
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
-use thiserror::Error;
-
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum EnvError {
     #[error("{}", translate!("env-error-missing-closing-quote", "position" => .0, "quote" => .1))]
     EnvMissingClosingQuote(usize, char),

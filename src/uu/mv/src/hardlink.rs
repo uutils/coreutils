@@ -71,8 +71,8 @@ impl std::fmt::Display for HardlinkError {
     }
 }
 
-impl std::error::Error for HardlinkError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for HardlinkError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             Self::Io(e) => Some(e),
             Self::Metadata { error, .. } => Some(error),
