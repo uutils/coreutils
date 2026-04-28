@@ -48,7 +48,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         // - sender without splice is bottleneck of our wc -c
         loop {
             match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => break,
+                Ok(0) => return Ok(byte_count),
                 Ok(res) => byte_count += res,
                 Err(_) => return Err(byte_count),
             }
@@ -57,7 +57,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         // input is not pipe. needs broker to use splice() with additional cost
         loop {
             match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => break,
+                Ok(0) => return Ok(byte_count),
                 Ok(res) => {
                     byte_count += res;
                     splice_exact(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
@@ -66,10 +66,8 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
             }
         }
     } else {
-        return Ok(0_usize);
+        Err(0)
     }
-
-    Ok(byte_count)
 }
 
 /// In the special case where we only need to count the number of bytes. There

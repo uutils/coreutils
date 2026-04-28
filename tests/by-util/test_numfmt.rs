@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (paths) gnutest ronna quetta
+
+// spell-checker:ignore (paths) gnutest ronna quetta unitless
 
 use uutests::new_ucmd;
 
@@ -634,6 +635,16 @@ fn test_round() {
 }
 
 #[test]
+fn test_to_unitless_small_values_use_display_rounding() {
+    new_ucmd!()
+        .args(&[
+            "--to=si", "--", "0.4", "0.5", "0.6", "1.4", "3.14", "-0.4", "-0.5", "-0.6", "-1.4",
+        ])
+        .succeeds()
+        .stdout_only("0\n0\n1\n1\n3\n-0\n-0\n-1\n-1\n");
+}
+
+#[test]
 fn test_round_with_to_unit() {
     for (method, exp) in [
         ("from-zero", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
@@ -657,6 +668,24 @@ fn test_round_with_to_unit() {
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");
     }
+}
+
+#[test]
+fn test_to_unit_with_unitless_small_value_uses_display_rounding() {
+    new_ucmd!()
+        .args(&["--to=iec", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["--to=si", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["--to=none", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
@@ -1022,6 +1051,19 @@ fn test_format_with_precision_and_to_arg() {
             .succeeds()
             .stdout_is(format!("{expected}\n"));
     }
+}
+
+#[test]
+fn test_format_with_precision_and_unitless_to_arg() {
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.1f", "3.14"])
+        .succeeds()
+        .stdout_is("4.0\n");
+
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.1f", "--round=down", "3.14"])
+        .succeeds()
+        .stdout_is("3.0\n");
 }
 
 #[test]
@@ -1523,4 +1565,39 @@ fn test_ignores_invalid_mode_issue11935() {
         .succeeds()
         .stderr_is("numfmt: invalid suffix in input: '1e5'\n")
         .stdout_is("100\n1e5\n200\n");
+}
+
+#[test]
+fn test_iec_format_precision_cap() {
+    // gnu zero pads after 3 decimals on iec
+    let cases = [
+        ("1500", "1.46500K"),
+        ("999999", "976.56200K"),
+        ("310174", "302.90500K"),
+    ];
+    for (input, expected) in cases {
+        new_ucmd!()
+            .args(&["--to=iec", "--format=%.5f", input])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+#[test]
+fn test_si_format_precision_no_cap() {
+    // si shouldn't get the cap, full precision
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.5f", "1234567"])
+        .succeeds()
+        .stdout_is("1.23457M\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11937
+// numfmt: --format width accounting diverges from GNU for multi-byte --suffix
+#[test]
+fn test_multibyte_suffix_issue11937() {
+    new_ucmd!()
+        .args(&["--suffix=€", "--format=%10.2f", "692"])
+        .succeeds()
+        .stdout_is("   692.00€\n");
 }

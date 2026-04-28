@@ -519,8 +519,14 @@ fn consider_suffix(
         _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
+    // iec caps at 3 decimals to match gnu, si stays as is
+    let effective_precision = if matches!(u, Unit::Iec(_)) {
+        precision.min(3)
+    } else {
+        precision
+    };
     let v = if precision > 0 {
-        round_with_precision(n / bases[i], round_method, precision)
+        round_with_precision(n / bases[i], round_method, effective_precision)
     } else {
         div_round(n, bases[i], round_method)
     };
@@ -586,10 +592,15 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None => localize(format!(
+        None if opts.to == Unit::None => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
+        None if is_precision_specified => {
+            let i2 = round_with_precision(i2, round_method, 0);
+            localize(format!("{i2:.precision$}"))
+        }
+        None => localize(format!("{i2:.0}")),
         Some(s) if precision > 0 => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
@@ -614,7 +625,7 @@ fn transform_to(
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
 /// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
 fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.len();
+    let len = s.chars().count();
     if len >= width {
         return s.to_string();
     }

@@ -3007,3 +3007,12 @@ fn test_korean_time_zone() {
         .succeeds()
         .stdout_is("2026-01-15 01:00:00 UTC\n");
 }
+
+// https://github.com/uutils/coreutils/issues/12001
+// date: width prefix in %N format specifier is ignored ( %3N, %6N always output full 9 nanosecond digits) #12001
+#[test]
+fn test_nanoseconds_width_prefix_ignored_issue12001() {
+    let result = new_ucmd!().arg("+%3N").succeeds();
+    // compare to 4 because of \n
+    assert_eq!(result.stdout().len(), 4);
+}
