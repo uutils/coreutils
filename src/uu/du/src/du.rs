@@ -284,7 +284,18 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     {
         Ok(bytes)
     } else {
-        Ok(parse_block_size::default_block_size())
+        Ok(default_block_size())
+    }
+}
+
+/// Default block size when no env var or flag is set.
+///
+/// Returns 512 if `POSIXLY_CORRECT` is set, 1024 otherwise.
+fn default_block_size() -> u64 {
+    if unsafe { IS_POSIXLY_CORRECT } {
+        512
+    } else {
+        1024
     }
 }
 
@@ -1003,9 +1014,15 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
         .unwrap_or(block_size_value_or_default_fallback))
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let summarize = matches.get_flag(options::SUMMARIZE);

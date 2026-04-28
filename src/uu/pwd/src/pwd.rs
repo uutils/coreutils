@@ -107,15 +107,21 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
     let cwd = if matches.get_flag(OPT_PHYSICAL) {
         physical_path()
-    } else if matches.get_flag(OPT_LOGICAL) || env::var("POSIXLY_CORRECT").is_ok() {
+    } else if matches.get_flag(OPT_LOGICAL) || unsafe { IS_POSIXLY_CORRECT } {
         logical_path()
     } else {
         physical_path()

@@ -30,13 +30,19 @@ const OPT_ZERO: &str = "zero";
 
 const ARG_FILES: &str = "files";
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let mut no_trailing_delimiter = matches.get_flag(OPT_NO_NEWLINE);
     let use_zero = matches.get_flag(OPT_ZERO);
-    let verbose = matches.get_flag(OPT_VERBOSE) || env::var("POSIXLY_CORRECT").is_ok();
+    let verbose = matches.get_flag(OPT_VERBOSE) || unsafe { IS_POSIXLY_CORRECT };
 
     // GNU readlink -f/-e/-m follows symlinks first and then applies `..` (physical resolution).
     // ResolveMode::Logical collapses `..` before following links, which yields the opposite order,

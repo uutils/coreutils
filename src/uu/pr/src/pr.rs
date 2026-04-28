@@ -372,8 +372,14 @@ pub fn uu_app() -> Command {
         )
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = std::env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let args = args.collect_ignore();
 
     let opt_args = recreate_arguments(&args);
@@ -489,7 +495,7 @@ fn get_date_format(matches: &ArgMatches) -> String {
         Some(format) => format,
         None => {
             // Replicate behavior from GNU manual.
-            if std::env::var("POSIXLY_CORRECT").is_ok()
+            if unsafe { IS_POSIXLY_CORRECT }
                 // TODO: This needs to be moved to uucore and handled by icu?
                 && (std::env::var_os("LC_TIME").as_deref() == Some(OsStr::new("POSIX"))
                     || std::env::var_os("LC_ALL").as_deref() == Some(OsStr::new("POSIX")))

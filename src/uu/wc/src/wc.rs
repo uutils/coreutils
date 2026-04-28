@@ -19,7 +19,6 @@ use std::{
     io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
-    sync::LazyLock,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
@@ -382,8 +381,14 @@ impl UError for WcError {
     }
 }
 
+static mut IS_POSIXLY_CORRECT: bool = false;
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    unsafe {
+        IS_POSIXLY_CORRECT = env::var_os("POSIXLY_CORRECT").is_some();
+    }
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::new(&matches);
@@ -580,11 +585,10 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-    is_posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if is_posixly_correct {
+            let is_space = if unsafe { IS_POSIXLY_CORRECT } {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
                 ch.is_whitespace()
@@ -656,7 +660,6 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-    let is_posixly_correct = *IS_POSIXLY_CORRECT;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -665,7 +668,6 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
-                    is_posixly_correct,
                 );
             }
             Err(e) => {
@@ -1040,6 +1042,3 @@ fn print_stats(
     }
     writeln!(stdout)
 }
-
-static IS_POSIXLY_CORRECT: LazyLock<bool> =
-    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
