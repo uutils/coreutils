@@ -13,7 +13,9 @@ use file_diff::diff;
 use filetime::set_file_times;
 use filetime::{FileTime, set_file_handle_times};
 #[cfg(unix)]
-use nix::unistd::{Gid, Uid, dup, fchown};
+use rustix::fs::{Gid, Uid, fchown};
+#[cfg(unix)]
+use rustix::io::dup;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
