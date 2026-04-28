@@ -576,6 +576,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 }
 
 // Print the target section of the file
+// use zero-copy on Linux
 fn print_target_section<
     #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
     #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
@@ -586,10 +587,14 @@ fn print_target_section<
     let stdout = stdout();
     let mut stdout = stdout.lock();
     if let Some(limit) = limit {
-        let mut reader = file.take(limit);
-        io::copy(&mut reader, &mut stdout)?;
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            let mut reader = file.take(limit);
+            io::copy(&mut reader, &mut stdout)?;
+        }
     } else {
-        // zero-copy fast-path
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
             io::copy(file, &mut stdout)?;
