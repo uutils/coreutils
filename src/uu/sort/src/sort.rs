@@ -2655,7 +2655,12 @@ fn compare_by<'a>(
     if global_settings.precomputed.fast_locale_collation {
         let a_key = a_line_data.collation_key(a.index);
         let b_key = b_line_data.collation_key(b.index);
-        let cmp = a_key.cmp(b_key);
+        let mut cmp = a_key.cmp(b_key);
+        // If collation keys are equal, fall back to lexicographic comparison
+        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        if cmp == Ordering::Equal {
+            cmp = a.line.cmp(b.line);
+        }
         return if global_settings.reverse {
             cmp.reverse()
         } else {
