@@ -543,7 +543,7 @@ fn try_format_exact_int_without_suffix_scaling(
     value: ParsedNumber,
     opts: &TransformOptions,
     precision: usize,
-) -> Option<String> {
+) -> Option<Result<String>> {
     if opts.to != Unit::None {
         return None;
     }
@@ -557,7 +557,21 @@ fn try_format_exact_int_without_suffix_scaling(
 
     let scaled = integer / to_unit;
 
-    Some(if precision == 0 {
+    // reject when formatted output would need 20+ digits
+    const MAX_FORMATTED: u128 = 10_000_000_000_000_000_000;
+    let precision_factor = 10_u128.pow(precision.min(19) as u32);
+    if scaled
+        .unsigned_abs()
+        .checked_mul(precision_factor)
+        .is_none_or(|v| v >= MAX_FORMATTED)
+    {
+        let value_sci = format_gnu_scientific(scaled as f64);
+        return Some(Err(format!(
+            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
+        )));
+    }
+
+    Some(Ok(if precision == 0 {
         scaled.to_string()
     } else {
         format!(
@@ -565,7 +579,24 @@ fn try_format_exact_int_without_suffix_scaling(
             locale_decimal_separator(),
             "0".repeat(precision)
         )
-    })
+    }))
+}
+
+fn format_gnu_scientific(v: f64) -> String {
+    // 6 significant figures with trimmed trailing zeros and signed exponent
+    let s = format!("{v:.5e}");
+    if let Some(e_pos) = s.find('e') {
+        let (mantissa, rest) = s.split_at(e_pos);
+        let exp = &rest[1..];
+        let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+        if exp.starts_with('-') {
+            format!("{mantissa}e{exp}")
+        } else {
+            format!("{mantissa}e+{exp}")
+        }
+    } else {
+        s
+    }
 }
 
 fn transform_to(
@@ -577,7 +608,7 @@ fn transform_to(
     is_precision_specified: bool,
 ) -> Result<String> {
     if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
-        return Ok(result);
+        return result;
     }
 
     let s = s.to_f64();
