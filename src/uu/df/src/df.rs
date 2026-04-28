@@ -379,6 +379,7 @@ where
             Filesystem::from_path_direct(path)
         } else {
             Filesystem::from_path(&mounts, path)
+                .or_else(|_| Filesystem::from_path_direct_with_mounts(&mounts, path))
         };
         #[cfg(not(unix))]
         let fs_result = Filesystem::from_path(&mounts, path);
