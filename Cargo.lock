@@ -3684,6 +3684,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "fluent",
+ "nix",
  "selinux",
  "thiserror 2.0.18",
  "uucore",
