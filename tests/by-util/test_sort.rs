@@ -2983,6 +2983,7 @@ fn test_consistent_sorting_with_i18n_collate() {
 
     let expected_output = "01\n01\n02\n02\n0_1\n0_1\n";
     new_ucmd!()
+        .env("LC_ALL", "C")
         .arg("fix_i18n_collate_inconsistency_1.txt")
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
