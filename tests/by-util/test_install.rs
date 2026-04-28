@@ -2573,70 +2573,59 @@ fn test_install_normal_file_replaces_symlink() {
 #[test]
 #[cfg(unix)]
 fn test_install_d_symlink_race_condition() {
-    // Test for symlink race condition fix (issue #10013)
-    // Verifies that pre-existing symlinks in path are handled safely
+    // Test that pre-existing symlinks in the path are followed (GNU coreutils behavior).
+    // install -D should traverse symlink components rather than replacing them.
     use std::os::unix::fs::symlink;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Create test directories
     at.mkdir("target");
-
-    // Create source file
     at.write("source_file", "test content");
 
-    // Set up a pre-existing symlink attack scenario
     at.mkdir_all("testdir/a");
-    let intermediate_dir = at.plus("testdir/a/b");
-    symlink(at.plus("target"), &intermediate_dir).unwrap();
+    symlink(at.plus("target"), at.plus("testdir/a/b")).unwrap();
 
-    // Run install -D which should detect and handle the symlink
-    let result = scene
+    // install -D should follow the symlink and write into the symlink target
+    scene
         .ucmd()
         .arg("-D")
         .arg(at.plus("source_file"))
         .arg(at.plus("testdir/a/b/c/file"))
-        .run();
+        .succeeds();
 
-    let wrong_location = at.plus("target/c/file");
-
-    // The critical assertion: file must NOT be in symlink target (race prevented)
+    // File must be written through the symlink, i.e. inside the real target dir
     assert!(
-        !wrong_location.exists(),
-        "RACE CONDITION NOT PREVENTED: File was created in symlink target"
+        at.plus("target/c/file").exists(),
+        "File should be written through the symlink into the real target directory"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/c/file")).unwrap(),
+        "test content"
     );
 
-    // If the command succeeded, verify the file is in the correct location
-    if result.succeeded() {
-        assert!(at.file_exists("testdir/a/b/c/file"));
-        assert_eq!(at.read("testdir/a/b/c/file"), "test content");
-        // The symlink should have been replaced with a real directory
-        assert!(
-            at.plus("testdir/a/b").is_dir() && !at.plus("testdir/a/b").is_symlink(),
-            "Intermediate path should be a real directory, not a symlink"
-        );
-    }
+    // The symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("testdir/a/b").is_symlink(),
+        "Intermediate symlink should be preserved, not replaced with a real directory"
+    );
 }
 
 #[test]
 #[cfg(unix)]
 fn test_install_d_symlink_race_condition_concurrent() {
-    // Test pre-existing symlinks in intermediate paths are handled correctly
+    // Verify symlink-following behavior is consistent (companion to the test above).
     use std::os::unix::fs::symlink;
 
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    // Create test directories and source file using testing framework
     at.mkdir("target2");
     at.write("source_file2", "test content 2");
 
-    // Set up intermediate directory with symlink
     at.mkdir_all("testdir2/a");
     symlink(at.plus("target2"), at.plus("testdir2/a/b")).unwrap();
 
-    // Run install -D
     scene
         .ucmd()
         .arg("-D")
@@ -2644,19 +2633,94 @@ fn test_install_d_symlink_race_condition_concurrent() {
         .arg(at.plus("testdir2/a/b/c/file"))
         .succeeds();
 
-    // Verify file was created at the intended destination
-    assert!(at.file_exists("testdir2/a/b/c/file"));
-    assert_eq!(at.read("testdir2/a/b/c/file"), "test content 2");
-
-    // Verify file was NOT created in symlink target
+    // File should be in the real target directory (symlink was followed)
     assert!(
-        !at.plus("target2/c/file").exists(),
-        "File should NOT be in symlink target location"
+        at.plus("target2/c/file").exists(),
+        "File should be written through the symlink into the real target directory"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target2/c/file")).unwrap(),
+        "test content 2"
     );
 
-    // Verify intermediate path is now a real directory
+    // Symlink should be preserved
     assert!(
-        at.plus("testdir2/a/b").is_dir() && !at.plus("testdir2/a/b").is_symlink(),
-        "Intermediate directory should be a real directory, not a symlink"
+        at.plus("testdir2/a/b").is_symlink(),
+        "Intermediate symlink should be preserved, not replaced with a real directory"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_follows_symlink_prefix() {
+    // Regression test for: install -D replaces symlink components instead of following them.
+    // Reproduces the exact scenario from the bug report: a symlinked install prefix
+    // (common in BOSH, Homebrew, Nix, stow) must be followed, not destroyed.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Simulate: ln -s /tmp/target /tmp/link
+    at.mkdir("target");
+    symlink(at.plus("target"), at.plus("link")).unwrap();
+
+    at.write("file.txt", "hello");
+
+    // install -D -m 644 file.txt link/subdir/file.txt
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("link/subdir/file.txt"))
+        .succeeds();
+
+    // GNU expected: /tmp/link remains a symlink, file written to /tmp/target/subdir/file.txt
+    assert!(
+        at.plus("link").is_symlink(),
+        "The symlinked prefix must remain a symlink"
+    );
+    assert!(
+        at.plus("target/subdir/file.txt").exists(),
+        "File must be written into the real target directory via the symlink"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/subdir/file.txt")).unwrap(),
+        "hello"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_dangling_symlink_in_path_errors() {
+    // A dangling symlink as a path component must not be silently replaced with a
+    // real directory. GNU coreutils errors out in this case; we should too.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a symlink pointing to a nonexistent target (dangling)
+    symlink(at.plus("nonexistent"), at.plus("dangling")).unwrap();
+    assert!(at.plus("dangling").is_symlink());
+
+    at.write("file.txt", "hello");
+
+    // install -D file.txt dangling/subdir/file.txt should fail
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("dangling/subdir/file.txt"))
+        .fails();
+
+    // The dangling symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("dangling").is_symlink(),
+        "Dangling symlink must not be replaced with a real directory"
+    );
+    assert!(
+        !at.plus("nonexistent").exists(),
+        "The symlink target must not have been created"
     );
 }
