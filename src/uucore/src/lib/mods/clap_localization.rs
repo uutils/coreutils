@@ -608,41 +608,27 @@ mod tests {
 
     #[test]
     fn test_color_environment_vars() {
-        use std::env;
-
         // Test NO_COLOR disables colors
-        unsafe {
-            env::set_var("NO_COLOR", "1");
-        }
+        crate::env::set_var("NO_COLOR", "1");
         assert_eq!(get_color_choice(), clap::ColorChoice::Never);
         assert!(!should_use_color_for_stream(&stderr()));
         let mgr = ColorManager::from_env();
         assert!(!mgr.0);
-        unsafe {
-            env::remove_var("NO_COLOR");
-        }
+        crate::env::remove_var("NO_COLOR");
 
         // Test CLICOLOR_FORCE enables colors
-        unsafe {
-            env::set_var("CLICOLOR_FORCE", "1");
-        }
+        crate::env::set_var("CLICOLOR_FORCE", "1");
         assert_eq!(get_color_choice(), clap::ColorChoice::Always);
         assert!(should_use_color_for_stream(&stderr()));
         let mgr = ColorManager::from_env();
         assert!(mgr.0);
-        unsafe {
-            env::remove_var("CLICOLOR_FORCE");
-        }
+        crate::env::remove_var("CLICOLOR_FORCE");
 
         // Test FORCE_COLOR also enables colors
-        unsafe {
-            env::set_var("FORCE_COLOR", "1");
-        }
+        crate::env::set_var("FORCE_COLOR", "1");
         assert_eq!(get_color_choice(), clap::ColorChoice::Always);
         assert!(should_use_color_for_stream(&stderr()));
-        unsafe {
-            env::remove_var("FORCE_COLOR");
-        }
+        crate::env::remove_var("FORCE_COLOR");
     }
 
     #[test]
@@ -684,9 +670,7 @@ mod tests {
 
         let original_lang = env::var_os("LANG").unwrap_or_default();
 
-        unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
-        }
+        crate::env::set_var("LANG", "fr_FR.UTF-8");
 
         if setup_localization("test").is_ok() {
             assert_eq!(get_message("common-error"), "erreur");
@@ -694,12 +678,10 @@ mod tests {
             assert_eq!(get_message("common-tip"), "conseil");
         }
 
-        unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
-            }
+        if original_lang.is_empty() {
+            crate::env::remove_var("LANG");
+        } else {
+            crate::env::set_var("LANG", original_lang);
         }
     }
 }

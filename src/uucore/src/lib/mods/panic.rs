@@ -55,7 +55,7 @@ pub fn preserve_inherited_sigpipe() {
     if std::env::var_os("RUST_SIGPIPE").is_some_and(|v| v == "default") {
         unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
         // Remove the environment variable so child processes don't inherit it incorrectly
-        unsafe { std::env::remove_var("RUST_SIGPIPE") };
+        crate::env::remove_var("RUST_SIGPIPE");
     }
 }
 

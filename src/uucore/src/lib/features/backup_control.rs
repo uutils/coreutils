@@ -597,33 +597,33 @@ mod tests {
     #[test]
     fn test_backup_mode_short_does_not_ignore_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "numbered");
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::Numbered);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     // --backup can be passed without an argument, but reads env var if existent
     #[test]
     fn test_backup_mode_long_without_args_with_env() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "none") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "none");
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::None);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     // --backup errors on invalid VERSION_CONTROL env var
     #[test]
     fn test_backup_mode_long_with_env_var_invalid() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "foobar") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "foobar");
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
@@ -631,14 +631,14 @@ mod tests {
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     // --backup errors on ambiguous VERSION_CONTROL env var
     #[test]
     fn test_backup_mode_long_with_env_var_ambiguous() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "n") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "n");
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches);
@@ -646,20 +646,20 @@ mod tests {
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     // --backup accepts shortened env vars (si for simple)
     #[test]
     fn test_backup_mode_long_with_env_var_shortened() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "si") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "si");
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::Simple);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     // Using --suffix without --backup defaults to --backup=existing
@@ -677,13 +677,13 @@ mod tests {
     #[test]
     fn test_backup_mode_suffix_without_backup_option_with_env_var() {
         let _dummy = TEST_MUTEX.lock().unwrap();
-        unsafe { env::set_var(ENV_VERSION_CONTROL, "numbered") };
+        crate::env::set_var(ENV_VERSION_CONTROL, "numbered");
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
 
         let result = determine_backup_mode(&matches).unwrap();
 
         assert_eq!(result, BackupMode::Numbered);
-        unsafe { env::remove_var(ENV_VERSION_CONTROL) };
+        crate::env::remove_var(ENV_VERSION_CONTROL);
     }
 
     #[test]

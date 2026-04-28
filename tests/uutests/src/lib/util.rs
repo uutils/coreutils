@@ -3246,9 +3246,7 @@ mod tests {
     #[cfg(test)]
     #[ctor::ctor]
     fn init() {
-        unsafe {
-            env::set_var("UUTESTS_BINARY_PATH", "");
-        }
+        uucore::env::set_var("UUTESTS_BINARY_PATH", "");
     }
 
     pub fn run_cmd<T: AsRef<OsStr>>(cmd: T) -> CmdResult {

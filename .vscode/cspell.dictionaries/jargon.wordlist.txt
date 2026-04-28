@@ -249,6 +249,7 @@ ENOTSUP
 enotsup
 SETFL
 tmpfs
+getenv
 
 Hijri
 Nowruz

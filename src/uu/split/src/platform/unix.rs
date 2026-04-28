@@ -52,9 +52,7 @@ impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
     fn new(key: &str, value: &OsStr) -> Self {
         let previous_env_value = env::var_os(key);
-        unsafe {
-            env::set_var(key, value);
-        }
+        uucore::env::set_var(key, value);
         Self {
             previous_var_key: String::from(key),
             previous_var_value: previous_env_value,
@@ -66,13 +64,9 @@ impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
         if let Some(prev_value) = &self.previous_var_value {
-            unsafe {
-                env::set_var(&self.previous_var_key, prev_value);
-            }
+            uucore::env::set_var(&self.previous_var_key, prev_value);
         } else {
-            unsafe {
-                env::remove_var(&self.previous_var_key);
-            }
+            uucore::env::remove_var(&self.previous_var_key);
         }
     }
 }

@@ -759,9 +759,7 @@ fn test_mkdir_environment_expansion() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    unsafe {
-        std::env::set_var("TEST_VAR", "expanded_value");
-    }
+    uucore::env::set_var("TEST_VAR", "expanded_value");
 
     // Create directory with literal $VAR (should not expand)
     scene.ucmd().arg("-p").arg("$TEST_VAR/dir").succeeds();
@@ -782,9 +780,7 @@ fn test_mkdir_environment_expansion() {
     scene.ucmd().arg("-p").arg("~/test_dir").succeeds();
     assert!(at.dir_exists("~/test_dir"));
 
-    unsafe {
-        std::env::remove_var("TEST_VAR");
-    }
+    uucore::env::remove_var("TEST_VAR");
 }
 
 /// Test that mkdir -m creates directories with the exact requested mode,
