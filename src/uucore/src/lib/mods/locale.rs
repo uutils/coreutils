@@ -1333,9 +1333,7 @@ invalid-syntax = This is { $missing
         let original_lang = env::var("LANG").ok();
 
         // Remove LANG environment variable
-        unsafe {
-            env::remove_var("LANG");
-        }
+        crate::env::remove_var("LANG");
 
         let result = detect_system_locale();
         assert!(result.is_ok());
@@ -1343,11 +1341,7 @@ invalid-syntax = This is { $missing
 
         // Restore original LANG value
         if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
-            }
-        } else {
-            {} // Was already unset
+            crate::env::set_var("LANG", val);
         }
     }
 
@@ -1356,9 +1350,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Save current LANG value
             let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
-            }
+            crate::env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
 
             let result = setup_localization("test");
             assert!(result.is_ok());
@@ -1370,13 +1362,9 @@ invalid-syntax = This is { $missing
 
             // Restore original LANG value
             if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
+                crate::env::set_var("LANG", val);
             } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
+                crate::env::remove_var("LANG");
             }
         })
         .join()
@@ -1388,9 +1376,7 @@ invalid-syntax = This is { $missing
         std::thread::spawn(|| {
             // Save current LANG value
             let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
-            }
+            crate::env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
 
             let result = setup_localization("test");
             assert!(result.is_ok());
@@ -1401,13 +1387,9 @@ invalid-syntax = This is { $missing
 
             // Restore original LANG value
             if let Some(val) = original_lang {
-                unsafe {
-                    env::set_var("LANG", val);
-                }
+                crate::env::set_var("LANG", val);
             } else {
-                unsafe {
-                    env::remove_var("LANG");
-                }
+                crate::env::remove_var("LANG");
             }
         })
         .join()
@@ -1418,9 +1400,7 @@ invalid-syntax = This is { $missing
     fn test_setup_localization_fallback_to_embedded() {
         std::thread::spawn(|| {
             // Force English locale for this test
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
+            crate::env::set_var("LANG", "en-US");
 
             // Test with a utility name that has embedded locales
             // This should fall back to embedded English when filesystem files aren't found

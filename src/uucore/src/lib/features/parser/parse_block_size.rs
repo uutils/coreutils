@@ -83,20 +83,16 @@ mod tests {
     // POSIXLY_CORRECT), so they must run sequentially. The mutex ensures that.
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
-    // SAFETY: set_var/remove_var are unsafe since Rust 2024 edition because env
-    // vars are process-global. We serialize access via ENV_LOCK above.
+    // Mutating env vars is process-global; we serialize access via ENV_LOCK
+    // above. The wrapper in `crate::env` contains the only `unsafe` block.
     fn clear_env_vars(vars: &[&str]) {
         for var in vars {
-            unsafe {
-                std::env::remove_var(var);
-            }
+            crate::env::remove_var(var);
         }
     }
 
     fn set_env_var(key: &str, value: &str) {
-        unsafe {
-            std::env::set_var(key, value);
-        }
+        crate::env::set_var(key, value);
     }
 
     #[test]

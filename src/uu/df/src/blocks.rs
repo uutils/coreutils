@@ -200,8 +200,6 @@ impl fmt::Display for BlockSize {
 #[cfg(test)]
 mod tests {
 
-    use std::env;
-
     use crate::blocks::{BlockSize, SuffixType, to_magnitude_and_suffix};
 
     #[test]
@@ -371,8 +369,8 @@ mod tests {
     #[test]
     fn test_default_block_size() {
         assert_eq!(BlockSize::Bytes(1024), BlockSize::default());
-        unsafe { env::set_var("POSIXLY_CORRECT", "1") };
+        uucore::env::set_var("POSIXLY_CORRECT", "1");
         assert_eq!(BlockSize::Bytes(512), BlockSize::default());
-        unsafe { env::remove_var("POSIXLY_CORRECT") };
+        uucore::env::remove_var("POSIXLY_CORRECT");
     }
 }

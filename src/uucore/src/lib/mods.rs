@@ -6,6 +6,7 @@
 
 pub mod clap_localization;
 pub mod display;
+pub mod env;
 pub mod error;
 #[cfg(feature = "fs")]
 pub mod io;

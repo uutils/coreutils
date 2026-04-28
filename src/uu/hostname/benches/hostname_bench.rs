@@ -83,9 +83,7 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
     let has_nss_wrapper = nss_wrapper_env.contains("nss_wrapper");
 
     if has_nss_wrapper {
-        unsafe {
-            std::env::set_var("NSS_WRAPPER_HOSTS", &hosts_file);
-        }
+        uucore::env::set_var("NSS_WRAPPER_HOSTS", &hosts_file);
     }
 
     bencher.bench(|| {
@@ -94,9 +92,7 @@ fn bench_hostname_ip(bencher: Bencher, entries: usize) {
     });
 
     if has_nss_wrapper {
-        unsafe {
-            std::env::remove_var("NSS_WRAPPER_HOSTS");
-        }
+        uucore::env::remove_var("NSS_WRAPPER_HOSTS");
     }
 }
 

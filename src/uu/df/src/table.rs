@@ -581,9 +581,7 @@ mod tests {
     use crate::{BlockSize, Options};
 
     fn init() {
-        unsafe {
-            std::env::set_var("LANG", "C");
-        }
+        uucore::env::set_var("LANG", "C");
         let _ = setup_localization("df");
     }
 

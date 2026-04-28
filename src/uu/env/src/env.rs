@@ -328,9 +328,7 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
             for (key, value) in prop {
-                unsafe {
-                    env::set_var(key, value);
-                }
+                uucore::env::set_var(key, value);
             }
         }
     }
@@ -963,9 +961,7 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     // remove all env vars if told to ignore presets
     if opts.ignore_env {
         for (ref name, _) in env::vars_os() {
-            unsafe {
-                env::remove_var(name);
-            }
+            uucore::env::remove_var(name);
         }
     }
 }
@@ -1056,9 +1052,7 @@ fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
                 translate!("env-error-cannot-unset-invalid", "name" => name.quote()),
             ));
         }
-        unsafe {
-            env::remove_var(name);
-        }
+        uucore::env::remove_var(name);
     }
     Ok(())
 }
@@ -1118,9 +1112,7 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
             );
             continue;
         }
-        unsafe {
-            env::set_var(name, val);
-        }
+        uucore::env::set_var(name, val);
     }
 }
 
@@ -1147,9 +1139,7 @@ where
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
         if matches!(action_kind, SignalActionKind::Default) && sig_value == libc::SIGPIPE as usize {
-            unsafe {
-                env::set_var("RUST_SIGPIPE", "default");
-            }
+            uucore::env::set_var("RUST_SIGPIPE", "default");
         }
 
         Ok(())
@@ -1269,7 +1259,7 @@ mod tests {
 
     #[test]
     fn test_split_string_environment_vars_test() {
-        unsafe { env::set_var("FOO", "BAR") };
+        uucore::env::set_var("FOO", "BAR");
         assert_eq!(
             NCvt::convert(vec!["FOO=bar", "sh", "-c", "echo xBARx =$FOO="]),
             parse_args_from_str(&NCvt::convert(r#"FOO=bar sh -c "echo x${FOO}x =\$FOO=""#))
