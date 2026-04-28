@@ -90,6 +90,10 @@ skip = [
   { name = "hashbrown", version = "0.14.5" },
   # string-interner
   { name = "hashbrown", version = "0.15.5" },
+  # lru
+  { name = "hashbrown", version = "0.16.1" },
+  # indexmap
+  { name = "hashbrown", version = "0.17.0" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
   # const-random-macro, rand_core
@@ -106,6 +110,8 @@ skip = [
   { name = "zerocopy-derive", version = "0.7.35" },
   # hashbrown
   { name = "foldhash", version = "0.1.5" },
+  # hashbrown
+  { name = "foldhash", version = "0.2.0" },
   # keccak, sha1, sha2
   { name = "cpufeatures", version = "0.2.17" },
   # various crates
