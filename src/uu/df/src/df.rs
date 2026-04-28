@@ -249,50 +249,6 @@ fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     true
 }
 
-/// Whether the mount info in `m2` should be prioritized over `m1`.
-///
-/// The "lt" in the function name is in analogy to the
-/// [`std::cmp::PartialOrd::lt`].
-fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
-    // let "real" devices with '/' in the name win.
-    if m1.dev_name.starts_with('/') && !m2.dev_name.starts_with('/') {
-        return false;
-    }
-
-    let m1_nearer_root = m1.mount_dir.len() < m2.mount_dir.len();
-    // With bind mounts, prefer items nearer the root of the source
-    let m2_below_root = !m1.mount_root.is_empty()
-        && !m2.mount_root.is_empty()
-        && m1.mount_root.len() > m2.mount_root.len();
-    // let points towards the root of the device win.
-    if m1_nearer_root && !m2_below_root {
-        return false;
-    }
-
-    // let an entry over-mounted on a new device win, but only when
-    // matching an existing mnt point, to avoid problematic
-    // replacement when given inaccurate mount lists, seen with some
-    // chroot environments for example.
-    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
-        return false;
-    }
-
-    true
-}
-
-/// Whether to prioritize given mount info over all others on the same device.
-///
-/// This function decides whether the mount info `mi` is better than
-/// all others in `previous` that mount the same device as `mi`.
-fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
-    for seen in previous {
-        if seen.dev_id == mi.dev_id && mount_info_lt(mi, seen) {
-            return false;
-        }
-    }
-    true
-}
-
 /// Get all currently mounted filesystems.
 ///
 /// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
@@ -306,12 +262,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     let mut mounts = vec![];
     for mut mi in read_fs_list()? {
-        // TODO The running time of the `is_best()` function is linear
-        // in the length of `result`. That makes the running time of
-        // this loop quadratic in the length of `vmi`. This could be
-        // improved by a more efficient implementation of `is_best()`,
-        // but `vmi` is probably not very long in practice.
-        if is_included(&mi, opt) && is_best(&mounts, &mi) {
+        if is_included(&mi, opt) {
             let dev_path: &Path = Path::new(&mi.dev_name);
             // Only check is_symlink() for absolute paths. For non-absolute paths
             // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
