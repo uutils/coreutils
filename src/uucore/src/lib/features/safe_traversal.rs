@@ -22,7 +22,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
 
-use nix::dir::Dir;
+use nix::dir::{Dir, OwningIter};
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
@@ -66,6 +66,12 @@ pub enum SafeTraversalError {
 
     #[error("{}", translate!("safe-traversal-error-open-failed", "path" => path.quote(), "source" => source))]
     OpenFailed {
+        /// The path that could not be opened.
+        ///
+        /// When produced by [`DirFd::open_subdir`] or [`DirIter::open_child_iter`] this is the
+        /// **relative entry name** (e.g. `"foo"`), not a full absolute path.  Callers that
+        /// display errors to the user should reconstruct the full path themselves (e.g. from a
+        /// shared `current_path` accumulator) before formatting the message.
         path: PathBuf,
         #[source]
         source: io::Error,
@@ -104,6 +110,167 @@ impl From<SafeTraversalError> for io::Error {
             SafeTraversalError::StatFailed { source, .. } => source,
             SafeTraversalError::ReadDirFailed { source, .. } => source,
             SafeTraversalError::UnlinkFailed { source, .. } => source,
+        }
+    }
+}
+
+/// A lazy iterator over the names of entries in a directory.
+/// File-type hint obtained from `getdents`/`d_type` without a separate `stat`.
+///
+/// This is the file type as reported in the directory entry itself.  On most
+/// modern Linux filesystems (ext4, xfs, btrfs, tmpfs, …) this is always
+/// populated.  On some network filesystems (NFS v2/v3, some FUSE mounts) the
+/// kernel may report `DT_UNKNOWN`, in which case [`DirIter`] yields `None` and
+/// callers must fall back to [`DirIter::stat_at`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirEntryType {
+    /// Regular file.
+    File,
+    /// Directory.
+    Directory,
+    /// Symbolic link.
+    Symlink,
+    /// Any other type (FIFO, socket, block/char device, …).
+    Other,
+}
+
+/// A directory entry yielded by [`DirIter`].
+#[derive(Debug)]
+pub struct DirEntry {
+    /// Name of the entry (never `"."` or `".."`).
+    pub name: OsString,
+    /// File-type hint from the directory entry itself (`d_type`).
+    /// `None` when the filesystem reports `DT_UNKNOWN`.
+    pub file_type: Option<DirEntryType>,
+}
+
+///
+/// Obtained from [`DirFd::iter_dir`] or [`DirFd::into_iter_dir`]. Yields one
+/// [`DirEntry`] per entry, skipping `"."` and `".."`. Iteration stops on the
+/// first I/O error, which is returned as `Some(Err(_))`.
+///
+/// Uses [`nix::dir::OwningIter`] internally, which does **not** rewind the
+/// directory on drop (unlike the borrowing [`nix::dir::Iter`]).
+///
+/// In addition to iteration, `DirIter` exposes [`stat_at`], [`open_child_iter`],
+/// and [`unlink_at`] so that callers can perform all directory operations
+/// through a single object — and therefore a single open file descriptor —
+/// instead of keeping a separate [`DirFd`] alongside the iterator.
+///
+/// [`stat_at`]: DirIter::stat_at
+/// [`open_child_iter`]: DirIter::open_child_iter
+/// [`unlink_at`]: DirIter::unlink_at
+pub struct DirIter {
+    inner: OwningIter,
+}
+
+impl DirIter {
+    /// Borrow the underlying directory fd for the duration of `self`.
+    ///
+    /// # Safety invariant
+    /// `OwningIter` owns the fd and keeps it open for its entire lifetime,
+    /// so the returned `BorrowedFd` is valid as long as `self` is alive.
+    fn borrowed_fd(&self) -> BorrowedFd<'_> {
+        // SAFETY: the fd is owned by `inner` (OwningIter) and remains valid
+        // for `'_` (the lifetime of `self`).
+        unsafe { BorrowedFd::borrow_raw(self.inner.as_raw_fd()) }
+    }
+
+    /// Stat a file relative to this directory.
+    pub fn stat_at(&self, name: &OsStr, symlink_behavior: SymlinkBehavior) -> io::Result<FileStat> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = if symlink_behavior.should_follow() {
+            nix::fcntl::AtFlags::empty()
+        } else {
+            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+        };
+        fstatat(self.borrowed_fd(), name_cstr.as_c_str(), flags).map_err(|e| {
+            SafeTraversalError::StatFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+            .into()
+        })
+    }
+
+    /// Open a subdirectory relative to this directory, returning a new `DirIter`.
+    ///
+    /// The returned iterator owns a freshly opened file descriptor; no `dup` is
+    /// performed. Together with [`DirFd::into_iter_dir`], this means an iterative
+    /// traversal needs only **one** open fd per directory level (instead of two
+    /// with the borrowing [`DirFd::iter_dir`]).
+    pub fn open_child_iter(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<Self> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC;
+        if !symlink_behavior.should_follow() {
+            flags |= OFlag::O_NOFOLLOW;
+        }
+        let new_fd: OwnedFd = openat(
+            self.borrowed_fd(),
+            name_cstr.as_c_str(),
+            flags,
+            Mode::empty(),
+        )
+        .map_err(|e| SafeTraversalError::OpenFailed {
+            path: name.into(),
+            source: io::Error::from_raw_os_error(e as i32),
+        })?;
+        // new_fd is an OwnedFd; RAII closes it automatically if from_fd returns Err.
+        let dir = Dir::from_fd(new_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(Self {
+            inner: dir.into_iter(),
+        })
+    }
+
+    /// Remove a file or empty directory relative to this directory.
+    pub fn unlink_at(&self, name: &OsStr, is_dir: bool) -> io::Result<()> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let flags = if is_dir {
+            UnlinkatFlags::RemoveDir
+        } else {
+            UnlinkatFlags::NoRemoveDir
+        };
+        unlinkat(self.borrowed_fd(), name_cstr.as_c_str(), flags).map_err(|e| {
+            SafeTraversalError::UnlinkFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(e as i32),
+            }
+        })?;
+        Ok(())
+    }
+}
+
+impl Iterator for DirIter {
+    type Item = io::Result<DirEntry>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.inner.next()? {
+                Err(e) => return Some(Err(io::Error::from_raw_os_error(e as i32))),
+                Ok(entry) => {
+                    let name = OsStr::from_bytes(entry.file_name().to_bytes());
+                    if name == "." || name == ".." {
+                        continue;
+                    }
+                    let file_type = entry.file_type().map(|t| match t {
+                        nix::dir::Type::Directory => DirEntryType::Directory,
+                        nix::dir::Type::Symlink => DirEntryType::Symlink,
+                        nix::dir::Type::File => DirEntryType::File,
+                        _ => DirEntryType::Other,
+                    });
+                    return Some(Ok(DirEntry {
+                        name: name.to_os_string(),
+                        file_type,
+                    }));
+                }
+            }
         }
     }
 }
@@ -226,6 +393,57 @@ impl DirFd {
                 source: e,
             }
             .into()
+        })
+    }
+
+    /// Return a lazy iterator over the names of entries in this directory.
+    ///
+    /// Entries are yielded in kernel order (same as `getdents64`). `"."` and
+    /// `".."` are never yielded. The underlying file descriptor is duplicated
+    /// so the iterator is independent of `self`.
+    ///
+    /// Prefer this over [`DirFd::read_dir`] in hot paths to avoid allocating a
+    /// `Vec` upfront when only a streaming pass over the entries is needed.
+    ///
+    /// # File-descriptor cost
+    ///
+    /// This method calls `dup(2)` to transfer fd ownership into [`DirIter`].
+    /// While the returned iterator is alive, **two** file descriptors are open
+    /// for the same directory: the original one in `self` and the duplicated
+    /// one inside the iterator. Callers that keep both alive simultaneously
+    /// (e.g. one per level of a directory stack) should be aware that the
+    /// effective traversal depth is bounded by half the process's open-file
+    /// limit (`RLIMIT_NOFILE`, commonly 1024 on Linux, giving ~510 levels).
+    pub fn iter_dir(&self) -> io::Result<DirIter> {
+        let dup_fd =
+            nix::unistd::dup(&self.fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        // dup_fd is an OwnedFd; RAII closes it automatically if from_fd returns Err.
+        let dir = Dir::from_fd(dup_fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(DirIter {
+            inner: dir.into_iter(),
+        })
+    }
+
+    /// Consume this `DirFd` and return a lazy iterator over the directory's entries.
+    ///
+    /// Unlike [`iter_dir`], this method transfers fd ownership directly to
+    /// [`DirIter`] without calling `dup(2)`.  The resulting iterator therefore
+    /// holds exactly **one** open file descriptor.  Prefer this over `iter_dir`
+    /// in iterative traversal code where the `DirFd` is no longer needed after
+    /// the iterator is created (e.g. when all subsequent operations — `stat_at`,
+    /// `unlink_at`, opening child directories — are routed through [`DirIter`]'s
+    /// own methods).
+    ///
+    /// [`iter_dir`]: DirFd::iter_dir
+    pub fn into_iter_dir(self) -> io::Result<DirIter> {
+        // self.fd is OwnedFd; Dir::from_fd takes ownership — no dup needed.
+        // If from_fd fails (essentially only on ENOMEM), the fd is leaked.
+        // This is an upstream nix limitation: Dir::from_fd consumes the OwnedFd
+        // before it can fail, leaving no Rust-safe way to recover it.  An fd
+        // leak on OOM is acceptable — the process is already in a degraded state.
+        let dir = Dir::from_fd(self.fd).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
+        Ok(DirIter {
+            inner: dir.into_iter(),
         })
     }
 
@@ -1241,5 +1459,109 @@ mod tests {
         // With follow_symlinks=false, should fail
         let result_nofollow = DirFd::open(&link, SymlinkBehavior::NoFollow);
         assert!(result_nofollow.is_err());
+    }
+
+    #[test]
+    fn test_dirfd_iter_dir_basic() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("alpha"), "a").unwrap();
+        fs::write(temp_dir.path().join("beta"), "b").unwrap();
+        fs::write(temp_dir.path().join("gamma"), "c").unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let mut names: Vec<OsString> = dir_fd
+            .iter_dir()
+            .unwrap()
+            .map(|r| r.unwrap().name)
+            .collect();
+        names.sort();
+
+        assert_eq!(
+            names,
+            vec![
+                OsString::from("alpha"),
+                OsString::from("beta"),
+                OsString::from("gamma"),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_dirfd_iter_dir_empty() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let entries: Vec<_> = dir_fd.iter_dir().unwrap().collect();
+        assert!(entries.is_empty());
+    }
+
+    #[test]
+    fn test_dirfd_iter_dir_skips_dots() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("file"), "x").unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let names: Vec<OsString> = dir_fd
+            .iter_dir()
+            .unwrap()
+            .map(|r| r.unwrap().name)
+            .collect();
+
+        assert!(!names.contains(&OsString::from(".")));
+        assert!(!names.contains(&OsString::from("..")));
+        assert_eq!(names, vec![OsString::from("file")]);
+    }
+
+    #[test]
+    fn test_diriter_open_child_iter() {
+        let temp_dir = TempDir::new().unwrap();
+        let sub = temp_dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        fs::write(sub.join("x"), "hello").unwrap();
+        fs::write(sub.join("y"), "world").unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        let parent_iter = dir_fd.into_iter_dir().unwrap();
+
+        // open_child_iter should open "sub" and expose its entries.
+        let child_iter = parent_iter
+            .open_child_iter(OsStr::new("sub"), SymlinkBehavior::Follow)
+            .unwrap();
+        let mut names: Vec<OsString> = child_iter.map(|r| r.unwrap().name).collect();
+        names.sort();
+
+        assert_eq!(names, vec![OsString::from("x"), OsString::from("y")]);
+    }
+
+    #[test]
+    fn test_dirfd_iter_dir_propagates_error() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // A sentinel file ensures the directory is non-empty, so the first
+        // `getdents64` call is deferred until after we close the fd below.
+        // Without it, an empty directory may return EOF (0) during Dir::from_fd
+        // initialization, making iter.next() return None instead of Some(Err(_)).
+        fs::write(temp_dir.path().join("sentinel"), "x").unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        // Wrap in ManuallyDrop immediately so the destructor never runs, regardless
+        // of how the test exits.  This is the correct, safe Rust mechanism for
+        // suppressing a destructor — no mem::forget or unsafe needed.
+        let mut iter = std::mem::ManuallyDrop::new(dir_fd.iter_dir().unwrap());
+
+        // `inner` is private but accessible here because this test lives in the
+        // same module as DirIter.  Close the fd using nix's safe wrapper so that
+        // the next readdir(3) call returns EBADF.
+        let raw_fd = iter.inner.as_raw_fd();
+        let _ = nix::unistd::close(raw_fd);
+
+        // `DerefMut` on `ManuallyDrop<DirIter>` gives `&mut DirIter` without
+        // scheduling the destructor to run — exactly what we want here: advance
+        // the iterator to observe the EBADF error, but skip the `close(2)` that
+        // the destructor would attempt on the already-closed fd.
+        match iter.next() {
+            Some(Err(_)) => {} // expected: EBADF propagated as io::Error
+            other => panic!("expected Some(Err(_)) after fd close, got {other:?}"),
+        }
     }
 }
