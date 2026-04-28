@@ -341,6 +341,40 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;
+
+    // %N: nanoseconds have unique semantics
+    if specifier.ends_with('N') {
+        let no_pad = flags.contains('-');
+        let underscore = flags.contains('_');
+
+        // - without width: no-op, return full 9 digits
+        if no_pad && width.is_none() {
+            return Ok(value.to_string());
+        }
+
+        let target_width = match width {
+            Some(w) if w > 9 => {
+                return Err(FormatError::FieldWidthTooLarge {
+                    width: w,
+                    specifier: specifier.to_string(),
+                });
+            }
+            Some(w) => w,
+            None => 9,
+        };
+
+        let truncated = &value[..target_width.min(value.len())];
+
+        if underscore {
+            let trimmed = truncated.trim_end_matches('0');
+            let core = if trimmed.is_empty() { "0" } else { trimmed };
+            let padding = target_width.saturating_sub(core.len());
+            return Ok(format!("{core}{}", " ".repeat(padding)));
+        }
+
+        return Ok(truncated.to_string());
+    }
+
     let mut result = value.to_string();
 
     // Determine default pad character based on specifier type
@@ -473,10 +507,6 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.extend(std::iter::repeat_n(pad_char, padding));
             padded.push_str(&result);
             result = padded;
-        }
-    } else if specifier.ends_with('N') {
-        if effective_width <= get_default_width(specifier) && effective_width != 0 {
-            result.truncate(effective_width);
         }
     }
 
@@ -1026,5 +1056,17 @@ mod tests {
         for (input, expected) in cases {
             assert_eq!(has_gnu_modifiers(input), *expected, "input = {input:?}");
         }
+    }
+
+    #[test]
+    fn test_apply_modifiers_nanoseconds() {
+        assert_eq!(apply_modifiers("123456789", &spec("", None, "N")).unwrap(), "123456789");
+        assert_eq!(apply_modifiers("000000000", &spec("", None, "N")).unwrap(), "000000000");
+        assert_eq!(apply_modifiers("123456789", &spec("", Some(3), "N")).unwrap(), "123");
+        assert_eq!(apply_modifiers("000000000", &spec("_", Some(3), "N")).unwrap(), "0  ");
+        assert_eq!(apply_modifiers("000000000", &spec("-", None, "N")).unwrap(), "000000000");
+        assert_eq!(apply_modifiers("000000000", &spec("-", Some(3), "N")).unwrap(), "000");
+        let err = apply_modifiers("123456789", &spec("", Some(10), "N")).unwrap_err();
+        assert!(matches!(err, FormatError::FieldWidthTooLarge { width, specifier } if width == 10 && specifier == "N"));
     }
 }
