@@ -42,6 +42,9 @@ langid
 lscolors
 mdbook
 memchr
+memmap
+mmap
+Mmap
 multifilereader
 onig
 ouroboros

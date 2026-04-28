@@ -1132,6 +1132,71 @@ fn test_merge_reversed() {
 }
 
 #[test]
+fn test_merge_duplicate_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
+    // Test that merging the same file twice produces correct output
+    // This verifies FD reuse via SortInputs
+    ucmd.arg("-m")
+        .arg("merge_duplicates_1.txt")
+        .arg("merge_duplicates_1.txt")
+        .succeeds()
+        .stdout_is("1\n1\n3\n3\n5\n5\n");
+}
+
+#[test]
+fn test_merge_duplicate_files_interleaved() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
+    at.write("merge_duplicates_2.txt", "2\n4\n6\n");
+    println!("Sub sir: {}", at.as_string());
+    // Test merging file1, file2, file1 - same file appears twice
+    ucmd.arg("-m")
+        .arg("merge_duplicates_1.txt")
+        .arg("merge_duplicates_2.txt")
+        .arg("merge_duplicates_1.txt")
+        .succeeds()
+        .stdout_is("1\n1\n2\n3\n3\n4\n5\n5\n6\n");
+}
+
+#[test]
+fn test_merge_single_stdin() {
+    // Test that single stdin works with -m
+    new_ucmd!()
+        .arg("-m")
+        .arg("-")
+        .pipe_in("1\n3\n5\n")
+        .succeeds()
+        .stdout_only("1\n3\n5\n");
+}
+#[test]
+fn test_merge_duplicate_stdin() {
+    // Verify that duplicate stdin is allowed (GNU Coreutils compatible)
+    // Note: stdin is a single stream, so duplicate '-' reads the same stream.
+    // The first read gets the data, subsequent reads get EOF (empty).
+    new_ucmd!()
+        .arg("-m")
+        .arg("-")
+        .arg("-")
+        .pipe_in("1\n3\n5\n")
+        .succeeds()
+        .stdout_only("1\n3\n5\n");
+}
+
+#[test]
+fn test_merge_mixed_stdin_and_files() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("merge_duplicates_1.txt", "1\n3\n5\n");
+    // Verify that sort -m allows mixing stdin with files (GNU Coreutils compatible)
+    ucmd.arg("-m")
+        .arg("-")
+        .arg("merge_duplicates_1.txt")
+        .pipe_in("apricot\nelderberry\nkiwi\n")
+        .succeeds()
+        .stdout_is("1\n3\n5\napricot\nelderberry\nkiwi\n");
+}
+
+#[test]
 fn test_pipe() {
     // TODO: issue 1608 reports a panic when we attempt to read from stdin,
     // which was closed by the other side of the pipe. This test does not
