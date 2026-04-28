@@ -617,6 +617,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
+    #[cfg_attr(wasi_runner, ignore = "WASI: no temp dir support")]
     fn test_merge_output_as_input() {
         // Setup: output file 'out' contains "6\n", inputs in/1..in/5 contain 1..5
         let mut out = NamedTempFile::new().unwrap();
