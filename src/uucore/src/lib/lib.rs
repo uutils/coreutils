@@ -125,7 +125,7 @@ pub use crate::features::fsxattr;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::selinux;
 
-#[cfg(all(target_os = "linux", feature = "smack"))]
+#[cfg(all(feature = "smack", target_os = "linux"))]
 pub use crate::features::smack;
 
 //## core functions
