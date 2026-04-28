@@ -2967,8 +2967,8 @@ fn test_inconsitent_sorting_with_i18n_collate() {
     let expected_output = "01\n01\n0_1\n0_1\n02\n02\n";
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
-        .arg("sort1.txt")
-        .arg("sort2.txt")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
 
@@ -2976,15 +2976,15 @@ fn test_inconsitent_sorting_with_i18n_collate() {
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
         .arg("--sort=general-numeric")
-        .arg("sort1.txt")
-        .arg("sort2.txt")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
 
     let expected_output = "01\n01\n02\n02\n0_1\n0_1\n";
     new_ucmd!()
-        .arg("sort1.txt")
-        .arg("sort2.txt")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
 }
