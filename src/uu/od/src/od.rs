@@ -26,7 +26,7 @@ mod prn_int;
 
 use std::cmp;
 use std::fmt::Write;
-use std::io::{BufReader, Read, Write as IoWrite};
+use std::io::{BufReader, Read};
 
 use crate::byteorder_io::ByteOrder;
 use crate::formatter_item_info::FormatWriter;
@@ -493,16 +493,16 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Loops through the input line by line, calling `print_bytes` to take care of the output.
+/// Loops through the input line by line, calling `write_bytes` to take care of the output.
 fn odfunc<I, W>(
     input_offset: &mut InputOffset,
     input_decoder: &mut InputDecoder<I>,
     output_info: &OutputInfo,
-    out: &mut W,
+    writer: &mut W,
 ) -> UResult<()>
 where
     I: PeekRead + HasError,
-    W: IoWrite,
+    W: std::io::Write,
 {
     let mut duplicate_line = false;
     let mut previous_bytes: Vec<u8> = Vec::new();
@@ -517,7 +517,7 @@ where
 
                 if length == 0 {
                     if !input_decoder.has_error() {
-                        input_offset.print_final_offset(out)?;
+                        input_offset.write_final_offset(writer)?;
                     }
                     break;
                 }
@@ -539,7 +539,7 @@ where
                 {
                     if !duplicate_line {
                         duplicate_line = true;
-                        writeln!(out, "*")?;
+                        writeln!(writer, "*")?;
                     }
                 } else {
                     duplicate_line = false;
@@ -548,11 +548,11 @@ where
                         memory_decoder.clone_buffer(&mut previous_bytes);
                     }
 
-                    print_bytes(
+                    write_bytes(
+                        writer,
                         &input_offset.format_byte_offset(),
                         &memory_decoder,
                         output_info,
-                        out,
                     )?;
                 }
 
@@ -560,7 +560,7 @@ where
             }
             Err(e) => {
                 show_error!("{e}");
-                input_offset.print_final_offset(out)?;
+                input_offset.write_final_offset(writer)?;
                 return Err(1.into());
             }
         }
@@ -580,7 +580,7 @@ fn extract_strings_from_input(
     read_bytes: Option<u64>,
     min_length: usize,
     radix: Radix,
-    out: &mut impl IoWrite,
+    writer: &mut impl std::io::Write,
 ) -> UResult<()> {
     let inputs = map_input_strings(input_strings);
     let mut mf = MultifileReader::new(inputs);
@@ -601,10 +601,10 @@ fn extract_strings_from_input(
     let mut print_string = |offset: u64, string: &[u8]| -> std::io::Result<()> {
         let string_content = String::from_utf8_lossy(string);
         match radix {
-            Radix::NoPrefix => writeln!(out, "{string_content}"),
-            Radix::Decimal => writeln!(out, "{offset:07} {string_content}"),
-            Radix::Hexadecimal => writeln!(out, "{offset:07x} {string_content}"),
-            Radix::Octal => writeln!(out, "{offset:07o} {string_content}"),
+            Radix::NoPrefix => writeln!(writer, "{string_content}"),
+            Radix::Decimal => writeln!(writer, "{offset:07} {string_content}"),
+            Radix::Hexadecimal => writeln!(writer, "{offset:07x} {string_content}"),
+            Radix::Octal => writeln!(writer, "{offset:07o} {string_content}"),
         }
     };
 
@@ -672,11 +672,11 @@ fn extract_strings_from_input(
 }
 
 /// Outputs a single line of input, into one or more lines human readable output.
-fn print_bytes<W: IoWrite>(
+fn write_bytes(
+    writer: &mut impl std::io::Write,
     prefix: &str,
     input_decoder: &MemoryDecoder,
     output_info: &OutputInfo,
-    out: &mut W,
 ) -> std::io::Result<()> {
     let mut first = true; // First line of a multi-format raster.
     for f in output_info.spaced_formatters_iter() {
@@ -731,15 +731,15 @@ fn print_bytes<W: IoWrite>(
         }
 
         if first {
-            write!(out, "{prefix}")?; // print offset
+            write!(writer, "{prefix}")?; // print offset
             // if printing in multiple formats offset is printed only once
             first = false;
         } else {
             // this takes the space of the file offset on subsequent
             // lines of multi-format rasters.
-            write!(out, "{:>width$}", "", width = prefix.chars().count())?;
+            write!(writer, "{:>width$}", "", width = prefix.chars().count())?;
         }
-        writeln!(out, "{output_text}")?;
+        writeln!(writer, "{output_text}")?;
     }
     Ok(())
 }

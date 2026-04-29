@@ -309,7 +309,7 @@ impl FileMerger<'_> {
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
         while self
-            .write_next(settings, out)
+            .write_next(out, settings)
             .map_err_context(|| "write failed".into())?
         {}
         drop(self.request_sender);
@@ -318,8 +318,8 @@ impl FileMerger<'_> {
 
     fn write_next(
         &mut self,
+        writer: &mut impl Write,
         settings: &GlobalSettings,
-        out: &mut impl Write,
     ) -> std::io::Result<bool> {
         if let Some(file) = self.heap.peek() {
             let prev = self.prev.replace(PreviousLine {
@@ -344,7 +344,7 @@ impl FileMerger<'_> {
                         }
                     }
                 }
-                current_line.print(out, settings)
+                current_line.write(writer, settings)
             })?;
 
             let was_last_line_for_file = file.current_chunk.lines().len() == file.line_idx + 1;

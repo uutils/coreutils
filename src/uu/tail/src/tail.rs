@@ -527,7 +527,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         FilterMode::Bytes(Signum::Negative(count)) => {
             let mut chunks = chunks::BytesChunkBuffer::new(*count);
             chunks.fill(reader)?;
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
         }
         FilterMode::Lines(Signum::MinusZero, sep) => {
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);

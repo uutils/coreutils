@@ -62,9 +62,9 @@ impl InputOffset {
 
     /// Prints the byte offset followed by a newline, or nothing at all if
     /// both `Radix::NoPrefix` was set and no label (--traditional) is used.
-    pub fn print_final_offset<W: Write>(&self, out: &mut W) -> io::Result<()> {
+    pub fn write_final_offset(&self, writer: &mut impl Write) -> io::Result<()> {
         if self.radix != Radix::NoPrefix || self.label.is_some() {
-            writeln!(out, "{}", self.format_byte_offset())?;
+            writeln!(writer, "{}", self.format_byte_offset())?;
         }
         Ok(())
     }

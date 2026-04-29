@@ -697,7 +697,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
             self.write_debug(settings, writer)?;
         } else {
@@ -3142,7 +3142,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())
