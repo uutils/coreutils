@@ -140,24 +140,7 @@ impl FileHandling {
             return Ok(false);
         };
 
-        let result = (|| -> UResult<bool> {
-            let mut chunk = BytesChunk::new();
-            if chunk.fill(&mut reader)?.is_none() {
-                return Ok(false);
-            }
-
-            if self.needs_header(path, verbose) {
-                let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str());
-            }
-
-            let mut writer = BufWriter::new(stdout().lock());
-            writer.write_all(chunk.get_buffer())?;
-            io::copy(&mut reader, &mut writer)?;
-            writer.flush()?;
-
-            Ok(true)
-        })();
+        let result = self.print_new_data(path, verbose, &mut reader);
 
         self.get_mut(path).reader = Some(reader);
 
@@ -168,6 +151,30 @@ impl FileHandling {
         } else {
             Ok(false)
         }
+    }
+
+    fn print_new_data(
+        &mut self,
+        path: &Path,
+        verbose: bool,
+        reader: &mut impl BufRead,
+    ) -> UResult<bool> {
+        let mut chunk = BytesChunk::new();
+        if chunk.fill(&mut *reader)?.is_none() {
+            return Ok(false);
+        }
+
+        if self.needs_header(path, verbose) {
+            let display_name = self.get(path).display_name.clone();
+            self.header_printer.print(display_name.as_str());
+        }
+
+        let mut writer = BufWriter::new(stdout().lock());
+        writer.write_all(chunk.get_buffer())?;
+        io::copy(&mut *reader, &mut writer)?;
+        writer.flush()?;
+
+        Ok(true)
     }
 
     /// Decide if printing `path` needs a header based on when it was last printed
