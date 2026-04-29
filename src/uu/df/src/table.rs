@@ -1123,7 +1123,7 @@ mod tests {
             ..Default::default()
         };
 
-        let table = Table::new(&options, filesystems.clone());
+        let table = Table::new(&options, filesystems);
         let mut data: Vec<u8> = vec![];
         table.write_to(&mut data).expect("Write error.");
         assert_eq!(
