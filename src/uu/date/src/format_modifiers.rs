@@ -1060,13 +1060,33 @@ mod tests {
 
     #[test]
     fn test_apply_modifiers_nanoseconds() {
-        assert_eq!(apply_modifiers("123456789", &spec("", None, "N")).unwrap(), "123456789");
-        assert_eq!(apply_modifiers("000000000", &spec("", None, "N")).unwrap(), "000000000");
-        assert_eq!(apply_modifiers("123456789", &spec("", Some(3), "N")).unwrap(), "123");
-        assert_eq!(apply_modifiers("000000000", &spec("_", Some(3), "N")).unwrap(), "0  ");
-        assert_eq!(apply_modifiers("000000000", &spec("-", None, "N")).unwrap(), "000000000");
-        assert_eq!(apply_modifiers("000000000", &spec("-", Some(3), "N")).unwrap(), "000");
+        assert_eq!(
+            apply_modifiers("123456789", &spec("", None, "N")).unwrap(),
+            "123456789"
+        );
+        assert_eq!(
+            apply_modifiers("000000000", &spec("", None, "N")).unwrap(),
+            "000000000"
+        );
+        assert_eq!(
+            apply_modifiers("123456789", &spec("", Some(3), "N")).unwrap(),
+            "123"
+        );
+        assert_eq!(
+            apply_modifiers("000000000", &spec("_", Some(3), "N")).unwrap(),
+            "0  "
+        );
+        assert_eq!(
+            apply_modifiers("000000000", &spec("-", None, "N")).unwrap(),
+            "000000000"
+        );
+        assert_eq!(
+            apply_modifiers("000000000", &spec("-", Some(3), "N")).unwrap(),
+            "000"
+        );
         let err = apply_modifiers("123456789", &spec("", Some(10), "N")).unwrap_err();
-        assert!(matches!(err, FormatError::FieldWidthTooLarge { width, specifier } if width == 10 && specifier == "N"));
+        assert!(
+            matches!(err, FormatError::FieldWidthTooLarge { width, specifier } if width == 10 && specifier == "N")
+        );
     }
 }
