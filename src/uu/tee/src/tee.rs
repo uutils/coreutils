@@ -253,19 +253,22 @@ enum Writer {
     Stdout(std::io::Stdout),
 }
 
+// todo: move this to uucore and remove Box dyn from many utils
+macro_rules! dispatch {
+    ($self:ident, $method:ident $(, $arg:expr)*) => {
+        match $self {
+            Writer::File(f) => f.$method($($arg),*),
+            Writer::Stdout(s) => s.$method($($arg),*),
+        }
+    };
+}
+
 impl Write for Writer {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        match self {
-            Self::File(f) => f.write(buf),
-            Self::Stdout(s) => s.write(buf),
-        }
+        dispatch!(self, write, buf)
     }
-
     fn flush(&mut self) -> Result<()> {
-        match self {
-            Self::File(f) => f.flush(),
-            Self::Stdout(s) => s.flush(),
-        }
+        dispatch!(self, flush)
     }
 }
 
