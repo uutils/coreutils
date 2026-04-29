@@ -49,7 +49,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))
     };
-
+    #[cfg(target_os = "wasi")]
+    let write_result = if std::io::stdin().is_terminal() {
+        // maximize compatibility
+        writeln!(stdout, r"/dev/tty")
+    } else {
+        set_exit_code(1);
+        writeln!(stdout, "{}", translate!("tty-not-a-tty"))
+    };
     #[cfg(target_os = "windows")]
     let write_result = if std::io::stdin().is_terminal() {
         writeln!(stdout, r"\\.\CON")

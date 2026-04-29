@@ -235,6 +235,7 @@ feat_wasm = [
   "true",
   "truncate",
   "tsort",
+  "tty",
   "uname",
   "unexpand",
   "uniq",
