@@ -47,9 +47,9 @@ use uucore::{format_usage, show, show_error, show_if_err};
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 #[cfg(unix)]
-use std::os::unix::prelude::OsStrExt;
-#[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+#[cfg(unix)]
+use std::os::unix::prelude::OsStrExt;
 
 const DEFAULT_MODE: u32 = 0o755;
 const DEFAULT_STRIP_PROGRAM: &str = "strip";
@@ -1037,7 +1037,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 fn fd_operation_path(fd: &File) -> PathBuf {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     {
-        return PathBuf::from(format!("/proc/self/fd/{}", fd.as_raw_fd()));
+        PathBuf::from(format!("/proc/self/fd/{}", fd.as_raw_fd()))
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -1071,7 +1071,10 @@ fn strip_file_fd(to: &Path, file: &File, b: &Behavior) -> UResult<()> {
     let strip_file = File::from(strip_fd);
     let strip_arg = fd_operation_path(&strip_file);
 
-    match process::Command::new(&b.strip_program).arg(&strip_arg).status() {
+    match process::Command::new(&b.strip_program)
+        .arg(&strip_arg)
+        .status()
+    {
         Ok(status) => {
             if !status.success() {
                 discard_installed_path_if_unchanged(to, file);
@@ -1124,8 +1127,12 @@ fn chown_optional_user_group_fd(file: &File, path: &Path, b: &Behavior) -> UResu
         return Ok(());
     };
 
-    fchown(file, owner_id.map(Uid::from_raw), group_id.map(Gid::from_raw))
-        .map_err(|e| InstallError::ChownFailed(path.to_path_buf(), e.to_string()))?;
+    fchown(
+        file,
+        owner_id.map(Uid::from_raw),
+        group_id.map(Gid::from_raw),
+    )
+    .map_err(|e| InstallError::ChownFailed(path.to_path_buf(), e.to_string()))?;
 
     Ok(())
 }
