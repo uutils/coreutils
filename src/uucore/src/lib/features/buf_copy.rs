@@ -9,8 +9,6 @@
 //! used by utilities to work around the limitations of Rust's `fs::copy` which
 //! does not handle copying special files (e.g pipes, character/block devices).
 
-pub mod common;
-
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub mod linux;
 #[cfg(any(target_os = "linux", target_os = "android"))]

@@ -13,8 +13,6 @@ use std::{
     os::fd::{AsFd, AsRawFd},
 };
 
-use super::common::Error;
-
 /// A readable file descriptor.
 pub trait FdReadable: Read + AsRawFd + AsFd {}
 
@@ -24,13 +22,6 @@ impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
 pub trait FdWritable: Write + AsFd + AsRawFd {}
 
 impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
-
-/// Conversion from a `rustix::io::Errno` into our `Error` which implements `UError`.
-impl From<rustix::io::Errno> for Error {
-    fn from(error: rustix::io::Errno) -> Self {
-        Self::Io(std::io::Error::from(error))
-    }
-}
 
 /// Copy data from `Read` implementor `source` into a `Write` implementor
 /// `dest`. This works by reading a chunk of data from `source` and writing the
