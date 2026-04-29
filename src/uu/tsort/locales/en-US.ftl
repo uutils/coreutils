@@ -9,3 +9,5 @@ tsort-error-loop = input contains a loop:
 tsort-error-extra-operand = extra operand { $operand }
   Try '{ $util } --help' for more information.
 tsort-error-at-least-one-input = at least one input
+tsort-error-read = read error: { $error }
+tsort-error-write = write error: { $error }
