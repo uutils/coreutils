@@ -348,14 +348,14 @@ fn parse_special_value(
     negative: bool,
     allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<ExtendedBigDecimal>> {
-    let input_lc = input.to_ascii_lowercase();
-
     // Array of ("String to match", return value when sign positive, when sign negative)
     const MATCH_TABLE: &[(&str, ExtendedBigDecimal)] = &[
         ("infinity", ExtendedBigDecimal::Infinity),
         ("inf", ExtendedBigDecimal::Infinity),
         ("nan", ExtendedBigDecimal::Nan),
     ];
+
+    let input_lc = input.to_ascii_lowercase();
 
     for (str, ebd) in MATCH_TABLE {
         if input_lc.starts_with(str) {

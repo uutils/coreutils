@@ -67,8 +67,7 @@ impl<B: BufRead> BufReadDecoder<B> {
             let buf = try_io!(self.buf_read.fill_buf());
 
             // Force loop iteration to go through an explicit `continue`
-            enum Unreachable {}
-            let _: Unreachable = if self.incomplete.is_empty() {
+            let _: std::convert::Infallible = if self.incomplete.is_empty() {
                 if buf.is_empty() {
                     return None; // EOF
                 }

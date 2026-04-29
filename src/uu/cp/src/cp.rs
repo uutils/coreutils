@@ -2384,8 +2384,7 @@ fn calculate_dest_permissions(
             let mode = handle_no_preserve_mode(options, permissions.mode());
 
             // Apply umask
-            use uucore::mode::get_umask;
-            let mode = mode & !get_umask();
+            let mode = mode & !uucore::mode::get_umask();
             permissions.set_mode(mode);
             permissions
         }

@@ -917,7 +917,7 @@ pub fn make_fifo(path: &Path) -> std::io::Result<()> {
     let name = CString::new(path.to_str().unwrap()).unwrap();
     let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
     if err == -1 {
-        Err(Error::from_raw_os_error(err))
+        Err(Error::last_os_error())
     } else {
         Ok(())
     }

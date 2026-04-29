@@ -8,16 +8,15 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{CString, OsStr};
+use std::ffi::OsStr;
 use std::io::{Error, ErrorKind};
-use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::libc::{self, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -424,22 +423,9 @@ fn set_context(options: &Options) -> UResult<()> {
 }
 
 fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
-    let err = unsafe {
-        chroot(
-            CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| ChrootError::CannotEnter("root".into(), e.into()))?
-                .as_bytes_with_nul()
-                .as_ptr()
-                .cast(),
-        )
-    };
-
-    if err == 0 {
-        if !skip_chdir {
-            std::env::set_current_dir("/")?;
-        }
-        Ok(())
-    } else {
-        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
+    rustix::process::chroot(root).map_err(|e| ChrootError::CannotEnter(root.into(), e.into()))?;
+    if !skip_chdir {
+        std::env::set_current_dir("/")?;
     }
+    Ok(())
 }

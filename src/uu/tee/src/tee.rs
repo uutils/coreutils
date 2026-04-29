@@ -144,6 +144,7 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
+    aborted: Option<Error>,
 }
 
 impl MultiWriter {
@@ -186,6 +187,7 @@ impl MultiWriter {
             writers,
             output_error_mode,
             ignored_errors: 0,
+            aborted: None,
         }
     }
 
@@ -194,7 +196,6 @@ impl MultiWriter {
     }
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
-        let mut aborted = None;
         let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
             let res = (|| {
@@ -205,13 +206,13 @@ impl MultiWriter {
                 Ok(()) => true,
                 Err(e) => {
                     if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
-                        aborted.get_or_insert(e);
+                        self.aborted.get_or_insert(e);
                     }
                     false
                 }
             }
         });
-        aborted.map_or(
+        self.aborted.take().map_or(
             if self.writers.is_empty() {
                 // This error kind will never be raised by the standard
                 // library, so we can use it for early termination of
