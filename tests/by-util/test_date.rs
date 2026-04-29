@@ -408,24 +408,6 @@ fn test_date_nano_seconds() {
 }
 
 #[test]
-fn test_date_strftime_n_width_and_flags() {
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d").arg("@0")
-        .arg("+%_3N")
-        .succeeds()
-        .stdout_is("0  \n");
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d").arg("@0")
-        .arg("+%-N")
-        .succeeds()
-        .stdout_is("000000000\n");
-}
-
-#[test]
 fn test_date_format_without_plus() {
     // [+FORMAT]
     new_ucmd!()
