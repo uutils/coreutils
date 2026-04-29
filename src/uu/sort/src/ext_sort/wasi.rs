@@ -8,6 +8,7 @@
 
 use std::cmp::Ordering;
 use std::io::Read;
+use std::iter;
 
 use itertools::Itertools;
 use uucore::error::UResult;
@@ -33,9 +34,13 @@ pub fn ext_sort(
     for file in files {
         file?.read_to_end(&mut input)?;
     }
+
     if input.is_empty() {
+        // empty files are sorted to empty like in coreutils
+        print_sorted(iter::empty<&[u8]>(), settings, output)?;
         return Ok(());
     }
+
     let mut chunk = Chunk::try_new(input, |buffer| {
         Ok::<_, Box<dyn uucore::error::UError>>(chunks::parse_into_chunk(
             buffer, separator, settings,
