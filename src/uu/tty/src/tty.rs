@@ -7,7 +7,6 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::display::OsWrite;
 use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 
@@ -38,13 +37,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let mut stdout = std::io::stdout();
-
+    #[cfg(unix)]
     let name = rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(8));
-
+    #[cfg(unix)]
     let write_result = if let Ok(name) = name {
         use std::os::unix::ffi::OsStrExt;
+        use uucore::display::OsWrite;
         let os_name = std::ffi::OsStr::from_bytes(name.as_bytes());
         stdout.write_all_os(os_name)
+    } else {
+        set_exit_code(1);
+        writeln!(stdout, "{}", translate!("tty-not-a-tty"))
+    };
+
+    #[cfg(target_os = "windows")]
+    let write_result = if std::io::stdin().is_terminal() {
+        writeln!(stdout, r"\\.\CON")
     } else {
         set_exit_code(1);
         writeln!(stdout, "{}", translate!("tty-not-a-tty"))

@@ -156,6 +156,7 @@ feat_common_core = [
   "true",
   "truncate",
   "tsort",
+  "tty",
   "unexpand",
   "uniq",
   "unlink",
@@ -312,7 +313,6 @@ feat_require_unix_core = [
   "stat",
   "stty",
   "timeout",
-  "tty",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
@@ -337,7 +337,6 @@ feat_os_unix_fuchsia = [
   "mkfifo",
   "mknod",
   "nice",
-  "tty",
   "uname",
   "unlink",
 ]
