@@ -2659,6 +2659,7 @@ fn compare_by<'a>(
         // If collation keys are equal, fall back to lexicographic comparison
         // This can be the case for inputs like `01` and `0_1`, which have equal keys
         if cmp == Ordering::Equal {
+            // Reversing the order to match sort's sorting behaviour
             cmp = b.line.cmp(a.line);
         }
         return if global_settings.reverse {
