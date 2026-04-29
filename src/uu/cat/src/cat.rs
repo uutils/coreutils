@@ -84,10 +84,6 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `rustix::io::Errno`
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[error("{0}")]
-    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -106,6 +102,13 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl From<rustix::io::Errno> for CatError {
+    fn from(value: rustix::io::Errno) -> Self {
+        Self::Io(value.into())
+    }
+}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -453,7 +456,7 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
                     return Err(CatError::TooManySymlinks);
                 }
             }
-            return Err(CatError::Io(e));
+            return Err(e.into());
         }
     };
     match ft {
