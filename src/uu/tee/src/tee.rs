@@ -80,7 +80,7 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Writer::Stdout(stdout()),
+            inner: stdout().into(),
         },
     );
 
@@ -127,7 +127,7 @@ fn open(
     };
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
-            inner: Writer::File(file),
+            inner: file.into(),
             name: name.clone(),
         })),
         Err(f) => {
@@ -252,6 +252,18 @@ fn process_error(
 enum Writer {
     File(std::fs::File),
     Stdout(std::io::Stdout),
+}
+
+impl From<std::fs::File> for Writer {
+    fn from(value: std::fs::File) -> Self {
+        Self::File(value)
+    }
+}
+
+impl From<std::io::Stdout> for Writer {
+    fn from(value: std::io::Stdout) -> Self {
+        Self::Stdout(value)
+    }
 }
 
 impl Write for Writer {
