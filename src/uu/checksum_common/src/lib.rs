@@ -7,6 +7,7 @@
 
 use std::borrow::Borrow;
 use std::ffi::OsString;
+use std::io;
 
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint};
@@ -213,7 +214,7 @@ pub fn checksum_main(
         line_ending,
     };
 
-    perform_checksum_computation(opts, files)?;
+    perform_checksum_computation(io::stdout(), opts, files)?;
 
     Ok(())
 }
