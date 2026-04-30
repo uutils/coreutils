@@ -197,12 +197,8 @@ impl MultiWriter {
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
         let mode = self.output_error_mode;
-        self.writers.retain_mut(|writer| {
-            let res = (|| {
-                writer.inner.write_all(buf)?;
-                writer.inner.flush()
-            })();
-            match res {
+        self.writers
+            .retain_mut(|writer| match writer.inner.write_all(buf) {
                 Ok(()) => true,
                 Err(e) => {
                     if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
@@ -210,8 +206,7 @@ impl MultiWriter {
                     }
                     false
                 }
-            }
-        });
+            });
         self.aborted.take().map_or(
             if self.writers.is_empty() {
                 // This error kind will never be raised by the standard
@@ -254,18 +249,14 @@ enum Writer {
     Stdout(std::io::Stdout),
 }
 
-impl Write for Writer {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+impl Writer {
+    pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         match self {
-            Self::File(f) => f.write(buf),
-            Self::Stdout(s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        match self {
-            Self::File(f) => f.flush(),
-            Self::Stdout(s) => s.flush(),
+            Self::File(f) => f.write_all(buf), // no buffering on File
+            Self::Stdout(s) => {
+                s.write_all(buf)?;
+                s.flush()
+            }
         }
     }
 }
