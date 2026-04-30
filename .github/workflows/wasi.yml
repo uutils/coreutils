@@ -42,7 +42,7 @@ jobs:
         RUSTFLAGS: --cfg wasi_runner
       run: |
         # Build the WASI binary
-        cargo build --target wasm32-wasip1 --no-default-features --features feat_wasm
+        cargo build --target wasm32-wasip1 --no-default-features --features $(cargo tree --depth 1 --features feat_wasm --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p'| paste -sd ",")
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
