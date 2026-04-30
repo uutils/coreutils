@@ -35,6 +35,7 @@ jobs:
           uu_dd,
           uu_df,
           uu_du,
+          uu_echo,
           uu_expand,
           uu_fold,
           uu_hostname,
