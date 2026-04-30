@@ -128,7 +128,7 @@ pub fn exec(bytes: &[u8], aligned: bool) -> io::Result<()> {
             && rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
             && p_write.write_all(bytes).is_ok()
     {
-        if aligned && tee(&p_read, &stdout, PAGE_SIZE).is_ok() {
+        if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
             while let Ok(1..) = tee(&p_read, &stdout, usize::MAX) {}
         } else if let Ok((broker_read, broker_write)) = pipe() {
             // tee() cannot control offset and write to non-pipe
