@@ -183,13 +183,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
-/// Execute utility code for `util`.
-///
-/// This macro expands to a main function that invokes the `uumain` function in `util`
-/// Exits with code returned by `uumain`.
 #[macro_export]
-macro_rules! bin {
-    ($util:ident) => {
+macro_rules! bin_inner {
+    ($util:ident, $post:expr) => {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
@@ -213,13 +209,28 @@ macro_rules! bin {
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
+            $post
+
+            std::process::exit(code);
+        }
+    };
+}
+/// Execute utility code for `util`.
+///
+/// This macro expands to a main function that invokes the `uumain` function in `util`
+/// Exits with code returned by `uumain`.
+#[macro_export]
+macro_rules! bin {
+    ($util:ident, no_flush) => {
+        ::uucore::bin_inner! {$util, {}}
+    };
+    ($util:ident) => {
+        ::uucore::bin_inner! {$util, {
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
                 eprintln!("Error flushing stdout: {e}");
             }
-
-            std::process::exit(code);
-        }
+        }}
     };
 }
 
