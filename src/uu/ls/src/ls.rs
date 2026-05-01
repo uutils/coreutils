@@ -979,6 +979,15 @@ impl<'a> PathData<'a> {
             PathDataDisplayName::Custom(ref cow) => cow,
         }
     }
+
+    fn file_name(&self) -> &OsStr {
+        match self.display_name {
+            PathDataDisplayName::SelfReferential => {
+                self.p_buf.file_name().unwrap_or(self.p_buf.as_os_str())
+            }
+            PathDataDisplayName::Custom(ref cow) => cow,
+        }
+    }
 }
 
 impl Colorable for PathData<'_> {
@@ -1477,8 +1486,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.file_name()).as_ref(),
+                os_str_as_bytes_lossy(b.file_name()).as_ref(),
             )
             .then(a.path().cmp(b.path()))
         }),

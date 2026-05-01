@@ -3661,7 +3661,7 @@ fn test_ls_version_sort() {
     );
 
     let result = scene.ucmd().arg("-a1v").succeeds();
-    expected.insert(expected.len() - 1, "..");
+    expected.insert(0, "..");
     expected.insert(0, ".");
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
