@@ -1511,7 +1511,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 
     if config.group_directories_first && config.sort != Sort::None {
-        entries.sort_unstable_by_key(|p| {
+        entries.sort_by_key(|p| {
             let ft = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.
