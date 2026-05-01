@@ -816,6 +816,7 @@ pub struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
+    is_dot_dir: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -838,6 +839,7 @@ impl<'a> PathData<'a> {
         file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
+        is_dot_dir: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
@@ -904,6 +906,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
+            is_dot_dir,
         }
     }
 
@@ -1164,7 +1167,7 @@ pub fn list_with_output<O: LsOutput>(
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(loc.into(), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true, false);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1278,6 +1281,7 @@ fn collect_directory_entries<O: LsOutput>(
             Some(OsStr::new(".").into()),
             config,
             false,
+            true,
         ));
         entries.push(PathData::new(
             dotdot_path(path_data.path()).into(),
@@ -1285,6 +1289,7 @@ fn collect_directory_entries<O: LsOutput>(
             Some(OsStr::new("..").into()),
             config,
             false,
+            true,
         ));
     }
 
@@ -1304,6 +1309,7 @@ fn collect_directory_entries<O: LsOutput>(
                 Some(dir_entry),
                 None,
                 config,
+                false,
                 false,
             ));
         }
@@ -1375,6 +1381,7 @@ fn enter_directory<O: LsOutput>(
             None,
             config,
             entry.command_line,
+            false,
         );
 
         if !entry.is_first {
@@ -1404,12 +1411,9 @@ fn enter_directory<O: LsOutput>(
         write_directory_entries(entries, config, output)?;
 
         if config.recursive {
-            let start = if config.files == Files::All { 2 } else { 0 };
-
             for child in entries
                 .iter()
-                .skip(start)
-                .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+                .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.is_dot_dir)
                 .rev()
             {
                 let child_path = child.path().to_path_buf();
