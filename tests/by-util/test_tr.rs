@@ -1240,7 +1240,7 @@ fn check_against_gnu_tr_tests_invalid_cc() {
         .args(&["[:fooclass:]", "x"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: invalid character class '[:fooclass:]'\n");
+        .stderr_is("tr: invalid character class 'fooclass'\n");
 }
 
 #[test]
