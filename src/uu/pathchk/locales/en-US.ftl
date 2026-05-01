@@ -1,5 +1,5 @@
 pathchk-about = Check whether file names are valid or portable
- Part of uutils.
+  Part of uutils.
 pathchk-usage = pathchk [OPTION]... NAME...
 
 # Help messages

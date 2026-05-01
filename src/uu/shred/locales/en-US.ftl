@@ -1,6 +1,6 @@
 shred-about = Overwrite the specified FILE(s) repeatedly, in order to make it harder for even
- Part of uutils.
   very expensive hardware probing to recover the data.
+  Part of uutils.
 shred-usage = shred [OPTION]... FILE...
 shred-after-help = Delete FILE(s) if --remove (-u) is specified. The default is not to remove
   the files because it is common to operate on device files like /dev/hda, and

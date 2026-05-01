@@ -1,7 +1,6 @@
 date-about =
- Part of uutils.
     Print or set the system date and time
-
+  Part of uutils.
 date-usage =
     date [OPTION]... [+FORMAT]...
     date [OPTION]... [MMDDhhmm[[CC]YY][.ss]]

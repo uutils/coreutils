@@ -1,3 +1,3 @@
 sha1sum-about = Print or check the SHA1 checksums
- Part of uutils.
+  Part of uutils.
 sha1sum-usage = sha1sum [OPTIONS] [FILE]...

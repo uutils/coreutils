@@ -1,3 +1,3 @@
 sha224sum-about = Print or check the SHA224 checksums
- Part of uutils.
+  Part of uutils.
 sha224sum-usage = sha224sum [OPTIONS] [FILE]...

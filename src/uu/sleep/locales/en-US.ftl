@@ -1,5 +1,5 @@
 sleep-about = Pause for NUMBER seconds.
- Part of uutils.
+  Part of uutils.
 sleep-usage = sleep NUMBER[SUFFIX]...
   sleep OPTION
 sleep-after-help = Pause for NUMBER seconds. SUFFIX may be 's' for seconds (the default),

@@ -1,6 +1,6 @@
 basename-about = Print NAME with any leading directory components removed
- Part of uutils.
   If specified, also remove a trailing SUFFIX
+  Part of uutils.
 basename-usage = basename [-z] NAME [SUFFIX]
   basename OPTION... NAME...
 

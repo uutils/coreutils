@@ -1,5 +1,5 @@
 mkfifo-about = Create a FIFO with the given name.
- Part of uutils.
+  Part of uutils.
 mkfifo-usage = mkfifo [OPTION]... NAME...
 
 # Help messages

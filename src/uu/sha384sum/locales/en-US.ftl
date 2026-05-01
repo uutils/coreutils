@@ -1,3 +1,3 @@
 sha384sum-about = Print or check the SHA384 checksums
- Part of uutils.
+  Part of uutils.
 sha384sum-usage = sha384sum [OPTIONS] [FILE]...

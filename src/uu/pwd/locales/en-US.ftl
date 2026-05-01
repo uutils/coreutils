@@ -1,5 +1,5 @@
 pwd-about = Display the full filename of the current working directory.
- Part of uutils.
+  Part of uutils.
 pwd-usage = pwd [OPTION]...
 
 # Help messages

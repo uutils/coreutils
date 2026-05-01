@@ -1,6 +1,6 @@
 unexpand-about = Convert blanks in each FILE to tabs, writing to standard output.
- Part of uutils.
   With no FILE, or when FILE is -, read standard input.
+  Part of uutils.
 unexpand-usage = unexpand [OPTION]... [FILE]...
 
 # Help messages

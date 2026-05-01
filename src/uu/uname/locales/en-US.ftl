@@ -1,6 +1,6 @@
 uname-about = Print certain system information.
- Part of uutils.
   With no OPTION, same as -s.
+  Part of uutils.
 uname-usage = uname [OPTION]...
 
 # Error messages

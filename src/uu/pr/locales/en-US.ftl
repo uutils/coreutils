@@ -1,5 +1,5 @@
 pr-about = paginate or columnate FILE(s) for printing
- Part of uutils.
+  Part of uutils.
 pr-after-help =
   If no FILE(s) are given, or if FILE is -, read standard input.
 

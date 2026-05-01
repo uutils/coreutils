@@ -2,6 +2,6 @@
 cannot-get-system = cannot get system name
 
 arch-about = Display machine architecture
- Part of uutils.
+  Part of uutils.
 arch-after-help = Determine architecture name for current machine.
 arch-usage = arch

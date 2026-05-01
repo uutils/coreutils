@@ -1,5 +1,5 @@
 nl-about = Number lines of files
- Part of uutils.
+  Part of uutils.
 nl-usage = nl [OPTION]... [FILE]...
 nl-after-help = STYLE is one of:
 

@@ -1,6 +1,6 @@
 id-about = Print user and group information for each specified USER,
- Part of uutils.
   or (when USER omitted) for the current user.
+  Part of uutils.
 id-usage = id [OPTION]... [USER]...
 id-after-help = The id utility displays the user and group names and numeric IDs, of the
   calling process, to the standard output. If the real and effective IDs are

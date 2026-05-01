@@ -1,5 +1,5 @@
 cksum-about = Print CRC and size for each file
- Part of uutils.
+  Part of uutils.
 cksum-usage = cksum [OPTIONS] [FILE]...
 cksum-after-help = DIGEST determines the digest algorithm and default output format:
 

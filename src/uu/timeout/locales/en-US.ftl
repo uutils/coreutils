@@ -1,5 +1,5 @@
 timeout-about = Start COMMAND, and kill it if still running after DURATION.
- Part of uutils.
+  Part of uutils.
 timeout-usage = timeout [OPTION] DURATION COMMAND...
 
 # Help messages

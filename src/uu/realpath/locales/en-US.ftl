@@ -1,5 +1,5 @@
 realpath-about = Print the resolved path
- Part of uutils.
+  Part of uutils.
 realpath-usage = realpath [OPTION]... FILE...
 
 # Help messages

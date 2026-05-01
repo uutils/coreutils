@@ -1,5 +1,5 @@
 ln-about = Make links between files.
- Part of uutils.
+  Part of uutils.
 ln-usage = ln [OPTION]... [-T] TARGET LINK_NAME
   ln [OPTION]... TARGET
   ln [OPTION]... TARGET... DIRECTORY

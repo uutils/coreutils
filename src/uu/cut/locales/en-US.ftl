@@ -1,5 +1,5 @@
 cut-about = Prints specified byte or field columns from each line of stdin or the input files
- Part of uutils.
+  Part of uutils.
 cut-usage = cut OPTION... [FILE]...
 cut-after-help = Each call must specify a mode (what to use for columns),
   a sequence (which columns to print), and provide a data source

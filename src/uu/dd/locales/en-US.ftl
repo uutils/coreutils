@@ -1,5 +1,5 @@
 dd-about = Copy, and optionally convert, a file system resource
- Part of uutils.
+  Part of uutils.
 dd-usage = dd [OPERAND]...
   dd OPTION
 dd-after-help = ### Operands

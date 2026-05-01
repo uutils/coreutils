@@ -1,6 +1,6 @@
 cat-about = Concatenate FILE(s), or standard input, to standard output
- Part of uutils.
   With no FILE, or when FILE is -, read standard input.
+  Part of uutils.
 cat-usage = cat [OPTION]... [FILE]...
 
 # Help messages

@@ -3,7 +3,7 @@ stty-usage = stty [-F DEVICE | --file=DEVICE] [SETTING]...
   or:  stty [-F DEVICE | --file=DEVICE] [-g|--save]
 
 stty-about = Print or change terminal characteristics.
- Part of uutils.
+  Part of uutils.
 
 stty-option-all = print all current settings in human-readable form
 stty-option-save = print all current settings in a stty-readable form

@@ -1,5 +1,5 @@
 truncate-about = Shrink or extend the size of each file to the specified size.
- Part of uutils.
+  Part of uutils.
 truncate-usage = truncate [OPTION]... [FILE]...
 truncate-after-help = SIZE is an integer with an optional prefix and optional unit.
   The available units (K, M, G, T, P, E, Z, and Y) use the following format:

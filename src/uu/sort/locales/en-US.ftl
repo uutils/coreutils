@@ -1,5 +1,5 @@
 sort-about = Display sorted concatenation of all FILE(s). With no FILE, or when FILE is -, read standard input.
- Part of uutils.
+  Part of uutils.
 sort-usage = sort [OPTION]... [FILE]...
 sort-after-help = The key format is FIELD[.CHAR][OPTIONS][,FIELD[.CHAR]][OPTIONS].
 

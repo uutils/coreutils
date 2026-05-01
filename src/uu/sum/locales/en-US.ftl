@@ -1,7 +1,7 @@
 sum-about = Checksum and count the blocks in a file.
- Part of uutils.
 
   With no FILE, or when FILE is -, read standard input.
+  Part of uutils.
 sum-usage = sum [OPTION]... [FILE]...
 
 # Help messages

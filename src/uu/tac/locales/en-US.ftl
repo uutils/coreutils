@@ -1,5 +1,5 @@
 tac-about = Write each file to standard output, last line first.
- Part of uutils.
+  Part of uutils.
 tac-usage = tac [OPTION]... [FILE]...
 tac-help-before = attach the separator before instead of after
 tac-help-regex = interpret the sequence as a regular expression

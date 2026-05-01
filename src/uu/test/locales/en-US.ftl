@@ -1,5 +1,5 @@
 test-about = Check file types and compare values.
- Part of uutils.
+  Part of uutils.
 test-usage = test EXPRESSION
   test
   {"[ EXPRESSION ]"}

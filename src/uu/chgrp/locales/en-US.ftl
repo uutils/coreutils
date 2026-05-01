@@ -1,5 +1,5 @@
 chgrp-about = Change the group of each FILE to GROUP.
- Part of uutils.
+  Part of uutils.
 chgrp-usage = chgrp [OPTION]... GROUP FILE...
   chgrp [OPTION]... --reference=RFILE FILE...
 

@@ -1,5 +1,5 @@
 runcon-about = Run command with specified security context under SELinux enabled systems.
- Part of uutils.
+  Part of uutils.
 runcon-usage = runcon CONTEXT COMMAND [ARG...]
   runcon [-c] [-u USER] [-r ROLE] [-t TYPE] [-l RANGE] COMMAND [ARG...]
 runcon-after-help = Run COMMAND with completely-specified CONTEXT, or with current or transitioned security context modified by one or more of LEVEL, ROLE, TYPE, and USER.

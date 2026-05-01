@@ -1,5 +1,5 @@
 expr-about = Print the value of EXPRESSION to standard output
- Part of uutils.
+  Part of uutils.
 expr-usage = expr [EXPRESSION]
   expr [OPTIONS]
 expr-after-help = Print the value of EXPRESSION to standard output. A blank line below

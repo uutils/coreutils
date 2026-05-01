@@ -1,7 +1,7 @@
 stdbuf-about = Run COMMAND, with modified buffering operations for its standard streams.
- Part of uutils.
 
   Mandatory arguments to long options are mandatory for short options too.
+  Part of uutils.
 stdbuf-usage = stdbuf [OPTION]... COMMAND
 stdbuf-after-help = If MODE is 'L' the corresponding stream will be line buffered.
   This option is invalid with standard input.

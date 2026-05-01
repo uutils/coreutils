@@ -1,6 +1,6 @@
 factor-about = Print the prime factors of the given NUMBER(s).
- Part of uutils.
   If none are specified, read from standard input.
+  Part of uutils.
 factor-usage = factor [OPTION]... [NUMBER]...
 
 # Help messages

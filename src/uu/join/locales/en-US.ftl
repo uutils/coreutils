@@ -1,8 +1,8 @@
 join-about = For each pair of input lines with identical join fields, write a line to
- Part of uutils.
   standard output. The default join field is the first, delimited by blanks.
 
   When FILE1 or FILE2 (not both) is -, read standard input.
+  Part of uutils.
 join-usage = join [OPTION]... FILE1 FILE2
 
 # Join help messages

@@ -4,7 +4,6 @@
 # and loading several bundles at the same time.
 
 base32-about = encode/decode data and print to standard output
- Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 
   The data are encoded as described for the base32 alphabet in RFC 4648.
@@ -12,10 +11,11 @@ base32-about = encode/decode data and print to standard output
   to the bytes of the formal base32 alphabet. Use --ignore-garbage
   to attempt to recover from any other non-alphabet bytes in the
   encoded stream.
+  Part of uutils.
 base32-usage = base32 [OPTION]... [FILE]
 
 base64-about = encode/decode data and print to standard output
- Part of uutils.
+
   With no FILE, or when FILE is -, read standard input.
 
   The data are encoded as described for the base64 alphabet in RFC 3548.
@@ -23,15 +23,16 @@ base64-about = encode/decode data and print to standard output
   to the bytes of the formal base64 alphabet. Use --ignore-garbage
   to attempt to recover from any other non-alphabet bytes in the
   encoded stream.
+  Part of uutils.
 base64-usage = base64 [OPTION]... [FILE]
 
 basenc-about = Encode/decode data and print to standard output
- Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 
   When decoding, the input may contain newlines in addition to the bytes of
   the formal alphabet. Use --ignore-garbage to attempt to recover
   from any other non-alphabet bytes in the encoded stream.
+  Part of uutils.
 basenc-usage = basenc [OPTION]... [FILE]
 
 # Help messages for encoding formats

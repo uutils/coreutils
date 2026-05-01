@@ -1,5 +1,5 @@
 nohup-about = Run COMMAND ignoring hangup signals.
- Part of uutils.
+  Part of uutils.
 nohup-usage = nohup COMMAND [ARG]...
   nohup OPTION
 nohup-after-help = If standard input is terminal, it'll be replaced with /dev/null.

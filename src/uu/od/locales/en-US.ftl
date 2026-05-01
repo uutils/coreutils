@@ -1,5 +1,5 @@
 od-about = Dump files in octal and other formats
- Part of uutils.
+  Part of uutils.
 od-usage = od [OPTION]... [--] [FILENAME]...
   od [-abcdDefFhHiIlLoOsxX] [FILENAME] [[+][0x]OFFSET[.][b]]
   od --traditional [OPTION]... [FILENAME] [[+][0x]OFFSET[.][b] [[+][0x]LABEL[.][b]]]

@@ -1,5 +1,5 @@
 rmdir-about = Remove the DIRECTORY(ies), if they are empty.
- Part of uutils.
+  Part of uutils.
 rmdir-usage = rmdir [OPTION]... DIRECTORY...
 
 # Help messages

@@ -1,5 +1,5 @@
 chroot-about = Run COMMAND with root directory set to NEWROOT.
- Part of uutils.
+  Part of uutils.
 chroot-usage = chroot [OPTION]... NEWROOT [COMMAND [ARG]...]
 
 # Help messages
