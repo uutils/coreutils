@@ -1,4 +1,5 @@
 rm-about = Remove (unlink) the FILE(s)
+ Part of uutils.
 rm-usage = rm [OPTION]... FILE...
 rm-after-help = By default, rm does not remove directories. Use the --recursive (-r or -R)
   option to remove each listed directory, too, along with all of its contents

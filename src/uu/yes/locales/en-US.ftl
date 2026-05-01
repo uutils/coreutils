@@ -1,4 +1,5 @@
 yes-about = Repeatedly display a line with STRING (or 'y')
+ Part of uutils.
 yes-usage = yes [STRING]...
 
 # Error messages

@@ -1,4 +1,5 @@
 du-about = Estimate file space usage
+ Part of uutils.
 du-usage = du [OPTION]... [FILE]...
   du [OPTION]... --files0-from=F
 du-after-help = Display values are in units of the first available SIZE from --block-size,

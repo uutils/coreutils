@@ -4,6 +4,9 @@
 # and loading several bundles at the same time.
 
 base32-about = encode/decode data and print to standard output
+ Part of uutils.
+ Part of uutils.
+ Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 
   The data are encoded as described for the base32 alphabet in RFC 4648.
@@ -14,6 +17,9 @@ base32-about = encode/decode data and print to standard output
 base32-usage = base32 [OPTION]... [FILE]
 
 base64-about = encode/decode data and print to standard output
+ Part of uutils.
+ Part of uutils.
+ Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 
   The data are encoded as described for the base64 alphabet in RFC 3548.
@@ -24,6 +30,9 @@ base64-about = encode/decode data and print to standard output
 base64-usage = base64 [OPTION]... [FILE]
 
 basenc-about = Encode/decode data and print to standard output
+ Part of uutils.
+ Part of uutils.
+ Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 
   When decoding, the input may contain newlines in addition to the bytes of

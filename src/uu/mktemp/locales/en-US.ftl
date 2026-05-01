@@ -1,4 +1,5 @@
 mktemp-about = Create a temporary file or directory.
+ Part of uutils.
 mktemp-usage = mktemp [OPTION]... [TEMPLATE]
 
 # Help messages

@@ -1,4 +1,5 @@
 printf-about = Print output based off of the format string and proceeding arguments.
+ Part of uutils.
 printf-usage = printf FORMAT [ARGUMENT]...
   printf OPTION
 printf-after-help = basic anonymous string templating:

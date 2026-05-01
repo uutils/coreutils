@@ -1,4 +1,5 @@
 more-about = Display the contents of a text file
+ Part of uutils.
 more-usage = more [OPTIONS] FILE...
 
 # Error messages

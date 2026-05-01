@@ -1,4 +1,5 @@
 expand-about = Convert tabs in each FILE to spaces, writing to standard output.
+ Part of uutils.
   With no FILE, or when FILE is -, read standard input.
 expand-usage = expand [OPTION]... [FILE]...
 

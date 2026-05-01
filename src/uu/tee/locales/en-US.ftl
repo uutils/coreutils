@@ -1,4 +1,5 @@
 tee-about = Copy standard input to each FILE, and also to standard output.
+ Part of uutils.
 tee-usage = tee [OPTION]... [FILE]...
 tee-after-help = If a FILE is -, it refers to a file named - .
 

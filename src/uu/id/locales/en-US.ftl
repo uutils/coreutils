@@ -1,4 +1,5 @@
 id-about = Print user and group information for each specified USER,
+ Part of uutils.
   or (when USER omitted) for the current user.
 id-usage = id [OPTION]... [USER]...
 id-after-help = The id utility displays the user and group names and numeric IDs, of the

@@ -1,2 +1,3 @@
 md5sum-about = Print or check the MD5 checksums
+ Part of uutils.
 md5sum-usage = md5sum [OPTIONS] [FILE]...

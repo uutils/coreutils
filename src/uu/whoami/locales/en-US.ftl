@@ -1,4 +1,5 @@
 whoami-about = Print the current username.
+ Part of uutils.
 whoami-usage = whoami
 
 # Error messages

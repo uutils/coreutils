@@ -1,4 +1,5 @@
 fold-about = Writes each file (or standard input if no files are given)
+ Part of uutils.
   to standard output whilst breaking long lines
 fold-usage = fold [OPTION]... [FILE]...
 fold-bytes-help = count using bytes rather than columns (meaning control characters such as newline are not treated specially)

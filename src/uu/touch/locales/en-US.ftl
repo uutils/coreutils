@@ -1,4 +1,5 @@
 touch-about = Update the access and modification times of each FILE to the current time.
+ Part of uutils.
 touch-usage = touch [OPTION]... [FILE]...
 
 # Help messages

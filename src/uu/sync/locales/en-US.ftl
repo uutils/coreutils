@@ -1,4 +1,5 @@
 sync-about = Synchronize cached writes to persistent storage
+ Part of uutils.
 sync-usage = sync [OPTION]... FILE...
 
 # Help messages

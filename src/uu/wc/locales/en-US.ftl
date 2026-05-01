@@ -1,4 +1,5 @@
 wc-about = Print newline, word, and byte counts for each FILE, and a total line if more than one FILE is specified.
+ Part of uutils.
 wc-usage = wc [OPTION]... [FILE]...
 
 # Help messages

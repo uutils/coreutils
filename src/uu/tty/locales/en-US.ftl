@@ -1,4 +1,5 @@
 tty-about = Print the file name of the terminal connected to standard input.
+ Part of uutils.
 tty-usage = tty [OPTION]...
 
 # Help messages

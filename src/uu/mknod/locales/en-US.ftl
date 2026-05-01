@@ -1,4 +1,5 @@
 mknod-about = Create the special file NAME of the given TYPE.
+ Part of uutils.
 mknod-usage = mknod [OPTION]... NAME TYPE [MAJOR MINOR]
 mknod-after-help = Mandatory arguments to long options are mandatory for short options too.
   -m, --mode=MODE set file permission bits to MODE, not a=rw - umask

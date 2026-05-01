@@ -1,2 +1,3 @@
 b2sum-about = Print or check the BLAKE2b checksums
+ Part of uutils.
 b2sum-usage = b2sum [OPTIONS] [FILE]...

@@ -1,4 +1,5 @@
 readlink-about = Print value of a symbolic link or canonical file name.
+ Part of uutils.
 readlink-usage = readlink [OPTION]... [FILE]...
 
 # Help messages

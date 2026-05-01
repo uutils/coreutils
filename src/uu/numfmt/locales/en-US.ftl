@@ -1,4 +1,5 @@
 numfmt-about = Convert numbers from/to human-readable strings
+ Part of uutils.
 numfmt-usage = numfmt [OPTION]... [NUMBER]...
 numfmt-after-help = UNIT options:
 

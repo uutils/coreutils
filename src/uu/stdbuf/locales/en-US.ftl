@@ -1,4 +1,5 @@
 stdbuf-about = Run COMMAND, with modified buffering operations for its standard streams.
+ Part of uutils.
 
   Mandatory arguments to long options are mandatory for short options too.
 stdbuf-usage = stdbuf [OPTION]... COMMAND

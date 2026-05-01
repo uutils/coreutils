@@ -1,4 +1,5 @@
 stat-about = Display file or file system status.
+ Part of uutils.
 stat-usage = stat [OPTION]... FILE...
 stat-after-help = Valid format sequences for files (without `--file-system`):
 

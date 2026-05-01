@@ -1,4 +1,5 @@
 shuf-about = Shuffle the input by outputting a random permutation of input lines.
+ Part of uutils.
   Each output permutation is equally likely.
   With no FILE, or when FILE is -, read standard input.
 shuf-usage = shuf [OPTION]... [FILE]

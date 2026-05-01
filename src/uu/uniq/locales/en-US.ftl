@@ -1,4 +1,5 @@
 uniq-about = Report or omit repeated lines.
+ Part of uutils.
 uniq-usage = uniq [OPTION]... [INPUT [OUTPUT]]
 uniq-after-help = Filter adjacent matching lines from INPUT (or standard input),
   writing to OUTPUT (or standard output).

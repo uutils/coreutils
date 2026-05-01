@@ -1,4 +1,5 @@
 df-about = Show information about the file system on which each FILE resides,
+ Part of uutils.
   or all file systems by default.
 df-usage = df [OPTION]... [FILE]...
 df-after-help = Display values are in units of the first available SIZE from --block-size,

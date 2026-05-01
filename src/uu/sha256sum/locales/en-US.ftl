@@ -1,2 +1,3 @@
 sha256sum-about = Print or check the SHA256 checksums
+ Part of uutils.
 sha256sum-usage = sha256sum [OPTIONS] [FILE]...

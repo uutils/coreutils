@@ -1,8 +1,11 @@
 ls-about = List directory contents.
+ Part of uutils.
   Ignore files and directories starting with a '.' by default
 dir-about = List directory contents.
+ Part of uutils.
   Ignore files and directories starting with a '.' by default
 vdir-about = List directory contents.
+ Part of uutils.
   Ignore files and directories starting with a '.' by default
 
   Mandatory arguments to long options are mandatory for short options too.

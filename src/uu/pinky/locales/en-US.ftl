@@ -1,4 +1,5 @@
 pinky-about = Displays brief user information on Unix-based systems
+ Part of uutils.
 pinky-usage = pinky [OPTION]... [USER]...
 pinky-about-musl-warning = Warning: When built with musl libc, the `pinky` utility may show incomplete
     or missing user information due to musl's stub implementation of `utmpx`

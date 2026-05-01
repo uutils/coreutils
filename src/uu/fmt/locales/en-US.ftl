@@ -1,4 +1,5 @@
 fmt-about = Reformat paragraphs from input (or standard input) to stdout.
+ Part of uutils.
 fmt-usage = [OPTION]... [FILE]...
 
 # Help messages

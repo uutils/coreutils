@@ -1,4 +1,5 @@
 echo-about = Display a line of text
+ Part of uutils.
 echo-usage = echo [OPTIONS]... [STRING]...
 echo-after-help = Echo the STRING(s) to standard output.
 

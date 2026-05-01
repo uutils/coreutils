@@ -1,4 +1,5 @@
 ptx-about = Produce a permuted index of file contents
+ Part of uutils.
   Output a permuted index, including context, of the words in the input files.
   Mandatory arguments to long options are mandatory for short options too.
   With no FILE, or when FILE is -, read standard input. Default is '-F /'.

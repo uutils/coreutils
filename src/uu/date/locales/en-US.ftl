@@ -1,4 +1,5 @@
 date-about =
+ Part of uutils.
     Print or set the system date and time
 
 date-usage =

@@ -1,4 +1,5 @@
 nice-about = Run COMMAND with an adjusted niceness, which affects process scheduling.
+ Part of uutils.
   With no COMMAND, print the current niceness.  Niceness values range from
   -20 (most favorable to the process) to 19 (least favorable to the process).
 nice-usage = nice [OPTION] [COMMAND [ARG]...]

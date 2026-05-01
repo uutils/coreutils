@@ -1,4 +1,5 @@
 hostname-about = Display or set the system's host name.
+ Part of uutils.
 hostname-usage = hostname [OPTION]... [HOSTNAME]
 hostname-help-domain = Display the name of the DNS domain if possible
 hostname-help-ip-address = Display the network address(es) of the host

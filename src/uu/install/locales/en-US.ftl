@@ -1,4 +1,5 @@
 install-about = Copy SOURCE to DEST or multiple SOURCE(s) to the existing
+ Part of uutils.
   DIRECTORY, while setting permission modes and owner/group
 install-usage = install [OPTION]... [FILE]...
 

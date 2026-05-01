@@ -1,4 +1,5 @@
 groups-about = Print group memberships for each USERNAME or, if no USERNAME is specified, for
+ Part of uutils.
   the current process (which may differ if the groups data‐base has changed).
 groups-usage = groups [OPTION]... [USERNAME]...
 groups-error-fetch = failed to fetch groups

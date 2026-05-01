@@ -1,4 +1,5 @@
 seq-about = Display numbers from FIRST to LAST, in steps of INCREMENT.
+ Part of uutils.
 seq-usage = seq [OPTION]... LAST
   seq [OPTION]... FIRST LAST
   seq [OPTION]... FIRST INCREMENT LAST

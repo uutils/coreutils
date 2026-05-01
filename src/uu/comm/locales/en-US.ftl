@@ -1,4 +1,5 @@
 comm-about = Compare two sorted files line by line.
+ Part of uutils.
 
   When FILE1 or FILE2 (not both) is -, read standard input.
 

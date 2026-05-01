@@ -1,4 +1,5 @@
 kill-about = Send signal to processes or list information about signals.
+ Part of uutils.
 kill-usage = kill [OPTIONS]... PID...
 
 # Help messages
