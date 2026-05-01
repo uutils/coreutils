@@ -1263,6 +1263,7 @@ pub fn list_with_output<O: LsOutput>(
             &mut entries,
         )?;
         listed_ancestors.remove(&inode);
+        debug_assert!(listed_ancestors.is_empty());
     }
 
     output.finalize(config)?;
