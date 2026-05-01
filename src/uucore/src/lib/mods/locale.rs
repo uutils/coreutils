@@ -1431,7 +1431,10 @@ invalid-syntax = This is { $missing
 
             // Verify we can get messages (using embedded English)
             let message = get_message("test-about");
-            assert_eq!(message, "Check file types and compare values.\nPart of uutils."); // Should use embedded English
+            assert_eq!(
+                message,
+                "Check file types and compare values.\nPart of uutils."
+            ); // Should use embedded English
         })
         .join()
         .unwrap();
