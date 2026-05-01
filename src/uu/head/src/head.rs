@@ -162,7 +162,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => err),
+        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
     )
 }
 

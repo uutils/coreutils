@@ -896,7 +896,7 @@ fn test_write_to_dev_full() {
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
                 .fails()
-                .stderr_contains("error writing 'standard output': No space left on device");
+                .stderr_is("head: error writing 'standard output': No space left on device\n");
         }
     }
 }
