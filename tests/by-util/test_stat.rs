@@ -448,6 +448,52 @@ fn test_quoting_style_locale() {
 }
 
 #[test]
+fn test_quoting_style_invalid_env() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("baguette");
+    at.touch("Croissant");
+    at.touch("Escargot");
+
+    let needle = "ignoring invalid value of environment variable QUOTING_STYLE";
+
+    // A bogus value triggers exactly one warning across multiple files and the
+    // output falls back to the default (shell-escape) style.
+    let res = ts
+        .ucmd()
+        .env("QUOTING_STYLE", "fromage")
+        .args(&["-c", "nom=[%N]", "baguette", "Croissant", "Escargot"])
+        .succeeds();
+    res.stdout_is("nom=['baguette']\nnom=['Croissant']\nnom=['Escargot']\n");
+    assert_eq!(res.stderr_str().matches(needle).count(), 1);
+
+    // An empty value is also invalid and must be reported with empty quotes.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "")
+        .args(&["-c", "%N", "baguette"])
+        .succeeds()
+        .stdout_is("'baguette'\n")
+        .stderr_is("stat: ignoring invalid value of environment variable QUOTING_STYLE: ''\n");
+
+    // %%%N: a literal '%' followed by the quoted name, fallback style applies.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "soufflé")
+        .args(&["-c", "%%%N", "baguette"])
+        .succeeds()
+        .stdout_is("%'baguette'\n")
+        .stderr_is(
+            "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'soufflé'\n",
+        );
+
+    // When the format never consults %N, QUOTING_STYLE must not be parsed at all.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "crème-brûlée")
+        .args(&["-c", "taille=%s genre:%F brut=%n", "baguette"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_printf_octal_1() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = vec![0x0A, 0xFF]; // Newline + byte 255
