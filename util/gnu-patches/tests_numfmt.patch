@@ -118,7 +118,16 @@ Index: gnu/tests/numfmt/numfmt.pl
               {EXIT=>1}],
 
       ## Format string - check error detection
-@@ -1097,7 +1106,7 @@ my @Limit_Tests =
+@@ -894,7 +903,7 @@ my @Tests =
+      # A leading '-9...' must be treated as an invalid short option, not as
+      # a negative positional argument.
+      ['neg-arg-not-option', '--to=iec -9923868',
+-             {ERR_SUBST => q!s/'9'/9/;s/unknown/invalid/!},
++             {ERR_SUBST => q!s/^error: unexpected argument '?-(\d).*$/numfmt: invalid option -- $1/; s/^For more information, try '--help'\.$/Try 'numfmt --help' for more information./; $_ = "" if /^\s*$|^  tip:|^Usage:/!},
+              {ERR => "$prog: invalid option -- 9\n" .
+                      "Try '$prog --help' for more information.\n"},
+              {EXIT => 1}],
+@@ -1136,7 +1145,7 @@ my @Limit_Tests =
               {EXIT => 2}],
    );
  # Restrict these tests to systems with LDBL_DIG == 18
