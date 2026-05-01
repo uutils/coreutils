@@ -4,13 +4,12 @@
 // file that was distributed with this source code.
 // spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek
 
-use libc::{SEEK_DATA, SEEK_HOLE};
+use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
-use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use uucore::buf_copy;
 use uucore::mode::get_umask;
@@ -60,18 +59,15 @@ where
 {
     let src_file = File::open(&source)?;
     let dst_file = File::create(&dest)?;
-    let src_fd = src_file.as_raw_fd();
-    let dst_fd = dst_file.as_raw_fd();
-    let result = unsafe { libc::ioctl(dst_fd, libc::FICLONE, src_fd) };
-    if result == 0 {
-        return Ok(());
+    if ioctl_ficlone(dst_file, src_file).is_err() {
+        return match fallback {
+            CloneFallback::Error => Err(std::io::Error::last_os_error()),
+            CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
+            CloneFallback::SparseCopy => sparse_copy(source, dest),
+            CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
+        };
     }
-    match fallback {
-        CloneFallback::Error => Err(std::io::Error::last_os_error()),
-        CloneFallback::FSCopy => std::fs::copy(source, dest).map(|_| ()),
-        CloneFallback::SparseCopy => sparse_copy(source, dest),
-        CloneFallback::SparseCopyWithoutHole => sparse_copy_without_hole(source, dest),
-    }
+    Ok(())
 }
 
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
@@ -90,16 +86,9 @@ fn check_for_data(source: &Path) -> Result<(bool, u64, u64), std::io::Error> {
         let _ = src_file.read(&mut buf)?;
         return Ok((buf.iter().any(|&x| x != 0x0), size, 0));
     }
+    let has_data = seek(src_file, SeekFrom::Data(0)).is_ok();
 
-    let src_fd = src_file.as_raw_fd();
-
-    let result = unsafe { libc::lseek(src_fd, 0, SEEK_DATA) };
-
-    match result {
-        -1 => Ok((false, size, blocks)), // No data found or end of file
-        _ if result >= 0 => Ok((true, size, blocks)), // Data found
-        _ => Err(std::io::Error::last_os_error()),
-    }
+    Ok((has_data, size, blocks))
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -126,42 +115,27 @@ where
 {
     let src_file = File::open(source)?;
     let dst_file = File::create(dest)?;
-    let dst_fd = dst_file.as_raw_fd();
 
     let size = src_file.metadata()?.size();
-    if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
-    let src_fd = src_file.as_raw_fd();
-    let mut current_offset: isize = 0;
+    ftruncate(&dst_file, size)?;
+    let mut current_offset = 0;
     // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
     // 16 MiB chunks should saturate an SSD
     let step = std::cmp::min(size, 16 * 1024 * 1024) as usize;
     let mut buf: Vec<u8> = vec![0x0; step];
-    loop {
-        let result = unsafe { libc::lseek(src_fd, current_offset.try_into().unwrap(), SEEK_DATA) }
-            .try_into()
-            .unwrap();
-
-        current_offset = result;
-        let hole: isize =
-            unsafe { libc::lseek(src_fd, current_offset.try_into().unwrap(), SEEK_HOLE) }
-                .try_into()
-                .unwrap();
-        if result == -1 || hole == -1 {
+    while let Ok(data) = seek(&src_file, SeekFrom::Data(current_offset)) {
+        current_offset = data;
+        let Ok(hole) = seek(&src_file, SeekFrom::Hole(current_offset)) else {
             break;
-        }
-        if result <= -2 || hole <= -2 {
-            return Err(std::io::Error::last_os_error());
-        }
-        let len: isize = hole - current_offset;
+        };
+        let len = hole - current_offset;
         // Read and write data in chunks of `step` while reusing the same buffer
         for i in (0..len).step_by(step) {
             // Ensure we don't read past the end of the file or the start of the next hole
             let read_len = std::cmp::min((len - i) as usize, step);
             let buf = &mut buf[..read_len];
-            src_file.read_exact_at(buf, (current_offset + i) as u64)?;
-            dst_file.write_all_at(buf, (current_offset + i) as u64)?;
+            src_file.read_exact_at(buf, current_offset + i)?;
+            dst_file.write_all_at(buf, current_offset + i)?;
         }
         current_offset = hole;
     }
@@ -176,12 +150,9 @@ where
 {
     let mut src_file = File::open(source)?;
     let dst_file = File::create(dest)?;
-    let dst_fd = dst_file.as_raw_fd();
 
     let size: usize = src_file.metadata()?.size().try_into().unwrap();
-    if unsafe { libc::ftruncate(dst_fd, size.try_into().unwrap()) } < 0 {
-        return Err(std::io::Error::last_os_error());
-    }
+    ftruncate(&dst_file, size.try_into().unwrap())?;
 
     let blksize = dst_file.metadata()?.blksize();
     let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
