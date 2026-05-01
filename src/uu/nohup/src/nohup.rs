@@ -8,11 +8,10 @@
 compile_error!("nohup is not supported on the target");
 
 use clap::{Arg, ArgAction, Command};
-use libc::{SIG_IGN, SIGHUP, dup2, signal};
+use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
-use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -76,7 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     replace_fds()?;
 
-    unsafe { signal(SIGHUP, SIG_IGN) };
+    unsafe { libc::signal(libc::SIGHUP, libc::SIG_IGN) };
 
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
@@ -118,22 +117,18 @@ fn replace_fds() -> UResult<()> {
     if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
-        }
+        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", Error::from(e)))?;
     }
 
     if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
-        let fd = new_stdout.as_raw_fd();
 
-        if unsafe { dup2(fd, 1) } != 1 {
-            return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
-        }
+        dup2_stdout(&new_stdout)
+            .map_err(|e| NohupError::CannotReplace("STDOUT", Error::from(e)))?;
     }
 
-    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
-        return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+    if std::io::stderr().is_terminal() {
+        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", Error::from(e)))?;
     }
     Ok(())
 }
