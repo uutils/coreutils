@@ -1265,6 +1265,7 @@ pub fn list_with_output<O: LsOutput>(
         if let Some(ref inode) = inode {
             listed_ancestors.remove(inode);
         }
+        debug_assert!(listed_ancestors.is_empty());
     }
 
     output.finalize(config)?;
