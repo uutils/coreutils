@@ -1458,15 +1458,13 @@ fn test_mv_overwrite_nonempty_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     at.touch(dummy);
-    // Not same error as GNU; the error message is a rust builtin
-    // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
-    // GNU:     "mv: cannot move 'a' to 'b': Directory not empty"
-
-    // Verbose output for the move should not be shown on failure
+    // GNU 9.11: "mv: cannot overwrite 'b': Directory not empty"
+    // Verbose output for the move should not be shown on failure.
     let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
     result.no_stdout();
-    assert!(!result.stderr_str().is_empty());
+    result.stderr_is(format!(
+        "mv: cannot overwrite '{dir_b}': Directory not empty\n"
+    ));
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
