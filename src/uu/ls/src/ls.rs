@@ -779,6 +779,7 @@ pub fn uu_app() -> Command {
     // Positional arguments
     .arg(
         Arg::new(options::PATHS)
+            .hide(true)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
             .value_parser(ValueParser::os_string()),
