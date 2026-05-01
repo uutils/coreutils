@@ -1480,7 +1480,12 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             )
         }),
         Sort::Size => {
-            entries.sort_unstable_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
+            entries.sort_unstable_by(|a, b| {
+                b.metadata()
+                    .map_or(0, Metadata::len)
+                    .cmp(&a.metadata().map_or(0, Metadata::len))
+                    .then(a.file_name().cmp(b.file_name()))
+            });
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
