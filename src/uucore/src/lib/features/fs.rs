@@ -42,6 +42,7 @@ macro_rules! has {
 }
 
 /// Information to uniquely identify a file
+#[derive(Clone)]
 pub struct FileInformation(
     #[cfg(unix)] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
