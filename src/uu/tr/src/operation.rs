@@ -670,6 +670,14 @@ impl ChunkProcessor for DeleteOperation {
 #[derive(Debug)]
 pub struct TranslateOperation {
     pub(crate) translation_table: [u8; 256],
+    pub(crate) ascii_range: Option<AsciiRangeTranslate>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AsciiRangeTranslate {
+    pub(crate) start: u8,
+    pub(crate) end: u8,
+    pub(crate) delta: u8,
 }
 
 impl TranslateOperation {
@@ -686,14 +694,58 @@ impl TranslateOperation {
                 translation_table[from as usize] = to;
             }
 
-            Ok(Self { translation_table })
+            Ok(Self {
+                ascii_range: detect_ascii_range_translate(&translation_table),
+                translation_table,
+            })
         } else if set1.is_empty() && set2.is_empty() {
             // Identity mapping for empty sets
-            Ok(Self { translation_table })
+            Ok(Self {
+                ascii_range: None,
+                translation_table,
+            })
         } else {
             Err(BadSequence::EmptySet2WhenNotTruncatingSet1)
         }
     }
+}
+
+fn detect_ascii_range_translate(table: &[u8; 256]) -> Option<AsciiRangeTranslate> {
+    let mut range: Option<AsciiRangeTranslate> = None;
+    let mut changed_count = 0usize;
+    let mut finished_range = false;
+
+    for (from, &to) in table.iter().enumerate() {
+        let from = from as u8;
+        if to == from {
+            if range.is_some() {
+                finished_range = true;
+            }
+            continue;
+        }
+
+        if from > 0x7f || finished_range {
+            return None;
+        }
+
+        let delta = to.wrapping_sub(from);
+        match &mut range {
+            Some(range) if range.delta == delta => {
+                range.end = from;
+            }
+            Some(_) => return None,
+            None => {
+                range = Some(AsciiRangeTranslate {
+                    start: from,
+                    end: from,
+                    delta,
+                });
+            }
+        }
+        changed_count += 1;
+    }
+
+    (changed_count > 1).then_some(range?)
 }
 
 impl SymbolTranslator for TranslateOperation {
@@ -704,7 +756,7 @@ impl SymbolTranslator for TranslateOperation {
 
 impl ChunkProcessor for TranslateOperation {
     fn process_chunk(&self, input: &[u8], output: &mut Vec<u8>) {
-        use crate::simd::{find_single_change, process_single_char_replace};
+        use crate::simd::{find_single_change, process_single_char_replace, translate_ascii_range};
 
         // Check if this is a simple single-character translation
         if let Some((source, target)) =
@@ -712,6 +764,8 @@ impl ChunkProcessor for TranslateOperation {
         {
             // Use SIMD-optimized single character replacement
             process_single_char_replace(input, output, source, target);
+        } else if let Some(range) = self.ascii_range {
+            translate_ascii_range(input, output, range);
         } else {
             // Standard translation using table lookup
             output.extend(input.iter().map(|&b| self.translation_table[b as usize]));
