@@ -231,7 +231,11 @@ jobs:
         cargo +stable fetch --locked --quiet --target $(rustc --print host-tuple)
         cargo +stable tree --no-dedupe --locked -e=no-dev --prefix=none ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} | grep -vE "$PWD" | sort --unique
     - name: Test
-      run: cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
+      run: |
+        # df test needs unshare. Don't enable this at every CI for security
+        sudo sysctl -w kernel.unprivileged_userns_clone=1 ||:
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 ||:
+        cargo nextest run --hide-progress-bar --profile ci ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} -p uucore -p coreutils
       env:
         RUSTFLAGS: "-Awarnings"
         RUST_BACKTRACE: "1"

@@ -6,7 +6,7 @@ name: GnuTests
 # spell-checker:ignore (options) Ccodegen Coverflow Cpanic Zpanic
 # spell-checker:ignore (people) Dawid Dziurla * dawidd
 # spell-checker:ignore (vars) FILESET SUBDIRS XPASS
-# spell-checker:ignore userns nodocs
+# spell-checker:ignore nodocs
 
 # * note: to run a single test => `REPO/util/run-gnu-test.sh PATH/TO/TEST/SCRIPT`
 

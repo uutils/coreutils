@@ -370,6 +370,7 @@ setpipe
 getlimits
 weblate
 algs
+userns
 wasm
 wasip
 
