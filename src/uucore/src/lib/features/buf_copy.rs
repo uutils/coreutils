@@ -50,7 +50,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn test_copy_stream() {
         let mut dest_file = new_temp_file();
 
@@ -72,8 +72,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(unix))]
-    // Test for non-unix platforms. We use regular files instead.
+    #[cfg(not(target_os = "linux"))]
+    // Test for non-linux platforms. We use regular files instead.
     fn test_copy_stream() {
         let temp_dir = tempdir().unwrap();
         let src_path = temp_dir.path().join("src.txt");

@@ -7,7 +7,7 @@
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
-#[cfg(any(target_os = "linux", target_os = "android", test))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{io::Read, os::fd::AsFd, sync::OnceLock};
@@ -22,11 +22,10 @@ const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 /// from the first.
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android", test))]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe() -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
     // improve performance for splice
-    #[cfg(any(target_os = "linux", target_os = "android"))]
     let _ = fcntl_setpipe_size(&read, MAX_ROOTLESS_PIPE_SIZE);
 
     Ok((File::from(read), File::from(write)))
