@@ -3,13 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
+// spell-checker:ignore (vars) cvar exitstatus cmdline kworker getpid
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
 // spell-checker:ignore pgrep pwait snice getpgrp
 
 use libc::{gid_t, pid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
-use nix::errno::Errno;
 use nix::sys::signal::{self as nix_signal, SigHandler, Signal};
 use nix::unistd::Pid;
 use std::io;
@@ -20,15 +18,11 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
+// todo: replace get*id by rustix::process::* and use .is_root() if possible
+
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
     nix::unistd::geteuid().as_raw()
-}
-
-/// `getpgrp()` returns the process group ID of the calling process.
-/// It is a trivial wrapper over nix::unistd::getpgrp.
-pub fn getpgrp() -> pid_t {
-    nix::unistd::getpgrp().as_raw()
 }
 
 /// `getegid()` returns the effective group ID of the calling process.
@@ -49,30 +43,6 @@ pub fn getuid() -> uid_t {
 /// `getpid()` returns the pid of the calling process.
 pub fn getpid() -> pid_t {
     nix::unistd::getpid().as_raw()
-}
-
-/// `getsid()` returns the session ID of the process with process ID pid.
-///
-/// If pid is 0, getsid() returns the session ID of the calling process.
-///
-/// # Error
-///
-/// - [Errno::EPERM] A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
-/// - [Errno::ESRCH] No process with process ID pid was found.
-///
-///
-/// # Platform
-///
-/// This function only support standard POSIX implementation platform,
-/// so some system such as redox doesn't supported.
-#[cfg(not(target_os = "redox"))]
-pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    let pid = if pid == 0 {
-        None
-    } else {
-        Some(Pid::from_raw(pid))
-    };
-    nix::unistd::getsid(pid).map(Pid::as_raw)
 }
 
 /// Missing methods for Child objects
@@ -164,27 +134,5 @@ impl ChildExt for Child {
         }
 
         Ok(None)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    #[cfg(not(target_os = "redox"))]
-    fn test_getsid() {
-        assert_eq!(
-            getsid(getpid()).expect("getsid(getpid)"),
-            // zero is a special value for SID.
-            // https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsid.html
-            getsid(0).expect("getsid(0)")
-        );
-
-        // SID never be 0.
-        assert!(getsid(getpid()).expect("getsid(getpid)") > 0);
-
-        // This might caused tests failure but the probability is low.
-        assert!(getsid(999_999).is_err());
     }
 }
