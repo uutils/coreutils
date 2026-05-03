@@ -32,19 +32,9 @@ fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
 /// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
 /// best-effort callers see [`copy_xattrs_ignore_unsupported`].
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    let attrs = match xattr::list(&source) {
-        Ok(a) => a,
-        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    for attr_name in attrs {
+    for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
-            if let Err(e) = xattr::set(&dest, &attr_name, &value) {
-                if is_xattr_unsupported(&e) {
-                    return Ok(());
-                }
-                return Err(e);
-            }
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
