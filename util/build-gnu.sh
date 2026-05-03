@@ -215,7 +215,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
-sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+sed -i -e "s|rm: cannot remove 'rel': \$EACCES|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
 # Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
 # This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory
