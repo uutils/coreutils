@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (intrinsics) blendv cmpgt loadu storeu
+
 //! I/O processing infrastructure for tr operations with SIMD optimizations
 
 use crate::operation::{AsciiRangeTranslate, ChunkProcessor};
