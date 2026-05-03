@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore TOCTOU NOFOLLOW
+// spell-checker:ignore TOCTOU NOFOLLOW CLOEXEC ELOOP RDONLY WRONLY
 
 //! Path-based primitives for security-sensitive file copies.
 //!
