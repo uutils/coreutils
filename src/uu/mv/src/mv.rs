@@ -921,7 +921,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = fsxattr::copy_xattrs(from, to);
+        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
@@ -1250,7 +1250,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = fsxattr::copy_xattrs(from, to);
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1315,7 +1315,7 @@ fn rename_file_fallback(
 
         #[cfg(not(any(target_os = "macos", target_os = "redox")))]
         {
-            let _ = fsxattr::copy_xattrs_fd(&src_file, &dst_file);
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
         }
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
