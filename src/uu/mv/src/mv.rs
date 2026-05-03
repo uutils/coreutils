@@ -916,7 +916,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = fsxattr::copy_xattrs(from, to);
+        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
     // Preserve ownership (uid/gid) from the source symlink
     let _ = preserve_ownership(from, to);
@@ -1239,7 +1239,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = fsxattr::copy_xattrs(from, to);
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1324,7 +1324,7 @@ fn rename_file_fallback(
         // xattrs are a legal destination for cross-device moves.
         #[cfg(not(any(target_os = "macos", target_os = "redox")))]
         {
-            let _ = fsxattr::copy_xattrs_fd(&src_file, &dst_file);
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
         }
 
         // Preserve ownership (uid/gid) before applying the final mode.

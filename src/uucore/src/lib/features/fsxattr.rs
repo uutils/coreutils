@@ -32,33 +32,38 @@ fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
 
 /// Copies extended attributes (xattrs) from one file or directory to another.
 ///
-/// Returns `Ok(())` if the destination filesystem signals that xattrs are
-/// not supported (`ENOTSUP` / `EOPNOTSUPP`), since cross-filesystem moves
-/// onto e.g. tmpfs without xattr support are a legitimate scenario. All
-/// other errors propagate so the caller can surface (for example)
-/// permission failures on `security.*` namespaces.
+/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP` from a
+/// destination filesystem that does not support xattrs. Callers that
+/// treat xattr preservation as best-effort (e.g. mv's cross-device
+/// fallback, or cp without an explicit `--preserve=xattr`) should use
+/// [`copy_xattrs_ignore_unsupported`] instead. cp's required-preserve
+/// path relies on the strict behavior here to match GNU cp's exit code
+/// when the destination filesystem rejects xattrs.
 ///
 /// # Arguments
 ///
 /// * `source` - A reference to the source path.
 /// * `dest` - A reference to the destination path.
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    let attrs = match xattr::list(&source) {
-        Ok(a) => a,
-        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    for attr_name in attrs {
+    for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
-            if let Err(e) = xattr::set(&dest, &attr_name, &value) {
-                if is_xattr_unsupported(&e) {
-                    return Ok(());
-                }
-                return Err(e);
-            }
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
+}
+
+/// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` from any of
+/// the underlying list/get/set calls to `Ok(())`. Use from callers
+/// where xattr preservation is best-effort and a destination filesystem
+/// without xattr support is a legitimate target (mv across devices,
+/// cp without explicit `--preserve=xattr`).
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    match copy_xattrs(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Copies extended attributes between two open file descriptors.
@@ -70,27 +75,32 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// xattr read is from the same inode and every write goes to the same
 /// inode. See issue #10014.
 ///
-/// `ENOTSUP` / `EOPNOTSUPP` from the destination is treated as success,
-/// matching [`copy_xattrs`].
+/// All errors propagate, matching [`copy_xattrs`]. Callers that want
+/// `ENOTSUP` / `EOPNOTSUPP` mapped to success should use
+/// [`copy_xattrs_fd_ignore_unsupported`].
 #[cfg(unix)]
 pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
     use xattr::FileExt;
-    let attrs = match source.list_xattr() {
-        Ok(a) => a,
-        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    for attr_name in attrs {
+    for attr_name in source.list_xattr()? {
         if let Some(value) = source.get_xattr(&attr_name)? {
-            if let Err(e) = dest.set_xattr(&attr_name, &value) {
-                if is_xattr_unsupported(&e) {
-                    return Ok(());
-                }
-                return Err(e);
-            }
+            dest.set_xattr(&attr_name, &value)?;
         }
     }
     Ok(())
+}
+
+/// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to
+/// `Ok(())`. The fd-based companion to [`copy_xattrs_ignore_unsupported`].
+#[cfg(unix)]
+pub fn copy_xattrs_fd_ignore_unsupported(
+    source: &std::fs::File,
+    dest: &std::fs::File,
+) -> std::io::Result<()> {
+    match copy_xattrs_fd(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
