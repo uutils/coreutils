@@ -13,10 +13,8 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-/// Returns true if the error is the kernel/filesystem signaling that
-/// extended attributes are not supported (`ENOTSUP` / `EOPNOTSUPP`).
-/// On Linux these are the same errno; on the BSDs they differ, so we
-/// match on either.
+/// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
+/// distinct on the BSDs).
 #[cfg(unix)]
 fn is_xattr_unsupported(err: &std::io::Error) -> bool {
     matches!(
@@ -30,60 +28,53 @@ fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
     false
 }
 
-/// Copies extended attributes (xattrs) from one file or directory to another.
-///
-/// Returns `Ok(())` if the destination filesystem signals that xattrs are
-/// not supported (`ENOTSUP` / `EOPNOTSUPP`), since cross-filesystem moves
-/// onto e.g. tmpfs without xattr support are a legitimate scenario. All
-/// other errors propagate so the caller can surface (for example)
-/// permission failures on `security.*` namespaces.
-///
-/// # Arguments
-///
-/// * `source` - A reference to the source path.
-/// * `dest` - A reference to the destination path.
+/// Copies extended attributes (xattrs) from one path to another.
+/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
+/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
-    let attrs = match xattr::list(&source) {
-        Ok(a) => a,
-        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    for attr_name in attrs {
+    for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
-            if let Err(e) = xattr::set(&dest, &attr_name, &value) {
-                if is_xattr_unsupported(&e) {
-                    return Ok(());
-                }
-                return Err(e);
-            }
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
 }
 
+/// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
+/// for callers where xattr preservation is best-effort.
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    match copy_xattrs(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 /// Copies xattrs between two open file descriptors. Pins both inodes so
 /// list/get/set calls cannot be redirected by a concurrent renamer, unlike
-/// the path-based [`copy_xattrs`]. `ENOTSUP` / `EOPNOTSUPP` is treated as
-/// success.
+/// the path-based [`copy_xattrs`].
 #[cfg(unix)]
 pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
     use xattr::FileExt;
-    let attrs = match source.list_xattr() {
-        Ok(a) => a,
-        Err(e) if is_xattr_unsupported(&e) => return Ok(()),
-        Err(e) => return Err(e),
-    };
-    for attr_name in attrs {
+    for attr_name in source.list_xattr()? {
         if let Some(value) = source.get_xattr(&attr_name)? {
-            if let Err(e) = dest.set_xattr(&attr_name, &value) {
-                if is_xattr_unsupported(&e) {
-                    return Ok(());
-                }
-                return Err(e);
-            }
+            dest.set_xattr(&attr_name, &value)?;
         }
     }
     Ok(())
+}
+
+/// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn copy_xattrs_fd_ignore_unsupported(
+    source: &std::fs::File,
+    dest: &std::fs::File,
+) -> std::io::Result<()> {
+    match copy_xattrs_fd(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
