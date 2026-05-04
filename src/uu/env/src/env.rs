@@ -1148,7 +1148,7 @@ fn list_signal_handling(log: &SignalActionLog) {
             SignalActionKind::Ignore => "IGNORE",
             SignalActionKind::Block => "BLOCK",
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?");
+        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
         eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
     }
 }
