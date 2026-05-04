@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore TOCTOU NOFOLLOW CLOEXEC ELOOP RDONLY WRONLY
+// spell-checker:ignore TOCTOU NOFOLLOW CLOEXEC ELOOP RDONLY WRONLY WUSR RUSR
 
 //! Path-based primitives for security-sensitive file copies.
 //!
@@ -77,11 +77,7 @@ pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::R
     if nofollow {
         flags |= OFlags::NOFOLLOW;
     }
-    let fd: OwnedFd = open(
-        path.as_ref(),
-        flags,
-        Mode::from_bits_truncate(DEST_INITIAL_MODE),
-    )?;
+    let fd: OwnedFd = open(path.as_ref(), flags, Mode::RUSR.union(Mode::WUSR))?;
     Ok(File::from(fd))
 }
 
