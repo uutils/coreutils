@@ -77,11 +77,7 @@ pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::R
     if nofollow {
         flags |= OFlags::NOFOLLOW;
     }
-    let fd: OwnedFd = open(
-        path.as_ref(),
-        flags,
-        Mode::from_bits_truncate(DEST_INITIAL_MODE),
-    )?;
+    let fd: OwnedFd = open(path.as_ref(), flags, Mode::RUSR.union(Mode::WUSR))?;
     Ok(File::from(fd))
 }
 
