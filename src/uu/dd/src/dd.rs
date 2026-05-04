@@ -67,8 +67,6 @@ use uucore::error::{USimpleError, set_exit_code};
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
-const BUF_INIT_BYTE: u8 = 0xDD;
-
 /// Final settings after parsing
 #[derive(Default)]
 struct Settings {
@@ -203,6 +201,61 @@ fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Res
     }
 
     Ok(total)
+}
+
+/// A 4 KiB chunk aligned to a 4 KiB boundary, used as the storage element of
+/// [`AlignedBuf`]. `Vec<AlignedPage>` inherits the type's alignment from the
+/// global allocator, so we get aligned memory without `posix_memalign`.
+#[repr(align(4096))]
+#[derive(Clone)]
+struct AlignedPage(#[allow(dead_code)] [u8; 4096]);
+
+/// A 4 KiB-aligned heap buffer used as `dd`'s primary read scratch.
+///
+/// Block devices that expose a strict `dma_alignment` (e.g. `loop`,
+/// `virtio_blk`, `nbd`, `zram` — all default to 511 on Linux) reject
+/// `O_DIRECT` reads whose user buffer is below that alignment, returning
+/// `EINVAL`. 4 KiB alignment satisfies any `dma_alignment` mask up to 4095,
+/// which covers every Linux block driver in mainline at the time of writing.
+///
+/// On systems with a page size larger than 4 KiB (PowerPC, some aarch64
+/// kernel configurations) GNU dd allocates a page-aligned buffer via
+/// `posix_memalign(getpagesize())`. We do not — `#[repr(align)]` requires a
+/// literal alignment, so this is a fixed compile-time choice. Such systems
+/// are not in the project CI matrix (see `.github/workflows/CICD.yml`); if
+/// support for them is added, this should be revisited.
+struct AlignedBuf {
+    pages: Box<[AlignedPage]>,
+    /// Logical buffer length in bytes; <= `pages.len() * 4096`.
+    len: usize,
+}
+
+impl AlignedBuf {
+    fn new(size: usize) -> io::Result<Self> {
+        let n_pages = size.div_ceil(4096).max(1);
+        let mut pages: Vec<AlignedPage> = Vec::new();
+        pages
+            .try_reserve_exact(n_pages)
+            .map_err(|_| io::Error::from(io::ErrorKind::OutOfMemory))?;
+        pages.resize(n_pages, AlignedPage([0; 4096]));
+        Ok(Self {
+            pages: pages.into_boxed_slice(),
+            len: size,
+        })
+    }
+
+    fn as_mut_bytes(&mut self) -> &mut [u8] {
+        // SAFETY: `AlignedPage` is `#[repr(align(4096))] [u8; 4096]`, layout-
+        // compatible with `[u8; 4096]`. The slice covers the first `self.len`
+        // bytes of the boxed allocation; `self.len <= pages.len() * 4096` is
+        // upheld by the constructor.
+        unsafe { std::slice::from_raw_parts_mut(self.pages.as_mut_ptr().cast::<u8>(), self.len) }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        // SAFETY: see `as_mut_bytes`.
+        unsafe { std::slice::from_raw_parts(self.pages.as_ptr().cast::<u8>(), self.len) }
+    }
 }
 
 /// Data sources.
@@ -523,7 +576,7 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read follows the previous one.
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
@@ -541,7 +594,6 @@ impl Input<'_> {
                 _ => break,
             }
         }
-        buf.truncate(bytes_total);
         Ok(ReadStat {
             reads_complete,
             reads_partial,
@@ -554,7 +606,8 @@ impl Input<'_> {
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
     /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    /// Returns the read statistics and the total filled length (reads + padding).
+    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -569,8 +622,7 @@ impl Input<'_> {
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding);
+                    buf[base_idx + rlen..next_blk].fill(pad);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -581,13 +633,15 @@ impl Input<'_> {
             base_idx += self.settings.ibs;
         }
 
-        buf.truncate(base_idx);
-        Ok(ReadStat {
-            reads_complete,
-            reads_partial,
-            records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
-        })
+        Ok((
+            ReadStat {
+                reads_complete,
+                reads_partial,
+                records_truncated: 0,
+                bytes_total: bytes_total.try_into().unwrap(),
+            },
+            base_idx,
+        ))
     }
 }
 
@@ -1204,10 +1258,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
-    // Create a common empty buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = Vec::new();
-    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    // Page-aligned read scratch sized to the block size (the max size needed).
+    // 4 KiB alignment satisfies block devices that enforce a strict
+    // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
+    let mut buf = AlignedBuf::new(bsize)?;
+    // Separate scratch for `conv=block` / `conv=unblock`, which can change
+    // the byte count and so cannot be done in-place in `buf`.
+    let mut conv_buf: Vec<u8> = Vec::new();
 
     // The main read/write loop.
     //
@@ -1222,7 +1279,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let (rstat_update, data) = read_helper(&mut i, &mut buf, &mut conv_buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
                 i.discard_cache(read_offset.try_into().unwrap(), 0);
@@ -1232,7 +1289,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let wstat_update = o.write_blocks(data)?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1358,45 +1415,52 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     if flag == 0 { None } else { Some(flag) }
 }
 
-/// Read from an input (that is, a source of bytes) into the given buffer.
+/// Read one block worth of data, applying any `conv=` transformations.
 ///
-/// This function also performs any conversions as specified by
-/// `conv=swab` or `conv=block` command-line arguments. This function
-/// mutates the `buf` argument in-place. The returned [`ReadStat`]
-/// indicates how many blocks were read.
-fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
-    // Local Helper Fns -------------------------------------------------
+/// `read_buf` is the page-aligned scratch read into directly. `conv_scratch`
+/// is only populated when `iconv.mode` is set (`conv=block` / `conv=unblock`)
+/// — those modes can change the byte count, so the converted output lives
+/// in a separate `Vec`. The returned slice points into whichever of the two
+/// holds the final data to be written.
+fn read_helper<'a>(
+    i: &mut Input,
+    read_buf: &'a mut AlignedBuf,
+    conv_scratch: &'a mut Vec<u8>,
+    bsize: usize,
+) -> io::Result<(ReadStat, &'a [u8])> {
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
             buf.swap(base, base - 1);
         }
     }
-    // ------------------------------------------------------------------
-    // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
-    buf.resize(bsize, BUF_INIT_BYTE);
 
-    let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+    let (rstat, data_len) = {
+        let scratch = &mut read_buf.as_mut_bytes()[..bsize];
+        let (rstat, data_len) = if let Some(ch) = i.settings.iconv.sync {
+            i.fill_blocks(scratch, ch)?
+        } else {
+            let s = i.fill_consecutive(scratch)?;
+            let n = s.bytes_total as usize;
+            (s, n)
+        };
+        if !rstat.is_empty() && i.settings.iconv.swab {
+            perform_swab(&mut scratch[..data_len]);
+        }
+        (rstat, data_len)
     };
-    // Return early if no data
-    if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
-        return Ok(rstat);
-    }
 
-    // Perform any conv=x[,x...] options
-    if i.settings.iconv.swab {
-        perform_swab(buf);
+    if rstat.is_empty() {
+        return Ok((rstat, &[]));
     }
 
     match i.settings.iconv.mode {
         Some(ref mode) => {
-            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
-            Ok(rstat)
+            let mut rstat = rstat;
+            let input = read_buf.as_bytes()[..data_len].to_vec();
+            *conv_scratch = conv_block_unblock_helper(input, mode, &mut rstat);
+            Ok((rstat, conv_scratch.as_slice()))
         }
-        None => Ok(rstat),
+        None => Ok((rstat, &read_buf.as_bytes()[..data_len])),
     }
 }
 
