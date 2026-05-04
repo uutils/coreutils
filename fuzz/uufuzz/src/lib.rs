@@ -72,7 +72,7 @@ where
 {
     // Duplicate the stdout and stderr file descriptors
      let stdout_fd = match dup(std::io::stdout()) {
-         Ok(fd) => fd.into_raw_fd(),  // Convert to raw fd, prevent auto-close
+         Ok(fd) => fd.into_raw_fd(),  
          Err(_) => {
              return CommandResult {
                  stdout: "".to_string(),
@@ -83,7 +83,7 @@ where
      };
      
      let stderr_fd = match dup(std::io::stderr()) {
-         Ok(fd) => fd.into_raw_fd(),  // Convert to raw fd, prevent auto-close
+         Ok(fd) => fd.into_raw_fd(),  
          Err(_) => {
              unsafe { close(stdout_fd) };
              return CommandResult {
