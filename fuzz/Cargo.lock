@@ -2156,6 +2156,7 @@ dependencies = [
  "console",
  "libc",
  "rand",
+ "rustix",
  "similar",
  "tempfile",
  "uucore",

@@ -4,8 +4,11 @@
 // file that was distributed with this source code.
 
 use console::Style;
+
 use libc::STDIN_FILENO;
-use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup, dup2, pipe};
+use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup2, pipe};
+use rustix::io::dup;
+use std::os::unix::io::IntoRawFd;
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
@@ -68,15 +71,31 @@ where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors
-    let original_stdout_fd = unsafe { dup(STDOUT_FILENO) };
-    let original_stderr_fd = unsafe { dup(STDERR_FILENO) };
-    if original_stdout_fd == -1 || original_stderr_fd == -1 {
-        return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to duplicate STDOUT_FILENO or STDERR_FILENO".to_string(),
-            exit_code: -1,
-        };
-    }
+     let stdout_fd = match dup(std::io::stdout()) {
+         Ok(fd) => fd.into_raw_fd(),  // Convert to raw fd, prevent auto-close
+         Err(_) => {
+             return CommandResult {
+                 stdout: "".to_string(),
+                 stderr: "Failed to duplicate STDOUT_FILENO".to_string(),
+                 exit_code: -1,
+             };
+         }
+     };
+     
+     let stderr_fd = match dup(std::io::stderr()) {
+         Ok(fd) => fd.into_raw_fd(),  // Convert to raw fd, prevent auto-close
+         Err(_) => {
+             unsafe { close(stdout_fd) };
+             return CommandResult {
+                 stdout: "".to_string(),
+                 stderr: "Failed to duplicate STDERR_FILENO".to_string(),
+                 exit_code: -1,
+             };
+         }
+     };
+ 
+    let original_stdout_fd = stdout_fd;
+    let original_stderr_fd = stderr_fd;
 
     println!("Running test {:?}", &args[0..]);
     let mut pipe_stdout_fds = [-1; 2];
@@ -117,15 +136,38 @@ where
         input_file.seek(SeekFrom::Start(0)).unwrap();
 
         // Redirect stdin to read from the in-memory file
-        let original_stdin_fd = unsafe { dup(STDIN_FILENO) };
-        if original_stdin_fd == -1 || unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
+        let stdin_fd = match dup(std::io::stdin()) {
+            Ok(fd) => fd.into_raw_fd(),
+            Err(_) => {
+                unsafe {
+                    close(original_stdout_fd);
+                    close(original_stderr_fd);
+                }
+                return CommandResult {
+                    stdout: "".to_string(),
+                    stderr: "Failed to duplicate STDIN".to_string(),
+                    exit_code: -1,
+                };
+            }
+        };
+
+        let original_stdin_fd = stdin_fd;
+ 
+        if unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
+            unsafe {
+                close(original_stdout_fd);
+                close(original_stderr_fd);
+                close(original_stdin_fd);
+            }
             return CommandResult {
                 stdout: "".to_string(),
                 stderr: "Failed to set up stdin redirection".to_string(),
                 exit_code: -1,
             };
         }
+    
         Some(original_stdin_fd)
+    
     } else {
         None
     };
