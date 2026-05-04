@@ -8,7 +8,7 @@
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
 // spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
-// spell-checker:ignore (misc) uppercased qsort getmonth juin juil
+// spell-checker:ignore (misc) uppercased qsort getmonth juin juil Nofile
 
 mod buffer_hint;
 mod check;
