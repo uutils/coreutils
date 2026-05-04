@@ -1828,6 +1828,43 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     assert!(output.stderr.starts_with(expected));
 }
 
+// `O_DIRECT` requires the read buffer to satisfy the device's DMA alignment;
+// with a misaligned buffer the kernel fails the read with EINVAL (#12085).
+// Reading a regular file with `iflag=direct` exercises the same requirement
+// on filesystems that support it.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_direct_read_uses_aligned_buffer() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // A multiple of the block size: the EOF read then happens at an aligned
+    // file offset. A trailing partial block would leave the offset
+    // misaligned, which some kernels (e.g. f2fs on Android) reject with
+    // EINVAL instead of reporting end of file.
+    let data = build_ascii_block(2 * 4096);
+    at.write_bytes("direct-in.bin", &data);
+
+    if OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(at.plus("direct-in.bin"))
+        .is_err()
+    {
+        print!("Test skipped; filesystem does not support O_DIRECT");
+        return;
+    }
+
+    ucmd.args(&[
+        "if=direct-in.bin",
+        "of=direct-out.bin",
+        "iflag=direct",
+        "bs=4096",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("direct-out.bin"), data);
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
