@@ -72,7 +72,7 @@ where
 {
     // Duplicate the stdout and stderr file descriptors
      let stdout_fd = match dup(std::io::stdout()) {
-         Ok(fd) => fd.into_raw_fd(),  
+         Ok(fd) => fd.into_raw_fd(),
          Err(_) => {
              return CommandResult {
                  stdout: "".to_string(),
@@ -81,9 +81,9 @@ where
              };
          }
      };
-     
+
      let stderr_fd = match dup(std::io::stderr()) {
-         Ok(fd) => fd.into_raw_fd(),  
+         Ok(fd) => fd.into_raw_fd(),
          Err(_) => {
              unsafe { close(stdout_fd) };
              return CommandResult {
@@ -93,7 +93,7 @@ where
              };
          }
      };
- 
+
     let original_stdout_fd = stdout_fd;
     let original_stderr_fd = stderr_fd;
 
@@ -152,7 +152,7 @@ where
         };
 
         let original_stdin_fd = stdin_fd;
- 
+
         if unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
             unsafe {
                 close(original_stdout_fd);
@@ -165,9 +165,9 @@ where
                 exit_code: -1,
             };
         }
-    
+
         Some(original_stdin_fd)
-    
+
     } else {
         None
     };
