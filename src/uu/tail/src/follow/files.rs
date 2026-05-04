@@ -160,7 +160,7 @@ impl FileHandling {
         reader: &mut impl BufRead,
     ) -> UResult<bool> {
         let mut chunk = BytesChunk::new();
-        if chunk.fill(&mut *reader)?.is_none() {
+        if chunk.fill(reader)?.is_none() {
             return Ok(false);
         }
 
