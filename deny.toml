@@ -76,8 +76,6 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.52.6" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.52.6" },
-  # kqueue-sys, onig
-  { name = "bitflags", version = "1.3.2" },
   # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
