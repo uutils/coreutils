@@ -113,22 +113,13 @@ impl Display for NumError<'_> {
     /// the invalid ones as escaped octal, like GNU. For example, the
     /// (escaped) string "\xFFabc\x1C" is formatted as "\377abc\034".
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match str::from_utf8(self.0) {
-            Ok(s) => write!(f, "{s}"),
-            Err(e) => {
-                let valid = e.valid_up_to();
-                let cont = valid + e.error_len().unwrap_or(1);
-                // SAFETY: `self.0` has been checked to contain valid
-                // UTF-8 sequences up to `valid`.
-                write!(f, "{}", unsafe {
-                    str::from_utf8_unchecked(&self.0[..valid])
-                })?;
-                for b in &self.0[valid..cont] {
-                    write!(f, "\\{b:03o}")?;
-                }
-                <Self as Display>::fmt(&Self(&self.0[cont..]), f)
+        for chunk in self.0.utf8_chunks() {
+            f.write_str(chunk.valid())?;
+            for &b in chunk.invalid() {
+                write!(f, "\\{b:03o}")?;
             }
         }
+        Ok(())
     }
 }
 
