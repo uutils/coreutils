@@ -24,13 +24,11 @@ use walkdir::WalkDir;
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
-use std::ffi::CString;
 use std::fs::Metadata;
 use std::io::Error as IOError;
 use std::io::Result as IOResult;
 use std::os::unix::fs::MetadataExt;
 
-use std::os::unix::ffi::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path};
 
 /// The various level of verbosity
@@ -59,19 +57,21 @@ impl Default for Verbosity {
 
 /// Actually perform the change of owner on a path
 fn chown<P: AsRef<Path>>(path: P, uid: uid_t, gid: gid_t, follow: bool) -> IOResult<()> {
-    let path = path.as_ref();
-    let s = CString::new(path.as_os_str().as_bytes()).unwrap();
-    let ret = unsafe {
-        if follow {
-            libc::chown(s.as_ptr(), uid, gid)
-        } else {
-            libc::lchown(s.as_ptr(), uid, gid)
-        }
-    };
-    if ret == 0 {
-        Ok(())
+    let final_path = if follow {
+        // Canonicalize is used to resolve symlinks
+        path.as_ref()
+            .canonicalize()
+            .map_err(|_| IOError::last_os_error())?
     } else {
-        Err(IOError::last_os_error())
+        path.as_ref().to_path_buf()
+    };
+    match rustix::fs::chown(
+        final_path,
+        Some(rustix::process::Uid::from_raw(uid)),
+        Some(rustix::process::Gid::from_raw(gid)),
+    ) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(IOError::from_raw_os_error(e.raw_os_error())),
     }
 }
 
