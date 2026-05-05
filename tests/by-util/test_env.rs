@@ -946,6 +946,21 @@ fn test_env_block_signal_flag() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_env_block_realtime_signal() {
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal=SIGRTMIN+7", "true"])
+        .succeeds()
+        .no_stderr();
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal=SIGRTMAX-7", "true"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
     let result = new_ucmd!()
