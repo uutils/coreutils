@@ -613,6 +613,7 @@ fn extract_strings_from_input(
     let mut current_offset = skip_bytes;
     let mut bytes_read = 0u64;
     let mut buf = [0u8; 1];
+    let mut offset_preloaded = false; //changed this
 
     loop {
         // Check if we've reached the read_bytes limit
@@ -634,16 +635,29 @@ fn extract_strings_from_input(
 
                 // Check if it's a printable character (including space)
                 if (0x20..=0x7E).contains(&byte) {
-                    if current_string.is_empty() {
+                    if current_string.is_empty() && !offset_preloaded {
+                        //changed this
                         string_start_offset = current_offset;
                     }
                     current_string.push(byte);
+
+                    offset_preloaded = false; //changed this
                 } else {
                     // Either null terminator or non-printable character
-                    if byte == 0 && current_string.len() >= min_length {
-                        // Null terminator found with valid string
-                        print_string(string_start_offset, &current_string)?;
+                    if byte == 0 {
+                        // Print current string if it's long enough
+                        if current_string.len() >= min_length {
+                            print_string(string_start_offset, &current_string)?;
+                        }
+
+                        // Preload the offset with the null byte position
+                        string_start_offset = current_offset;
+                        offset_preloaded = true;
+                    } else {
+                        // Any other non-printable (like \n) resets the preload logic, representing the GNU bug
+                        offset_preloaded = false;
                     }
+
                     current_string.clear();
                 }
 

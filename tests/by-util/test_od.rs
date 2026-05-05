@@ -1343,3 +1343,12 @@ fn test_write_error_dev_full() {
         .code_is(1)
         .stderr_contains("No space left on device");
 }
+
+#[test]
+fn test_od_strings_null_offset_regression() {
+    new_ucmd!()
+        .args(&["-S", "3"]) // You can add "-t", "x1" if your code uses it
+        .pipe_in("foo\0bar\0")
+        .succeeds()
+        .stdout_only("0000000 foo\n0000003 bar\n");
+}
