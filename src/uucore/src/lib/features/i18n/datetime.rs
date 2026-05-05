@@ -169,14 +169,7 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
 }
 
 /// Unix implementation using nl_langinfo for exact match with `locale abmon` output.
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(all(unix, not(target_os = "android"), not(target_os = "redox")))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     use nix::libc;
     use std::ffi::CStr;
@@ -228,14 +221,7 @@ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
 }
 
 /// Non-Unix fallback using ICU DateTimeFormatter.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(not(unix), target_os = "android", target_os = "redox"))]
 fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
     let (locale, _) = get_time_locale();
     let locale_prefs = locale.clone().into();

@@ -8,11 +8,10 @@
 compile_error!("nohup is not supported on the target");
 
 use clap::{Arg, ArgAction, Command};
-use libc::{SIG_IGN, SIGHUP, dup2, signal};
+use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
-use std::os::unix::prelude::*;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -36,6 +35,7 @@ mod options {
 
 #[derive(Debug, Error)]
 enum NohupError {
+    #[cfg(target_vendor = "apple")]
     #[error("{}", translate!("nohup-error-cannot-detach"))]
     CannotDetach,
 
@@ -51,6 +51,7 @@ enum NohupError {
 
 impl UError for NohupError {
     fn code(&self) -> i32 {
+        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,
@@ -76,8 +77,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     replace_fds()?;
 
-    unsafe { signal(SIGHUP, SIG_IGN) };
+    unsafe { libc::signal(libc::SIGHUP, libc::SIG_IGN) };
 
+    #[cfg(target_vendor = "apple")]
     if unsafe { !_vprocmgr_detach_from_console(0).is_null() } {
         return Err(NohupError::CannotDetach.into());
     }
@@ -118,22 +120,18 @@ fn replace_fds() -> UResult<()> {
     if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        if unsafe { dup2(new_stdin.as_raw_fd(), 0) } != 0 {
-            return Err(NohupError::CannotReplace("STDIN", Error::last_os_error()).into());
-        }
+        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", Error::from(e)))?;
     }
 
     if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
-        let fd = new_stdout.as_raw_fd();
 
-        if unsafe { dup2(fd, 1) } != 1 {
-            return Err(NohupError::CannotReplace("STDOUT", Error::last_os_error()).into());
-        }
+        dup2_stdout(&new_stdout)
+            .map_err(|e| NohupError::CannotReplace("STDOUT", Error::from(e)))?;
     }
 
-    if std::io::stderr().is_terminal() && unsafe { dup2(1, 2) } != 2 {
-        return Err(NohupError::CannotReplace("STDERR", Error::last_os_error()).into());
+    if std::io::stderr().is_terminal() {
+        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", Error::from(e)))?;
     }
     Ok(())
 }
@@ -180,11 +178,4 @@ fn find_stdout() -> UResult<File> {
 #[cfg(target_vendor = "apple")]
 unsafe extern "C" {
     fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
-}
-
-#[cfg(not(target_vendor = "apple"))]
-/// # Safety
-/// This function is unsafe because it dereferences a raw pointer.
-unsafe fn _vprocmgr_detach_from_console(_: u32) -> *const libc::c_int {
-    std::ptr::null()
 }

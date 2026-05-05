@@ -731,22 +731,18 @@ fn test_file_owned_by_egid() {
     // /tmp directory will have a different gid than the current egid (due to
     // the sticky bit set on the /tmp directory). Fix this before running the
     // test command.
-    use std::ffi::CString;
-    use std::os::unix::ffi::OsStrExt;
     use std::os::unix::fs::MetadataExt;
-    use uucore::process::getegid;
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
     let metadata = at.metadata("regular_file");
-    let file_gid = metadata.gid();
-    let user_gid = getegid();
+    let file_gid = rustix::fs::Gid::from_raw(metadata.gid());
+    let user_gid = rustix::process::getegid();
 
     if user_gid != file_gid {
-        let file_metadata_uid = metadata.uid();
-        let path = CString::new(at.plus("regular_file").as_os_str().as_bytes()).expect("bad path");
-        let r = unsafe { libc::chown(path.as_ptr(), file_metadata_uid, user_gid) };
-        assert_ne!(r, -1);
+        let file_uid = rustix::fs::Uid::from_raw(metadata.uid());
+        let path = at.plus("regular_file");
+        rustix::fs::chown(&path, Some(file_uid), Some(user_gid)).expect("chown failed");
     }
 
     scene.ucmd().args(&["-G", "regular_file"]).succeeds();

@@ -12,12 +12,12 @@ use std::num::IntErrorKind;
 use os_display::Quotable;
 use thiserror::Error;
 
-use crate::error::{UError, UResult};
-use crate::show_error;
+use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
+use crate::{show_error, translate};
 
 pub mod compute;
 pub mod validate;
@@ -432,8 +432,8 @@ pub enum ChecksumError {
     NeedAlgorithmToHash,
     #[error("unknown algorithm: {0}: clap should have prevented this case")]
     UnknownAlgorithm(String),
-    #[error("")]
-    Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
 }
 
 impl UError for ChecksumError {

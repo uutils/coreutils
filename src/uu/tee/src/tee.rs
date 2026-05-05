@@ -144,6 +144,7 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
+    aborted: Option<Error>,
 }
 
 impl MultiWriter {
@@ -159,12 +160,14 @@ impl MultiWriter {
         // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
         const BUF_SIZE: usize = 8 * 1024;
         let mut buffer = [0u8; BUF_SIZE];
-        // fast-path for small input
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => self.write_flush(&buffer[..received])?,
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-            _ => {}
+        // fast-path for small input. needs 2+ read to catch end of file
+        for _ in 0..2 {
+            match input.read(&mut buffer) {
+                Ok(0) => return Ok(()), // end of file
+                Ok(received) => self.write_flush(&buffer[..received])?,
+                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
+                _ => {}
+            }
         }
         // buffer is too small optimize for large input
         //stack array makes code path for smaller file slower
@@ -184,6 +187,7 @@ impl MultiWriter {
             writers,
             output_error_mode,
             ignored_errors: 0,
+            aborted: None,
         }
     }
 
@@ -192,26 +196,23 @@ impl MultiWriter {
     }
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
-        let mut aborted = None;
-        let mut errors = 0;
         let mode = self.output_error_mode;
         self.writers.retain_mut(|writer| {
             let res = (|| {
-                writer.write_all(buf)?;
-                writer.flush()
+                writer.inner.write_all(buf)?;
+                writer.inner.flush()
             })();
             match res {
                 Ok(()) => true,
                 Err(e) => {
-                    if let Err(e) = process_error(mode, e, writer, &mut errors) {
-                        aborted.get_or_insert(e);
+                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
+                        self.aborted.get_or_insert(e);
                     }
                     false
                 }
             }
         });
-        self.ignored_errors += errors;
-        aborted.map_or(
+        self.aborted.take().map_or(
             if self.writers.is_empty() {
                 // This error kind will never be raised by the standard
                 // library, so we can use it for early termination of
@@ -272,16 +273,6 @@ impl Write for Writer {
 struct NamedWriter {
     inner: Writer,
     pub name: OsString,
-}
-
-impl Write for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
 }
 
 struct NamedReader {

@@ -57,11 +57,17 @@ struct Config {
     dev: u64,
 
     /// Set security context (SELinux/SMACK).
-    #[cfg(any(feature = "selinux", feature = "smack"))]
+    #[cfg(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    ))]
     set_security_context: bool,
 
     /// Specific security context (SELinux/SMACK).
-    #[cfg(any(feature = "selinux", feature = "smack"))]
+    #[cfg(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    ))]
     context: Option<String>,
 }
 
@@ -96,30 +102,32 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     }
 
     // Apply SELinux context if requested
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     if config.set_security_context {
+        use std::io::Write as _;
+
         if let Err(e) = uucore::selinux::set_selinux_security_context(
             std::path::Path::new(file_name),
             config.context.as_ref(),
         ) {
             // if it fails, delete the file
             let _ = std::fs::remove_file(file_name);
-            use std::io::{Write, stderr};
-            let _ = writeln!(stderr(), "mknod: {e}");
+            let _ = writeln!(std::io::stderr(), "mknod: {e}");
             return 1;
         }
     }
 
     // Apply SMACK context if requested
-    #[cfg(feature = "smack")]
+    #[cfg(all(feature = "smack", target_os = "linux"))]
     if config.set_security_context {
+        use std::io::Write as _;
+
         if let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
             })
         {
-            use std::io::{Write, stderr};
-            let _ = writeln!(stderr(), "mknod: {e}");
+            let _ = writeln!(std::io::stderr(), "mknod: {e}");
             return 1;
         }
     }
@@ -148,9 +156,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .expect("Missing argument 'NAME'");
 
     // Extract the security context related flags and options
-    #[cfg(any(feature = "selinux", feature = "smack"))]
+    #[cfg(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    ))]
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-    #[cfg(any(feature = "selinux", feature = "smack"))]
+    #[cfg(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    ))]
     let context = matches.get_one::<String>(options::CONTEXT).cloned();
 
     let dev = match (
@@ -179,9 +193,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         file_type: file_type.clone(),
         use_umask,
         dev,
-        #[cfg(any(feature = "selinux", feature = "smack"))]
+        #[cfg(any(
+            all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+            all(feature = "smack", target_os = "linux"),
+        ))]
         set_security_context: set_security_context || context.is_some(),
-        #[cfg(any(feature = "selinux", feature = "smack"))]
+        #[cfg(any(
+            all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+            all(feature = "smack", target_os = "linux"),
+        ))]
         context,
     };
 

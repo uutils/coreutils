@@ -1398,14 +1398,7 @@ fn test_date_locale_hour_c_locale() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_hour_en_us() {
     // en_US locale typically uses 12-hour format when available
     // Note: If locale is not installed on system, falls back to C locale (24-hour)
@@ -1440,14 +1433,7 @@ fn test_date_explicit_format_overrides_locale() {
 
 // Comprehensive locale formatting tests to verify actual locale format strings are used
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_leading_zeros_en_us() {
     // Test for leading zeros in en_US locale
     // en_US uses %I (01-12) with leading zeros, not %l (1-12) without
@@ -1576,14 +1562,7 @@ fn test_date_locale_format_not_hardcoded() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_en_us_vs_c_difference() {
     // Verify that en_US and C locales produce different outputs
     // (if en_US locale is available on the system)
@@ -3027,4 +3006,13 @@ fn test_korean_time_zone() {
         .arg("+%F %T %Z")
         .succeeds()
         .stdout_is("2026-01-15 01:00:00 UTC\n");
+}
+
+// https://github.com/uutils/coreutils/issues/12001
+// date: width prefix in %N format specifier is ignored ( %3N, %6N always output full 9 nanosecond digits) #12001
+#[test]
+fn test_nanoseconds_width_prefix_ignored_issue12001() {
+    let result = new_ucmd!().arg("+%3N").succeeds();
+    // compare to 4 because of \n
+    assert_eq!(result.stdout().len(), 4);
 }

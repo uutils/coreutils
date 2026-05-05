@@ -22,26 +22,18 @@ use uutests::util_name;
 // Verify cat handles a broken pipe on stdout without hanging or crashing and exits nonzero
 #[test]
 fn test_cat_broken_pipe_nonzero_and_message() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
     use uutests::new_ucmd;
+    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    // Close the read end to simulate a broken pipe on stdout
+    drop(read);
+    let write: File = write.into();
+    let content = (0..10000).map(|_| "x").collect::<String>();
 
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end to simulate a broken pipe on stdout
-        let read_end = File::from_raw_fd(fds[0]);
-        // Explicitly drop the read-end so writers see EPIPE instead of blocking on a full pipe
-        drop(read_end);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10000).map(|_| "x").collect::<String>();
-        // On Unix, SIGPIPE should lead to a non-zero exit; ensure process exits and fails
-        new_ucmd!()
-            .set_stdout(write_end)
-            .pipe_in(content.as_bytes())
-            .fails();
-    }
+    // On Unix, SIGPIPE should lead to a non-zero exit; ensure process exits and fails
+    new_ucmd!()
+        .set_stdout(write)
+        .pipe_in(content.as_bytes())
+        .fails();
 }
 
 #[test]

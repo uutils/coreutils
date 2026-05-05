@@ -152,7 +152,7 @@ fn test_nohup_fallback_to_home() {
 
     // Skip test when running as root (permissions bypassed via CAP_DAC_OVERRIDE)
     // This is common in Docker/Podman containers but won't happen in CI
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         println!("Skipping test when running as root (file permissions bypassed)");
         return;
     }

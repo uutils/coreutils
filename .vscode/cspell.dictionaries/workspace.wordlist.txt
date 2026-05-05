@@ -147,7 +147,6 @@ EROFS
 # * vars/fcntl
 F_GETFL
 fcntl
-vmsplice
 
 # * vars/libc
 COMFOLLOW

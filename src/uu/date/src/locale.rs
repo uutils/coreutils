@@ -12,14 +12,7 @@
 macro_rules! cfg_langinfo {
     ($($item:item)*) => {
         $(
-            #[cfg(any(
-                target_os = "linux",
-                target_vendor = "apple",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "dragonfly"
-            ))]
+            #[cfg(all(unix, not(target_os = "android"), not(target_os = "redox")))]
             $item
         )*
     }
@@ -117,14 +110,7 @@ cfg_langinfo! {
 }
 
 /// On platforms without nl_langinfo support, use 24-hour format by default
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(not(unix), target_os = "android", target_os = "redox"))]
 pub fn get_locale_default_format() -> &'static str {
     "%a %b %e %X %Z %Y"
 }

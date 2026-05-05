@@ -76,8 +76,6 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.52.6" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.52.6" },
-  # kqueue-sys, onig
-  { name = "bitflags", version = "1.3.2" },
   # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
@@ -88,8 +86,6 @@ skip = [
   { name = "itertools", version = "0.13.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # string-interner
-  { name = "hashbrown", version = "0.15.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
   # const-random-macro, rand_core

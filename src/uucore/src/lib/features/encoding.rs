@@ -567,11 +567,11 @@ impl SupportsFastDecodeAndEncode for Base32Wrapper {
     }
 
     fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
+        const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
+
         if remainder.is_empty() || remainder.contains(&b'=') {
             return None;
         }
-
-        const VALID_REMAINDERS: [usize; 4] = [2, 4, 5, 7];
 
         let mut len = remainder.len();
         let mut trimmed = false;

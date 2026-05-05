@@ -70,7 +70,7 @@ jobs:
 
       - name: Run sccache-cache
         id: sccache-setup
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.10
         continue-on-error: true
       - name: Export sccache
         if: steps.sccache-setup.outcome == 'success'

@@ -263,38 +263,19 @@ mod linux_only {
     use uutests::new_ucmd;
 
     fn make_broken_pipe() -> File {
-        use libc::c_int;
-        use std::os::unix::io::FromRawFd;
-
-        let mut fds: [c_int; 2] = [0, 0];
-        assert_eq!(
-            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
-            0,
-            "Failed to create pipe"
-        );
-
+        let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
         // Drop the read end of the pipe
-        let _ = unsafe { File::from_raw_fd(fds[0]) };
-
+        drop(read);
         // Make the write end of the pipe into a Rust File
-        unsafe { File::from_raw_fd(fds[1]) }
+        write.into()
     }
 
     fn make_hanging_read() -> File {
-        use libc::c_int;
-        use std::os::unix::io::FromRawFd;
-
-        let mut fds: [c_int; 2] = [0, 0];
-        assert_eq!(
-            unsafe { libc::pipe(std::ptr::from_mut::<c_int>(&mut fds[0])) },
-            0,
-            "Failed to create pipe"
-        );
-
+        let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
         // PURPOSELY leak the write end of the pipe, so the read end hangs.
-
+        std::mem::forget(write);
         // Return the read end of the pipe
-        unsafe { File::from_raw_fd(fds[0]) }
+        read.into()
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
@@ -745,56 +726,40 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_output_error_presence_only_broken_pipe_unix() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
+    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    // Close the read end to simulate a broken pipe on stdout
+    drop(read);
+    let write: std::fs::File = write.into();
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let result = new_ucmd!()
+        .arg("--output-error") // presence-only flag
+        .set_stdout(write)
+        .pipe_in(content.as_bytes())
+        .run();
 
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end to simulate a broken pipe on stdout
-        let _read_end = File::from_raw_fd(fds[0]);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10_000).map(|_| "x").collect::<String>();
-        let result = new_ucmd!()
-            .arg("--output-error") // presence-only flag
-            .set_stdout(write_end)
-            .pipe_in(content.as_bytes())
-            .run();
-
-        // Assert that a status was produced (i.e., process exited) and no crash occurred.
-        assert!(result.try_exit_status().is_some(), "process did not exit");
-    }
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
 }
 
 // Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_broken_pipe_early_termination_stdout_only() {
-    use std::fs::File;
-    use std::os::unix::io::FromRawFd;
-
-    // Create a broken stdout by creating a pipe and dropping the read end
-    unsafe {
-        let mut fds: [libc::c_int; 2] = [0, 0];
-        assert_eq!(libc::pipe(fds.as_mut_ptr()), 0, "Failed to create pipe");
-        // Close the read end immediately to simulate a broken pipe
-        let _read_end = File::from_raw_fd(fds[0]);
-        let write_end = File::from_raw_fd(fds[1]);
-
-        let content = (0..10_000).map(|_| "x").collect::<String>();
-        let mut proc = new_ucmd!();
-        let result = proc
-            .set_stdout(write_end)
-            .ignore_stdin_write_error()
-            .pipe_in(content.as_bytes())
-            .run();
-
-        // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
-        // details vary by mode, but we should not panic and should return an exit status.
-        // Assert that a status was produced (i.e., process exited) and no crash occurred.
-        assert!(result.try_exit_status().is_some(), "process did not exit");
-    }
+    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    // Create a broken stdout
+    drop(read);
+    let write: std::fs::File = write.into();
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let mut proc = new_ucmd!();
+    let result = proc
+        .set_stdout(write)
+        .ignore_stdin_write_error()
+        .pipe_in(content.as_bytes())
+        .run();
+    // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
+    // details vary by mode, but we should not panic and should return an exit status.
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
 }
 
 #[test]

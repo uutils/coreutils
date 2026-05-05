@@ -697,7 +697,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
             self.write_debug(settings, writer)?;
         } else {
@@ -2655,7 +2655,13 @@ fn compare_by<'a>(
     if global_settings.precomputed.fast_locale_collation {
         let a_key = a_line_data.collation_key(a.index);
         let b_key = b_line_data.collation_key(b.index);
-        let cmp = a_key.cmp(b_key);
+        let mut cmp = a_key.cmp(b_key);
+        // If collation keys are equal, fall back to lexicographic comparison
+        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        if cmp == Ordering::Equal {
+            // Reversing the order to match sort's sorting behaviour
+            cmp = b.line.cmp(a.line);
+        }
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -2834,11 +2840,12 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
+    // check for inf, -inf and nan
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
     for &allowed_prefix in ALLOWED_PREFIXES {
         if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -3141,7 +3148,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())

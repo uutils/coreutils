@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -3661,7 +3661,7 @@ fn test_ls_version_sort() {
     );
 
     let result = scene.ucmd().arg("-a1v").succeeds();
-    expected.insert(expected.len() - 1, "..");
+    expected.insert(0, "..");
     expected.insert(0, ".");
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
@@ -5054,16 +5054,7 @@ fn test_tabsize_formatting() {
         .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_vendor = "apple"
-))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
@@ -6223,7 +6214,7 @@ fn test_acl_padding_not_inflated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let uid = unsafe { libc::getuid() };
+    let uid = uucore::process::getuid();
     let names = ["file1", "file2", "file3", "file4", "file5"];
     for name in &names {
         at.touch(name);
@@ -7243,4 +7234,21 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
         .succeeds()
         .stdout_contains("..")
         .no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_al_no_capabilities_insufficient_on_wasi() {
+    // `ls -al` reads metadata for every entry including "..". Without the
+    // WASI fallback, stat on ".." at the preopened root returns
+    // ERRNO_NOTCAPABLE, which surfaces to the user as "Capabilities
+    // insufficient". Guard against that regression here.
+    let scene = TestScenario::new(util_name!());
+    let out = scene.ucmd().arg("-al").succeeds();
+    out.no_stderr();
+    assert!(
+        !out.stdout_str().contains("Capabilities insufficient"),
+        "ls -al stdout leaked a WASI capability error: {}",
+        out.stdout_str()
+    );
 }

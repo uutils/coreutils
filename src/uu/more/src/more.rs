@@ -337,7 +337,7 @@ impl InputType {
 
 enum OutputType {
     Tty(Stdout),
-    Pipe(Box<dyn Write>),
+    Pipe(Stdout),
     #[cfg(test)]
     Test(Vec<u8>),
 }
@@ -375,7 +375,7 @@ fn setup_term() -> UResult<OutputType> {
         stdout.execute(EnterAlternateScreen)?.execute(Hide)?;
         Ok(OutputType::Tty(stdout))
     } else {
-        Ok(OutputType::Pipe(Box::new(stdout)))
+        Ok(OutputType::Pipe(stdout))
     }
 }
 
@@ -383,7 +383,7 @@ fn setup_term() -> UResult<OutputType> {
 #[inline(always)]
 fn setup_term() -> UResult<OutputType> {
     // no real stdout/tty on Fuchsia, just write into a pipe
-    Ok(OutputType::Pipe(Box::new(stdout())))
+    Ok(OutputType::Pipe(stdout()))
 }
 
 fn reset_term() -> UResult<()> {

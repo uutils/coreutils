@@ -779,6 +779,7 @@ pub fn uu_app() -> Command {
     // Positional arguments
     .arg(
         Arg::new(options::PATHS)
+            .hide(true)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
             .value_parser(ValueParser::os_string()),
@@ -816,6 +817,7 @@ pub struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
+    is_dot_dir: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -838,6 +840,7 @@ impl<'a> PathData<'a> {
         file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
+        is_dot_dir: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
@@ -904,6 +907,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
+            is_dot_dir,
         }
     }
 
@@ -973,6 +977,15 @@ impl<'a> PathData<'a> {
     fn display_name(&self) -> &OsStr {
         match self.display_name {
             PathDataDisplayName::SelfReferential => self.p_buf.as_os_str(),
+            PathDataDisplayName::Custom(ref cow) => cow,
+        }
+    }
+
+    fn file_name(&self) -> &OsStr {
+        match self.display_name {
+            PathDataDisplayName::SelfReferential => {
+                self.p_buf.file_name().unwrap_or(self.p_buf.as_os_str())
+            }
             PathDataDisplayName::Custom(ref cow) => cow,
         }
     }
@@ -1164,7 +1177,7 @@ pub fn list_with_output<O: LsOutput>(
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(loc.into(), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true, false);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1248,6 +1261,20 @@ pub fn list_with_output<O: LsOutput>(
     Ok(())
 }
 
+/// Build the path for the ".." entry of `parent`.
+///
+/// On WASI the sandbox may block access to ".." at the preopened root,
+/// so fall back to the parent path itself when its metadata can't be
+/// read. On other targets this is just `parent/..`.
+fn dotdot_path(parent: &Path) -> PathBuf {
+    let dotdot = parent.join("..");
+    #[cfg(target_os = "wasi")]
+    if dotdot.metadata().is_err() {
+        return parent.to_path_buf();
+    }
+    dotdot
+}
+
 fn collect_directory_entries<O: LsOutput>(
     entries: &mut Vec<PathData>,
     path_data: &PathData,
@@ -1264,13 +1291,15 @@ fn collect_directory_entries<O: LsOutput>(
             Some(OsStr::new(".").into()),
             config,
             false,
+            true,
         ));
         entries.push(PathData::new(
-            path_data.path().join("..").into(),
+            dotdot_path(path_data.path()).into(),
             None,
             Some(OsStr::new("..").into()),
             config,
             false,
+            true,
         ));
     }
 
@@ -1290,6 +1319,7 @@ fn collect_directory_entries<O: LsOutput>(
                 Some(dir_entry),
                 None,
                 config,
+                false,
                 false,
             ));
         }
@@ -1361,6 +1391,7 @@ fn enter_directory<O: LsOutput>(
             None,
             config,
             entry.command_line,
+            false,
         );
 
         if !entry.is_first {
@@ -1390,12 +1421,9 @@ fn enter_directory<O: LsOutput>(
         write_directory_entries(entries, config, output)?;
 
         if config.recursive {
-            let start = if config.files == Files::All { 2 } else { 0 };
-
             for child in entries
                 .iter()
-                .skip(start)
-                .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+                .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.is_dot_dir)
                 .rev()
             {
                 let child_path = child.path().to_path_buf();
@@ -1459,8 +1487,8 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
         Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.file_name()).as_ref(),
+                os_str_as_bytes_lossy(b.file_name()).as_ref(),
             )
             .then(a.path().cmp(b.path()))
         }),

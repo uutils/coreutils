@@ -331,7 +331,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
 
             // Apply SELinux context if requested
-            #[cfg(feature = "selinux")]
+            #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
             if config.set_security_context && uucore::selinux::is_selinux_enabled() {
                 if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
                 {
@@ -341,7 +341,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
 
             // Apply SMACK context if requested
-            #[cfg(feature = "smack")]
+            #[cfg(all(feature = "smack", target_os = "linux"))]
             if config.set_security_context {
                 uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
                     std::fs::remove_dir(p)

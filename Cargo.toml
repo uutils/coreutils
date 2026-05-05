@@ -156,6 +156,7 @@ feat_common_core = [
   "true",
   "truncate",
   "tsort",
+  "tty",
   "unexpand",
   "uniq",
   "unlink",
@@ -234,6 +235,7 @@ feat_wasm = [
   "true",
   "truncate",
   "tsort",
+  "tty",
   "uname",
   "unexpand",
   "uniq",
@@ -312,7 +314,6 @@ feat_require_unix_core = [
   "stat",
   "stty",
   "timeout",
-  "tty",
 ]
 # "feat_require_unix_utmpx" == set of utilities requiring unix utmp/utmpx support
 # * ref: <https://wiki.musl-libc.org/faq.html#Q:-Why-is-the-utmp/wtmp-functionality-only-implemented-as-stubs?>
@@ -337,7 +338,6 @@ feat_os_unix_fuchsia = [
   "mkfifo",
   "mknod",
   "nice",
-  "tty",
   "uname",
   "unlink",
 ]
@@ -396,7 +396,7 @@ clap_complete = "4.4"
 clap_mangen = "0.3"
 compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
-ctor = "0.10.0"
+ctor = "0.12.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
 divan = { package = "codspeed-divan-compat", version = "4.4.1" }
 dns-lookup = { version = "3.0.0" }
@@ -456,7 +456,7 @@ rustix = { version = "1.1.4", features = ["param"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"
-string-interner = "0.19.0"
+string-interner = "0.20.0"
 tempfile = "3.15.0"
 terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
@@ -476,7 +476,7 @@ hex = "0.4.3"
 md-5 = "0.10.6"
 sha1 = "0.10.6"
 sha2 = "0.10.8"
-sha3 = "0.10.8"
+sha3 = "0.10.9"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
 sm3 = "0.5.0"
@@ -672,6 +672,7 @@ nix = { workspace = true, features = [
   "user",
 ] }
 rlimit = { workspace = true }
+rustix.workspace = true
 
 
 [build-dependencies]
@@ -747,7 +748,6 @@ ignored_unit_patterns = "allow"              # 21
 similar_names = "allow"                      # 20
 needless_pass_by_value = "allow"             # 16
 float_cmp = "allow"                          # 12
-items_after_statements = "allow"             # 11
 return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6

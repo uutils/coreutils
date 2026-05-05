@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-use std::borrow::Cow;
 use std::ffi::OsString;
 #[cfg(unix)]
 use uucore::display::print_verbatim;
@@ -39,9 +38,9 @@ mod options {
 /// - GNU: <https://www.gnu.org/software/coreutils/manual/html_node/dirname-invocation.html>
 ///
 /// See issue #8910 and similar fix in basename (#8373, commit c5268a897).
-fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
+fn dirname_string_manipulation(path_bytes: &[u8]) -> &[u8] {
     if path_bytes.is_empty() {
-        return Cow::Borrowed(b".");
+        return b".";
     }
 
     let mut bytes = path_bytes;
@@ -49,7 +48,7 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
     // Step 1: Strip trailing slashes (but not if the entire path is slashes)
     let all_slashes = bytes.iter().all(|&b| b == b'/');
     if all_slashes {
-        return Cow::Borrowed(b"/");
+        return b"/";
     }
 
     while bytes.len() > 1 && bytes.ends_with(b"/") {
@@ -69,12 +68,12 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
             if slash_start == 0 {
                 // Result would be empty
                 return if path_bytes.starts_with(b"/") {
-                    Cow::Borrowed(b"/")
+                    b"/"
                 } else {
-                    Cow::Borrowed(b".")
+                    b"."
                 };
             }
-            return Cow::Borrowed(&bytes[..slash_start]);
+            return &bytes[..slash_start];
         }
     }
 
@@ -89,14 +88,14 @@ fn dirname_string_manipulation(path_bytes: &[u8]) -> Cow<'_, [u8]> {
         }
 
         if result.is_empty() {
-            return Cow::Borrowed(b"/");
+            return b"/";
         }
 
-        return Cow::Borrowed(result);
+        return result;
     }
 
     // No slash found, return "."
-    Cow::Borrowed(b".")
+    b"."
 }
 
 #[uucore::main(no_signals)]
@@ -122,13 +121,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(unix)]
         {
             use std::os::unix::ffi::OsStrExt;
-            let result_os = std::ffi::OsStr::from_bytes(&result);
+            let result_os = std::ffi::OsStr::from_bytes(result);
             print_verbatim(result_os).unwrap();
         }
         #[cfg(not(unix))]
         {
             // On non-Unix, fall back to lossy conversion
-            if let Ok(s) = std::str::from_utf8(&result) {
+            if let Ok(s) = std::str::from_utf8(result) {
                 print!("{s}");
             } else {
                 // Fallback for non-UTF-8 paths on non-Unix systems

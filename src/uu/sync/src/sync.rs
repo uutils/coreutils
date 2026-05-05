@@ -80,10 +80,13 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
+    pub fn do_sync_with<F>(files: Vec<String>, op: F) -> UResult<()>
+    where
+        F: Fn(File) -> Result<(), nix::Error>,
+    {
         for path in files {
             let f = open_and_reset_nonblock(&path)?;
-            syncfs(f).map_err_context(
+            op(f).map_err_context(
                 || translate!("sync-error-syncing-file", "file" => path.quote()),
             )?;
         }
@@ -91,14 +94,13 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
+        do_sync_with(files, syncfs)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
-        for path in files {
-            let f = open_and_reset_nonblock(&path)?;
-            fdatasync(f).map_err_context(
-                || translate!("sync-error-syncing-file", "file" => path.quote()),
-            )?;
-        }
-        Ok(())
+        do_sync_with(files, fdatasync)
     }
 }
 

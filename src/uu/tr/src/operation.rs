@@ -547,10 +547,9 @@ impl Sequence {
                         b"space" => Ok(Self::Class(Class::Space)),
                         b"upper" => Ok(Self::Class(Class::Upper)),
                         b"xdigit" => Ok(Self::Class(Class::Xdigit)),
-                        _ => Err(BadSequence::InvalidCharClass(format!(
-                            "[:{}:]",
-                            String::from_utf8_lossy(class_name)
-                        ))),
+                        _ => Err(BadSequence::InvalidCharClass(
+                            String::from_utf8_lossy(class_name).into_owned(),
+                        )),
                     },
                 )
             })

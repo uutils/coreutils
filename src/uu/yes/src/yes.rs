@@ -12,7 +12,14 @@ use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const PAGE_SIZE: usize = 4096;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
 // it's possible that using a smaller or larger buffer might provide better performance
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 const BUF_SIZE: usize = 16 * 1024;
 
 #[uucore::main]
@@ -20,10 +27,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
-    prepare_buffer(&mut buffer);
+    let buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
 
-    match exec(&buffer) {
+    match exec(buffer) {
         Ok(()) => Ok(()),
         // On Windows, silently handle broken pipe since there's no SIGPIPE
         #[cfg(windows)]
@@ -85,7 +91,7 @@ fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
 /// repeatedly until the buffer holds as many copies as it can
-fn prepare_buffer(buf: &mut Vec<u8>) {
+fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
     let line_len = buf.len();
     debug_assert!(line_len > 0, "buffer is not empty since we have newline");
     let target_size = line_len * (buf.capacity() / line_len); // 0 if line_len is already large enough
@@ -97,10 +103,50 @@ fn prepare_buffer(buf: &mut Vec<u8>) {
     }
 }
 
-pub fn exec(bytes: &[u8]) -> io::Result<()> {
-    let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    repeat_content_to_capacity(&mut bytes);
+    let bytes = bytes.as_slice();
+    let mut stdout = io::stdout().lock();
+    loop {
+        stdout.write_all(bytes)?;
+    }
+}
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    use uucore::pipes::{pipe, splice, tee};
+    let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
+    repeat_content_to_capacity(&mut bytes);
+    let bytes = bytes.as_slice();
+    let mut stdout = io::stdout(); // no need to lock with zero-copy
+    // don't show any error from fast-path and fallback to write for proper message
+    if let Ok((p_read, mut p_write)) = pipe()
+            // todo: zero-copy with default size when fcntl failed
+            && rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
+            && p_write.write_all(bytes).is_ok()
+    {
+        if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+            while let Ok(1..) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
+        } else if let Ok((broker_read, broker_write)) = pipe() {
+            // tee() cannot control offset and write to non-pipe
+            'hybrid: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+            {
+                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
+                while remain > 0 {
+                    if let Ok(s) = splice(&broker_read, &stdout, remain) {
+                        remain -= s;
+                    } else {
+                        // avoid output breakage with reduced remain even if it would not happen
+                        stdout.write_all(&bytes[bytes.len() - remain..])?;
+                        break 'hybrid;
+                    }
+                }
+            }
+        }
+    }
+    // fallback
+    let mut stdout = stdout.lock();
     loop {
         stdout.write_all(bytes)?;
     }
@@ -111,6 +157,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // Linux uses different buffer size
     fn test_prepare_buffer() {
         let tests = [
             (150, 16350),
@@ -133,7 +180,7 @@ mod tests {
         for (line, final_len) in tests {
             let mut v = Vec::with_capacity(BUF_SIZE);
             v.extend(std::iter::repeat_n(b'a', line));
-            prepare_buffer(&mut v);
+            repeat_content_to_capacity(&mut v);
             assert_eq!(v.len(), final_len);
         }
     }

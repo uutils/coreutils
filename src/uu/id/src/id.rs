@@ -63,10 +63,17 @@ macro_rules! cstr2cow {
 }
 
 fn get_context_help_text() -> String {
-    #[cfg(not(any(feature = "selinux", feature = "smack")))]
-    return translate!("id-context-help-disabled");
-    #[cfg(any(feature = "selinux", feature = "smack"))]
+    #[cfg(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    ))]
     return translate!("id-context-help-enabled");
+
+    #[cfg(not(any(
+        all(feature = "selinux", any(target_os = "android", target_os = "linux")),
+        all(feature = "smack", target_os = "linux"),
+    )))]
+    return translate!("id-context-help-disabled");
 }
 
 mod options {
@@ -99,9 +106,9 @@ struct State {
     rflag: bool,  // --real
     zflag: bool,  // --zero
     cflag: bool,  // --context
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     selinux_supported: bool,
-    #[cfg(feature = "smack")]
+    #[cfg(all(feature = "smack", target_os = "linux"))]
     smack_supported: bool,
     ids: Option<Ids>,
     // The behavior for calling GNU's `id` and calling GNU's `id $USER` is similar but different.
@@ -140,10 +147,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         rflag: matches.get_flag(options::OPT_REAL_ID),
         zflag: matches.get_flag(options::OPT_ZERO),
         cflag: matches.get_flag(options::OPT_CONTEXT),
-
-        #[cfg(feature = "selinux")]
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         selinux_supported: uucore::selinux::is_selinux_enabled(),
-        #[cfg(feature = "smack")]
+        #[cfg(all(feature = "smack", target_os = "linux"))]
         smack_supported: uucore::smack::is_smack_enabled(),
         user_specified: !users.is_empty(),
         ids: None,
@@ -179,7 +185,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if state.cflag {
         // SELinux context
-        #[cfg(feature = "selinux")]
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if state.selinux_supported {
             if let Ok(context) = selinux::SecurityContext::current(false) {
                 let bytes = context.as_bytes();
@@ -193,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // SMACK label
-        #[cfg(feature = "smack")]
+        #[cfg(all(feature = "smack", target_os = "linux"))]
         if state.smack_supported {
             match uucore::smack::get_smack_label_for_self() {
                 Ok(label) => {
@@ -705,7 +711,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
             .join(",")
     )?;
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if state.selinux_supported
         && !state.user_specified
         && std::env::var_os("POSIXLY_CORRECT").is_none()
@@ -717,7 +723,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
         }
     }
 
-    #[cfg(feature = "smack")]
+    #[cfg(all(feature = "smack", target_os = "linux"))]
     if state.smack_supported
         && !state.user_specified
         && std::env::var_os("POSIXLY_CORRECT").is_none()

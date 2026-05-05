@@ -74,36 +74,31 @@ fn write_factors_str(
 }
 
 fn parse_num(slice: &[u8]) -> UResult<Number> {
-    let err_invalid = |s: &str, force_quoting| {
-        let num = if force_quoting {
-            s.quote() // Force quoting if there are invalid characters.
-        } else {
-            s.maybe_quote()
-        };
+    let err_invalid = |s: &str| {
         USimpleError::new(
             1,
-            format!("warning: {num}: {}", translate!("factor-error-invalid-int")),
+            format!("{} {}", s.quote(), translate!("factor-error-invalid-int")),
         )
     };
-    let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string(), true))?;
+    let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string()))?;
 
     match num.parse::<u64>() {
         Ok(x) => return Ok(Number::U64(x)),
         // If overflown, attempt a greater width
         Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
-        Err(_) => return Err(err_invalid(num, false)),
+        Err(_) => return Err(err_invalid(num)),
     }
 
     match num.parse::<u128>() {
         Ok(x) => return Ok(Number::U128(x)),
         // If overflown, attempt a greater width
         Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
-        Err(_) => return Err(err_invalid(num, false)),
+        Err(_) => return Err(err_invalid(num)),
     }
 
     num.parse::<BigUint>()
         .map(Number::BigUint)
-        .map_err(|_| err_invalid(num, false))
+        .map_err(|_| err_invalid(num))
 }
 
 /// This is a newtype wrapper over a potentially malformed UTF-8
