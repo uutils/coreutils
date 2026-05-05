@@ -60,9 +60,7 @@ fn split_short_args_with_value(args: impl uucore::Args) -> impl uucore::Args {
     for arg in args {
         let bytes = arg.as_encoded_bytes();
 
-        if bytes.len() > 2
-            && (bytes.starts_with(b"-f") || bytes.starts_with(b"-s") || bytes.starts_with(b"-t"))
-        {
+        if bytes.starts_with(b"-f") || bytes.starts_with(b"-s") || bytes.starts_with(b"-t") {
             let (short_arg, value) = bytes.split_at(2);
             // SAFETY:
             // Both `short_arg` and `value` only contain content that originated from `OsStr::as_encoded_bytes`
