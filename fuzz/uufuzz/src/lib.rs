@@ -179,15 +179,15 @@ where
     });
 
     // Restore the original stdin if it was modified
-    if let Some(fd) = original_stdin_fd_owned {
-        if dup2_stdin(&fd).is_err() {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to restore the original STDIN".to_string(),
-                exit_code: -1,
-            };
-        }
+    if let Some(fd) = original_stdin_fd_owned 
+        && dup2_stdin(&fd).is_err() {
+        return CommandResult {
+            stdout: "".to_string(),
+            stderr: "Failed to restore the original STDIN".to_string(),
+            exit_code: -1,
+        };
     }
+    
 
     CommandResult {
         stdout: captured_stdout,
