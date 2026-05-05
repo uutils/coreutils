@@ -71,32 +71,28 @@ pub fn generate_and_run_uumain<F>(
 where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
-    // Duplicate the stdout and stderr file descriptors
-     let stdout_fd = match dup(std::io::stdout()) {
-         Ok(fd) => fd.into_raw_fd(),  
-         Err(_) => {
-             return CommandResult {
-                 stdout: "".to_string(),
-                 stderr: "Failed to duplicate STDOUT_FILENO".to_string(),
-                 exit_code: -1,
-             };
-         }
-     };
-     
-     let stderr_fd = match dup(std::io::stderr()) {
-         Ok(fd) => fd.into_raw_fd(),  
-         Err(_) => {
-             unsafe { close(stdout_fd) };
-             return CommandResult {
-                 stdout: "".to_string(),
-                 stderr: "Failed to duplicate STDERR_FILENO".to_string(),
-                 exit_code: -1,
-             };
-         }
-     };
- 
-    let original_stdout_fd = stdout_fd;
-    let original_stderr_fd = stderr_fd;
+    // Duplicate the stdout and stderr file descriptors to restore later
+    let original_stdout_fd_owned = match dup(std::io::stdout()) {
+        Ok(fd) => fd,
+        Err(_) => {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to duplicate STDOUT_FILENO".to_string(),
+                exit_code: -1,
+            };
+        }
+    };
+
+    let original_stderr_fd_owned = match dup(std::io::stderr()) {
+        Ok(fd) => fd,
+        Err(_) => {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to duplicate STDERR_FILENO".to_string(),
+                exit_code: -1,
+            };
+        }
+    };
 
     println!("Running test {:?}", &args[0..]);
     let (read_pipe_stdout, write_pipe_stdout) = match pipe() {
@@ -148,23 +144,16 @@ where
             }
         };
 
-        let original_stdin_fd = stdin_fd;
- 
-        if unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
-            unsafe {
-                close(original_stdout_fd);
-                close(original_stderr_fd);
-                close(original_stdin_fd);
-            }
+        // Redirect stdin to read from the in-memory file
+        if dup2_stdin(&input_file).is_err() {
             return CommandResult {
                 stdout: "".to_string(),
                 stderr: "Failed to set up stdin redirection".to_string(),
                 exit_code: -1,
             };
         }
-    
-        Some(original_stdin_fd)
-    
+
+        Some(stdin_fd)
     } else {
         None
     };
@@ -190,14 +179,14 @@ where
     });
 
     // Restore the original stdin if it was modified
-    if let Some(fd) = original_stdin_fd_owned
-        && dup2_stdin(&fd).is_err()
-    {
-        return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to restore the original STDIN".to_string(),
-            exit_code: -1,
-        };
+    if let Some(fd) = original_stdin_fd_owned {
+        if dup2_stdin(&fd).is_err() {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to restore the original STDIN".to_string(),
+                exit_code: -1,
+            };
+        }
     }
 
     CommandResult {
@@ -216,7 +205,7 @@ fn read_from_fd(fd: RawFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
     
-    // Create an OwnedFd for safe reading with RAII cleanup
+    // Temporarily create an OwnedFd for reading (we won't drop it)
     let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
     
     loop {
@@ -234,7 +223,9 @@ fn read_from_fd(fd: RawFd) -> String {
         }
     }
     
-    // owned_fd drops here and RAII automatically closes the file descriptor
+    // Forget the owned_fd to prevent it from closing the fd (the caller owns it)
+    std::mem::forget(owned_fd);
+    
     String::from_utf8_lossy(&captured_output).into_owned()
 }
 
