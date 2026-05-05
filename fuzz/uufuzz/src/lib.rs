@@ -5,20 +5,21 @@
 
 use console::Style;
 
-use libc::STDIN_FILENO;
-use libc::{STDERR_FILENO, STDOUT_FILENO, close, dup2, pipe};
-use rustix::io::dup;
-use std::os::unix::io::IntoRawFd;
+use rustix::io::read;
+use rustix::pipe::pipe;
+use rustix::stdio::{dup2_stdin, dup2_stdout, dup2_stderr};
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::unix::io::FromRawFd;
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
 use rand::RngExt;
 use rand::prelude::IndexedRandom;
+use rustix::io::dup;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
-use std::os::fd::{AsRawFd, RawFd};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};
@@ -72,7 +73,7 @@ where
 {
     // Duplicate the stdout and stderr file descriptors
      let stdout_fd = match dup(std::io::stdout()) {
-         Ok(fd) => fd.into_raw_fd(),
+         Ok(fd) => fd.into_raw_fd(),  
          Err(_) => {
              return CommandResult {
                  stdout: "".to_string(),
@@ -81,9 +82,9 @@ where
              };
          }
      };
-
+     
      let stderr_fd = match dup(std::io::stderr()) {
-         Ok(fd) => fd.into_raw_fd(),
+         Ok(fd) => fd.into_raw_fd(),  
          Err(_) => {
              unsafe { close(stdout_fd) };
              return CommandResult {
@@ -93,43 +94,43 @@ where
              };
          }
      };
-
+ 
     let original_stdout_fd = stdout_fd;
     let original_stderr_fd = stderr_fd;
 
     println!("Running test {:?}", &args[0..]);
-    let mut pipe_stdout_fds = [-1; 2];
-    let mut pipe_stderr_fds = [-1; 2];
-
-    // Create pipes for stdout and stderr
-    if unsafe { pipe(pipe_stdout_fds.as_mut_ptr()) } == -1
-        || unsafe { pipe(pipe_stderr_fds.as_mut_ptr()) } == -1
-    {
-        return CommandResult {
-            stdout: "".to_string(),
-            stderr: "Failed to create pipes".to_string(),
-            exit_code: -1,
-        };
-    }
+    let (read_pipe_stdout, write_pipe_stdout) = match pipe() {
+        Ok(fds) => fds,
+        Err(_) => {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to create pipes".to_string(),
+                exit_code: -1,
+            };
+        }
+    };
+    let (read_pipe_stderr, write_pipe_stderr) = match pipe() {
+        Ok(fds) => fds,
+        Err(_) => {
+            return CommandResult {
+                stdout: "".to_string(),
+                stderr: "Failed to create pipes".to_string(),
+                exit_code: -1,
+            };
+        }
+    };
 
     // Redirect stdout and stderr to their respective pipes
-    if unsafe { dup2(pipe_stdout_fds[1], STDOUT_FILENO) } == -1
-        || unsafe { dup2(pipe_stderr_fds[1], STDERR_FILENO) } == -1
-    {
-        unsafe {
-            close(pipe_stdout_fds[0]);
-            close(pipe_stdout_fds[1]);
-            close(pipe_stderr_fds[0]);
-            close(pipe_stderr_fds[1]);
-        }
+    if dup2_stdout(&write_pipe_stdout).is_err() || dup2_stderr(&write_pipe_stderr).is_err() {
         return CommandResult {
             stdout: "".to_string(),
             stderr: "Failed to redirect STDOUT_FILENO or STDERR_FILENO".to_string(),
             exit_code: -1,
         };
     }
-
-    let original_stdin_fd = if let Some(input_str) = pipe_input {
+    
+    // Handle stdin redirection if needed
+    let original_stdin_fd_owned = if let Some(input_str) = pipe_input {
         // we have pipe input
         let mut input_file = tempfile::tempfile().unwrap();
         write!(input_file, "{input_str}").unwrap();
@@ -137,12 +138,8 @@ where
 
         // Redirect stdin to read from the in-memory file
         let stdin_fd = match dup(std::io::stdin()) {
-            Ok(fd) => fd.into_raw_fd(),
+            Ok(fd) => fd,
             Err(_) => {
-                unsafe {
-                    close(original_stdout_fd);
-                    close(original_stderr_fd);
-                }
                 return CommandResult {
                     stdout: "".to_string(),
                     stderr: "Failed to duplicate STDIN".to_string(),
@@ -152,7 +149,7 @@ where
         };
 
         let original_stdin_fd = stdin_fd;
-
+ 
         if unsafe { dup2(input_file.as_raw_fd(), STDIN_FILENO) } == -1 {
             unsafe {
                 close(original_stdout_fd);
@@ -165,16 +162,16 @@ where
                 exit_code: -1,
             };
         }
-
+    
         Some(original_stdin_fd)
-
+    
     } else {
         None
     };
-
+    
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
-        let out = s.spawn(|| read_from_fd(pipe_stdout_fds[0]));
-        let err = s.spawn(|| read_from_fd(pipe_stderr_fds[0]));
+        let out = s.spawn(|| read_from_fd(read_pipe_stdout.as_raw_fd()));
+        let err = s.spawn(|| read_from_fd(read_pipe_stderr.as_raw_fd()));
         #[allow(clippy::unnecessary_to_owned)]
         // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
@@ -183,40 +180,24 @@ where
         uucore::error::set_exit_code(0);
         io::stdout().flush().unwrap();
         io::stderr().flush().unwrap();
-        unsafe {
-            close(pipe_stdout_fds[1]);
-            close(pipe_stderr_fds[1]);
-            close(STDOUT_FILENO);
-            close(STDERR_FILENO);
-        }
+        // Drop write ends to close them, allowing readers to get EOF
+        drop(write_pipe_stdout);
+        drop(write_pipe_stderr);
+        // Restore stdout/stderr
+        let _ = dup2_stdout(&original_stdout_fd_owned);
+        let _ = dup2_stderr(&original_stderr_fd_owned);
         (status, out.join().unwrap(), err.join().unwrap())
     });
 
-    // Restore the original stdout and stderr
-    if unsafe { dup2(original_stdout_fd, STDOUT_FILENO) } == -1
-        || unsafe { dup2(original_stderr_fd, STDERR_FILENO) } == -1
+    // Restore the original stdin if it was modified
+    if let Some(fd) = original_stdin_fd_owned
+        && dup2_stdin(&fd).is_err()
     {
         return CommandResult {
             stdout: "".to_string(),
-            stderr: "Failed to restore the original STDOUT_FILENO or STDERR_FILENO".to_string(),
+            stderr: "Failed to restore the original STDIN".to_string(),
             exit_code: -1,
         };
-    }
-    unsafe {
-        close(original_stdout_fd);
-        close(original_stderr_fd);
-    }
-
-    // Restore the original stdin if it was modified
-    if let Some(fd) = original_stdin_fd {
-        if unsafe { dup2(fd, STDIN_FILENO) } == -1 {
-            return CommandResult {
-                stdout: "".to_string(),
-                stderr: "Failed to restore the original STDIN".to_string(),
-                exit_code: -1,
-            };
-        }
-        unsafe { close(fd) };
     }
 
     CommandResult {
@@ -234,22 +215,26 @@ where
 fn read_from_fd(fd: RawFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
+    
+    // Create an OwnedFd for safe reading with RAII cleanup
+    let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
+    
     loop {
-        let bytes_read =
-            unsafe { libc::read(fd, read_buffer.as_mut_ptr().cast(), read_buffer.len()) };
-
-        if bytes_read == -1 {
-            eprintln!("Failed to read from the pipe");
-            break;
+        match read(&owned_fd, &mut read_buffer) {
+            Ok(bytes_read) => {
+                if bytes_read == 0 {
+                    break;
+                }
+                captured_output.extend_from_slice(&read_buffer[..bytes_read]);
+            }
+            Err(_) => {
+                eprintln!("Failed to read from the pipe");
+                break;
+            }
         }
-        if bytes_read == 0 {
-            break;
-        }
-        captured_output.extend_from_slice(&read_buffer[..bytes_read as usize]);
     }
-
-    unsafe { libc::close(fd) };
-
+    
+    // owned_fd drops here and RAII automatically closes the file descriptor
     String::from_utf8_lossy(&captured_output).into_owned()
 }
 
