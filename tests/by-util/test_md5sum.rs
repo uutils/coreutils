@@ -164,7 +164,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stdout_is("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n")
             .stderr_is("");
     }
     #[cfg(windows)]
@@ -184,7 +184,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stdout_is("a: OK\n' b': OK\ndd: OK\n")
             .stderr_is("");
     }
 }
@@ -210,7 +210,7 @@ fn test_check_md5sum_only_one_space() {
         .arg("-c")
         .arg("check.md5sum")
         .succeeds()
-        .stdout_only("a: OK\n b: OK\nc: OK\n");
+        .stdout_only("a: OK\n' b': OK\nc: OK\n");
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
+            .stdout_is("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n")
             .stderr_is("");
     }
     #[cfg(windows)]
@@ -257,7 +257,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\ndd: OK\n")
+            .stdout_is("a: OK\n' b': OK\ndd: OK\n")
             .stderr_is("");
     }
 }
@@ -384,7 +384,7 @@ fn test_check_with_escape_filename() {
         .arg("-c")
         .arg("check.md5")
         .succeeds();
-    result.stdout_is("\\a\\nb: OK\n");
+    result.stdout_is("'a'$'\\n''b': OK\n");
 }
 
 #[test]
@@ -510,7 +510,7 @@ fn test_check_one_two_space_star() {
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stdout_is("*empty: FAILED open or read\n");
+        .stdout_is("'*empty': FAILED open or read\n");
 
     at.touch("*empty");
     // Should pass as we have the file
@@ -519,7 +519,7 @@ fn test_check_one_two_space_star() {
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .succeeds()
-        .stdout_is("*empty: OK\n");
+        .stdout_is("'*empty': OK\n");
 }
 
 #[test]
