@@ -4,22 +4,21 @@
 // file that was distributed with this source code.
 
 use console::Style;
-
-use rustix::io::read;
-use rustix::pipe::pipe;
-use rustix::stdio::{dup2_stdin, dup2_stdout, dup2_stderr};
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-use std::os::unix::io::FromRawFd;
 use pretty_print::{
     print_diff, print_end_with_status, print_or_empty, print_section, print_with_style,
 };
 use rand::RngExt;
 use rand::prelude::IndexedRandom;
 use rustix::io::dup;
+use rustix::io::read;
+use rustix::pipe::pipe;
+use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
+use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::unix::io::FromRawFd;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};
