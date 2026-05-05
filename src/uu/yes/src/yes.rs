@@ -14,8 +14,6 @@ use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
 use uucore::{format_usage, translate};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const PAGE_SIZE: usize = 4096;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
 // it's possible that using a smaller or larger buffer might provide better performance
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -116,6 +114,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     use uucore::pipes::{pipe, splice, tee};
 
+    const PAGE_SIZE: usize = 4096;
     let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
