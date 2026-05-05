@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use console::{style, Style};
+use console::{Style, style};
 use similar::TextDiff;
 
 pub fn print_section<S: fmt::Display>(s: S) {
