@@ -124,7 +124,7 @@ where
             exit_code: -1,
         };
     }
-    
+
     // Handle stdin redirection if needed
     let original_stdin_fd_owned = if let Some(input_str) = pipe_input {
         // we have pipe input
@@ -157,7 +157,7 @@ where
     } else {
         None
     };
-    
+
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
         let out = s.spawn(|| read_from_fd(read_pipe_stdout.as_raw_fd()));
         let err = s.spawn(|| read_from_fd(read_pipe_stderr.as_raw_fd()));
@@ -204,10 +204,10 @@ where
 fn read_from_fd(fd: RawFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
-    
+
     // Temporarily create an OwnedFd for reading (we won't drop it)
     let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
-    
+
     loop {
         match read(&owned_fd, &mut read_buffer) {
             Ok(bytes_read) => {
@@ -222,10 +222,10 @@ fn read_from_fd(fd: RawFd) -> String {
             }
         }
     }
-    
+
     // Forget the owned_fd to prevent it from closing the fd (the caller owns it)
     std::mem::forget(owned_fd);
-    
+
     String::from_utf8_lossy(&captured_output).into_owned()
 }
 
