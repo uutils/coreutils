@@ -9,7 +9,7 @@ use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -63,23 +63,55 @@ pub const DEFAULT_LOCALE: &str = "en-US";
 // Include embedded locale files as fallback
 include!(concat!(env!("OUT_DIR"), "/embedded_locales.rs"));
 
-// A struct to handle localization with optional English fallback
+// A struct to handle localization with optional (possibly lazy) English fallback.
+//
+// To avoid eagerly parsing `en-US.ftl` when the primary (non-English) locale
+// loads successfully (issue #11247), the fallback can be supplied as a
+// builder closure that is only invoked the first time a message lookup
+// misses the primary bundle.
+type FallbackBuilder = Box<dyn Fn() -> Option<FluentBundle<&'static FluentResource>>>;
+
 struct Localizer {
     primary_bundle: FluentBundle<&'static FluentResource>,
-    fallback_bundle: Option<FluentBundle<&'static FluentResource>>,
+    fallback_bundle: RefCell<Option<FluentBundle<&'static FluentResource>>>,
+    fallback_builder: RefCell<Option<FallbackBuilder>>,
 }
 
 impl Localizer {
     fn new(primary_bundle: FluentBundle<&'static FluentResource>) -> Self {
         Self {
             primary_bundle,
-            fallback_bundle: None,
+            fallback_bundle: RefCell::new(None),
+            fallback_builder: RefCell::new(None),
         }
     }
 
-    fn with_fallback(mut self, fallback_bundle: FluentBundle<&'static FluentResource>) -> Self {
-        self.fallback_bundle = Some(fallback_bundle);
+    #[cfg(test)]
+    fn with_fallback(self, fallback_bundle: FluentBundle<&'static FluentResource>) -> Self {
+        *self.fallback_bundle.borrow_mut() = Some(fallback_bundle);
         self
+    }
+
+    /// Attach a fallback bundle that is built lazily on the first lookup miss.
+    fn with_lazy_fallback<F>(self, builder: F) -> Self
+    where
+        F: Fn() -> Option<FluentBundle<&'static FluentResource>> + 'static,
+    {
+        *self.fallback_builder.borrow_mut() = Some(Box::new(builder));
+        self
+    }
+
+    /// Ensure the fallback bundle is materialized, running the builder once if present.
+    fn ensure_fallback(&self) {
+        if self.fallback_bundle.borrow().is_some() {
+            return;
+        }
+        let builder = self.fallback_builder.borrow_mut().take();
+        if let Some(builder) = builder
+            && let Some(bundle) = builder()
+        {
+            *self.fallback_bundle.borrow_mut() = Some(bundle);
+        }
     }
 
     fn format(&self, id: &str, args: Option<&FluentArgs>) -> String {
@@ -92,14 +124,15 @@ impl Localizer {
                 .to_string();
         }
 
-        // Fall back to English bundle if available
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        // Fall back to English bundle if available (build it lazily if needed).
+        self.ensure_fallback();
+        if let Some(ref fallback) = *self.fallback_bundle.borrow()
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
 
         // Return the key ID if not found anywhere
@@ -196,25 +229,34 @@ fn init_localization(
     let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
 
-    // Try to create a bundle that combines common and utility-specific strings
-    let english_bundle: FluentBundle<&'static FluentResource> =
-        create_bundle(&default_locale, locales_dir, util_name).or_else(|_| {
-            // Fallback to embedded utility-specific and common strings
-            create_english_bundle_from_embedded(&default_locale, util_name)
-        })?;
+    // Helper to (re)build the English bundle, used both as the primary bundle
+    // when English is requested / primary fails, and as the lazy fallback.
+    let locales_dir_owned = locales_dir.to_path_buf();
+    let util_name_owned = util_name.to_string();
+    let default_locale_for_builder = default_locale.clone();
+    let build_english =
+        move || -> Result<FluentBundle<&'static FluentResource>, LocalizationError> {
+            create_bundle(
+                &default_locale_for_builder,
+                &locales_dir_owned,
+                &util_name_owned,
+            )
+            .or_else(|_| {
+                create_english_bundle_from_embedded(&default_locale_for_builder, &util_name_owned)
+            })
+        };
 
     let loc = if locale == &default_locale {
-        // If requesting English, just use English as primary (no fallback needed)
-        Localizer::new(english_bundle)
+        // English requested: build it now as primary (no fallback needed).
+        Localizer::new(build_english()?)
+    } else if let Ok(primary_bundle) = create_bundle(locale, locales_dir, util_name) {
+        // Primary non-English locale loaded successfully. Defer English parsing
+        // until a message lookup actually misses the primary bundle (#11247).
+        let lazy = build_english;
+        Localizer::new(primary_bundle).with_lazy_fallback(move || lazy().ok())
     } else {
-        // Try to load the requested locale with common strings
-        if let Ok(primary_bundle) = create_bundle(locale, locales_dir, util_name) {
-            // Successfully loaded requested locale, load English as fallback
-            Localizer::new(primary_bundle).with_fallback(english_bundle)
-        } else {
-            // Failed to load requested locale, just use English as primary
-            Localizer::new(english_bundle)
-        }
+        // Primary failed to load: fall back to English as the primary bundle.
+        Localizer::new(build_english()?)
     };
 
     LOCALIZER.with(|lock| {
@@ -486,13 +528,17 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
 
         #[cfg(target_os = "wasi")]
         let localizer = {
-            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
+            let p_owned = p.to_string();
+            let default_for_builder = default_locale.clone();
+            let build_english =
+                move || create_wasi_bundle_from_embedded(&default_for_builder, &p_owned);
             if locale == default_locale {
-                Localizer::new(english_bundle)
+                Localizer::new(build_english()?)
             } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
-                Localizer::new(localized).with_fallback(english_bundle)
+                // Defer English parsing until a fallback is actually needed (#11247).
+                Localizer::new(localized).with_lazy_fallback(move || build_english().ok())
             } else {
-                Localizer::new(english_bundle)
+                Localizer::new(build_english()?)
             }
         };
 
@@ -661,8 +707,10 @@ mod tests {
 
     // Regression instrumentation for issue #11247: count how many times the
     // English (`en-US`) FTL is parsed during `init_test_localization`.
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    static ENGLISH_PARSE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    // Per-thread so concurrent tests do not interfere with each other.
+    thread_local! {
+        static ENGLISH_PARSE_COUNT: Cell<usize> = const { Cell::new(0) };
+    }
 
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]
@@ -678,8 +726,8 @@ mod tests {
         let locale_path = test_locales_dir.join(format!("{locale}.ftl"));
         if let Ok(ftl_content) = fs::read_to_string(&locale_path) {
             let resource = parse_fluent_resource(&ftl_content, &UUCORE_FLUENT)?;
-            if locale.to_string() == DEFAULT_LOCALE {
-                ENGLISH_PARSE_COUNT.fetch_add(1, Ordering::SeqCst);
+            if *locale == DEFAULT_LOCALE {
+                ENGLISH_PARSE_COUNT.with(|c| c.set(c.get() + 1));
             }
             bundle.add_resource_overriding(resource);
             return Ok(bundle);
@@ -700,21 +748,20 @@ mod tests {
         let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
             .expect("Default locale should always be valid");
 
-        // Create English bundle from test directory
-        let english_bundle = create_test_bundle(&default_locale, test_locales_dir)?;
+        // Lazy English builder: parse en-US.ftl only when actually needed (#11247).
+        let dir_owned = test_locales_dir.to_path_buf();
+        let default_for_builder = default_locale.clone();
+        let build_english = move || create_test_bundle(&default_for_builder, &dir_owned);
 
         let loc = if locale == &default_locale {
-            // If requesting English, just use English as primary
-            Localizer::new(english_bundle)
+            // If requesting English, build it now as primary.
+            Localizer::new(build_english()?)
+        } else if let Ok(primary_bundle) = create_test_bundle(locale, test_locales_dir) {
+            // Primary loaded; defer English parsing until a miss occurs.
+            Localizer::new(primary_bundle).with_lazy_fallback(move || build_english().ok())
         } else {
-            // Try to load the requested locale from test directory
-            if let Ok(primary_bundle) = create_test_bundle(locale, test_locales_dir) {
-                // Successfully loaded requested locale, load English as fallback
-                Localizer::new(primary_bundle).with_fallback(english_bundle)
-            } else {
-                // Failed to load requested locale, just use English as primary
-                Localizer::new(english_bundle)
-            }
+            // Primary failed: fall back to English as primary.
+            Localizer::new(build_english()?)
         };
 
         LOCALIZER.with(|lock| {
@@ -1512,7 +1559,7 @@ invalid-syntax = This is { $missing
             let temp_dir = create_test_locales_dir();
             let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
 
-            ENGLISH_PARSE_COUNT.store(0, Ordering::SeqCst);
+            ENGLISH_PARSE_COUNT.with(|c| c.set(0));
 
             // Init with fr-FR, which exists and loads successfully.
             let result = init_test_localization(&locale, temp_dir.path());
@@ -1523,7 +1570,7 @@ invalid-syntax = This is { $missing
             assert_eq!(message, "Bonjour, le monde!");
 
             assert_eq!(
-                ENGLISH_PARSE_COUNT.load(Ordering::SeqCst),
+                ENGLISH_PARSE_COUNT.with(Cell::get),
                 0,
                 "en-US.ftl must not be parsed when the primary (fr-FR) locale loads successfully \
                  and no fallback lookup has occurred (issue #11247)"
