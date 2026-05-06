@@ -33,7 +33,8 @@ thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = { workspace = true, features = ["fs", "signal"] }
+nix = { workspace = true, features = ["signal"] }
+rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "dd"
