@@ -188,7 +188,6 @@ where
         };
     }
 
-
     CommandResult {
         stdout: captured_stdout,
         stderr: captured_stderr
