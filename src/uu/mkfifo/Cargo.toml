@@ -25,7 +25,10 @@ uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["fs", "process"] }
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+libc = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]
