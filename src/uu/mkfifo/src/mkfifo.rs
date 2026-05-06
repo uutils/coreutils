@@ -4,10 +4,10 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::sys::stat::Mode;
+use nix::sys::stat::{Mode, umask};
 use nix::unistd::mkfifo;
+#[cfg(any(feature = "selinux", feature = "smack"))]
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -48,47 +48,48 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     for f in fifos {
-        if mkfifo(f.as_str(), Mode::from_bits_truncate(0o666)).is_err() {
+        // Clear umask around mkfifo so the kernel applies the exact
+        // requested mode atomically. Skipping the path-based chmod
+        // that used to follow this call closes the TOCTOU window an
+        // attacker could use to swap the FIFO for a symlink between
+        // mkfifo and chmod (issue #10020).
+        let prev_umask = umask(Mode::empty());
+        let mkfifo_result = mkfifo(f.as_str(), Mode::from_bits_truncate(mode));
+        umask(prev_umask);
+
+        if mkfifo_result.is_err() {
             show!(USimpleError::new(
                 1,
                 translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
             ));
-            continue;
-        }
+        } else {
+            // Apply SELinux context if requested
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            {
+                let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+                let context = matches.get_one::<String>(options::CONTEXT);
 
-        // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
-            ));
-        }
-
-        // Apply SELinux context if requested
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        {
-            // Extract the SELinux related flags and options
-            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-            let context = matches.get_one::<String>(options::CONTEXT);
-
-            if set_security_context || context.is_some() {
-                use std::path::Path;
-                if let Err(e) =
-                    uucore::selinux::set_selinux_security_context(Path::new(&f), context)
-                {
-                    let _ = fs::remove_file(f);
-                    return Err(USimpleError::new(1, e.to_string()));
+                if set_security_context || context.is_some() {
+                    use std::path::Path;
+                    if let Err(e) =
+                        uucore::selinux::set_selinux_security_context(Path::new(&f), context)
+                    {
+                        let _ = fs::remove_file(f);
+                        return Err(USimpleError::new(1, e.to_string()));
+                    }
                 }
             }
-        }
 
-        // Apply SMACK context if requested
-        #[cfg(feature = "smack")]
-        {
-            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-            let context = matches.get_one::<String>(options::CONTEXT);
-            if set_security_context || context.is_some() {
-                uucore::smack::set_smack_label_and_cleanup(&f, context, |p| fs::remove_file(p))?;
+            // Apply SMACK context if requested
+            #[cfg(feature = "smack")]
+            {
+                let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+                let context = matches.get_one::<String>(options::CONTEXT);
+                if set_security_context || context.is_some() {
+                    uucore::smack::set_smack_label_and_cleanup(&f, context, |p| {
+                        fs::remove_file(p)
+                    })?;
+                }
             }
         }
     }
