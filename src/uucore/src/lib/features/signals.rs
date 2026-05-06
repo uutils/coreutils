@@ -462,16 +462,18 @@ pub fn signal_name_by_value(signal_value: usize) -> Option<String> {
     })
 }
 
+/// Returns the values of SIGRTMIN and SIGRTMAX if defined on this platform.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn realtime_signal_bounds() -> Option<(usize, usize)> {
+pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
     let rtmin = libc::SIGRTMIN();
     let rtmax = libc::SIGRTMAX();
 
     (0 < rtmin && rtmin <= rtmax).then_some((rtmin as usize, rtmax as usize))
 }
 
+/// Returns the values of SIGRTMIN and SIGRTMAX if defined on this platform.
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn realtime_signal_bounds() -> Option<(usize, usize)> {
+pub fn realtime_signal_bounds() -> Option<(usize, usize)> {
     None
 }
 
