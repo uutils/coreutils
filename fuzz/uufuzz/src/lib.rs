@@ -152,6 +152,8 @@ where
             };
         }
 
+        std::mem::forget(input_file);
+
         Some(stdin_fd)
     } else {
         None
