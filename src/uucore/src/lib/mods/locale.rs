@@ -659,6 +659,11 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::TempDir;
 
+    // Regression instrumentation for issue #11247: count how many times the
+    // English (`en-US`) FTL is parsed during `init_test_localization`.
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static ENGLISH_PARSE_COUNT: AtomicUsize = AtomicUsize::new(0);
+
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]
     fn create_test_bundle(
@@ -673,6 +678,9 @@ mod tests {
         let locale_path = test_locales_dir.join(format!("{locale}.ftl"));
         if let Ok(ftl_content) = fs::read_to_string(&locale_path) {
             let resource = parse_fluent_resource(&ftl_content, &UUCORE_FLUENT)?;
+            if locale.to_string() == DEFAULT_LOCALE {
+                ENGLISH_PARSE_COUNT.fetch_add(1, Ordering::SeqCst);
+            }
             bundle.add_resource_overriding(resource);
             return Ok(bundle);
         }
@@ -1487,6 +1495,39 @@ invalid-syntax = This is { $missing
             // Test usage key fallback
             let usage_key = get_message("common-usage");
             assert!(!usage_key.is_empty());
+        })
+        .join()
+        .unwrap();
+    }
+
+    /// Regression test for https://github.com/uutils/coreutils/issues/11247
+    ///
+    /// When the system locale is non-English and the primary bundle loads
+    /// successfully, the English (`en-US`) FTL must NOT be parsed eagerly.
+    /// English should only be parsed lazily if/when a message lookup misses
+    /// the primary bundle and a fallback is actually required.
+    #[test]
+    fn test_english_not_parsed_when_primary_locale_loads() {
+        std::thread::spawn(|| {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+
+            ENGLISH_PARSE_COUNT.store(0, Ordering::SeqCst);
+
+            // Init with fr-FR, which exists and loads successfully.
+            let result = init_test_localization(&locale, temp_dir.path());
+            assert!(result.is_ok());
+
+            // A French message lookup must not force English to be parsed.
+            let message = get_message("greeting");
+            assert_eq!(message, "Bonjour, le monde!");
+
+            assert_eq!(
+                ENGLISH_PARSE_COUNT.load(Ordering::SeqCst),
+                0,
+                "en-US.ftl must not be parsed when the primary (fr-FR) locale loads successfully \
+                 and no fallback lookup has occurred (issue #11247)"
+            );
         })
         .join()
         .unwrap();
