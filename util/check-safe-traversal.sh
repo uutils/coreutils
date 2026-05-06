@@ -233,6 +233,59 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv"; then
     check_utility "mv" "openat,renameat,newfstatat,rename" "openat" "test_mv_src test_mv_dst" "move_directory"
 fi
 
+# Test mv cross-device (EXDEV fallback): xattr preservation must use the
+# fd-based *xattr variants so the source and destination inodes are
+# pinned for the whole copy + xattr window. Using path-based listxattr /
+# getxattr / setxattr reopens the TOCTOU described in issue #10014.
+# Skip if /dev/shm is unavailable or doesn't support user xattrs.
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    # Confirm $TEMP_DIR and /dev/shm are on different filesystems; otherwise
+    # mv won't take the EXDEV fallback and the strace check is a no-op.
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv cross-device xattr check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+    shm_probe=$(mktemp -p /dev/shm mv_xattr_probe.XXXXXX)
+    if setfattr -n user.probe -v ok "$shm_probe" 2>/dev/null; then
+        rm -f "$shm_probe"
+        cross_src=$(mktemp -p "$TEMP_DIR" cross_src.XXXXXX)
+        cross_dst=$(mktemp -u -p /dev/shm cross_dst.XXXXXX)
+        echo "cross-device payload" > "$cross_src"
+        if setfattr -n user.tag -v pinned "$cross_src" 2>/dev/null; then
+            if [ "$USE_MULTICALL" -eq 1 ]; then
+                mv_cmd="$COREUTILS_BIN mv"
+            else
+                mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+            fi
+            strace -f -e trace='%file,fgetxattr,fsetxattr,flistxattr,getxattr,setxattr,listxattr' \
+                -o strace_mv_xattr.log \
+                $mv_cmd "$cross_src" "$cross_dst" 2>/dev/null || true
+
+            # Path-based xattr calls against the source or destination paths
+            # indicate the non-atomic TOCTOU pattern we're avoiding.
+            cross_src_base=$(basename "$cross_src")
+            cross_dst_base=$(basename "$cross_dst")
+            if grep -qE "(listxattr|getxattr|setxattr)\([^,]*($cross_src_base|$cross_dst_base)" strace_mv_xattr.log; then
+                cat strace_mv_xattr.log
+                fail_immediately "mv cross-device must use fd-based xattr ops (issue #10014)"
+            fi
+            if grep -qE 'flistxattr|fgetxattr|fsetxattr' strace_mv_xattr.log; then
+                echo "OK: mv cross-device uses fd-based xattr syscalls"
+            else
+                echo "WARN: mv cross-device xattr check: no xattr syscalls observed (xattr may have been filtered - check filesystem support)"
+            fi
+            rm -f "$cross_dst"
+        else
+            echo "WARN: mv cross-device xattr check: TMPDIR does not support user xattrs; skipped"
+        fi
+    else
+        rm -f "$shm_probe"
+        echo "WARN: mv cross-device xattr check: /dev/shm does not support user xattrs; skipped"
+    fi
+    fi
+fi
+
 echo ""
 echo "✓ Basic safe traversal verification completed"
 echo ""

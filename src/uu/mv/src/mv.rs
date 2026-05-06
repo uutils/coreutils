@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable callees
 
 mod error;
 #[cfg(unix)]
@@ -407,14 +407,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                 #[cfg(not(unix))]
                 let hardlink_params = (None, None);
 
-                rename(
+                consume_already_reported(rename(
                     source,
                     target,
                     opts,
                     None,
                     hardlink_params.0,
                     hardlink_params.1,
-                )
+                ))
                 .map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
                 })
@@ -449,14 +449,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         #[cfg(not(unix))]
         let hardlink_params = (None, None);
 
-        rename(
+        consume_already_reported(rename(
             source,
             target,
             opts,
             None,
             hardlink_params.0,
             hardlink_params.1,
-        )
+        ))
         .map_err(|e| USimpleError::new(1, format!("{e}")))
     }
 }
@@ -658,26 +658,22 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         #[cfg(not(unix))]
         let hardlink_params = (None, None);
 
-        match rename(
+        if let Err(e) = consume_already_reported(rename(
             sourcepath,
             &targetpath,
             options,
             display_manager.as_ref(),
             hardlink_params.0,
             hardlink_params.1,
-        ) {
-            Err(e) if e.to_string().is_empty() => set_exit_code(1),
-            Err(e) => {
-                let e = e.map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
-                });
-                if let Some(ref pb) = display_manager {
-                    pb.suspend(|| show!(e));
-                } else {
-                    show!(e);
-                }
+        )) {
+            let e = e.map_err_context(|| {
+                translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
+            });
+            if let Some(ref pb) = display_manager {
+                pb.suspend(|| show!(e));
+            } else {
+                show!(e);
             }
-            Ok(()) => (),
         }
         if let Some(ref pb) = count_progress {
             pb.inc(1);
@@ -685,6 +681,20 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         moved_destinations.insert(targetpath.clone());
     }
     Ok(())
+}
+
+/// `rename()` (and its callees like `prompt_overwrite`) signals
+/// "error already reported, just propagate the failure exit code" by
+/// returning an io::Error whose message is empty. Convert that sentinel into
+/// `Ok(())` after bumping the exit code so callers don't double-print.
+fn consume_already_reported(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(e) if e.to_string().is_empty() => {
+            set_exit_code(1);
+            Ok(())
+        }
+        other => other,
+    }
 }
 
 fn rename(
@@ -750,7 +760,19 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
+                // GNU's mv reports "cannot overwrite 'TARGET': Directory not
+                // empty" for this case, *not* "cannot move SRC to TARGET: ...".
+                // Print it here and return an empty error so the caller takes
+                // the silent-failure path that just sets the exit code.
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "{}: {}",
+                        translate!("mv-error-cannot-overwrite", "target" => to.quote()),
+                        translate!("mv-error-directory-not-empty"),
+                    ),
+                ));
+                return Err(io::Error::other(""));
             }
         }
     }
@@ -903,14 +925,82 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to)?;
+
+    // Fast path: create the symlink directly. If the destination already
+    // exists, fall through to the atomic temp-and-rename path. Matches GNU
+    // mv, which replaces the existing destination. See issue #10010.
+    match unix::fs::symlink(&path_symlink_points_to, to) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            create_symlink_replace(&path_symlink_points_to, to)?;
+        }
+        Err(e) => return Err(e),
+    }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = copy_xattrs_if_supported(from, to);
+        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
     // Preserve ownership (uid/gid) from the source symlink
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
+}
+
+/// Create a symlink at `to` pointing to `target`, replacing any existing
+/// file/symlink at `to` atomically. Creates the new symlink at a temp
+/// name in `to`'s parent directory, then renames it into place. `rename`
+/// is atomic on Linux, so a concurrent observer of `to` never sees it
+/// absent. See issue #10010.
+#[cfg(unix)]
+fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
+    use std::ffi::{OsStr, OsString};
+    use std::os::unix::ffi::OsStrExt;
+
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = to
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination path"))?;
+    let pid = std::process::id();
+
+    // Try a few times with a fresh nanos suffix on EEXIST. The pid+nanos
+    // pair is already unique in practice, but pid namespaces and clock
+    // coarsening can collide; retry rather than overwrite a stranger's
+    // temp file.
+    for _ in 0..8 {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+
+        // Build the temp name as raw bytes so non-UTF-8 basenames survive
+        // intact (no U+FFFD substitution). Truncate the basename so the
+        // total length stays under a conservative NAME_MAX of 255 bytes.
+        let prefix = format!(".mv-tmp-{pid}-{nanos}-");
+        let max_base_len = 255usize.saturating_sub(prefix.len());
+        let base_bytes = basename.as_bytes();
+        let base_slice = &base_bytes[..base_bytes.len().min(max_base_len)];
+        let mut tmp_name = OsString::from(prefix);
+        tmp_name.push(OsStr::from_bytes(base_slice));
+        let tmp_path = parent.join(&tmp_name);
+
+        match unix::fs::symlink(target, &tmp_path) {
+            Ok(()) => {
+                if let Err(e) = fs::rename(&tmp_path, to) {
+                    let _ = fs::remove_file(&tmp_path);
+                    return Err(e);
+                }
+                return Ok(());
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique temp name in destination directory",
+    ))
 }
 
 #[cfg(windows)]
@@ -1171,7 +1261,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = copy_xattrs_if_supported(from, to);
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1186,16 +1276,22 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
-    // Remove existing target file if it exists
+    // If the destination is a symlink, remove it first so the subsequent
+    // `fs::copy` does not follow the symlink and write to the target. The
+    // remaining race window (between this unlink and the open inside
+    // `fs::copy`) matches GNU mv; the separate pre-copy unlink of regular
+    // files was an additional window unique to uutils and has been removed.
+    // See issue #10015.
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
             let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
             io::Error::new(err.kind(), inter_device_msg)
         })?;
-    } else if to.exists() {
-        // For non-symlinks, just remove the file without special error handling
-        fs::remove_file(to)?;
     }
+    // For regular-file destinations we intentionally do NOT unlink here.
+    // `fs::copy` opens with `O_WRONLY|O_CREAT|O_TRUNC`, which truncates an
+    // existing regular file in place — matching GNU mv and avoiding the
+    // extra unlink/copy race window.
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
     #[cfg(unix)]
@@ -1214,20 +1310,62 @@ fn rename_file_fallback(
         }
     }
 
-    // Regular file copy
-    fs::copy(from, to)
-        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-
-    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        let _ = copy_xattrs_if_supported(from, to);
-    }
-
-    // Preserve ownership (uid/gid) from the source file
+    // Regular file copy. On Unix, we open source and destination via the
+    // shared `uucore::safe_copy` helpers and keep the file descriptors alive
+    // across the content copy, mode restoration, and xattr copy. This pins
+    // both inodes so a concurrent path renamer cannot redirect later xattr
+    // list/get/set syscalls to different inodes (issue #10014). Both opens
+    // use O_NOFOLLOW so the same path-swap-to-symlink TOCTOU that cp #10017
+    // closes for cp's regular-file path is closed here for mv too — on the
+    // source so we don't read through an attacker-planted symlink, and on
+    // the dest so a planted symlink can't redirect the truncate and write
+    // to a victim file the caller has permission to write.
+    //
+    // `std::io::copy` has a File→File specialization that uses
+    // `copy_file_range`/`sendfile` on Linux, so this is roughly as fast as
+    // `fs::copy` and not a regression for large files.
     #[cfg(unix)]
     {
+        use std::fs::Permissions;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use uucore::safe_copy::{create_dest_restrictive, open_source};
+        let src_file = open_source(from, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let src_mode = src_file
+            .metadata()
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
+            .mode()
+            & 0o7777;
+        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        io::copy(&mut &src_file, &mut dst_file)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
+        // Copy xattrs on the pinned fds. Errors are best-effort to match
+        // the previous path-based behavior; filesystems that don't support
+        // xattrs are a legal destination for cross-device moves.
+        #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+        {
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
+        }
+
+        // Preserve ownership (uid/gid) before applying the final mode.
+        // chown(2) clears S_ISUID/S_ISGID for non-root callers, so applying
+        // the mode after the chown is the only way to faithfully preserve
+        // setuid/setgid bits — matching GNU mv / cp's ordering.
         let _ = preserve_ownership(from, to);
+
+        // Now widen to the source's full mode (including setuid/setgid/
+        // sticky). The restrictive 0o600 used at create_dest_restrictive()
+        // opened the dest narrowly so other users couldn't observe the
+        // file mid-copy.
+        let _ = dst_file.set_permissions(Permissions::from_mode(src_mode));
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::copy(from, to)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     }
 
     fs::remove_file(from)
@@ -1270,18 +1408,6 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
     }
 
     Ok(())
-}
-
-/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
-/// These errors indicate the filesystem doesn't support extended attributes,
-/// which is acceptable when moving files across filesystems.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
-    match fsxattr::copy_xattrs(from, to) {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
-        Err(e) => Err(e),
-    }
 }
 
 fn is_empty_dir(path: &Path) -> bool {

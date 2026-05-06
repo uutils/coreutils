@@ -1458,15 +1458,13 @@ fn test_mv_overwrite_nonempty_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     at.touch(dummy);
-    // Not same error as GNU; the error message is a rust builtin
-    // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
-    // GNU:     "mv: cannot move 'a' to 'b': Directory not empty"
-
-    // Verbose output for the move should not be shown on failure
+    // GNU 9.11: "mv: cannot overwrite 'b': Directory not empty"
+    // Verbose output for the move should not be shown on failure.
     let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
     result.no_stdout();
-    assert!(!result.stderr_str().is_empty());
+    result.stderr_is(format!(
+        "mv: cannot overwrite '{dir_b}': Directory not empty\n"
+    ));
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -2597,10 +2595,55 @@ fn test_special_file_different_filesystem() {
 
 /// Test cross-device move with permission denied error
 /// This test mimics the scenario from the GNU part-fail test where
-/// a cross-device move fails due to permission errors when removing the target file
+/// Cross-device move into a read-only destination directory must fail when
+/// creating a new destination file there. (mv into an existing writable file
+/// in a read-only dir now succeeds in place — matching GNU — because #10015
+/// removed the pre-copy unlink that previously forced directory-write
+/// permission even when the target already existed.)
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_permission_denied() {
+    use std::fs::set_permissions;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("k", "source content");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+    // Remove write permissions from the directory so creating a new file inside fails.
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
+        .expect("Unable to set directory permissions");
+
+    let target_file_path = other_fs_tempdir.path().join("new_target");
+
+    let result = scene
+        .ucmd()
+        .arg("-f")
+        .arg("k")
+        .arg(target_file_path.to_str().unwrap())
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("Permission denied") || stderr.contains("permission denied"));
+
+    set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
+        .expect("Unable to restore directory permissions");
+}
+
+/// Regression for #10015: cross-device mv into a read-only destination
+/// directory must succeed when overwriting an existing writable file —
+/// the truncate happens in place via O_TRUNC, no directory-write
+/// permission is needed. Previously uutils unlinked first, which forced
+/// directory write permission and made this scenario fail.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_truncate_in_readonly_dir() {
     use std::fs::{set_permissions, write};
     use std::os::unix::fs::PermissionsExt;
     use tempfile::TempDir;
@@ -2614,29 +2657,26 @@ fn test_mv_cross_device_permission_denied() {
     let other_fs_tempdir =
         TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
 
-    let target_file_path = other_fs_tempdir.path().join("k");
-    write(&target_file_path, "target content").expect("Unable to write target file");
+    let target_file_path = other_fs_tempdir.path().join("existing_target");
+    write(&target_file_path, "old content").expect("Unable to write target file");
 
-    // Remove write permissions from the directory to cause permission denied
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
         .expect("Unable to set directory permissions");
 
-    // Attempt to move file to the other filesystem
-    // This should fail with a permission denied error
-    let result = scene
+    scene
         .ucmd()
         .arg("-f")
         .arg("k")
         .arg(target_file_path.to_str().unwrap())
-        .fails();
-
-    // Check that it contains permission denied and references the file
-    // The exact format may vary but should contain these key elements
-    let stderr = result.stderr_str();
-    assert!(stderr.contains("Permission denied") || stderr.contains("permission denied"));
+        .succeeds()
+        .no_stderr();
 
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
         .expect("Unable to restore directory permissions");
+
+    let copied = std::fs::read_to_string(&target_file_path).expect("read dst");
+    assert_eq!(copied, "source content");
+    assert!(!at.file_exists("k"), "source should be removed after mv");
 }
 
 #[test]
@@ -2863,6 +2903,93 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Regression for #10010: a cross-device mv of a symlink onto an existing
+/// destination file must replace the destination, matching GNU. Previously
+/// uutils failed with "File exists" because the symlink creation saw the
+/// existing destination.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_exists");
+    fs::write(&dst_path, "placeholder").expect("Failed to write placeholder dst");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(
+        dst_path.is_symlink(),
+        "dst_exists should now be a symlink after the cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&dst_path).expect("read_link failed"),
+        Path::new("/etc/passwd"),
+    );
+    assert!(
+        !at.symlink_exists("src_link"),
+        "source symlink should be gone"
+    );
+}
+
+/// Cross-device mv of a symlink onto an existing *directory* destination
+/// (with -T so mv doesn't treat dst as a parent directory) must fail and
+/// must not destroy the directory. Companion to #10010 — the atomic
+/// temp-and-rename path can replace files/symlinks but `rename(2)`
+/// refuses to replace a non-empty directory with a symlink, and even an
+/// empty directory must not be silently destroyed.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing_dir() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_dir = other_fs_tempdir.path().join("dst_dir");
+    fs::create_dir(&dst_dir).expect("Failed to create destination directory");
+    fs::write(dst_dir.join("guard"), "preserved").expect("Failed to write guard file");
+
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_dir.to_str().unwrap())
+        .fails();
+
+    assert!(
+        dst_dir.is_dir(),
+        "destination directory must still exist after failed mv"
+    );
+    assert!(
+        dst_dir.join("guard").is_file(),
+        "destination directory contents must be untouched"
+    );
+    assert!(
+        at.symlink_exists("src_link"),
+        "source symlink must not be removed when mv fails"
+    );
 }
 
 /// Test that symlinks inside directories are preserved during cross-device moves
