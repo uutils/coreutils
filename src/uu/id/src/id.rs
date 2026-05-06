@@ -41,11 +41,11 @@ use uucore::entries::{self, Group, Locate, Passwd};
 use uucore::error::UResult;
 use uucore::error::{USimpleError, set_exit_code};
 pub use uucore::libc;
-use uucore::libc::{getlogin, uid_t};
+use uucore::libc::getlogin;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
-use uucore::process::{getegid, geteuid, getgid, getuid};
+use rustix::process::{Uid, getegid, geteuid, getgid, getuid};
 use uucore::{format_usage, show_error};
 
 macro_rules! cstr2cow {
@@ -245,7 +245,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // GNU's `id` does not support the flags: -p/-P/-A.
         if matches.get_flag(options::OPT_PASSWORD) {
             // BSD's `id` ignores all but the first specified user
-            pline(possible_pw.as_ref().map(|v| v.uid))?;
+            pline(possible_pw.as_ref().map(|v| Uid::from_raw(v.uid)))?;
             return Ok(());
         }
         if matches.get_flag(options::OPT_HUMAN_READABLE) {
@@ -263,9 +263,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             {
                 let use_effective = !state.rflag && (state.uflag || state.gflag || state.gsflag);
                 if use_effective {
-                    (geteuid(), getegid())
+                    (geteuid().as_raw(), getegid().as_raw())
                 } else {
-                    (getuid(), getgid())
+                    (getuid().as_raw(), getgid().as_raw())
                 }
             },
             |p| (p.uid, p.gid),
@@ -273,8 +273,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         state.ids = Some(Ids {
             uid,
             gid,
-            euid: geteuid(),
-            egid: getegid(),
+            euid: geteuid().as_raw(),
+            egid: getegid().as_raw(),
         });
 
         if state.gflag {
@@ -499,7 +499,7 @@ fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
         )?;
     } else {
         let login = cstr2cow!(getlogin().cast_const());
-        let uid = getuid();
+        let uid = getuid().as_raw();
         if let Ok(p) = Passwd::locate(uid) {
             if let Some(user_name) = login {
                 writeln!(lock, "{}\t{user_name}", translate!("id-output-login"))?;
@@ -509,7 +509,7 @@ fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
             writeln!(lock, "{}\t{uid}", translate!("id-output-uid"))?;
         }
 
-        let euid = geteuid();
+        let euid = geteuid().as_raw();
         if euid != uid {
             if let Ok(p) = Passwd::locate(euid) {
                 writeln!(lock, "{}\t{}", translate!("id-output-euid"), p.name)?;
@@ -518,8 +518,8 @@ fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
             }
         }
 
-        let rgid = getgid();
-        let egid = getegid();
+        let rgid = getgid().as_raw();
+        let egid = getegid().as_raw();
         if egid != rgid {
             if let Ok(g) = Group::locate(rgid) {
                 writeln!(lock, "{}\t{}", translate!("id-output-rgid"), g.name)?;
@@ -544,9 +544,9 @@ fn pretty(possible_pw: Option<Passwd>) -> io::Result<()> {
 }
 
 #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
-fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
+fn pline(possible_uid: Option<Uid>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
-    let pw = Passwd::locate(uid)?;
+    let pw = Passwd::locate(uid.as_raw())?;
 
     writeln!(
         io::stdout().lock(),
@@ -571,9 +571,9 @@ fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
     target_os = "cygwin",
     target_os = "netbsd"
 ))]
-fn pline(possible_uid: Option<uid_t>) -> io::Result<()> {
+fn pline(possible_uid: Option<Uid>) -> io::Result<()> {
     let uid = possible_uid.unwrap_or_else(getuid);
-    let pw = Passwd::locate(uid)?;
+    let pw = Passwd::locate(uid.as_raw())?;
 
     writeln!(
         io::stdout().lock(),
