@@ -125,8 +125,7 @@ fn test_check_md5_ignore_missing() {
         .arg("--ignore-missing")
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 
     scene
         .ccmd("md5sum")
@@ -164,8 +163,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n");
     }
     #[cfg(windows)]
     {
@@ -184,8 +182,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n' b': OK\ndd: OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\ndd: OK\n");
     }
 }
 
@@ -237,8 +234,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n");
     }
     #[cfg(windows)]
     {
@@ -257,8 +253,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n' b': OK\ndd: OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\ndd: OK\n");
     }
 }
 
@@ -463,8 +458,7 @@ fn test_check_status_code() {
         .arg("--status")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stderr_is("")
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
