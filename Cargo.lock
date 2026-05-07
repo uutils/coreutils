@@ -4311,8 +4311,11 @@ version = "0.8.0"
 dependencies = [
  "bytecount",
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "nom 8.0.0",
+ "rustix",
+ "tempfile",
  "uucore",
 ]
 
