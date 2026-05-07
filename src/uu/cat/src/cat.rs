@@ -13,7 +13,7 @@ use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -103,7 +103,7 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl From<rustix::io::Errno> for CatError {
     fn from(value: rustix::io::Errno) -> Self {
         Self::Io(value.into())
@@ -170,14 +170,14 @@ struct OutputState {
     one_blank_kept: bool,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 trait FdReadable: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 trait FdReadable: Read {}
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl<T> FdReadable for T where T: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 impl<T> FdReadable for T where T: Read {}
 
 /// Represents an open file handle, stream, or other device
@@ -493,32 +493,52 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     }
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
-    print_slow(handle, stdout)
+    print_unbuffered(handle, stdout)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-#[cfg_attr(not(any(target_os = "linux", target_os = "android")), inline)]
-fn print_slow<R: FdReadable>(handle: &mut InputHandle<R>, stdout: io::Stdout) -> CatResult<()> {
-    let mut stdout = stdout.lock();
-    let mut buf = [0; 1024 * 64];
+#[cfg(any(unix, target_os = "wasi"))]
+fn print_unbuffered<R: FdReadable>(
+    handle: &mut InputHandle<R>,
+    stdout: io::Stdout,
+) -> CatResult<()> {
+    // todo: since there is no cost by 0-fill, we could use larger heap buffer for throughput
+    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); 1024 * 64];
+    // use raw syscall to remove buffering
     loop {
-        match handle.reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => stdout
-                .write_all(&buf[..n])
-                .inspect_err(handle_broken_pipe)?,
+        match rustix::io::read(&handle.reader, &mut buf) {
+            Ok(([], _)) => return Ok(()),
+            Ok((filled, _)) => {
+                uucore::io::write_all_raw(&stdout, filled).inspect_err(handle_broken_pipe)?;
+            }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
             _ => {}
         }
     }
+}
 
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    stdout.flush().inspect_err(handle_broken_pipe)?;
-    Ok(())
+#[cfg(not(any(unix, target_os = "wasi")))]
+fn print_unbuffered<R: FdReadable>(
+    handle: &mut InputHandle<R>,
+    stdout: io::Stdout,
+) -> CatResult<()> {
+    let mut stdout = stdout.lock();
+    let mut buf = [0; 1024 * 64];
+    loop {
+        match handle.reader.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => {
+                stdout
+                    .write_all(&buf[..n])
+                    .inspect_err(handle_broken_pipe)?;
+                // we cannot use rustix::io on Windows
+                // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                stdout.flush().inspect_err(handle_broken_pipe)?;
+            }
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
+            _ => {}
+        }
+    }
 }
 
 /// Outputs file contents to stdout in a line-by-line fashion,
