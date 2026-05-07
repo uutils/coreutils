@@ -1345,7 +1345,7 @@ fn test_write_error_dev_full() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", not(target_os = "wasi")))]
 fn test_hex_lowercase() {
     use regex::Regex;
     // Test verifies that the output hex byte offset is in lowercase
