@@ -9,7 +9,6 @@
 use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::path::Path;
-use regex::Regex;
 
 use unindent::unindent;
 use uutests::util::TestScenario;
@@ -1348,6 +1347,7 @@ fn test_write_error_dev_full() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_hex_lowercase() {
+    use regex::Regex;
     // Test verifies that the output hex byte offset is in lowercase
     new_ucmd!()
         .arg("-Ax")
