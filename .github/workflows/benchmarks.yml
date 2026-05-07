@@ -53,6 +53,7 @@ jobs:
           uu_split,
           uu_tee,
           uu_timeout,
+          uu_tr,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
