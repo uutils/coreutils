@@ -137,42 +137,29 @@ fn replace_fds() -> UResult<()> {
 }
 
 fn find_stdout() -> UResult<File> {
-    match OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(Path::new(NOHUP_OUT))
-    {
-        Ok(t) => {
-            show_error!(
-                "{}",
-                translate!("nohup-ignoring-input-appending-output", "path" => NOHUP_OUT.quote())
-            );
-            Ok(t)
-        }
-        Err(e1) => {
-            let Ok(home) = env::var("HOME") else {
-                return Err(NohupError::OpenFailed(*FAILURE_CODE, e1).into());
-            };
-            let mut homeout = PathBuf::from(home);
-            homeout.push(NOHUP_OUT);
-            let homeout_str = homeout.to_str().unwrap();
-            match OpenOptions::new().create(true).append(true).open(&homeout) {
-                Ok(t) => {
-                    show_error!(
-                        "{}",
-                        translate!("nohup-ignoring-input-appending-output", "path" => homeout_str.quote())
-                    );
-                    Ok(t)
-                }
-                Err(e2) => {
-                    Err(
-                        NohupError::OpenFailed2(*FAILURE_CODE, e1, homeout_str.to_string(), e2)
-                            .into(),
-                    )
-                }
-            }
-        }
-    }
+    try_open_nohup_file(NOHUP_OUT).or_else(|e1| {
+        let Ok(home) = env::var("HOME") else {
+            return Err(NohupError::OpenFailed(*FAILURE_CODE, e1).into());
+        };
+
+        let home_out = PathBuf::from(home).join(NOHUP_OUT);
+        let home_out = home_out.to_str().unwrap();
+
+        try_open_nohup_file(home_out).map_err(|e2| {
+            NohupError::OpenFailed2(*FAILURE_CODE, e1, home_out.to_string(), e2).into()
+        })
+    })
+}
+
+fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
+    let file = OpenOptions::new().create(true).append(true).open(path)?;
+
+    show_error!(
+        "{}",
+        translate!("nohup-ignoring-input-appending-output", "path" => path.quote())
+    );
+
+    Ok(file)
 }
 
 #[cfg(target_vendor = "apple")]

@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore crème brûlée
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -445,6 +447,52 @@ fn test_quoting_style_locale() {
         .args(&["-c", "%N", "\""])
         .succeeds()
         .stdout_only("\'\"\'\n");
+}
+
+#[test]
+fn test_quoting_style_invalid_env() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("baguette");
+    at.touch("Croissant");
+    at.touch("Escargot");
+
+    let needle = "ignoring invalid value of environment variable QUOTING_STYLE";
+
+    // A bogus value triggers exactly one warning across multiple files and the
+    // output falls back to the default (shell-escape) style.
+    let res = ts
+        .ucmd()
+        .env("QUOTING_STYLE", "fromage")
+        .args(&["-c", "nom=[%N]", "baguette", "Croissant", "Escargot"])
+        .succeeds();
+    res.stdout_is("nom=['baguette']\nnom=['Croissant']\nnom=['Escargot']\n");
+    assert_eq!(res.stderr_str().matches(needle).count(), 1);
+
+    // An empty value is also invalid and must be reported with empty quotes.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "")
+        .args(&["-c", "%N", "baguette"])
+        .succeeds()
+        .stdout_is("'baguette'\n")
+        .stderr_is("stat: ignoring invalid value of environment variable QUOTING_STYLE: ''\n");
+
+    // %%%N: a literal '%' followed by the quoted name, fallback style applies.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "soufflé")
+        .args(&["-c", "%%%N", "baguette"])
+        .succeeds()
+        .stdout_is("%'baguette'\n")
+        .stderr_is(
+            "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'soufflé'\n",
+        );
+
+    // When the format never consults %N, QUOTING_STYLE must not be parsed at all.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "crème-brûlée")
+        .args(&["-c", "taille=%s genre:%F brut=%n", "baguette"])
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]

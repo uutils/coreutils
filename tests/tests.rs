@@ -8,7 +8,7 @@ use std::env;
 pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
     // Allow overriding the binary path (e.g. to test a WASI binary via wasmtime)
     if env::var("UUTESTS_BINARY_PATH").is_err() {

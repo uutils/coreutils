@@ -1972,7 +1972,7 @@ mod check_encoding {
             .arg("--check")
             .arg(at.subdir.join("check"))
             .succeeds()
-            .stdout_is_bytes(b"funky\xffname: OK\n")
+            .stdout_is_bytes(b"'funky'$'\\377''name': OK\n")
             .no_stderr();
 
         // Checksum mismatch
@@ -1983,7 +1983,7 @@ mod check_encoding {
             .arg("--check")
             .arg(at.subdir.join("check"))
             .fails()
-            .stdout_is_bytes(b"funky\xffname: FAILED\n")
+            .stdout_is_bytes(b"'funky'$'\\377''name': FAILED\n")
             .stderr_contains("1 computed checksum did NOT match");
 
         // file not found
@@ -1994,7 +1994,7 @@ mod check_encoding {
             .arg("--check")
             .arg(at.subdir.join("check"))
             .fails()
-            .stdout_is_bytes(b"flakey\xffname: FAILED open or read\n")
+            .stdout_is_bytes(b"'flakey'$'\\377''name': FAILED open or read\n")
             .stderr_contains("1 listed file could not be read");
     }
 
@@ -2015,8 +2015,8 @@ mod check_encoding {
         cmd.arg("-c")
             .arg("check")
             .fails_with_code(1)
-            .stdout_contains_bytes(b"FFF\xffFFF: FAILED open or read")
-            .stdout_contains_bytes(b"FFF\xffDIR: FAILED open or read")
+            .stdout_contains_bytes(b"'FFF'$'\\377''FFF': FAILED open or read")
+            .stdout_contains_bytes(b"'FFF'$'\\377''DIR': FAILED open or read")
             .stderr_contains("'FFF'$'\\377''FFF': No such file or directory")
             .stderr_contains("'FFF'$'\\377''DIR': Is a directory");
     }

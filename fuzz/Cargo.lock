@@ -2154,8 +2154,8 @@ name = "uufuzz"
 version = "0.8.0"
 dependencies = [
  "console",
- "libc",
  "rand",
+ "rustix",
  "similar",
  "tempfile",
  "uucore",

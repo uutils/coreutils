@@ -3244,7 +3244,7 @@ mod tests {
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
-    #[ctor::ctor]
+    #[ctor::ctor(unsafe)]
     fn init() {
         unsafe {
             env::set_var("UUTESTS_BINARY_PATH", "");

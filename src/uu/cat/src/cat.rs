@@ -499,20 +499,16 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
 #[cfg_attr(not(any(target_os = "linux", target_os = "android")), inline)]
 fn print_slow<R: FdReadable>(handle: &mut InputHandle<R>, stdout: io::Stdout) -> CatResult<()> {
-    let mut stdout_lock = stdout.lock();
+    let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
-            Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-                stdout_lock
-                    .write_all(&buf[..n])
-                    .inspect_err(handle_broken_pipe)?;
-            }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e.into()),
+            Ok(0) => break,
+            Ok(n) => stdout
+                .write_all(&buf[..n])
+                .inspect_err(handle_broken_pipe)?,
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
+            _ => {}
         }
     }
 
@@ -521,7 +517,7 @@ fn print_slow<R: FdReadable>(handle: &mut InputHandle<R>, stdout: io::Stdout) ->
     // that will succeed, data pushed through splice will be output before
     // the data buffered in stdout.lock. Therefore additional explicit flush
     // is required here.
-    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
+    stdout.flush().inspect_err(handle_broken_pipe)?;
     Ok(())
 }
 

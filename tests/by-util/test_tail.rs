@@ -1578,7 +1578,7 @@ fn test_retry7() {
         "--use-polling",
     ];
 
-    let mut delay = 100;
+    let mut delay = 500;
     for _ in 0..2 {
         at.mkdir(untailable);
 

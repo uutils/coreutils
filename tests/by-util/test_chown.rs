@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::process::geteuid;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
 use uutests::{at_and_ucmd, new_ucmd};
@@ -750,7 +748,7 @@ fn test_root_preserve() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_big_p() {
-    if geteuid() != 0 {
+    if !rustix::process::geteuid().is_root() {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")

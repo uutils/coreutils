@@ -241,16 +241,16 @@ impl Display for FileChecksumResult {
 /// name might contain non-utf-8 characters.
 fn write_file_report<W: Write>(
     mut w: W,
-    filename: &[u8],
+    filename: &OsStr,
     result: FileChecksumResult,
-    prefix: &str,
     verbose: ChecksumVerbose,
-) {
+) -> io::Result<()> {
     if result.can_display(verbose) {
-        let _ = write!(w, "{prefix}");
-        let _ = w.write_all(filename);
-        let _ = writeln!(w, ": {result}");
+        let filename = locale_aware_escape_name(filename, QuotingStyle::SHELL_ESCAPE);
+        // Here, .to_string_lossy() is lossless thanks to the escaping.
+        writeln!(w, "{}: {result}", filename.to_string_lossy())?;
     }
+    Ok(())
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -543,17 +543,14 @@ fn get_file_to_check(
     filename: &OsStr,
     opts: ChecksumValidateOptions,
 ) -> Result<Box<dyn Read>, LineCheckError> {
-    let filename_bytes = os_str_as_bytes(filename).map_err(|e| LineCheckError::UError(e.into()))?;
-
     if filename == "-" {
         Ok(Box::new(stdin())) // Use stdin if "-" is specified in the checksum file
     } else {
         let failed_open = || {
-            write_file_report(
+            let _ = write_file_report(
                 io::stdout(),
-                filename_bytes,
+                filename,
                 FileChecksumResult::CantOpen,
-                "",
                 opts.verbose,
             );
         };
@@ -686,7 +683,7 @@ fn compute_and_check_digest_from_file(
     algo: SizedAlgoKind,
     opts: ChecksumValidateOptions,
 ) -> Result<(), LineCheckError> {
-    let (filename_to_check_unescaped, prefix) = unescape_filename(filename);
+    let (filename_to_check_unescaped, _prefix) = unescape_filename(filename);
     let real_filename_to_check = os_str_from_bytes(&filename_to_check_unescaped)?;
 
     // Open the input file
@@ -708,11 +705,10 @@ fn compute_and_check_digest_from_file(
                         .to_string()
                 }));
 
-                write_file_report(
+                let _ = write_file_report(
                     io::stdout(),
-                    filename,
+                    &real_filename_to_check,
                     FileChecksumResult::CantOpen,
-                    prefix,
                     opts.verbose,
                 );
                 return Err(LineCheckError::CantOpenFile);
@@ -725,11 +721,10 @@ fn compute_and_check_digest_from_file(
         DigestOutput::Crc(n) => n.to_be_bytes() == expected_checksum,
         DigestOutput::U16(n) => n.to_be_bytes() == expected_checksum,
     };
-    write_file_report(
+    let _ = write_file_report(
         io::stdout(),
-        filename,
+        &real_filename_to_check,
         FileChecksumResult::from_bool(checksum_correct),
-        prefix,
         opts.verbose,
     );
 
@@ -1278,37 +1273,33 @@ mod tests {
     fn test_write_file_report() {
         let opts = ChecksumValidateOptions::default();
 
-        let cases: &[(&[u8], FileChecksumResult, &str, &[u8])] = &[
-            (b"filename", FileChecksumResult::Ok, "", b"filename: OK\n"),
+        let cases: &[(OsString, FileChecksumResult, &[u8])] = &[
             (
-                b"filename",
+                OsString::from("filename"),
+                FileChecksumResult::Ok,
+                b"filename: OK\n",
+            ),
+            (
+                OsString::from("filename"),
                 FileChecksumResult::Failed,
-                "",
                 b"filename: FAILED\n",
             ),
             (
-                b"filename",
+                OsString::from("filename"),
                 FileChecksumResult::CantOpen,
-                "",
                 b"filename: FAILED open or read\n",
             ),
             (
-                b"filename",
+                #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
+                os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),
                 FileChecksumResult::Ok,
-                "prefix",
-                b"prefixfilename: OK\n",
-            ),
-            (
-                b"funky\xffname",
-                FileChecksumResult::Ok,
-                "",
-                b"funky\xffname: OK\n",
+                b"'funky'$'\\377''name': OK\n",
             ),
         ];
 
-        for (filename, result, prefix, expected) in cases {
+        for (filename, result, expected) in cases {
             let mut buffer: Vec<u8> = vec![];
-            write_file_report(&mut buffer, filename, *result, prefix, opts.verbose);
+            let _ = write_file_report(&mut buffer, filename, *result, opts.verbose);
             assert_eq!(&buffer, expected);
         }
     }

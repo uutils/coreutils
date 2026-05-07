@@ -81,12 +81,26 @@ check_utility() {
     # Check for expected safe syscalls
     local found_safe=0
     for syscall in $expected_syscalls; do
-        if grep -q "$syscall" "$strace_log"; then
-            echo "✓ Found $syscall() (safe traversal)"
-            found_safe=$((found_safe + 1))
-        else
-            fail_immediately "Missing $syscall() (safe traversal not active for $util)"
-        fi
+        # fchmodat2 is the modern replacement for fchmodat on Linux 6.6+
+        # Accept either as a valid safe traversal syscall
+        case "$syscall" in
+            fchmodat)
+                if grep -qE "fchmodat2?\(" "$strace_log"; then
+                    echo "✓ Found fchmodat/fchmodat2() (safe traversal)"
+                    found_safe=$((found_safe + 1))
+                else
+                    fail_immediately "Missing fchmodat() or fchmodat2() (safe traversal not active for $util)"
+                fi
+                ;;
+            *)
+                if grep -q "$syscall" "$strace_log"; then
+                    echo "✓ Found $syscall() (safe traversal)"
+                    found_safe=$((found_safe + 1))
+                else
+                    fail_immediately "Missing $syscall() (safe traversal not active for $util)"
+                fi
+                ;;
+        esac
     done
 
     # Count detailed syscall statistics
@@ -95,7 +109,7 @@ check_utility() {
 
     openat_count=$(grep -c "openat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     unlinkat_count=$(grep -c "unlinkat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
-    fchmodat_count=$(grep -c "fchmodat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
+    fchmodat_count=$(grep -cE "fchmodat2?\(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     fchownat_count=$(grep -c "fchownat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     newfstatat_count=$(grep -c "newfstatat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
     renameat_count=$(grep -c "renameat(" "$strace_log" 2>/dev/null | tr -d '\n' || echo "0")
@@ -159,7 +173,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv; do
+    for util in rm chmod chown chgrp du mv cp; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -183,7 +197,7 @@ fi
 # Test chmod - should use openat, fchmodat, newfstatat
 if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
     cp -r test_dir test_chmod
-    check_utility "chmod" "openat,fchmodat,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
+    check_utility "chmod" "openat,fchmodat,fchmodat2,newfstatat,chmod" "openat fchmodat" "-R 755 test_chmod" "recursive_chmod"
 
     # Additional regression guard: ensure recursion uses dirfd-relative openat, not AT_FDCWD with a multi-component path
     if grep -q 'openat(AT_FDCWD, "test_chmod/' strace_chmod_recursive_chmod.log; then
@@ -217,6 +231,42 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv"; then
     echo "test" > test_mv_src/file.txt
     echo "test" > test_mv_src/sub/file2.txt
     check_utility "mv" "openat,renameat,newfstatat,rename" "openat" "test_mv_src test_mv_dst" "move_directory"
+fi
+
+# cp invariant checks. Both #10011 (restrictive 0600 destination mode) and
+# #10017 (O_NOFOLLOW on the -P source) need to hold; verify each on its own
+# strace.
+if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        cp_cmd="$COREUTILS_BIN cp"
+    else
+        cp_cmd="$PROJECT_ROOT/target/${PROFILE}/cp"
+    fi
+
+    # #10011: destination created with mode 0600 so other users cannot open
+    # the file through its umask-derived initial mode before cp narrows it.
+    echo "cp_perm_test" > test_cp_src_perm
+    rm -f test_cp_dst_perm
+    strace -f -e trace=openat -o strace_cp_dest_perm.log \
+        $cp_cmd test_cp_src_perm test_cp_dst_perm 2>/dev/null || true
+    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
+        cat strace_cp_dest_perm.log
+        fail_immediately "cp must create the destination with mode 0600 (issue #10011)"
+    fi
+    echo "✓ cp creates destination with restrictive 0600 mode"
+    rm -f test_cp_src_perm test_cp_dst_perm
+
+    # #10017: -P opens source with O_NOFOLLOW so a path swap to a symlink
+    # between the lstat check and the open cannot redirect the copy.
+    echo "cp_nofollow_test" > test_cp_src
+    strace -f -e trace=openat -o strace_cp_nofollow.log \
+        $cp_cmd -P test_cp_src test_cp_dst 2>/dev/null || true
+    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
+        cat strace_cp_nofollow.log
+        fail_immediately "cp -P must open the source with O_NOFOLLOW (issue #10017)"
+    fi
+    echo "✓ cp -P opens source with O_NOFOLLOW"
+    rm -f test_cp_src test_cp_dst
 fi
 
 echo ""

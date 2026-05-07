@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstdir
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs ELOOP
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -1768,6 +1768,47 @@ fn test_cp_preserve_all() {
     }
 }
 
+// GNU `cp -p` preserves mode, ownership, and timestamps but NOT xattrs.
+// xattr preservation requires explicit `--preserve=xattr` or `-a`. See #9704.
+#[test]
+#[cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "openbsd", target_os = "macos"))
+))]
+fn test_cp_p_does_not_preserve_xattr_by_default() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    let xattr_key = "user.test_preserve_p";
+    let setfattr = Command::new("setfattr")
+        .args(["-n", xattr_key, "-v", "v", &at.plus_as_string("src")])
+        .status();
+    match setfattr {
+        Ok(s) if s.success() => {}
+        _ => {
+            println!("test skipped: setfattr not available / filesystem rejects xattrs");
+            return;
+        }
+    }
+
+    scene
+        .ucmd()
+        .args(&["-p", &at.plus_as_string("src"), &at.plus_as_string("dst")])
+        .succeeds();
+
+    let out = Command::new("getfattr")
+        .args(["--only-values", "-n", xattr_key, &at.plus_as_string("dst")])
+        .output()
+        .expect("getfattr failed");
+    assert!(
+        !out.status.success(),
+        "cp -p should not preserve xattrs by default, but '{xattr_key}' was copied"
+    );
+}
+
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "openbsd"))))]
 fn test_cp_preserve_xattr() {
@@ -3036,8 +3077,6 @@ fn test_cp_symlink_overwrite_detection() {
         .fails()
         .stderr_only(if cfg!(target_os = "windows") {
             "cp: will not copy 'good/README' through just-created symlink 'tmp\\README'\n"
-        } else if cfg!(target_os = "macos") {
-            "cp: will not overwrite just-created 'tmp/README' with 'good/README'\n"
         } else {
             "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n"
         });
@@ -7859,6 +7898,28 @@ fn test_cp_preserve_context_with_z_fails() {
         .stderr_contains("cannot combine");
 }
 
+// Covers the happy path for issue #9750: when chown succeeds (src owner ==
+// current user), `cp -p` preserves setuid/setgid. The failure-path behavior —
+// stripping setuid/setgid when chown cannot preserve ownership — requires a
+// multi-user setup (source owned by a different uid, cp run as non-root) and
+// is exercised by GNU's test suite; documenting here as future coverage.
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_setuid_when_chown_succeeds() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.set_mode("src", 0o4755);
+
+    ucmd.arg("-p").arg("src").arg("dst").succeeds();
+
+    let mode = at.metadata("dst").mode() & 0o7777;
+    assert_eq!(
+        mode & 0o4000,
+        0o4000,
+        "setuid bit should be preserved when chown succeeds (got mode {mode:o})"
+    );
+}
+
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_cp_recursive_non_utf8_source() {
@@ -7878,102 +7939,113 @@ fn test_cp_recursive_non_utf8_source() {
     assert!(at.plus("dir2").join("a").exists());
 }
 
-/// Regression tests for Issue #10017: TOCTOU symlink swap vulnerability.
-///
-/// These tests verify that `cp` opens source files with `O_NOFOLLOW` when
-/// symlink dereferencing is not requested, preventing a race condition where
-/// an attacker swaps a regular file with a symlink between the metadata check
-/// and the open call.
-mod issue_10017_no_follow {
-    use super::*;
-    use uutests::util::TestScenario;
+// Regression guard for issue #10011: cp now creates the destination with
+// mode 0o600 instead of the umask-derived 0o666, so another user in a
+// shared directory cannot open the file through its permissive initial
+// mode before cp applies the final permissions. The final mode must still
+// match the source mode masked by the running umask, so no user-visible
+// behavior changes.
+#[test]
+#[cfg(unix)]
+fn test_cp_final_mode_unchanged_after_restrictive_create() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
+    at.set_mode("src", 0o644);
 
-    /// Verify that copying a regular file still works after the O_NOFOLLOW change.
-    #[test]
-    fn copy_regular_file_works() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    ucmd.umask(0o022).arg("src").arg("dst").succeeds();
 
-        at.write("src", "hello world");
-        scene.ucmd().arg("src").arg("dst").succeeds();
-        assert_eq!(at.read("dst"), "hello world");
+    let mode = at.metadata("dst").mode() & 0o777;
+    assert_eq!(
+        mode, 0o644,
+        "dst final mode should match source & ~umask (got {mode:o})"
+    );
+}
+
+// Sanity check for the `-P` happy path: a symlink source is copied as a
+// symlink, not by following it. The actual `O_NOFOLLOW` invariant for
+// issue #10017 (path swap to a symlink between lstat and open) cannot be
+// raced deterministically from a unit test; that is locked in by the
+// strace check in util/check-safe-traversal.sh, which fails if a future
+// change drops `O_NOFOLLOW` from the source open under `-P`.
+#[test]
+#[cfg(unix)]
+fn test_cp_no_dereference_copies_symlink_as_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("target", "secret target contents");
+    at.symlink_file("target", "src_link");
+
+    ucmd.arg("-P").arg("src_link").arg("dst").succeeds();
+    assert!(at.symlink_exists("dst"));
+    assert!(at.read_symlink("dst").ends_with("target"));
+}
+
+// Regression for GNU tests/cp/deref-slink: when the destination exists as
+// a symlink, `cp -d` (which implies --no-dereference for the source) must
+// still follow the destination symlink and overwrite the link's target.
+// `-P`/`-d` only forbids dereferencing on the source side; applying
+// O_NOFOLLOW to the dest open broke this and surfaced as ELOOP.
+#[test]
+#[cfg(unix)]
+fn test_cp_d_overwrites_existing_symlink_dest() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("f");
+    at.touch("slink-target");
+    at.symlink_file("slink-target", "slink");
+
+    ucmd.arg("-d").arg("f").arg("slink").succeeds();
+
+    // The destination symlink itself remains a symlink (GNU follows it
+    // through to the target rather than replacing it).
+    assert!(at.symlink_exists("slink"));
+    assert!(at.read_symlink("slink").ends_with("slink-target"));
+}
+
+// Regression for GNU tests/cp/acl: `cp -p` must preserve POSIX ACLs on
+// Linux. ACLs are part of GNU's `mode` preservation, not its `xattr`
+// preservation, so the default-no-xattr change in #9704 must not strip
+// them. Only runs when `setfacl` is available so non-ACL filesystems and
+// non-Linux CI do not flag spurious failures.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_p_preserves_posix_acls() {
+    use std::process::Command;
+
+    if Command::new("setfacl").arg("--version").output().is_err() {
+        return;
+    }
+    if Command::new("getfacl").arg("--version").output().is_err() {
+        return;
     }
 
-    /// Verify that copying a file via symlink with `-L` (dereference) works.
-    #[test]
-    #[cfg(not(windows))]
-    fn copy_dereference_follows_symlink() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("src");
 
-        at.write("target", "target content");
-        fs::symlink("target", at.plus("link")).unwrap();
-        scene.ucmd().arg("-L").arg("link").arg("dst").succeeds();
-        assert_eq!(at.read("dst"), "target content");
-        assert!(!at.is_symlink("dst"));
+    let setfacl = Command::new("setfacl")
+        .arg("-m")
+        .arg("user:bin:rw-")
+        .arg(at.plus("src"))
+        .status();
+    let Ok(status) = setfacl else { return };
+    if !status.success() {
+        // Filesystem doesn't support ACLs; skip.
+        return;
     }
 
-    /// Verify that with `-P` (no-dereference), a symlink source is copied
-    /// as a symlink (not the target's contents).
-    #[test]
-    #[cfg(not(windows))]
-    fn copy_symlink_as_link_no_dereference() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
+    ucmd.arg("-p").arg("src").arg("dst").succeeds();
 
-        at.write("target", "target content");
-        fs::symlink("target", at.plus("link")).unwrap();
-        scene.ucmd().arg("-P").arg("link").arg("dst").succeeds();
-        assert!(at.is_symlink("dst"));
-    }
-
-    /// Verify that copying a regular file with `--reflink=never` still works.
-    #[test]
-    fn copy_reflink_never_regular_file() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        at.write("src", "reflink never content");
-        scene
-            .ucmd()
-            .arg("--reflink=never")
-            .arg("src")
-            .arg("dst")
-            .succeeds();
-        assert_eq!(at.read("dst"), "reflink never content");
-    }
-
-    /// Verify that recursive copy of regular files still works with O_NOFOLLOW.
-    #[test]
-    #[cfg(not(windows))]
-    fn recursive_copy_regular_files() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        at.mkdir("srcdir");
-        at.write("srcdir/a", "file a");
-        at.write("srcdir/b", "file b");
-        scene
-            .ucmd()
-            .arg("-r")
-            .arg("srcdir")
-            .arg("dstdir")
-            .succeeds();
-        assert_eq!(at.read("dstdir/a"), "file a");
-        assert_eq!(at.read("dstdir/b"), "file b");
-    }
-
-    /// Verify that `-P` (no-dereference) with a regular file still copies
-    /// the file contents correctly.
-    #[test]
-    #[cfg(not(windows))]
-    fn copy_no_dereference_regular_file() {
-        let scene = TestScenario::new(util_name!());
-        let at = &scene.fixtures;
-
-        at.write("src", "no-deref content");
-        scene.ucmd().arg("-P").arg("src").arg("dst").succeeds();
-        assert_eq!(at.read("dst"), "no-deref content");
-        assert!(!at.is_symlink("dst"));
-    }
+    let src_acl = Command::new("getfacl")
+        .arg("--omit-header")
+        .arg(at.plus("src"))
+        .output()
+        .unwrap();
+    let dst_acl = Command::new("getfacl")
+        .arg("--omit-header")
+        .arg(at.plus("dst"))
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&src_acl.stdout),
+        String::from_utf8_lossy(&dst_acl.stdout),
+        "cp -p must preserve POSIX ACLs (GNU tests/cp/acl regression)",
+    );
 }

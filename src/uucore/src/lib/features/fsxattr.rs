@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
@@ -43,6 +43,28 @@ pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::
         }
     }
     Ok(())
+}
+
+/// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
+/// `system.posix_acl_default`) from `source` to `dest`.
+///
+/// GNU `cp -p` preserves ACLs as part of mode preservation but does not
+/// preserve other (user/security) xattrs unless `--preserve=xattr` or
+/// `-a` is requested. On Linux, POSIX ACLs are stored as the two `system.*`
+/// xattrs above; copying them here without copying the rest gives the
+/// GNU-compatible "preserve mode (incl. ACLs) but not user xattrs" behavior.
+///
+/// Errors from the underlying xattr calls are silently ignored: filesystems
+/// without ACL/xattr support are common, and GNU cp itself does not surface
+/// failures here when `mode` is the only thing being preserved.
+#[cfg(unix)]
+pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
+    for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+        if let Ok(Some(value)) = xattr::get(&source, name) {
+            // Best-effort: silently skip if dest doesn't support ACL xattrs.
+            let _ = xattr::set(&dest, name, &value);
+        }
+    }
 }
 
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
