@@ -2981,4 +2981,52 @@ fn test_consistent_sorting_with_i18n_collate() {
         .stdout_is(expected_output);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_locale_utf8_long_lines_differ_after_prefix_limit() {
+    // Regression test for #12138: lines sharing a prefix longer than the
+    // 8 KiB sort-key limit must fall back to full locale comparison.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let prefix = "x".repeat(16 * 1024);
+    let line_a = format!("{prefix}a\n");
+    let line_b = format!("{prefix}b\n");
+    let input = format!("{line_b}{line_a}");
+    let expected = format!("{line_a}{line_b}");
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_utf8_truncation_at_multibyte_boundary() {
+    // Construct lines whose byte length is just over the 8 KiB sort-key
+    // prefix limit, with a multi-byte UTF-8 character (é = 0xC3 0xA9)
+    // straddling that boundary. The truncation logic must back off to a
+    // valid char boundary and not split the multi-byte sequence; the
+    // fallback path must then order the lines correctly.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // Pad to one byte before the 8 KiB limit, then place "éa" / "éb" so
+    // 'é' begins at byte 8191 (straddling 8192) and the differing ASCII
+    // byte ('a' vs 'b') sits past the limit.
+    let pad = "x".repeat(8 * 1024 - 1);
+    let line_a = format!("{pad}éa\n");
+    let line_b = format!("{pad}éb\n");
+    let input = format!("{line_b}{line_a}");
+    let expected = format!("{line_a}{line_b}");
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 /* spell-checker: enable */

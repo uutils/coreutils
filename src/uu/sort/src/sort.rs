@@ -643,10 +643,11 @@ impl<'a> Line<'a> {
     ) -> Self {
         #[cfg(feature = "i18n-collator")]
         if settings.precomputed.fast_locale_collation {
-            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+            let truncated = compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
             line_data
                 .collation_key_ends
                 .push(line_data.collation_key_buffer.len());
+            line_data.collation_key_truncated.push(truncated);
             return Self { line, index };
         }
 
@@ -2656,11 +2657,20 @@ fn compare_by<'a>(
         let a_key = a_line_data.collation_key(a.index);
         let b_key = b_line_data.collation_key(b.index);
         let mut cmp = a_key.cmp(b_key);
-        // If collation keys are equal, fall back to lexicographic comparison
-        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        // If collation keys are equal, we need to distinguish two cases:
         if cmp == Ordering::Equal {
-            // Reversing the order to match sort's sorting behaviour
-            cmp = b.line.cmp(a.line);
+            let a_truncated = a_line_data.collation_key_truncated[a.index];
+            let b_truncated = b_line_data.collation_key_truncated[b.index];
+            if a_truncated || b_truncated {
+                // Prefix sort keys matched but at least one line was truncated.
+                // Fall back to full locale comparison for correctness.
+                cmp = locale_cmp(a.line, b.line);
+            }
+            // If still equal (or neither was truncated), use reverse lexicographic
+            // tiebreak to match GNU sort's behaviour for inputs like `01` vs `0_1`.
+            if cmp == Ordering::Equal {
+                cmp = b.line.cmp(a.line);
+            }
         }
         return if global_settings.reverse {
             cmp.reverse()

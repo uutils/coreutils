@@ -74,15 +74,38 @@ pub fn init_locale_collation() -> bool {
     try_init_collator(opts)
 }
 
-/// Compute the ICU collation sort key for the given input bytes and append it to `buf`.
-/// This allows pre-computing sort keys once per line, then comparing them with simple
-/// byte comparison during sorting (much faster than calling `compare_utf8` per comparison).
-pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
+/// Cap on input bytes used to compute a sort key. Callers must fall back to
+/// `locale_cmp` when prefix keys tie. 8 KiB bounds key cost on multi-MB lines
+/// without hitting the fallback for realistic inputs — see issue #12138
+/// (unbounded path was ~40× slower than GNU `sort`).
+const SORT_KEY_PREFIX_LIMIT: usize = 8 * 1024;
+
+/// Append the ICU collation sort key for `input` to `buf`, using at most
+/// `SORT_KEY_PREFIX_LIMIT` bytes. Returns `true` if the input was truncated;
+/// the caller must then fall back to `locale_cmp` on tie.
+pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) -> bool {
     let c = COLLATOR
         .get()
         .expect("compute_sort_key_utf8 called before collator initialization");
-    c.write_sort_key_utf8_to(input, buf)
+    let truncated = input.len() > SORT_KEY_PREFIX_LIMIT;
+    let effective_input = if truncated {
+        let mut end = SORT_KEY_PREFIX_LIMIT;
+        while end > 0 && !is_utf8_char_boundary(input[end]) {
+            end -= 1;
+        }
+        &input[..end]
+    } else {
+        input
+    };
+    c.write_sort_key_utf8_to(effective_input, buf)
         .expect("ICU write_sort_key_utf8_to failed");
+    truncated
+}
+
+#[inline]
+fn is_utf8_char_boundary(b: u8) -> bool {
+    // ASCII (0xxxxxxx) or UTF-8 leading byte (11xxxxxx).
+    (b as i8) >= -0x40
 }
 
 /// Compare both strings with regard to the current locale.

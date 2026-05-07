@@ -57,6 +57,10 @@ pub struct LineData<'a> {
     pub collation_key_buffer: Vec<u8>,
     /// End offsets into `collation_key_buffer` for each line's sort key.
     pub collation_key_ends: Vec<usize>,
+    /// Tracks whether each line's sort key was computed from a truncated prefix.
+    /// When `true`, prefix sort keys that compare equal must fall back to full
+    /// locale comparison.
+    pub collation_key_truncated: Vec<bool>,
 }
 
 impl LineData<'_> {
@@ -83,6 +87,7 @@ impl Chunk {
             contents.line_data.line_num_floats.clear();
             contents.line_data.collation_key_buffer.clear();
             contents.line_data.collation_key_ends.clear();
+            contents.line_data.collation_key_truncated.clear();
             contents.token_buffer.clear();
             let lines = unsafe {
                 // SAFETY: It is safe to (temporarily) transmute to a vector of lines with a longer lifetime,
@@ -108,6 +113,9 @@ impl Chunk {
                 line_num_floats: std::mem::take(&mut contents.line_data.line_num_floats),
                 collation_key_buffer: std::mem::take(&mut contents.line_data.collation_key_buffer),
                 collation_key_ends: std::mem::take(&mut contents.line_data.collation_key_ends),
+                collation_key_truncated: std::mem::take(
+                    &mut contents.line_data.collation_key_truncated,
+                ),
                 token_buffer: std::mem::take(&mut contents.token_buffer),
                 line_count_hint: contents.line_count_hint,
                 // buffer is set below after we consume `self`
@@ -135,6 +143,7 @@ pub struct RecycledChunk {
     line_num_floats: Vec<Option<f64>>,
     collation_key_buffer: Vec<u8>,
     collation_key_ends: Vec<usize>,
+    collation_key_truncated: Vec<bool>,
     token_buffer: Vec<Range<usize>>,
     line_count_hint: usize,
     buffer: Vec<u8>,
@@ -150,6 +159,7 @@ impl RecycledChunk {
             line_num_floats: Vec::new(),
             collation_key_buffer: Vec::new(),
             collation_key_ends: Vec::new(),
+            collation_key_truncated: Vec::new(),
             token_buffer: Vec::new(),
             line_count_hint: 0,
             buffer: vec![0; capacity],
@@ -197,6 +207,7 @@ pub fn read<T: Read>(
         line_num_floats,
         collation_key_buffer,
         collation_key_ends,
+        collation_key_truncated,
         mut token_buffer,
         mut line_count_hint,
         mut buffer,
@@ -237,6 +248,7 @@ pub fn read<T: Read>(
                 line_num_floats,
                 collation_key_buffer,
                 collation_key_ends,
+                collation_key_truncated,
             };
             parse_lines(
                 read,
