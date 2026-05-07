@@ -16,7 +16,7 @@ use uucore::checksum::compute::{
     ChecksumComputeOptions, OutputFormat, perform_checksum_computation,
 };
 use uucore::checksum::validate::{self, ChecksumValidateOptions, ChecksumVerbose};
-use uucore::checksum::{AlgoKind, ChecksumError, SizedAlgoKind};
+use uucore::checksum::{AlgoKind, ChecksumError, HashLength, SizedAlgoKind};
 use uucore::error::UResult;
 use uucore::line_ending::LineEnding;
 use uucore::{crate_version, format_usage, localized_help_template, util_name};
@@ -64,7 +64,7 @@ pub fn standalone_with_length_main(
     algo: AlgoKind,
     cmd: Command,
     args: impl uucore::Args,
-    validate_len: fn(&str) -> UResult<usize>,
+    validate_len: fn(&str) -> UResult<HashLength>,
 ) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(cmd, args)?;
     let algo = Some(algo);
@@ -142,7 +142,7 @@ pub fn standalone_checksum_app(about: String, usage: String) -> Command {
 /// validation on arguments and proceeds in computing or checking mode.
 pub fn checksum_main(
     algo: Option<AlgoKind>,
-    length: Option<usize>,
+    length: Option<HashLength>,
     matches: ArgMatches,
     output_format: OutputFormat,
 ) -> UResult<()> {
