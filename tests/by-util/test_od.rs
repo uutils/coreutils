@@ -9,6 +9,7 @@
 use std::io::Read;
 #[cfg(target_os = "linux")]
 use std::path::Path;
+use regex::Regex;
 
 use unindent::unindent;
 use uutests::util::TestScenario;
@@ -689,7 +690,7 @@ fn test_hex_offset() {
                    00000000 00000000 00000000 00000000
             000010 00000000 00000000 00000000 00000000
                    00000000 00000000 00000000 00000000
-            00001F
+            00001f
             ",
     );
 
@@ -1342,4 +1343,18 @@ fn test_write_error_dev_full() {
         .fails()
         .code_is(1)
         .stderr_contains("No space left on device");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_hex_lowercase() {
+    // Test verifies that the output hex byte offset is in lowercase
+    new_ucmd!()
+        .arg("-Ax")
+        .arg("-N16")
+        .arg("-j0xff0")
+        .arg("/dev/urandom")
+        .succeeds()
+        .no_stderr()
+        .stdout_matches(&Regex::new(r"^000ff0.*").unwrap());
 }
