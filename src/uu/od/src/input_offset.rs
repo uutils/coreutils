@@ -73,7 +73,7 @@ impl InputOffset {
 #[test]
 fn test_input_offset() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, None);
-    assert_eq!("00000A", &sut.format_byte_offset());
+    assert_eq!("00000a", &sut.format_byte_offset());
     sut.increase_position(10);
     assert_eq!("000014", &sut.format_byte_offset());
 
@@ -98,16 +98,16 @@ fn test_input_offset() {
 #[test]
 fn test_input_offset_with_label() {
     let mut sut = InputOffset::new(Radix::Hexadecimal, 10, Some(20));
-    assert_eq!("00000A (000014)", &sut.format_byte_offset());
+    assert_eq!("00000a (000014)", &sut.format_byte_offset());
     sut.increase_position(10);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     // note normally the radix will not change after initialization
     sut.set_radix(Radix::Decimal);
     assert_eq!("0000020 (0000030)", &sut.format_byte_offset());
 
     sut.set_radix(Radix::Hexadecimal);
-    assert_eq!("000014 (00001E)", &sut.format_byte_offset());
+    assert_eq!("000014 (00001e)", &sut.format_byte_offset());
 
     sut.set_radix(Radix::Octal);
     assert_eq!("0000024 (0000036)", &sut.format_byte_offset());
