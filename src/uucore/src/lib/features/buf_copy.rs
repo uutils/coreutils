@@ -25,7 +25,7 @@ mod tests {
     use std::fs::File;
     use tempfile::tempdir;
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     use {
         crate::pipes,
         std::fs::OpenOptions,
@@ -37,7 +37,7 @@ mod tests {
 
     use std::io::{Read, Write};
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn new_temp_file() -> File {
         let temp_dir = tempdir().unwrap();
         OpenOptions::new()
