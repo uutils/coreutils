@@ -9,7 +9,6 @@ use libfuzzer_sys::fuzz_target;
 use uu_sort::uumain;
 
 use rand::RngExt;
-use std::env;
 use std::ffi::OsString;
 
 use uufuzz::CommandResult;
@@ -57,9 +56,7 @@ fuzz_target!(|_data: &[u8]| {
     let rust_result = generate_and_run_uumain(&args, uumain, Some(&input_lines));
 
     // TODO remove once uutils sort supports localization
-    unsafe {
-        env::set_var("LC_ALL", "C");
-    }
+    uucore::env::set_var("LC_ALL", "C");
     let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, Some(&input_lines)) {
         Ok(result) => result,
         Err(error_result) => {

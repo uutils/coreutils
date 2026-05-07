@@ -94,7 +94,7 @@ mod tests {
     // Test epoch SystemTime get printed correctly at UTC0, with 2 simple formats.
     #[test]
     fn test_simple_system_time() {
-        unsafe { std::env::set_var("TZ", "UTC0") };
+        crate::env::set_var("TZ", "UTC0");
 
         let time = UNIX_EPOCH;
         let mut out = Vec::new();

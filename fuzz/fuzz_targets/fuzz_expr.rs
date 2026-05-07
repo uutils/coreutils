@@ -10,7 +10,7 @@ use uu_expr::uumain;
 
 use rand::RngExt;
 use rand::prelude::IndexedRandom;
-use std::{env, ffi::OsString};
+use std::ffi::OsString;
 
 use uufuzz::CommandResult;
 use uufuzz::{compare_result, generate_and_run_uumain, generate_random_string, run_gnu_cmd};
@@ -66,9 +66,7 @@ fuzz_target!(|_data: &[u8]| {
     // Use C locale to avoid false positives, like in https://github.com/uutils/coreutils/issues/5378,
     // because uutils expr doesn't support localization yet
     // TODO remove once uutils expr supports localization
-    unsafe {
-        env::set_var("LC_COLLATE", "C");
-    }
+    uucore::env::set_var("LC_COLLATE", "C");
     let rust_result = generate_and_run_uumain(&args, uumain, None);
 
     let gnu_result = match run_gnu_cmd(CMD_PATH, &args[1..], false, None) {
