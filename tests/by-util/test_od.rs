@@ -1345,16 +1345,18 @@ fn test_write_error_dev_full() {
 }
 
 #[test]
-#[cfg(unix)]
 fn test_hex_lowercase() {
-    use regex::Regex;
+    let input = [0u8; 10];
     // Test verifies that the output hex byte offset is in lowercase
     new_ucmd!()
         .arg("-Ax")
-        .arg("-N16")
-        .arg("-j0xff0")
-        .arg("/dev/urandom")
-        .succeeds()
+        .run_piped_stdin(input)
+        .success()
         .no_stderr()
-        .stdout_matches(&Regex::new(r"^000ff0.*").unwrap());
+        .stdout_only(unindent(
+            r"
+                000000 000000 000000 000000 000000 000000
+                00000a
+            ",
+        ));
 }
