@@ -30,11 +30,11 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// create stdout without buffering
+// create writer without buffering
 #[cfg(any(unix, target_os = "wasi"))]
-pub struct RawWriter(pub io::Stdout);
+pub struct RawWriter<T: AsFd>(pub T);
 #[cfg(any(unix, target_os = "wasi"))]
-impl io::Write for RawWriter {
+impl<T: AsFd> io::Write for RawWriter<T> {
     fn write(&mut self, b: &[u8]) -> io::Result<usize> {
         rustix::io::write(&self.0, b).map_err(Into::into)
     }
