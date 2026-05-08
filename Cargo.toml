@@ -688,7 +688,7 @@ path = "src/bin/uudoc.rs"
 required-features = ["uudoc"]
 
 [profile.release]
-lto = true
+lto = "fat"
 panic = "abort"
 codegen-units = 1
 
