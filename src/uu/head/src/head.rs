@@ -471,8 +471,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 print_verbatim(file).unwrap();
                 writeln!(stdout, " <==")?;
             }
-            head_file(&mut file_handle, options)?;
-            Ok(())
+            head_file(&mut file_handle, options).map(|_| ())
         };
         if let Err(err) = res {
             let name = if file == "-" {
@@ -480,7 +479,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             } else {
                 file.into()
             };
-            return Err(HeadError::Io { name, err }.into());
+            show!(HeadError::Io { name, err });
         }
         first = false;
     }
