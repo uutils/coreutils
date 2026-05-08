@@ -11,6 +11,9 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
+
 [lints]
 workspace = true
 
@@ -37,6 +40,3 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "sync"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]

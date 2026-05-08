@@ -92,6 +92,9 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = [
   "dir",
@@ -104,9 +107,6 @@ nix = { workspace = true, features = [
 ] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
