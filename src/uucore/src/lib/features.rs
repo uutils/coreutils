@@ -32,6 +32,8 @@ pub mod fsext;
 pub mod i18n;
 #[cfg(feature = "lines")]
 pub mod lines;
+#[cfg(all(windows, feature = "fsext"))]
+pub mod nt;
 #[cfg(any(
     feature = "parser",
     feature = "parser-num",

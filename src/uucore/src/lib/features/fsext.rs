@@ -14,8 +14,6 @@ const LINUX_MOUNTINFO: &str = "/proc/self/mountinfo";
 #[cfg(all(unix, not(any(target_os = "aix", target_os = "redox"))))]
 static MOUNT_OPT_BIND: &str = "bind";
 #[cfg(windows)]
-const MAX_PATH: usize = 266;
-#[cfg(windows)]
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
@@ -25,39 +23,18 @@ static EXIT_ERR: i32 = 1;
     target_os = "openbsd"
 ))]
 use crate::os_str_from_bytes;
-#[cfg(windows)]
-use crate::show_warning;
 
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(windows)]
-use std::os::windows::ffi::OsStrExt;
-#[cfg(windows)]
 use windows_sys::Win32::{
-    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE},
+    Foundation::{ERROR_NO_MORE_FILES, INVALID_HANDLE_VALUE, MAX_PATH},
     Storage::FileSystem::{
-        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetDiskFreeSpaceW, GetDriveTypeW,
-        GetVolumeInformationW, GetVolumePathNamesForVolumeNameW, QueryDosDeviceW,
+        FindFirstVolumeW, FindNextVolumeW, FindVolumeClose, GetVolumePathNamesForVolumeNameW,
     },
-    System::WindowsProgramming::DRIVE_REMOTE,
 };
-
-#[cfg(windows)]
-#[allow(non_snake_case)]
-fn LPWSTR2String(buf: &[u16]) -> String {
-    let len = buf.iter().position(|&n| n == 0).unwrap();
-    String::from_utf16(&buf[..len]).unwrap()
-}
-
-#[cfg(windows)]
-fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
-    s.as_ref()
-        .encode_wide()
-        .chain(Some(0))
-        .collect::<Vec<u16>>()
-}
 
 #[cfg(unix)]
 use libc::{
@@ -270,72 +247,78 @@ impl MountInfo {
     }
 
     #[cfg(windows)]
-    fn new(mut volume_name: String) -> Option<Self> {
-        let mut dev_name_buf = [0u16; MAX_PATH];
-        volume_name.pop();
-        unsafe {
-            QueryDosDeviceW(
-                OsStr::new(&volume_name)
-                    .encode_wide()
-                    .chain(Some(0))
-                    .skip(4)
-                    .collect::<Vec<u16>>()
-                    .as_ptr(),
-                dev_name_buf.as_mut_ptr(),
-                dev_name_buf.len() as u32,
-            )
-        };
-        volume_name.push('\\');
-        let dev_name = LPWSTR2String(&dev_name_buf);
-
-        let mut mount_root_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            let volume_name = to_nul_terminated_wide_string(&volume_name);
-            GetVolumePathNamesForVolumeNameW(
-                volume_name.as_ptr(),
-                mount_root_buf.as_mut_ptr(),
-                mount_root_buf.len() as u32,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            // TODO: support the case when `GetLastError()` returns `ERROR_MORE_DATA`
+    fn new(volume_name_buf: &[u16]) -> Option<Self> {
+        use super::nt;
+        let nul = volume_name_buf.iter().position(|&c| c == 0)?;
+        let volume_name = String::from_utf16_lossy(&volume_name_buf[..nul]);
+        if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
             return None;
         }
-        // TODO: This should probably call `OsString::from_wide`, but unclear if
-        // terminating zeros need to be striped first.
-        let mount_root = LPWSTR2String(&mount_root_buf);
 
-        let mut fs_type_buf = [0u16; MAX_PATH];
-        let success = unsafe {
-            let mount_root = to_nul_terminated_wide_string(&mount_root);
-            GetVolumeInformationW(
-                mount_root.as_ptr(),
-                ptr::null_mut(),
-                0,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                fs_type_buf.as_mut_ptr(),
-                fs_type_buf.len() as u32,
+        let handle = nt::open_file(
+            Path::new(&volume_name),
+            nt::SYNCHRONIZE,
+            nt::FILE_SYNCHRONOUS_IO_NONALERT | nt::FILE_DIRECTORY_FILE,
+        )
+        .ok()?;
+
+        let fs_type = unsafe {
+            nt::query_volume_information::<nt::FILE_FS_ATTRIBUTE_INFORMATION>(
+                &handle,
+                nt::FileFsAttributeInformation,
             )
+        }
+        .map(|info| {
+            let len = info.file_system_name_length as usize / size_of::<u16>();
+            String::from_utf16_lossy(&info.file_system_name[..len])
+        })
+        .unwrap_or_default();
+
+        let remote = unsafe {
+            nt::query_volume_information::<nt::FILE_FS_DEVICE_INFORMATION>(
+                &handle,
+                nt::FileFsDeviceInformation,
+            )
+        }
+        .is_ok_and(|info| info.characteristics & nt::FILE_REMOTE_DEVICE != 0);
+
+        let mount_dir: String = unsafe {
+            // TODO: Once we're on Rust 1.93 we could use MaybeUninit<u16>
+            // here and extract the range with assume_init_ref() below.
+            let mut buf = [0u16; MAX_PATH as usize];
+            let mut len = 0u32;
+            if 0 == GetVolumePathNamesForVolumeNameW(
+                volume_name_buf.as_ptr(),
+                buf.as_mut_ptr(),
+                MAX_PATH,
+                &raw mut len,
+            ) {
+                return None;
+            }
+
+            // The buffer contains a double-null-terminated list,
+            // which this turns into a comma separated string.
+            buf[..len as usize]
+                .split(|&c| c == 0)
+                .filter(|s| !s.is_empty())
+                .fold(String::new(), |mut acc, str| {
+                    if !acc.is_empty() {
+                        acc.push_str(", ");
+                    }
+                    acc.extend(
+                        char::decode_utf16(str.iter().copied())
+                            .map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER)),
+                    );
+                    acc
+                })
         };
-        let fs_type = if 0 == success {
-            None
-        } else {
-            Some(LPWSTR2String(&fs_type_buf))
-        };
-        let remote = DRIVE_REMOTE
-            == unsafe {
-                let mount_root = to_nul_terminated_wide_string(&mount_root);
-                GetDriveTypeW(mount_root.as_ptr())
-            };
+
         Some(Self {
-            dev_id: volume_name,
-            dev_name,
-            fs_type: fs_type.unwrap_or_default(),
-            mount_root: mount_root.into(), // TODO: We should figure out how to keep an OsString here.
-            mount_dir: OsString::new(),
+            dev_id: volume_name.clone(),
+            dev_name: volume_name,
+            fs_type,
+            mount_root: OsString::new(),
+            mount_dir: mount_dir.into(),
             mount_option: String::new(),
             remote,
             dummy: false,
@@ -445,7 +428,6 @@ use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
-    target_os = "windows",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
@@ -496,7 +478,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     }
     #[cfg(windows)]
     {
-        let mut volume_name_buf = [0u16; MAX_PATH];
+        let mut volume_name_buf = [0u16; MAX_PATH as usize];
         // As recommended in the MS documentation, retrieve the first volume before the others
         let find_handle =
             unsafe { FindFirstVolumeW(volume_name_buf.as_mut_ptr(), volume_name_buf.len() as u32) };
@@ -507,12 +489,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         }
         let mut mounts = Vec::<MountInfo>::new();
         loop {
-            let volume_name = LPWSTR2String(&volume_name_buf);
-            if !volume_name.starts_with("\\\\?\\") || !volume_name.ends_with('\\') {
-                show_warning!("A bad path was skipped: {volume_name}");
-                continue;
-            }
-            if let Some(m) = MountInfo::new(volume_name) {
+            if let Some(m) = MountInfo::new(&volume_name_buf) {
                 mounts.push(m);
             }
             if 0 == unsafe {
@@ -524,6 +501,7 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             } {
                 let err = IOError::last_os_error();
                 if err.raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
+                    unsafe { FindVolumeClose(find_handle) };
                     let msg = format!("FindNextVolumeW failed: {err}");
                     return Err(USimpleError::new(EXIT_ERR, msg));
                 }
@@ -624,53 +602,33 @@ impl FsUsage {
     }
     #[cfg(windows)]
     pub fn new(path: &Path) -> UResult<Self> {
-        let mut root_path = [0u16; MAX_PATH];
-        let success = unsafe {
-            let path = to_nul_terminated_wide_string(path);
-            GetVolumePathNamesForVolumeNameW(
-                //path_utf8.as_ptr(),
-                path.as_ptr(),
-                root_path.as_mut_ptr(),
-                root_path.len() as u32,
-                ptr::null_mut(),
-            )
-        };
-        if 0 == success {
-            let msg = format!(
-                "GetVolumePathNamesForVolumeNameW failed: {}",
-                IOError::last_os_error()
-            );
-            return Err(USimpleError::new(EXIT_ERR, msg));
-        }
+        use super::nt;
 
-        let mut sectors_per_cluster = 0;
-        let mut bytes_per_sector = 0;
-        let mut number_of_free_clusters = 0;
-        let mut total_number_of_clusters = 0;
+        let handle = nt::open_file(
+            path,
+            nt::SYNCHRONIZE,
+            nt::FILE_SYNCHRONOUS_IO_NONALERT
+                | nt::FILE_DIRECTORY_FILE
+                | nt::FILE_OPEN_FOR_FREE_SPACE_QUERY,
+        )?;
 
-        unsafe {
-            let path = to_nul_terminated_wide_string(path);
-            GetDiskFreeSpaceW(
-                path.as_ptr(),
-                &raw mut sectors_per_cluster,
-                &raw mut bytes_per_sector,
-                &raw mut number_of_free_clusters,
-                &raw mut total_number_of_clusters,
-            );
-        }
+        let info: nt::FILE_FS_FULL_SIZE_INFORMATION =
+            unsafe { nt::query_volume_information(&handle, nt::FileFsFullSizeInformation)? };
+        let bytes_per_cluster =
+            info.sectors_per_allocation_unit as u64 * info.bytes_per_sector as u64;
+        let avail = info.caller_available_allocation_units as u64;
 
-        let bytes_per_cluster = sectors_per_cluster as u64 * bytes_per_sector as u64;
         Ok(Self {
             // f_bsize      File system block size.
             blocksize: bytes_per_cluster,
             // f_blocks - Total number of blocks on the file system, in units of f_frsize.
             // frsize =     Fundamental file system block size (fragment size).
-            blocks: total_number_of_clusters as u64,
+            blocks: info.total_allocation_units as u64,
             //  Total number of free blocks.
-            bfree: number_of_free_clusters as u64,
+            bfree: info.actual_available_allocation_units as u64,
             //  Total number of free blocks available to non-privileged processes.
-            bavail: 0,
-            bavail_top_bit_set: ((bytes_per_sector as u64) & (1u64.rotate_right(1))) != 0,
+            bavail: avail,
+            bavail_top_bit_set: (avail & (1u64.rotate_right(1))) != 0,
             // Total number of file nodes (inodes) on the file system.
             files: 0, // Not available on windows
             // Total number of free file nodes (inodes).
