@@ -496,17 +496,20 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     print_unbuffered(handle, stdout)
 }
 
+// print without io::stdout's buffering
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
 #[cfg(any(unix, target_os = "wasi"))]
 fn print_unbuffered<R: FdReadable>(
     handle: &mut InputHandle<R>,
     stdout: io::Stdout,
 ) -> CatResult<()> {
-    // todo: since there is no cost by 0-fill, we could use larger heap buffer for throughput
-    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); 1024 * 64];
-    // use raw syscall to remove buffering
+    // since there is no cost by 0-fill, we use larger buffer for throughput
+    // this size is still useful if splice failed, but fcntl succeed
+    const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
+    let mut buf = Vec::with_capacity(MAX_ROOTLESS_PIPE_SIZE);
+    let buf = buf.spare_capacity_mut();
     loop {
-        match rustix::io::read(&handle.reader, &mut buf) {
+        match rustix::io::read(&handle.reader, &mut *buf) {
             Ok(([], _)) => return Ok(()),
             Ok((filled, _)) => {
                 uucore::io::write_all_raw(&stdout, filled).inspect_err(handle_broken_pipe)?;
