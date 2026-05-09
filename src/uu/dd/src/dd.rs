@@ -25,7 +25,6 @@ use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
 #[cfg(target_os = "linux")]
 use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
-use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
 use std::cmp;
@@ -35,6 +34,7 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::mem::ManuallyDrop;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -45,7 +45,7 @@ use std::os::unix::{
     io::{AsRawFd, FromRawFd},
 };
 #[cfg(windows)]
-use std::os::windows::{fs::MetadataExt, io::AsHandle};
+use std::os::windows::{fs::MetadataExt, io::{AsHandle, AsRawHandle, FromRawHandle}};
 use std::path::Path;
 use std::sync::atomic::AtomicU8;
 use std::sync::{Arc, atomic::Ordering::Relaxed, mpsc};
@@ -827,8 +827,12 @@ struct Output<'a> {
 impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
-        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
-        let mut dst = Dest::Stdout(fx.into_file());
+        // Use a "borrowed" File to avoid fcntl syscall from try_clone_to_owned
+        #[cfg(unix)]
+        let file = ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdout().as_raw_fd()) });
+        #[cfg(windows)]
+        let file = ManuallyDrop::new(unsafe { File::from_raw_handle(io::stdout().as_raw_handle()) });
+        let mut dst = Dest::Stdout(ManuallyDrop::into_inner(file));
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
@@ -888,16 +892,24 @@ impl<'a> Output<'a> {
     /// already opened by the system (stdout) and has a state
     /// (current position) that shall be used.
     fn new_file_from_stdout(settings: &'a Settings) -> UResult<Self> {
-        let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            nix::fcntl::fcntl(
-                fx.as_raw().as_fd(),
-                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
-            )?;
-        }
+        // Use a "borrowed" File to avoid fcntl syscall from try_clone_to_owned
+        #[cfg(unix)]
+        let file = {
+            let stdout = io::stdout();
+            let raw_fd = stdout.as_raw_fd();
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
+                nix::fcntl::fcntl(
+                    raw_fd,
+                    FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
+                )?;
+            }
+            ManuallyDrop::new(unsafe { File::from_raw_fd(raw_fd) })
+        };
+        #[cfg(windows)]
+        let file = ManuallyDrop::new(unsafe { File::from_raw_handle(io::stdout().as_raw_handle()) });
 
-        Self::prepare_file(fx.into_file(), settings)
+        Self::prepare_file(ManuallyDrop::into_inner(file), settings)
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
