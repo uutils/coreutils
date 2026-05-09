@@ -5,9 +5,15 @@
 
 // spell-checker:ignore espidf nopipe
 
+use core::mem::ManuallyDrop;
 use std::ffi::OsString;
+use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
+#[cfg(windows)]
+use std::io::stdout;
+use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin};
+#[cfg(windows)]
+use std::os::windows::io::{AsRawHandle as _, FromRawHandle as _};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -80,7 +86,7 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Writer::Stdout(stdout()),
+            inner: Writer::stdout_raw(),
         },
     );
 
@@ -197,12 +203,8 @@ impl MultiWriter {
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
         let mode = self.output_error_mode;
-        self.writers.retain_mut(|writer| {
-            let res = (|| {
-                writer.inner.write_all(buf)?;
-                writer.inner.flush()
-            })();
-            match res {
+        self.writers
+            .retain_mut(|writer| match writer.inner.write_all(buf) {
                 Ok(()) => true,
                 Err(e) => {
                     if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
@@ -210,8 +212,7 @@ impl MultiWriter {
                     }
                     false
                 }
-            }
-        });
+            });
         self.aborted.take().map_or(
             if self.writers.is_empty() {
                 // This error kind will never be raised by the standard
@@ -250,23 +251,38 @@ fn process_error(
 }
 
 enum Writer {
-    File(std::fs::File),
-    Stdout(std::io::Stdout),
+    File(File),
+    StdoutRaw(ManuallyDrop<File>),
+}
+
+impl Writer {
+    #[cfg(not(windows))]
+    fn stdout_raw() -> Self {
+        // SAFETY: We ensure that the file descriptor is never closed by
+        // wrapping the `File` in `ManuallyDrop`.
+        let fd = unsafe { rustix::stdio::take_stdout() };
+        let f = File::from(fd);
+        Self::StdoutRaw(ManuallyDrop::new(f))
+    }
+
+    #[cfg(windows)]
+    fn stdout_raw() -> Self {
+        let handle = stdout().as_raw_handle();
+        let f = unsafe { File::from_raw_handle(handle) };
+        Self::StdoutRaw(ManuallyDrop::new(f))
+    }
 }
 
 impl Write for Writer {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {
         match self {
             Self::File(f) => f.write(buf),
-            Self::Stdout(s) => s.write(buf),
+            Self::StdoutRaw(s) => s.write(buf),
         }
     }
 
     fn flush(&mut self) -> Result<()> {
-        match self {
-            Self::File(f) => f.flush(),
-            Self::Stdout(s) => s.flush(),
-        }
+        Ok(())
     }
 }
 

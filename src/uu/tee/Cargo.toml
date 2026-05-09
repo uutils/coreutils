@@ -21,8 +21,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["libc", "parser", "signals"] }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["stdio"] }
+uucore = { workspace = true, features = ["libc", "parser", "signals"] }
 
 [dev-dependencies]
 divan = { workspace = true }
