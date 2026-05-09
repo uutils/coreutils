@@ -811,14 +811,21 @@ impl Chmoder {
         let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
 
         // Use safe traversal to change the mode
-        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
+        if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
                     file_path.quote(),
                 );
             }
-            return Err(ChmodError::PermissionDenied(file_path.into()).into());
+
+            return Err(match e.kind() {
+                std::io::ErrorKind::ReadOnlyFilesystem => {
+                    ChmodError::ChangingPermissions(file_path.into(), e)
+                }
+                _ => ChmodError::PermissionDenied(file_path.into()),
+            }
+            .into());
         }
 
         // Report the change using the helper method
