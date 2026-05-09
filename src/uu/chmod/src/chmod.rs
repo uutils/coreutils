@@ -619,10 +619,10 @@ impl Chmoder {
                 );
             }
             let err = if e.kind() == std::io::ErrorKind::ReadOnlyFilesystem {
-                    ChmodError::ReadOnlyFileSystem(file_path.into())
-                } else {
-                    ChmodError::PermissionDenied(file_path.into())
-                };
+                ChmodError::ReadOnlyFileSystem(file_path.into())
+            } else {
+                ChmodError::PermissionDenied(file_path.into())
+            };
 
             return Err(err.into());
         }
