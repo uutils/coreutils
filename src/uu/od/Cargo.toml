@@ -21,6 +21,7 @@ path = "src/od.rs"
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
+rustix = { workspace = true, features = ["stdio"] }
 uucore = { workspace = true, features = ["parser-size"] }
 fluent = { workspace = true }
 libc.workspace = true

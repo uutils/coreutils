@@ -3888,6 +3888,7 @@ dependencies = [
  "fluent",
  "half",
  "libc",
+ "rustix",
  "uucore",
 ]
 
