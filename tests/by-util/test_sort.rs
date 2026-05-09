@@ -3048,6 +3048,7 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_consistent_sorting_with_i18n_collate() {
     // Regression test for issue #11980
     // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
