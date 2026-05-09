@@ -1,0 +1,30 @@
+name: Check TOML files
+
+# spell-checker:ignore (people) taiki-e
+# spell-checker:ignore (misc) taplo tombi
+
+on:
+  push:
+    paths:
+      - "**.toml"
+  pull_request:
+    paths:
+      - "**.toml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install Tombi
+        uses: tombi-toml/setup-tombi@v1
+      - name: Install taplo-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo-cli
+      - name: Lint TOML files
+        run: tombi lint --error-on-warnings
+      - name: Format TOML files
+        run: taplo fmt --check --diff
