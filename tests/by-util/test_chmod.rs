@@ -423,7 +423,7 @@ fn test_chmod_readonly_filesystem() {
         .expect("mounting tmpfs failed");
 
     // Create a file and set permissions so chmod will attempt to change them
-    scene.fixtures.touch(&format!("{mountpoint}/file.txt"));
+    scene.fixtures.touch(format!("{mountpoint}/file.txt"));
     scene
         .cmd("chmod")
         .arg("400")
