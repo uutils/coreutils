@@ -104,9 +104,9 @@ pub mod options {
 
 struct Options {
     silent: bool,
-    _logical: bool,     // not implemented
-    _exit_on_eof: bool, // not implemented
-    _no_pause: bool,    // not implemented
+    _logical: bool, // not implemented
+    exit_on_eof: bool,
+    _no_pause: bool, // not implemented
     print_over: bool,
     clean_print: bool,
     squeeze: bool,
@@ -131,10 +131,15 @@ impl Options {
             _ => 0,
         };
         let pattern = matches.get_one::<String>(options::PATTERN).cloned();
+        // exit_on_eof is enabled by default unless POSIXLY_CORRECT is set and stdout is a tty.
+        // The -e/--exit-on-eof flag re-enables it explicitly.
+        let posixly_correct = std::env::var_os("POSIXLY_CORRECT").is_some();
+        let is_tty = stdout().is_tty();
+        let exit_on_eof = !posixly_correct || !is_tty || matches.get_flag(options::EXIT_ON_EOF);
         Self {
             silent: matches.get_flag(options::SILENT),
             _logical: matches.get_flag(options::LOGICAL),
-            _exit_on_eof: matches.get_flag(options::EXIT_ON_EOF),
+            exit_on_eof,
             _no_pause: matches.get_flag(options::NO_PAUSE),
             print_over: matches.get_flag(options::PRINT_OVER),
             clean_print: matches.get_flag(options::CLEAN_PRINT),
@@ -441,6 +446,10 @@ fn more(
     }
     // Initial display
     pager.draw(None)?;
+    // Exit immediately if exit_on_eof is enabled and EOF is reached
+    if pager.exit_on_eof && pager.eof_reached {
+        return Ok(());
+    }
     // Reset multi-file settings after initial display
     if multiple_file {
         pager.reset_multi_file_header();
@@ -471,6 +480,8 @@ struct Pager<'a> {
     eof_reached: bool,
     silent: bool,
     squeeze: bool,
+    /// Exit immediately when EOF is reached
+    exit_on_eof: bool,
     stdout: OutputType,
 }
 
@@ -500,6 +511,7 @@ impl<'a> Pager<'a> {
             eof_reached: false,
             silent: options.silent,
             squeeze: options.squeeze,
+            exit_on_eof: options.exit_on_eof,
             stdout,
         };
         Ok(pager)
@@ -670,7 +682,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.page_down();
@@ -680,7 +692,7 @@ impl<'a> Pager<'a> {
                     modifiers: KeyModifiers::NONE,
                     ..
                 }) => {
-                    if self.eof_reached {
+                    if self.eof_reached && self.exit_on_eof {
                         return Ok(());
                     }
                     self.next_line();
@@ -934,7 +946,7 @@ mod tests {
                 options: Options {
                     silent: false,
                     _logical: false,
-                    _exit_on_eof: false,
+                    exit_on_eof: false,
                     _no_pause: false,
                     print_over: false,
                     clean_print: false,
