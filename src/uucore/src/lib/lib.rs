@@ -32,6 +32,8 @@ pub use crate::mods::locale;
 pub use crate::mods::os;
 pub use crate::mods::panic;
 pub use crate::mods::posix;
+#[cfg(any(unix, target_os = "wasi"))]
+pub use crate::mods::stdio;
 
 // * feature-gated modules
 #[cfg(feature = "backup-control")]
