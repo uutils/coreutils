@@ -430,56 +430,42 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
 }
 
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+#[test]
+#[cfg(target_os = "linux")]
 fn test_chmod_readonly_filesystem() {
     let mut scene = TestScenario::new(util_name!());
 
-    // Test must be run as root (or with `sudo -E`)
-    if scene.cmd("whoami").run().stdout_str() != "root\n" {
-        return;
-    }
-
-    // Prepare the mount
     let mountpoint = "readonly_mount";
     scene.fixtures.mkdir(mountpoint);
     let mountpoint_path = scene.fixtures.plus_as_string(mountpoint);
+    let file_path = format!("{mountpoint}/file.txt");
 
-    scene
-        .mount_temp_fs(&mountpoint_path)
-        .expect("mounting tmpfs failed");
+    // Skip if the environment cannot create a mount.
+    if let Err(err) = scene.mount_temp_fs(&mountpoint_path) {
+        eprintln!("Skipping read-only filesystem test: {err}");
+        return;
+    }
 
-    // Create a file and set permissions so chmod will attempt to change them
-    scene.fixtures.touch(&format!("{mountpoint}/file.txt"));
-    scene
-        .cmd("chmod")
-        .arg("400")
-        .arg(format!("{mountpoint_path}/file.txt"))
-        .run();
+    scene.fixtures.touch(&file_path);
 
-    // Remount as read-only
+    // Make the filesystem read-only.
     scene
         .cmd("mount")
         .arg("-o")
         .arg("remount,ro")
         .arg(&mountpoint_path)
-        .run();
+        .succeeds();
 
-    // Should say "Read-only file system" not "Permission denied"
+    // -R exercises safe_chmod_file() for the nested file.
     scene
         .ucmd()
-        .arg("ugo+w")
-        .arg(format!("{mountpoint_path}/file.txt"))
+        .args(&["-R", "ugo+w", mountpoint])
         .fails()
-        .stderr_contains("Read-only file system");
+        .stderr_contains(format!(
+            "chmod: changing permissions of '{file_path}': Read-only file system"
+        ));
 
-    // Remount as read-write so umount can clean up
-    scene
-        .cmd("mount")
-        .arg("-o")
-        .arg("remount,rw")
-        .arg(&mountpoint_path)
-        .run();
-
+    // A read-only filesystem can be unmounted directly.
     scene.umount_temp_fs();
 }
 
