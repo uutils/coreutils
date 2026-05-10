@@ -30,7 +30,20 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// io::write_all but no buffering
+// create stdout without buffering
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct RawWriter(pub io::Stdout);
+#[cfg(any(unix, target_os = "wasi"))]
+impl io::Write for RawWriter {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        rustix::io::write(&self.0, b).map_err(Into::into)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+// io::write_all but no buffering (deprecated?)
 #[inline]
 #[cfg(any(unix, target_os = "wasi"))]
 pub fn write_all_raw(output: impl AsFd, buf: &[u8]) -> io::Result<()> {
