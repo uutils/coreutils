@@ -455,6 +455,55 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
 }
 
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+fn test_chmod_readonly_filesystem() {
+    let mut scene = TestScenario::new(util_name!());
+
+    // Test must be run as root (or with `sudo -E`)
+    if scene.cmd("whoami").run().stdout_str() != "root\n" {
+        return;
+    }
+
+    // Prepare the mount
+    let mountpoint = "readonly_mount";
+    scene.fixtures.mkdir(mountpoint);
+    let mountpoint_path = scene.fixtures.plus_as_string(mountpoint);
+
+    scene
+        .mount_temp_fs(&mountpoint_path)
+        .expect("mounting tmpfs failed");
+
+    // Create a file and set permissions so chmod will attempt to change them
+    scene.fixtures.touch(&format!("{mountpoint}/file.txt"));
+    scene.cmd("chmod").arg("400").arg(format!("{mountpoint_path}/file.txt")).run();
+
+    // Remount as read-only
+    scene
+        .cmd("mount")
+        .arg("-o")
+        .arg("remount,ro")
+        .arg(&mountpoint_path)
+        .run();
+
+    // Should say "Read-only file system" not "Permission denied"
+    scene
+        .ucmd()
+        .arg("ugo+w")
+        .arg(format!("{mountpoint_path}/file.txt"))
+        .fails()
+        .stderr_contains("Read-only file system");
+
+    // Remount as read-write so umount can clean up
+    scene
+        .cmd("mount")
+        .arg("-o")
+        .arg("remount,rw")
+        .arg(&mountpoint_path)
+        .run();
+
+    scene.umount_temp_fs();
+}
+
 #[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
