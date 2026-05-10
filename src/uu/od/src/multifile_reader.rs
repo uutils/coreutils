@@ -56,10 +56,12 @@ impl MultifileReader<'_> {
                     // limit.
                     #[cfg(any(unix, target_os = "wasi"))]
                     {
-                        struct RawReader<'a>(rustix::fd::BorrowedFd<'a>);
-                        impl io::Read for RawReader<'_> {
+                        use std::os::fd::AsFd;
+                        // todo: definition is generic enough to move to uucore::io::RawReader if useful
+                        struct RawReader<T: AsFd>(pub T);
+                        impl<T: AsFd> io::Read for RawReader<T> {
                             fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
-                                rustix::io::read(self.0, b).map_err(Into::into)
+                                rustix::io::read(&self.0, b).map_err(Into::into)
                             }
                         }
                         let stdin = RawReader(rustix::stdio::stdin());
