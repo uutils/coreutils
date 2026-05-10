@@ -11,6 +11,8 @@ use std::fs::File;
 use std::io;
 use std::os::unix::io::AsRawFd;
 
+// Field names mirror the C `struct fiemap` / `struct fiemap_extent` ABI.
+#[allow(clippy::struct_field_names)]
 #[derive(Default)]
 #[repr(C)]
 pub struct Fiemap {
@@ -22,6 +24,7 @@ pub struct Fiemap {
     fm_reserved: u32,
 }
 
+#[allow(clippy::struct_field_names)]
 #[derive(Default)]
 #[repr(C)]
 pub struct FiemapExtent {
@@ -60,9 +63,9 @@ impl FiemapBuffer {
     }
 }
 
-pub const FIEMAP_EXTENT_LAST: u32 = 0x00000001;
-pub const FIEMAP_EXTENT_ENCODED: u32 = 0x00000008;
-pub const FIEMAP_EXTENT_SHARED: u32 = 0x00002000;
+pub const FIEMAP_EXTENT_LAST: u32 = 0x0000_0001;
+pub const FIEMAP_EXTENT_ENCODED: u32 = 0x0000_0008;
+pub const FIEMAP_EXTENT_SHARED: u32 = 0x0000_2000;
 pub const FS_IOC_FIEMAP: libc::Ioctl = libc::_IOWR::<Fiemap>(b'f' as u32, 11);
 
 pub fn walk_fiemap_extents<F>(file: &File, start_offset: u64, mut visit: F) -> io::Result<()>

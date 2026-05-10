@@ -14,19 +14,20 @@ use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{BufRead, BufReader, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use thiserror::Error;
 #[cfg(windows)]
-use windows_sys::Win32::{
-    Foundation::HANDLE,
-    Storage::FileSystem::{
-        FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-        GetFileInformationByHandleEx,
+use {
+    std::os::windows::io::AsRawHandle,
+    windows_sys::Win32::{
+        Foundation::HANDLE,
+        Storage::FileSystem::{
+            FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
+            GetFileInformationByHandleEx,
+        },
     },
 };
 
@@ -76,6 +77,7 @@ mod options {
     pub const EXCLUDE_FROM: &str = "exclude-from";
     pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
+    pub const DEDUPE_REFLINKS: &str = "dedupe-reflinks";
     pub const FILE: &str = "FILE";
 }
 
@@ -291,6 +293,12 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     result
 }
 
+// Subtract block counts for shared extents already attributed to an earlier
+// file. Order-dependent: first file encountered "owns" the extent.
+// Limitations:
+//  - Only full {dev,physical,length} matches are deduped; partially overlapping
+//    extents from divergent CoW chains are still counted multiple times.
+//  - Extents with fe_physical == 0 are skipped (INLINE data, delayed alloc).
 #[cfg(target_os = "linux")]
 fn adjust_blocks_for_reflinks(
     path: &Path,
@@ -361,6 +369,7 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 #[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
 // This is done for TOCTOU safety
+#[allow(clippy::too_many_arguments)]
 fn safe_du(
     path: &Path,
     options: &TraversalOptions,
@@ -506,6 +515,7 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
+        const S_IFREG: u32 = 0o100_000;
 
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
@@ -520,8 +530,6 @@ fn safe_du(
         };
 
         // Check if it's a symlink
-        const S_IFREG: u32 = 0o100_000;
-
         #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
@@ -603,8 +611,12 @@ fn safe_du(
             let dev_id = this_stat
                 .inode
                 .map_or(entry_stat.st_dev as u64, |inode| inode.dev_id);
-            this_stat.blocks =
-                adjust_blocks_for_reflinks(&this_stat.path, dev_id, this_stat.blocks, shared_extents);
+            this_stat.blocks = adjust_blocks_for_reflinks(
+                &this_stat.path,
+                dev_id,
+                this_stat.blocks,
+                shared_extents,
+            );
         }
 
         // Process directories recursively
@@ -1189,7 +1201,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::None
         },
         count_links,
-        dedupe_reflinks: !count_links && !apparent_size && !inodes,
+        dedupe_reflinks: matches.get_flag(options::DEDUPE_REFLINKS)
+            && !count_links
+            && !apparent_size
+            && !inodes,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
     };
@@ -1572,6 +1587,13 @@ pub fn uu_app() -> Command {
                 .help(translate!("du-help-verbose"))
                 .action(ArgAction::SetTrue)
                 .overrides_with(options::VERBOSE),
+        )
+        .arg(
+            Arg::new(options::DEDUPE_REFLINKS)
+                .long(options::DEDUPE_REFLINKS)
+                .help(translate!("du-help-dedupe-reflinks"))
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEDUPE_REFLINKS),
         )
         .arg(
             Arg::new(options::EXCLUDE)

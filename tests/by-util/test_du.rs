@@ -4,25 +4,26 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP smallfile fiemap
+// spell-checker:ignore selfref ELOOP smallfile fiemap dedupe reflinks
+
+use std::fs::File;
+
+use uutests::util::TestScenario;
+use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(not(windows))]
-use regex::Regex;
+use {
+    regex::Regex,
+    uutests::{unwrap_or_return, util::expected_result},
+};
+
 #[cfg(target_os = "linux")]
 use {
     du::fiemap::{FIEMAP_EXTENT_ENCODED, FIEMAP_EXTENT_SHARED, walk_fiemap_extents},
     rand::rngs::StdRng,
-    rand::{RngCore, SeedableRng},
-    std::fs::File,
+    rand::{RngExt as _, SeedableRng},
     std::path::Path,
 };
-
-#[cfg(not(target_os = "windows"))]
-use uutests::unwrap_or_return;
-use uutests::util::TestScenario;
-#[cfg(not(target_os = "windows"))]
-use uutests::util::expected_result;
-use uutests::{at_and_ucmd, new_ucmd, util_name};
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
@@ -303,7 +304,7 @@ fn test_du_binary_block_size() {
 
     at.mkdir(dir);
     let fpath = at.plus(format!("{dir}/file"));
-    std::fs::File::create(&fpath)
+    File::create(&fpath)
         .expect("cannot create test file")
         .set_len(100_000)
         .expect("cannot set file size");
@@ -345,7 +346,7 @@ fn test_du_binary_env_block_size() {
 
     at.mkdir(dir);
     let fpath = at.plus(format!("{dir}/file"));
-    std::fs::File::create(&fpath)
+    File::create(&fpath)
         .expect("cannot create test file")
         .set_len(100_000)
         .expect("cannot set file size");
@@ -667,7 +668,7 @@ fn test_du_reflink_dedup() {
     let file_size = 256 * 1024;
     let mut data = vec![0_u8; file_size];
     let mut rng = StdRng::seed_from_u64(0x5eed);
-    rng.fill_bytes(&mut data);
+    rng.fill(&mut data[..]);
     at.write_bytes(file1, &data);
     at.sync_file(file1);
 
@@ -686,11 +687,24 @@ fn test_du_reflink_dedup() {
     at.sync_file(file2);
     assert!(reflink_extents_all_shared(&at.plus(file2)));
 
-    let result = ts.ucmd().arg("--all").arg("--bytes").succeeds();
+    let result = ts
+        .ucmd()
+        .arg("--all")
+        .arg("--block-size=1")
+        .arg("--dedupe-reflinks")
+        .succeeds();
     let size1 = find_du_size(result.stdout_str(), file1).unwrap();
     let size2 = find_du_size(result.stdout_str(), file2).unwrap();
-    assert_eq!(size1, file_size);
+    // First-met owns the extent; second is fully deduped.
+    assert!(size1 >= file_size);
     assert_eq!(size2, 0);
+
+    // Without the flag, both should report the full size.
+    let result = ts.ucmd().arg("--all").arg("--block-size=1").succeeds();
+    let size1 = find_du_size(result.stdout_str(), file1).unwrap();
+    let size2 = find_du_size(result.stdout_str(), file2).unwrap();
+    assert!(size1 >= file_size);
+    assert!(size2 >= file_size);
 }
 
 #[test]
@@ -1024,7 +1038,7 @@ fn test_du_h_precision() {
         let (at, mut ucmd) = at_and_ucmd!();
 
         let fpath = at.plus("test.txt");
-        std::fs::File::create(&fpath)
+        File::create(&fpath)
             .expect("cannot create test file")
             .set_len(test_len)
             .expect("cannot truncate test len to size");
@@ -2248,25 +2262,25 @@ fn test_block_size_args_override() {
     at.mkdir_all(nested_dir);
     at.mkdir_all(nested_dir_2);
     let fpath = at.plus(format!("{nested_dir}/file"));
-    std::fs::File::create(fpath)
+    File::create(fpath)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
     let fpath2 = at.plus(format!("{nested_dir}/file_2"));
-    std::fs::File::create(fpath2)
+    File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
     let fpath = at.plus(format!("{nested_dir_2}/file_3"));
-    std::fs::File::create(fpath)
+    File::create(fpath)
         .expect("cannot create test file")
         .set_len(100_000)
         .expect("cannot set file size");
 
     let fpath2 = at.plus(format!("{nested_dir_2}/file_4"));
-    std::fs::File::create(fpath2)
+    File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100)
         .expect("cannot set file size");
@@ -2314,13 +2328,13 @@ fn test_block_override_b_still_has_apparent_size() {
 
     at.mkdir_all(nested_dir);
     let fpath = at.plus(format!("{nested_dir}/file"));
-    std::fs::File::create(fpath)
+    File::create(fpath)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");
 
     let fpath2 = at.plus(format!("{nested_dir}/file_2"));
-    std::fs::File::create(fpath2)
+    File::create(fpath2)
         .expect("cannot create test file")
         .set_len(100_000_000)
         .expect("cannot set file size");

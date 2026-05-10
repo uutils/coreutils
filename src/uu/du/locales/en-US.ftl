@@ -38,6 +38,7 @@ du-help-si = like -h, but use powers of 1000 not 1024
 du-help-one-file-system = skip directories on different file systems
 du-help-threshold = exclude entries smaller than SIZE if positive, or entries greater than SIZE if negative
 du-help-verbose = verbose mode (option not present in GNU/Coreutils)
+du-help-dedupe-reflinks = count storage shared via reflinks (CoW copies) only once (Linux only; requires FIEMAP). Adds significant overhead and is ignored with --apparent-size, --bytes, --inodes, or --count-links.
 du-help-exclude = exclude files that match PATTERN
 du-help-exclude-from = exclude files that match any pattern in FILE
 du-help-files0-from = summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input

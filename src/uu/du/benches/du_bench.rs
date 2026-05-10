@@ -128,6 +128,42 @@ fn du_max_depth_balanced_tree(
     bench_du_with_args(bencher, &temp_dir, &["--max-depth=2"]);
 }
 
+/// Benchmark du --dedupe-reflinks on wide tree.
+/// Measures FIEMAP per-file overhead (files in fs_tree are not reflinked,
+/// so this is the worst-case syscall cost with zero dedup payoff).
+#[cfg(target_os = "linux")]
+#[divan::bench(args = [(5000, 500)])]
+fn du_dedupe_reflinks_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str, "--dedupe-reflinks"];
+            black_box(run_util_function(uumain, &args));
+        });
+}
+
+/// Benchmark du --dedupe-reflinks -a on wide tree (FIEMAP for every entry).
+#[cfg(target_os = "linux")]
+#[divan::bench(args = [(5000, 500)])]
+fn du_dedupe_reflinks_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str, "-a", "--dedupe-reflinks"];
+            black_box(run_util_function(uumain, &args));
+        });
+}
+
 fn main() {
     divan::main();
 }
