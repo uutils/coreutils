@@ -424,7 +424,11 @@ fn test_chmod_readonly_filesystem() {
 
     // Create a file and set permissions so chmod will attempt to change them
     scene.fixtures.touch(&format!("{mountpoint}/file.txt"));
-    scene.cmd("chmod").arg("400").arg(format!("{mountpoint_path}/file.txt")).run();
+    scene
+        .cmd("chmod")
+        .arg("400")
+        .arg(format!("{mountpoint_path}/file.txt"))
+        .run();
 
     // Remount as read-only
     scene
