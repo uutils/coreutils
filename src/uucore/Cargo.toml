@@ -203,6 +203,7 @@ safe-traversal = ["libc", "nix/fs", "nix/dir", "nix/user", "rustix/fs"]
 selinux = ["dep:selinux", "libc"]
 smack = ["xattr"]
 signals = ["nix/fs", "nix/signal", "nix/poll"]
+stdio = ["libc"]
 sum = [
   "digest",
   "hex",
