@@ -104,6 +104,10 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
+    // avoid double buffering
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut stdout = uucore::io::RawWriter(rustix::stdio::stdout());
+    #[cfg(not(any(unix, target_os = "wasi")))]
     let mut stdout = io::stdout().lock();
     loop {
         stdout.write_all(bytes)?;
@@ -118,11 +122,11 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
-    let mut stdout = io::stdout(); // no need to lock with zero-copy
+    let stdout = rustix::stdio::stdout(); // avoid double buffering
     // don't show any error from fast-path and fallback to write for proper message
     if let Ok((p_read, mut p_write)) = pipe()
             // todo: zero-copy with default size when fcntl failed
-            && rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
+            && rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
             && p_write.write_all(bytes).is_ok()
     {
         if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
@@ -136,8 +140,8 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
                     if let Ok(s) = splice(&broker_read, &stdout, remain) {
                         remain -= s;
                     } else {
-                        // avoid output breakage with reduced remain even if it would not happen
-                        stdout.write_all(&bytes[bytes.len() - remain..])?;
+                        // avoid output breakage with reduced remain even if it rarely happen
+                        uucore::io::RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
                         break 'hybrid;
                     }
                 }
@@ -145,7 +149,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
         }
     }
     // fallback
-    let mut stdout = stdout.lock();
+    let mut stdout = uucore::io::RawWriter(stdout);
     loop {
         stdout.write_all(bytes)?;
     }
