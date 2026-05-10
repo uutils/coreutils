@@ -233,20 +233,22 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[cfg(unix)]
 #[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
-    // Get the actual system umask using libc
-    let system_umask = unsafe {
-        let mask = libc::umask(0);
-        libc::umask(mask);
+    // Get the actual system umask
+    let system_umask = {
+        use rustix::process::umask;
+        let mask = umask(rustix::fs::Mode::empty());
+        umask(mask);
         mask
     };
 
     // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, system_umask as u32,
+        current_umask,
+        system_umask.bits() as u32,
         "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
