@@ -447,15 +447,12 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
             Ok(())
         } else {
-            if Path::new(file).is_dir() {
-                show!(USimpleError::new(
-                    1,
-                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                ));
-                continue;
-            }
-            let mut file_handle = match File::open(file) {
-                Ok(f) => f,
+            // Stat the path first so we know whether to print the header.
+            // GNU head prints "==> name <==" for existing files and
+            // directories, but NOT for nonexistent ones — those produce
+            // only an error message.
+            let metadata = match Path::new(file).metadata() {
+                Ok(m) => m,
                 Err(err) => {
                     show!(err.map_err_context(
                         || translate!("head-error-cannot-open", "name" => file.quote())
@@ -470,7 +467,32 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 write!(stdout, "==> ")?;
                 print_verbatim(file).unwrap();
                 writeln!(stdout, " <==")?;
+                first = false;
             }
+            // When 0 bytes or 0 lines are requested, there is nothing to
+            // read, so we should succeed on directories just like GNU head
+            // does. Skip opening the file entirely in that case (also
+            // avoids platform differences: on Windows, `File::open` on a
+            // directory fails with "Permission denied").
+            let zero_output = matches!(options.mode, Mode::FirstBytes(0) | Mode::FirstLines(0));
+            if metadata.is_dir() {
+                if !zero_output {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                    ));
+                }
+                continue;
+            }
+            let mut file_handle = match File::open(file) {
+                Ok(f) => f,
+                Err(err) => {
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.quote())
+                    ));
+                    continue;
+                }
+            };
             head_file(&mut file_handle, options)?;
             Ok(())
         };
