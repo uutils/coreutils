@@ -1032,7 +1032,10 @@ impl Options {
 
         let recursive = matches.get_flag(options::RECURSIVE) || matches.get_flag(options::ARCHIVE);
 
-        let backup_mode = match backup_control::determine_backup_mode(matches) {
+        let backup_mode = match backup_control::determine_backup_mode(
+            std::env::var("VERSION_CONTROL").ok(),
+            matches,
+        ) {
             Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
             Ok(mode) => mode,
         };
