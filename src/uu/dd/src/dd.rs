@@ -599,13 +599,22 @@ enum Density {
 /// Data destinations.
 enum Dest {
     /// Output to stdout.
-    Stdout(File),
+    ///
+    /// ManuallyDrop ensures the file descriptor is never closed when dropped,
+    /// preventing loss of buffered data and maintaining stdout's lifetime.
+    Stdout(ManuallyDrop<File>),
 
     /// Output to a file.
     ///
     /// The [`Density`] component indicates whether to attempt to
     /// write a sparse file when all-zero blocks are encountered.
     File(File, Density),
+
+    /// Output to stdout when redirected to a seekable file.
+    ///
+    /// Like `Stdout`, uses ManuallyDrop to prevent closing stdout's fd.
+    /// Unlike `File`, this represents stdout redirected to a file (e.g., `dd > out.txt`).
+    FileFromStdout(ManuallyDrop<File>, Density),
 
     /// Output to a named pipe, also known as a FIFO.
     #[cfg(unix)]
@@ -624,6 +633,10 @@ impl Dest {
                 f.flush()?;
                 f.sync_all()
             }
+            Self::FileFromStdout(f, _) => {
+                (**f).flush()?;
+                (**f).sync_all()
+            }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 f.flush()?;
@@ -641,6 +654,10 @@ impl Dest {
                 f.flush()?;
                 f.sync_data()
             }
+            Self::FileFromStdout(f, _) => {
+                (**f).flush()?;
+                (**f).sync_data()
+            }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 f.flush()?;
@@ -654,10 +671,26 @@ impl Dest {
     #[cfg_attr(not(unix), allow(unused_variables))]
     fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
         match self {
-            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), &mut **stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
+                }
+                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+            }
+            Self::FileFromStdout(f, _) => {
+                #[cfg(unix)]
+                if let Ok(Some(len)) = try_get_len_of_block_device(&mut **f)
                     && len < n
                 {
                     // GNU compatibility:
@@ -683,9 +716,12 @@ impl Dest {
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => {
+                let pos = f.stream_position()?;
+                f.set_len(pos)
+            }
+            Self::FileFromStdout(f, _) => {
                 let pos = f.stream_position()?;
                 f.set_len(pos)
             }
@@ -703,6 +739,10 @@ impl Dest {
     fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
         match self {
             Self::File(f, _) => {
+                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
+                posix_fadvise(f.as_fd(), offset, len, advice)
+            }
+            Self::FileFromStdout(f, _) => {
                 let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
                 posix_fadvise(f.as_fd(), offset, len, advice)
             }
@@ -775,6 +815,14 @@ impl Write for Dest {
                 f.seek(SeekFrom::Current(seek_amt))?;
                 Ok(buf.len())
             }
+            Self::FileFromStdout(f, Density::Sparse) if is_sparse(buf) => {
+                let seek_amt: i64 = buf
+                    .len()
+                    .try_into()
+                    .expect("Internal dd Error: Seek amount greater than signed 64-bit integer");
+                f.seek(SeekFrom::Current(seek_amt))?;
+                Ok(buf.len())
+            }
             Self::File(f, _) => {
                 // Try the write first
                 match f.write(buf) {
@@ -786,6 +834,21 @@ impl Write for Dest {
                         // This might be an O_DIRECT alignment issue.
                         // Try removing O_DIRECT temporarily and retry.
                         handle_o_direct_write(f, buf, e)
+                    }
+                    Err(e) => Err(e),
+                }
+            }
+            Self::FileFromStdout(f, _) => {
+                // Try the write first
+                match f.write(buf) {
+                    Ok(len) => Ok(len),
+                    Err(e)
+                        if e.kind() == io::ErrorKind::InvalidInput
+                            && e.raw_os_error() == Some(libc::EINVAL) =>
+                    {
+                        // This might be an O_DIRECT alignment issue.
+                        // Try removing O_DIRECT temporarily and retry.
+                        handle_o_direct_write(&mut **f, buf, e)
                     }
                     Err(e) => Err(e),
                 }
@@ -802,6 +865,7 @@ impl Write for Dest {
         match self {
             Self::Stdout(stdout) => stdout.flush(),
             Self::File(f, _) => f.flush(),
+            Self::FileFromStdout(f, _) => f.flush(),
             #[cfg(unix)]
             Self::Fifo(f) => f.flush(),
             #[cfg(unix)]
@@ -828,11 +892,12 @@ impl<'a> Output<'a> {
     /// Instantiate this struct with stdout as a destination.
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         // Use a "borrowed" File to avoid fcntl syscall from try_clone_to_owned
+        // ManuallyDrop ensures stdout is never closed when dropped
         #[cfg(unix)]
         let file = ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdout().as_raw_fd()) });
         #[cfg(windows)]
         let file = ManuallyDrop::new(unsafe { File::from_raw_handle(io::stdout().as_raw_handle()) });
-        let mut dst = Dest::Stdout(ManuallyDrop::into_inner(file));
+        let mut dst = Dest::Stdout(file);
         dst.seek(settings.seek, settings.obs)
             .map_err_context(|| translate!("dd-error-write-error"))?;
         Ok(Self { dst, settings })
@@ -893,6 +958,8 @@ impl<'a> Output<'a> {
     /// (current position) that shall be used.
     fn new_file_from_stdout(settings: &'a Settings) -> UResult<Self> {
         // Use a "borrowed" File to avoid fcntl syscall from try_clone_to_owned
+        // ManuallyDrop ensures stdout is never closed when dropped, even though
+        // it's being treated as a regular file (e.g., when stdout is redirected to a file)
         #[cfg(unix)]
         let file = {
             let stdout = io::stdout();
@@ -909,7 +976,15 @@ impl<'a> Output<'a> {
         #[cfg(windows)]
         let file = ManuallyDrop::new(unsafe { File::from_raw_handle(io::stdout().as_raw_handle()) });
 
-        Self::prepare_file(ManuallyDrop::into_inner(file), settings)
+        let density = if settings.oconv.sparse {
+            Density::Sparse
+        } else {
+            Density::Dense
+        };
+        let mut dst = Dest::FileFromStdout(file, density);
+        dst.seek(settings.seek, settings.obs)
+            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
+        Ok(Self { dst, settings })
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
