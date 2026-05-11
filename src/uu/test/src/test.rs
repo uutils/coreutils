@@ -233,11 +233,14 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 }
 
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
-    fd.to_str()
+    let i = fd
+        .to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))?;
+    // isatty does not close file descriptor
+    let fd = unsafe { std::os::fd::BorrowedFd::borrow_raw(i) };
+    Ok(rustix::termios::isatty(fd))
 }
 
 #[derive(Eq, PartialEq)]

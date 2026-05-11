@@ -21,7 +21,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-libc = { workspace = true }
+rustix = { workspace = true, features = ["termios"] }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
 
