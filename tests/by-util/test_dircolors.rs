@@ -32,46 +32,14 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_shell_syntax() {
-    use std::env;
-    let last = env::var("SHELL");
-    unsafe {
-        env::set_var("SHELL", "/path/csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/path/bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/asd/bar");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "foo");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-    unsafe {
-        env::remove_var("SHELL");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-
-    if let Ok(s) = last {
-        unsafe {
-            env::set_var("SHELL", s);
-        }
-    }
+    assert_eq!(OutputFmt::CShell, guess_syntax(Some("/path/csh".into())));
+    assert_eq!(OutputFmt::CShell, guess_syntax(Some("csh".into())));
+    assert_eq!(OutputFmt::Shell, guess_syntax(Some("/path/bash".into())));
+    assert_eq!(OutputFmt::Shell, guess_syntax(Some("bash".into())));
+    assert_eq!(OutputFmt::Shell, guess_syntax(Some("/asd/bar".into())));
+    assert_eq!(OutputFmt::Shell, guess_syntax(Some("foo".into())));
+    assert_eq!(OutputFmt::Unknown, guess_syntax(Some(String::new().into())));
+    assert_eq!(OutputFmt::Unknown, guess_syntax(None));
 }
 
 #[test]

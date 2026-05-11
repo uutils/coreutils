@@ -37,9 +37,9 @@ pub enum OutputFmt {
     Unknown,
 }
 
-pub fn guess_syntax() -> OutputFmt {
-    match env::var("SHELL") {
-        Ok(ref s) if !s.is_empty() => {
+pub fn guess_syntax(env: Option<OsString>) -> OutputFmt {
+    match env {
+        Some(s) if !s.is_empty() => {
             let shell_path: &Path = s.as_ref();
             if let Some(name) = shell_path.file_name() {
                 if name == "csh" || name == "tcsh" {
@@ -165,7 +165,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     if out_format == OutputFmt::Unknown {
-        match guess_syntax() {
+        match guess_syntax(env::var_os("SHELL")) {
             OutputFmt::Unknown => {
                 return Err(USimpleError::new(
                     1,
