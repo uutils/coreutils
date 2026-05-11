@@ -505,19 +505,36 @@ impl<'a> Pager<'a> {
         Ok(pager)
     }
 
+    /// Queue a line clear only when stdout is a tty; no-op otherwise so ANSI bytes
+    /// don't leak into downstream pipes.
+    fn clear_line(&mut self) -> std::io::Result<()> {
+        if self.stdout.is_tty() {
+            self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        }
+        Ok(())
+    }
+
+    /// Wrap `text` in the reverse-video attribute when stdout is a tty; return
+    /// the plain text otherwise.
+    fn highlight_text(&self, text: &str) -> String {
+        if self.stdout.is_tty() {
+            format!("{}{text}{}", Attribute::Reverse, Attribute::Reset)
+        } else {
+            text.to_string()
+        }
+    }
+
     fn handle_from_line(&mut self) -> UResult<()> {
         if !self.read_until_line(self.upper_mark)? {
-            write!(
-                self.stdout,
-                "\r{}{} ({}){}",
-                Attribute::Reverse,
+            let msg = format!(
+                "{} ({})",
                 translate!(
                     "more-error-cannot-seek-to-line",
                     "line" => (self.upper_mark + 1)
                 ),
                 translate!("more-press-return"),
-                Attribute::Reset,
-            )?;
+            );
+            write!(self.stdout, "\r{}", self.highlight_text(&msg))?;
             self.stdout.flush()?;
             self.wait_for_enter_key()?;
             self.upper_mark = 0;
@@ -572,14 +589,12 @@ impl<'a> Pager<'a> {
             self.upper_mark = line;
         } else {
             self.pattern = None;
-            write!(
-                self.stdout,
-                "\r{}{} ({}){}",
-                Attribute::Reverse,
+            let msg = format!(
+                "{} ({})",
                 translate!("more-error-pattern-not-found"),
                 translate!("more-press-return"),
-                Attribute::Reset,
-            )?;
+            );
+            write!(self.stdout, "\r{}", self.highlight_text(&msg))?;
             self.stdout.flush()?;
             self.wait_for_enter_key()?;
         }
@@ -606,7 +621,7 @@ impl<'a> Pager<'a> {
     }
 
     fn display_multi_file_header(&mut self) -> UResult<()> {
-        self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        self.clear_line()?;
         self.stdout.write_all(
             MULTI_FILE_TOP_PROMPT
                 .replace("{}", self.file_name.unwrap_or_default())
@@ -625,6 +640,9 @@ impl<'a> Pager<'a> {
     }
 
     fn update_display(&mut self, options: &Options) -> UResult<()> {
+        if !self.stdout.is_tty() {
+            return Ok(());
+        }
         if options.print_over {
             self.stdout
                 .execute(MoveTo(0, 0))?
@@ -770,14 +788,14 @@ impl<'a> Pager<'a> {
 
     fn draw(&mut self, wrong_key: Option<char>) -> UResult<()> {
         self.draw_lines()?;
-        self.draw_status_bar(wrong_key);
+        self.draw_status_bar(wrong_key)?;
         self.stdout.flush()?;
         Ok(())
     }
 
     fn draw_lines(&mut self) -> UResult<()> {
         // Clear current prompt line
-        self.stdout.queue(Clear(ClearType::CurrentLine))?;
+        self.clear_line()?;
         // Reset squeezed lines counter
         self.lines_squeezed = 0;
         // Display lines until we've filled the screen
@@ -799,11 +817,8 @@ impl<'a> Pager<'a> {
             // Display the line
             let mut line = self.lines[index].clone();
             if let Some(pattern) = &self.pattern {
-                // Highlight the pattern in the line
-                line = line.replace(
-                    pattern,
-                    &format!("{}{pattern}{}", Attribute::Reverse, Attribute::Reset),
-                );
+                let highlighted = self.highlight_text(pattern);
+                line = line.replace(pattern, &highlighted);
             }
             self.stdout.write_all(format!("\r{line}\n").as_bytes())?;
             lines_printed += 1;
@@ -829,7 +844,7 @@ impl<'a> Pager<'a> {
         }
     }
 
-    fn draw_status_bar(&mut self, wrong_key: Option<char>) {
+    fn draw_status_bar(&mut self, wrong_key: Option<char>) -> std::io::Result<()> {
         // Calculate the index of the last visible line
         let lower_mark =
             (self.upper_mark + self.content_rows).min(self.lines.len().saturating_sub(1));
@@ -881,13 +896,9 @@ impl<'a> Pager<'a> {
             (false, None) => status,
         };
         // Draw the status bar at the bottom of the screen
-        write!(
-            self.stdout,
-            "\r{}{banner}{}",
-            Attribute::Reverse,
-            Attribute::Reset
-        )
-        .unwrap();
+        let styled = self.highlight_text(&banner);
+        write!(self.stdout, "\r{styled}")?;
+        Ok(())
     }
 }
 
@@ -1072,7 +1083,7 @@ mod tests {
             .from_line(3)
             .silent()
             .build();
-        pager.draw_status_bar(None);
+        pager.draw_status_bar(None).unwrap();
         let stdout = String::from_utf8_lossy(&pager.stdout);
         assert!(stdout.contains(&translate!("more-help-message")));
     }
@@ -1179,7 +1190,7 @@ mod tests {
     #[test]
     fn test_wrong_key() {
         let mut pager = TestPagerBuilder::default().silent().build();
-        pager.draw_status_bar(Some('x'));
+        pager.draw_status_bar(Some('x')).unwrap();
         let stdout = String::from_utf8_lossy(&pager.stdout);
         assert!(stdout.contains(&translate!(
             "more-error-unknown-key",
@@ -1187,7 +1198,7 @@ mod tests {
         )));
 
         pager = TestPagerBuilder::default().build();
-        pager.draw_status_bar(Some('x'));
+        pager.draw_status_bar(Some('x')).unwrap();
         let stdout = String::from_utf8_lossy(&pager.stdout);
         assert!(stdout.contains(&BELL.to_string()));
     }
