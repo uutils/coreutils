@@ -97,7 +97,7 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 pub fn splice_unbounded<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
 where
     R: Read + AsFd,
-    S: AsFd + Write,
+    S: AsFd,
 {
     // improve throughput
     // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
@@ -123,7 +123,7 @@ where
 pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
 where
     R: Read + AsFd,
-    S: AsFd + Write,
+    S: AsFd,
 {
     static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
     let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe().ok()).as_ref() else {
