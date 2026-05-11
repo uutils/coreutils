@@ -27,8 +27,6 @@ use pretty_assertions::assert_eq;
 use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
-#[cfg(not(windows))]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1165,12 +1163,13 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn mkfifo(&self, fifo: &str) {
+        // rustix::fs::mkfifoat is linux only
+        use nix::sys::stat::Mode;
         let full_path = self.plus_as_string(fifo);
         log_info("mkfifo", &full_path);
-        unsafe {
-            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
-            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
-        }
+
+        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
