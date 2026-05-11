@@ -931,8 +931,7 @@ fn test_skip_to_no_match5() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%nope%", "{*}"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")

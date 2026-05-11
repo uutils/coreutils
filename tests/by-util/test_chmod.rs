@@ -615,8 +615,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         .arg("755")
         .arg(test_directory)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line

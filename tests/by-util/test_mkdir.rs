@@ -156,8 +156,7 @@ fn test_mkdir_parent_mode() {
         .arg("a/b")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert!(at.dir_exists("a"));
     // parents created by -p have permissions set to "=rwx,u+wx"
@@ -187,8 +186,7 @@ fn test_mkdir_parent_mode_check_existing_parent() {
         .arg("a/b/c")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert!(at.dir_exists("a"));
     // parent dirs that already exist do not get their permissions modified
@@ -220,8 +218,7 @@ fn test_mkdir_parent_mode_skip_existing_last_component_chmod() {
         .arg("a/b")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.metadata("a/b").permissions().mode() as mode_t, 0o40000);
 }
@@ -919,8 +916,7 @@ fn test_mkdir_parent_inherits_setgid() {
     ucmd.arg("-p")
         .arg("parent/child/grandchild")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     // All descendants should inherit the setgid bit (0o2000)
     assert_eq!(at.metadata("parent").permissions().mode() & 0o2000, 0o2000);

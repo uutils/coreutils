@@ -479,8 +479,7 @@ fn test_cp_arg_update_none() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
@@ -503,8 +502,7 @@ fn test_cp_arg_update_all() {
         .arg(TEST_HOW_ARE_YOU_SOURCE)
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(
         at.read(TEST_HOW_ARE_YOU_SOURCE),
@@ -528,8 +526,7 @@ fn test_cp_arg_update_older_dest_not_older_than_src() {
         .arg(new)
         .arg("--update=older")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -551,8 +548,7 @@ fn test_cp_arg_update_older_dest_not_older_than_src_no_verbose_output() {
         .arg("--verbose")
         .arg("--update=older")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -576,8 +572,7 @@ fn test_cp_arg_update_older_dest_older_than_src() {
         .arg(old)
         .arg("--update=older")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(old), "new content\n");
 }
@@ -624,12 +619,7 @@ fn test_cp_arg_update_short_no_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(old)
-        .arg(new)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(old).arg(new).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -650,12 +640,7 @@ fn test_cp_arg_update_short_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(new)
-        .arg(old)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(new).arg(old).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(old), "new content\n");
 }
@@ -682,8 +667,7 @@ fn test_cp_arg_update_none_then_all() {
         .arg("--update=none")
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "old content\n");
 }
@@ -710,8 +694,7 @@ fn test_cp_arg_update_all_then_none() {
         .arg("--update=all")
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -2940,8 +2923,7 @@ fn test_no_preserve_mode() {
         .arg("dest")
         .umask(libc::mode_t::from(umask))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     // remove sticky bit, setuid and setgid bit; apply umask
     let expected_perms = PERMS_ALL & !0o7000 & u32::from(!umask);
     assert_eq!(
@@ -2970,8 +2952,7 @@ fn test_preserve_mode() {
         .arg("dest")
         .arg("-p")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert_eq!(
         at.plus("dest").metadata().unwrap().mode() & 0o7777,
         PERMS_ALL
@@ -2984,11 +2965,7 @@ fn test_canonicalize_symlink() {
     at.mkdir("dir");
     at.touch("dir/file");
     at.relative_symlink_file("../dir/file", "dir/file-ln");
-    ucmd.arg("dir/file-ln")
-        .arg(".")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg("dir/file-ln").arg(".").succeeds().no_output();
 }
 
 #[test]
@@ -3053,8 +3030,7 @@ fn test_copy_through_dangling_symlink_no_dereference() {
         .arg("dangle")
         .arg("d2")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -3128,8 +3104,7 @@ fn test_copy_through_dangling_symlink_no_dereference_permissions() {
     //           V      V      V        V
     ucmd.args(&["-P", "-p", "dangle", "d2"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert!(at.symlink_exists("d2"), "symlink wasn't created");
 
     // `-p` means `--preserve=mode,ownership,timestamps`
@@ -3203,8 +3178,7 @@ fn test_cp_fifo() {
         .arg("fifo")
         .arg("fifo2")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert!(at.is_fifo("fifo2"));
 
     let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
@@ -3351,8 +3325,7 @@ fn test_cp_socket() {
         .arg("socket")
         .arg("socket2")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let metadata = std::fs::metadata(at.subdir.join("socket2")).unwrap();
     let permission = uucore::fs::display_permissions(&metadata, true);
@@ -3411,8 +3384,7 @@ fn test_cp_r_symlink() {
         .arg("tmp")
         .arg("tmp2")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     // Is symlink2 still a symlink, and does it point at the same place?
     assert!(at.is_symlink("tmp2/symlink"));
@@ -3561,8 +3533,7 @@ fn test_cp_parents_2_dirs() {
     at.mkdir("d");
     ucmd.args(&["-a", "--parents", "a/b/c", "d"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert!(at.dir_exists("d/a/b/c"));
 }
 
@@ -3735,8 +3706,7 @@ fn test_remove_destination_symbolic_link_loop() {
     at.touch("f");
     ucmd.args(&["--remove-destination", "f", "loop"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(at.file_exists("loop"));
 }
 
@@ -3747,10 +3717,7 @@ fn test_cp_symbolic_link_loop() {
     at.symlink_file("loop", "loop");
     at.plus("loop");
     at.touch("f");
-    ucmd.args(&["-f", "f", "loop"])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-f", "f", "loop"]).succeeds().no_output();
     assert!(at.file_exists("loop"));
 }
 
@@ -3799,10 +3766,7 @@ fn test_copy_dir_preserve_permissions() {
     //            |      |    |   to this destination
     //            |      |    |     |
     //            V      V    V     V
-    ucmd.args(&["-p", "-R", "d1", "d2"])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-p", "-R", "d1", "d2"]).succeeds().no_output();
     assert!(at.dir_exists("d2"));
 
     // Assert that the permissions are preserved.
@@ -3822,10 +3786,7 @@ fn test_copy_dir_preserve_subdir_permissions() {
     at.set_mode("a1/a2", 0o0555);
     at.set_mode("a1", 0o0777);
 
-    ucmd.args(&["-p", "-r", "a1", "b1"])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-p", "-r", "a1", "b1"]).succeeds().no_output();
 
     // Make sure everything is preserved
     assert!(at.dir_exists("b1"));
@@ -3847,8 +3808,7 @@ fn test_copy_dir_preserve_readonly_source_with_files() {
 
     ucmd.args(&["-p", "-r", "src", "dest"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert!(at.dir_exists("dest"));
     assert_eq!(at.read("dest/file.txt"), "hello");
@@ -3920,8 +3880,7 @@ fn test_same_file_force_backup() {
     at.touch("f");
     ucmd.args(&["--force", "--backup", "f", "f"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(at.file_exists("f~"));
 }
 
@@ -3947,7 +3906,7 @@ fn test_copy_contents_fifo() {
     // At this point the child process should have terminated
     // successfully with no output. The `outfile` should have the
     // contents of `fifo` copied into it.
-    child.wait().unwrap().no_stdout().no_stderr().success();
+    child.wait().unwrap().no_output().success();
     assert_eq!(at.read("outfile"), "foo");
 }
 
@@ -3968,8 +3927,7 @@ fn test_reflink_never_sparse_always() {
 
     ucmd.args(&["--reflink=never", "--sparse=always", "src", "dest"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     at.file_exists("dest");
 
     let src_metadata = std::fs::metadata(at.plus("src")).unwrap();
@@ -4046,8 +4004,7 @@ fn test_src_base_dot() {
         .current_dir(at.plus("y"))
         .args(&["--verbose", "-r", "../x/.", "."])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert!(!at.dir_exists("y/x"));
 }
 
@@ -4065,10 +4022,7 @@ fn test_non_utf8_src() {
     let (at, mut ucmd) = at_and_ucmd!();
     let src = non_utf8_name("src");
     std::fs::File::create(at.plus(&src)).unwrap();
-    ucmd.args(&[src, "dest".into()])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&[src, "dest".into()]).succeeds().no_output();
     assert!(at.file_exists("dest"));
 }
 
@@ -4079,8 +4033,7 @@ fn test_non_utf8_dest() {
     let dest = non_utf8_name("dest");
     ucmd.args(&[TEST_HELLO_WORLD_SOURCE.as_ref(), &*dest])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     assert!(at.file_exists(dest));
 }
 
@@ -4092,8 +4045,7 @@ fn test_non_utf8_target() {
     at.mkdir(&dest);
     ucmd.args(&["-t".as_ref(), &*dest, TEST_HELLO_WORLD_SOURCE.as_ref()])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     let mut copied_file = PathBuf::from(dest);
     copied_file.push(TEST_HELLO_WORLD_SOURCE);
     assert!(at.file_exists(copied_file));

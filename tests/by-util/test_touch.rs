@@ -710,10 +710,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 
     // From the GNU documentation:
@@ -735,10 +732,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 }
 

@@ -455,12 +455,7 @@ fn test_verbose_or_silent() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.touch("regfile");
-    scene
-        .ucmd()
-        .arg("regfile")
-        .fails_with_code(1)
-        .no_stderr()
-        .no_stdout();
+    scene.ucmd().arg("regfile").fails_with_code(1).no_output();
     scene
         .ucmd()
         .args(&["-v", "regfile"])
@@ -476,8 +471,7 @@ fn test_verbose_or_silent() {
         .ucmd()
         .args(&["-vs", "regfile"])
         .fails_with_code(1)
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     scene
         .ucmd()
         .args(&["-sv", "regfile"])
