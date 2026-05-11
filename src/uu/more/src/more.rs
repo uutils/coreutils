@@ -82,8 +82,8 @@ impl std::error::Error for MoreError {}
 
 const BELL: char = '\x07'; // Printing this character will ring the bell
 
-// The prompt to be displayed at the top of the screen when viewing multiple files,
-// with the file name in the middle
+/// The prompt to be displayed at the top of the screen when viewing multiple files,
+/// with the file name in the middle
 const MULTI_FILE_TOP_PROMPT: &str = "\r::::::::::::::\n\r{}\n\r::::::::::::::\n";
 
 pub mod options {
@@ -186,7 +186,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             };
             let next_file_str = next_file.map(|f| f.to_string_lossy().into_owned());
             more(
-                InputType::File(BufReader::new(opened_file)),
+                Input::from_file(opened_file)?,
                 length > 1,
                 Some(&file.to_string_lossy()),
                 next_file_str.as_deref(),
@@ -199,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // stdin is not a pipe
             return Err(UUsageError::new(1, MoreError::BadUsage.to_string()));
         }
-        more(InputType::Stdin(stdin), false, None, None, &mut options)?;
+        more(Input::from_stdin(stdin), false, None, None, &mut options)?;
     }
 
     Ok(())
@@ -313,25 +313,34 @@ pub fn uu_app() -> Command {
         )
 }
 
-enum InputType {
-    File(BufReader<File>),
-    Stdin(Stdin),
+struct Input {
+    reader: Box<dyn BufRead>,
+    /// Total size in bytes; `None` when the source is not a regular file (e.g. stdin).
+    file_size: Option<u64>,
 }
 
-impl InputType {
-    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
-        match self {
-            Self::File(reader) => reader.read_line(buf),
-            Self::Stdin(stdin) => stdin.read_line(buf),
+impl Input {
+    fn from_file(file: File) -> std::io::Result<Self> {
+        let file_size = Some(file.metadata()?.len());
+        Ok(Self {
+            reader: Box::new(BufReader::new(file)),
+            file_size,
+        })
+    }
+
+    fn from_stdin(stdin: Stdin) -> Self {
+        Self {
+            reader: Box::new(stdin.lock()),
+            file_size: None,
         }
     }
 
-    fn len(&self) -> std::io::Result<Option<u64>> {
-        let len = match self {
-            Self::File(reader) => Some(reader.get_ref().metadata()?.len()),
-            Self::Stdin(_) => None,
-        };
-        Ok(len)
+    fn read_line(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        self.reader.read_line(buf)
+    }
+
+    fn len(&self) -> Option<u64> {
+        self.file_size
     }
 }
 
@@ -415,7 +424,7 @@ impl Drop for TerminalGuard {
 }
 
 fn more(
-    input: InputType,
+    input: Input,
     multiple_file: bool,
     file_name: Option<&str>,
     next_file: Option<&str>,
@@ -430,7 +439,7 @@ fn more(
     if let Some(number) = options.lines {
         rows = number;
     }
-    let mut pager = Pager::new(input, rows, file_name, next_file, options, out)?;
+    let mut pager = Pager::new(input, rows, file_name, next_file, options, out);
     // Start from the specified line
     pager.handle_from_line()?;
     // Search for pattern
@@ -451,10 +460,8 @@ fn more(
 }
 
 struct Pager<'a> {
-    /// Source of the content (file, stdin)
-    input: InputType,
-    /// Total size of the file in bytes (only available for file inputs)
-    file_size: Option<u64>,
+    /// Source of the content (file, stdin); also holds the cached file size.
+    input: Input,
     /// Storage for the lines read from the input
     lines: Vec<String>,
     /// Running total of byte sizes for each line, used for positioning
@@ -476,19 +483,17 @@ struct Pager<'a> {
 
 impl<'a> Pager<'a> {
     fn new(
-        input: InputType,
+        input: Input,
         rows: u16,
         file_name: Option<&'a str>,
         next_file: Option<&'a str>,
         options: &Options,
         stdout: OutputType,
-    ) -> UResult<Self> {
+    ) -> Self {
         // Reserve one line for the status bar, ensuring at least one content row
         let content_rows = rows.saturating_sub(1).max(1) as usize;
-        let file_size = input.len()?;
-        let pager = Self {
+        Self {
             input,
-            file_size,
             lines: Vec::with_capacity(content_rows),
             cumulative_line_sizes: Vec::new(),
             upper_mark: options.from_line,
@@ -501,8 +506,7 @@ impl<'a> Pager<'a> {
             silent: options.silent,
             squeeze: options.squeeze,
             stdout,
-        };
-        Ok(pager)
+        }
     }
 
     fn handle_from_line(&mut self) -> UResult<()> {
@@ -704,7 +708,7 @@ impl<'a> Pager<'a> {
 
                 // --- Terminal events ---
                 Event::Resize(col, row) => {
-                    self.page_resize(col, row, options.lines);
+                    self.resize_page(col, row, options.lines);
                 }
 
                 // --- Skip key release events ---
@@ -762,7 +766,7 @@ impl<'a> Pager<'a> {
     }
 
     // TODO: Deal with column size changes.
-    fn page_resize(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
+    fn resize_page(&mut self, _col: u16, row: u16, option_line: Option<u16>) {
         if option_line.is_none() {
             self.content_rows = row.saturating_sub(1) as usize;
         }
@@ -841,7 +845,7 @@ impl<'a> Pager<'a> {
                 .as_ref()
                 .map(|next_file| format!(" (Next file: {next_file})"))
                 .unwrap_or_default()
-        } else if let Some(file_size) = self.file_size {
+        } else if let Some(file_size) = self.input.len() {
             // For files, show percentage or END
             let position = self
                 .cumulative_line_sizes
@@ -967,14 +971,13 @@ mod tests {
                 self.rows = rows;
             }
             Pager::new(
-                InputType::File(BufReader::new(tmpfile)),
+                Input::from_file(tmpfile).unwrap(),
                 self.rows,
                 None,
                 self.next_file,
                 &self.options,
                 out,
             )
-            .unwrap()
         }
 
         fn silent(mut self) -> Self {
