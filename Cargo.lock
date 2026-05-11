@@ -3815,6 +3815,7 @@ dependencies = [
  "fs_extra",
  "indicatif",
  "libc",
+ "nix",
  "rustc-hash",
  "tempfile",
  "thiserror 2.0.18",

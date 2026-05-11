@@ -39,8 +39,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
-#[cfg(unix)]
-use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
     are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
@@ -885,7 +883,8 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to)?;
+    // rustix::fs::mkfifoat is linux only
+    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
     fs::remove_file(from)
 }
 
@@ -1162,7 +1161,8 @@ fn copy_file_with_hardlinks_helper(
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
-        make_fifo(to)?;
+        // rustix::fs::mkfifoat is linux only
+        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
     } else {
