@@ -13,7 +13,7 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -447,13 +447,14 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
             Ok(())
         } else {
-            if Path::new(file).is_dir() {
-                show!(USimpleError::new(
-                    1,
-                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                ));
-                continue;
-            }
+            // Open first, then check whether the fd refers to a
+            // directory. The previous `Path::is_dir()` check followed
+            // symlinks, and a subsequent `File::open` re-resolved the
+            // path — opening this race window: an attacker who flips
+            // `file` from regular file to symlink between the two
+            // syscalls would have the post-check open follow the
+            // swapped symlink (issue #11972). Checking on the open fd
+            // closes that window.
             let mut file_handle = match File::open(file) {
                 Ok(f) => f,
                 Err(err) => {
@@ -463,6 +464,22 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     continue;
                 }
             };
+            match file_handle.metadata() {
+                Ok(m) if m.is_dir() => {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                    ));
+                    continue;
+                }
+                Ok(_) => {}
+                Err(err) => {
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.quote())
+                    ));
+                    continue;
+                }
+            }
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
                     writeln!(stdout)?;
