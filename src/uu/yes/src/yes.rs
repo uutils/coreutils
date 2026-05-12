@@ -119,11 +119,11 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
     let mut stdout = io::stdout(); // no need to lock with zero-copy
+    // improve throughput
+    let _ = rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE);
     // don't show any error from fast-path and fallback to write for proper message
     if let Ok((p_read, mut p_write)) = pipe()
-            // todo: zero-copy with default size when fcntl failed
-            && rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok()
-            && p_write.write_all(bytes).is_ok()
+        && p_write.write_all(bytes).is_ok()
     {
         if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
             while let Ok(1..) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
