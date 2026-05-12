@@ -1062,6 +1062,22 @@ fn test_do_not_attempt_to_read_a_directory() {
         .stderr_contains("error reading '.'");
 }
 
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: /proc not visible")]
+fn test_proc_self_mem_reports_read_error() {
+    for args in [
+        vec!["/proc/self/mem"],
+        vec!["-c", "10", "/proc/self/mem"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_contains("error reading '/proc/self/mem'")
+            .stderr_does_not_contain("error writing 'standard output'");
+    }
+}
+
 /// Regression test for <https://github.com/uutils/coreutils/issues/12215>
 /// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
 #[test]
