@@ -690,7 +690,7 @@ impl Dest {
             }
             Self::FileFromStdout(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(&mut **f)
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
                     && len < n
                 {
                     // GNU compatibility:
@@ -848,7 +848,7 @@ impl Write for Dest {
                     {
                         // This might be an O_DIRECT alignment issue.
                         // Try removing O_DIRECT temporarily and retry.
-                        handle_o_direct_write(&mut **f, buf, e)
+                        handle_o_direct_write(f, buf, e)
                     }
                     Err(e) => Err(e),
                 }
