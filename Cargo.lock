@@ -3433,6 +3433,7 @@ dependencies = [
  "fluent",
  "libc",
  "num-integer",
+ "rustc_version",
  "rustix",
  "tempfile",
  "thiserror 2.0.20",

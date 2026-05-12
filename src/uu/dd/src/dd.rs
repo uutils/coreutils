@@ -5,6 +5,9 @@
 
 // spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, virtio, wlen, wstat, zram, oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
+// TODO: Remove once https://github.com/rust-lang/rust/issues/71213 is stabilized.
+#![cfg_attr(all(nightly, target_os = "wasi"), feature(wasi_ext))]
+
 mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
@@ -28,17 +31,18 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
-#[cfg(unix)]
+#[cfg(any(unix, all(nightly, target_os = "wasi")))]
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+#[cfg(any(unix, all(nightly, target_os = "wasi")))]
+use std::os::fd::{AsRawFd, FromRawFd};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
-#[cfg(unix)]
-use std::os::unix::{
-    fs::FileTypeExt,
-    io::{AsRawFd, FromRawFd},
-};
+#[cfg(all(nightly, target_os = "wasi"))]
+use std::os::wasi::fs::FileTypeExt;
 #[cfg(windows)]
 use std::os::windows::{fs::MetadataExt, io::AsHandle};
 use std::path::Path;
@@ -50,9 +54,11 @@ use std::time::{Duration, Instant};
 use clap::{Arg, Command};
 use num_integer::Integer;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
-use uucore::error::{USimpleError, set_exit_code};
+use uucore::error::USimpleError;
+#[cfg(any(unix, all(nightly, target_os = "wasi")))]
+use uucore::error::set_exit_code;
+use uucore::error::{FromIo, UResult};
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
@@ -213,14 +219,14 @@ impl AlignedBuf {
 /// fine-grained access to reading from stdin.
 enum Source {
     /// Input from stdin.
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, all(nightly, target_os = "wasi"))))]
     Stdin(io::Stdin),
 
     /// Input from a file.
     File(File),
 
     /// Input from stdin, opened from its file descriptor.
-    #[cfg(unix)]
+    #[cfg(any(unix, all(nightly, target_os = "wasi")))]
     StdinFile(File),
 
     /// Input from a named pipe, also known as a FIFO.
@@ -236,7 +242,7 @@ impl Source {
     /// the [`File`] parameter. You can use this instead of
     /// `Source::Stdin` to allow reading from stdin without consuming
     /// the entire contents of stdin when this process terminates.
-    #[cfg(unix)]
+    #[cfg(any(unix, all(nightly, target_os = "wasi")))]
     fn stdin_as_file() -> Self {
         let fd = io::stdin().as_raw_fd();
         let f = unsafe { File::from_raw_fd(fd) };
@@ -245,7 +251,7 @@ impl Source {
 
     fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
         match self {
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, all(nightly, target_os = "wasi"))))]
             Self::Stdin(stdin) => {
                 let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
@@ -256,7 +262,7 @@ impl Source {
                 }
                 Ok(m)
             }
-            #[cfg(unix)]
+            #[cfg(any(unix, all(nightly, target_os = "wasi")))]
             Self::StdinFile(f) => {
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
                     && len < n
@@ -335,10 +341,10 @@ impl Source {
 impl Read for Source {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            #[cfg(not(unix))]
+            #[cfg(not(any(unix, all(nightly, target_os = "wasi"))))]
             Self::Stdin(stdin) => stdin.read(buf),
             Self::File(f) => f.read(buf),
-            #[cfg(unix)]
+            #[cfg(any(unix, all(nightly, target_os = "wasi")))]
             Self::StdinFile(f) => f.read(buf),
             #[cfg(unix)]
             Self::Fifo(f) => f.read(buf),
@@ -376,9 +382,9 @@ impl<'a> Input<'a> {
                 _ => Source::Stdin(io::stdin()),
             }
         };
-        #[cfg(all(not(unix), not(windows)))]
+        #[cfg(all(not(unix), not(windows), not(all(nightly, target_os = "wasi"))))]
         let mut src = Source::Stdin(io::stdin());
-        #[cfg(unix)]
+        #[cfg(any(unix, all(nightly, target_os = "wasi")))]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
         if let Source::StdinFile(f) = &src
@@ -1538,7 +1544,7 @@ fn is_stdout_redirected_to_seekable_file() -> bool {
 }
 
 /// Try to get the len if it is a block device
-#[cfg(unix)]
+#[cfg(any(unix, all(nightly, target_os = "wasi")))]
 fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
     let ftype = file.metadata()?.file_type();
     if !ftype.is_block_device() {
