@@ -8,9 +8,8 @@
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{
+    fs::File,
     io::{Read, Write},
     os::fd::AsFd,
     sync::OnceLock,
@@ -35,15 +34,31 @@ pub fn pipe() -> std::io::Result<(File, File)> {
     Ok((File::from(read), File::from(write)))
 }
 
-/// return pipe larger than given size and kernel's default size
+/// try to return pipe larger than given size
 ///
 /// useful to save RAM usage
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
+    // avoid unnecessary syscall
     if s > KERNEL_DEFAULT_PIPE_SIZE {
         let _ = fcntl_setpipe_size(&read, s);
+    }
+
+    Ok((File::from(read), File::from(write)))
+}
+
+// used only from yes currently. We might use this for dd...
+/// return pipe larger than given size
+///
+/// use this if writing size to pipe should not hang
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn pipe_exact(s: usize) -> std::io::Result<(File, File)> {
+    let (read, write) = rustix::pipe::pipe()?;
+    if s > KERNEL_DEFAULT_PIPE_SIZE {
+        fcntl_setpipe_size(&read, s)?;
     }
 
     Ok((File::from(read), File::from(write)))

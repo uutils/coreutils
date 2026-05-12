@@ -22,7 +22,7 @@ doctest = false
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }
-rustix = { workspace = true, features = ["pipe"] }
+rustix = { workspace = true, features = ["stdio", "pipe"] }
 uucore = { workspace = true, features = ["pipes"] }
 
 [[bin]]
