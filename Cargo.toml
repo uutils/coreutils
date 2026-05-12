@@ -190,6 +190,7 @@ feat_wasm = [
   "csplit",
   "cut",
   "date",
+  "dd",
   "dir",
   "dircolors",
   "dirname",
