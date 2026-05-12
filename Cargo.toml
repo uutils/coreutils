@@ -449,6 +449,7 @@ regex = "1.10.4"
 rlimit = "0.11.0"
 rstest = "0.26.0"
 rstest_reuse = "0.7.0"
+rustc_version = "0.4.1"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 # raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
