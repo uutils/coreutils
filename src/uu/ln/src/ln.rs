@@ -70,6 +70,9 @@ pub enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
+    #[error("{}", translate!("ln-error-missing-operand"))]
+    MissingOperand,
+
     #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
 
@@ -270,6 +273,10 @@ pub fn uu_app() -> Command {
 ///
 /// This is made public to allow other apps to use `ln` as a library.
 pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
+    if files.is_empty() {
+        return Err(LnError::MissingOperand);
+    }
+
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -298,7 +305,6 @@ pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
             uucore::execution_phrase().to_string(),
         ));
     }
-    assert!(!files.is_empty());
 
     link(&files[0], &files[1], settings)
 }
