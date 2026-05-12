@@ -27,6 +27,7 @@ ln-help-verbose = afficher le nom de chaque fichier lié
 ln-error-target-is-not-directory = la cible {$target} n'est pas un répertoire
 ln-error-same-file = {$file1} et {$file2} sont le même fichier
 ln-error-missing-destination = opérande de fichier de destination manquant après {$operand}
+ln-error-missing-operand = opérande manquant
 ln-error-extra-operand = opérande supplémentaire {$operand}
   Essayez « {$program} --help » pour plus d'informations.
 ln-error-could-not-update = Impossible de mettre à jour {$target} : {$error}
