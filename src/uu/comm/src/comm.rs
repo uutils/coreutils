@@ -113,7 +113,7 @@ impl OrderChecker {
         }
 
         let is_ordered = *current_line >= *self.last_line;
-        if !is_ordered && !self.has_error {
+        if !is_ordered && !self.has_error && self.check_order {
             let _ = writeln!(
                 stderr(),
                 "{}",
