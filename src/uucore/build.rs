@@ -274,14 +274,12 @@ fn embed_static_utility_locales(
 /// It always includes "en-US" to ensure that a fallback is available if the
 /// system locale's translation file is missing or if `LANG` is not set.
 fn get_locales_to_embed(env: Option<String>) -> (String, Option<String>) {
-    let system_locale = env.and_then(|lang| {
-        let locale = lang.split('.').next()?.replace('_', "-");
-        if locale != "en-US" && !locale.is_empty() {
-            Some(locale)
-        } else {
-            None
-        }
-    });
+    let system_locale = env
+        .as_deref()
+        .and_then(|s| s.split('.').next())
+        .map(|s| s.replace('_', "-"))
+        .filter(|s| !s.is_empty() && s != "en-US");
+
     ("en-US".to_string(), system_locale)
 }
 
