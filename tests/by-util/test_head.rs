@@ -939,6 +939,7 @@ fn test_do_not_attempt_to_read_a_directory() {
 /// 'standard output'" message.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_proc_self_mem_reports_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
