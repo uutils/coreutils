@@ -641,39 +641,18 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
     write!(
         lock,
         "uid={uid}({})",
-        entries::uid2usr(uid).unwrap_or_else(|_| {
-            show_error!(
-                "{}",
-                translate!("id-error-cannot-find-user-name", "uid" => uid)
-            );
-            set_exit_code(1);
-            uid.to_string()
-        })
+        entries::uid2usr(uid).unwrap_or_else(|_| { uid.to_string() })
     )?;
     write!(
         lock,
         " gid={gid}({})",
-        entries::gid2grp(gid).unwrap_or_else(|_| {
-            show_error!(
-                "{}",
-                translate!("id-error-cannot-find-group-name", "gid" => gid)
-            );
-            set_exit_code(1);
-            gid.to_string()
-        })
+        entries::gid2grp(gid).unwrap_or_else(|_| { gid.to_string() })
     )?;
     if !state.user_specified && (euid != uid) {
         write!(
             lock,
             " euid={euid}({})",
-            entries::uid2usr(euid).unwrap_or_else(|_| {
-                show_error!(
-                    "{}",
-                    translate!("id-error-cannot-find-user-name", "uid" => euid)
-                );
-                set_exit_code(1);
-                euid.to_string()
-            })
+            entries::uid2usr(euid).unwrap_or_else(|_| { euid.to_string() })
         )?;
     }
     if !state.user_specified && (egid != gid) {
@@ -681,14 +660,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
         write!(
             lock,
             " egid={egid}({})",
-            entries::gid2grp(egid).unwrap_or_else(|_| {
-                show_error!(
-                    "{}",
-                    translate!("id-error-cannot-find-group-name", "gid" => egid)
-                );
-                set_exit_code(1);
-                egid.to_string()
-            })
+            entries::gid2grp(egid).unwrap_or_else(|_| { egid.to_string() })
         )?;
     }
     write!(
@@ -698,14 +670,7 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
             .iter()
             .map(|&gr| format!(
                 "{gr}({})",
-                entries::gid2grp(gr).unwrap_or_else(|_| {
-                    show_error!(
-                        "{}",
-                        translate!("id-error-cannot-find-group-name", "gid" => gr)
-                    );
-                    set_exit_code(1);
-                    gr.to_string()
-                })
+                entries::gid2grp(gr).unwrap_or_else(|_| { gr.to_string() })
             ))
             .collect::<Vec<_>>()
             .join(",")

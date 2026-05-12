@@ -3235,6 +3235,38 @@ pub fn run_ucmd_as_root_with_stdin_stdout(
     }
 }
 
+/// Determines whether `unshare` can be used in the current setup, and returns the path to its binary.
+///
+/// # Errors
+/// If `unshare` is not available on the system, or cannot be run (e.g. in CI), this function
+/// returns a String describing the reason.
+pub fn unshare_bin() -> Result<String> {
+    // Determine whether 'unshare' is available
+    let which_result = Command::new("which").arg("unshare").output()?;
+    if !which_result.status.success() {
+        return Err(io::Error::other("'unshare' not found on system"));
+    }
+    let unshare = String::from_utf8_lossy(&which_result.stdout)
+        .trim()
+        .to_string();
+
+    // Determine whether 'unshare' works as expected
+    let test_result = Command::new(&unshare)
+        .args(["-U", "--map-user=0", "--map-group=0", "--", "whoami"])
+        .output()?;
+    if !test_result.status.success() {
+        let err = String::from_utf8_lossy(&test_result.stderr)
+            .trim()
+            .to_string();
+        return Err(io::Error::other(format!("failed to run 'unshare': {err}")));
+    }
+    if String::from_utf8_lossy(&test_result.stdout).trim() != "root" {
+        return Err(io::Error::other("'unshare' does not work as expected"));
+    }
+
+    Ok(unshare)
+}
+
 /// Sanity checks for test utils
 #[cfg(test)]
 mod tests {
