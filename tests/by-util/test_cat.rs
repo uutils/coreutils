@@ -36,6 +36,18 @@ fn test_cat_broken_pipe_nonzero_and_message() {
         .fails();
 }
 
+// todo: checksum is needed to catch lossy conversion by utf-16
+#[test]
+#[cfg(windows)]
+fn test_cat_invalid_unicode_binary_to_console() {
+    let con = OpenOptions::new()
+        .write(true)
+        .open(r"\\.\CON")
+        .expect("Failed to open console");
+    let path = std::env::current_exe().expect("Failed to get executable path");
+    new_ucmd!().arg(&path).set_stdout(con).succeeds();
+}
+
 #[test]
 fn test_output_simple() {
     new_ucmd!()
