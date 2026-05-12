@@ -20,7 +20,6 @@ more-help-clean-print = Ne pas défiler, afficher le texte et nettoyer les fins 
 more-help-squeeze = Compresser plusieurs lignes vides en une seule
 more-help-plain = Supprimer le soulignement
 more-help-lines = Le nombre de lignes par écran complet
-more-help-number = Identique à l'argument de l'option --lines
 more-help-from-line = Commencer l'affichage de chaque fichier au numéro de ligne
 more-help-pattern = La chaîne à rechercher dans chaque fichier avant de commencer à l'afficher
 more-help-files = Chemin vers les fichiers à lire
