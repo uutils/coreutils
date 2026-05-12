@@ -26,6 +26,7 @@ ln-help-verbose = print name of each linked file
 ln-error-target-is-not-directory = target {$target} is not a directory
 ln-error-same-file = {$file1} and {$file2} are the same file
 ln-error-missing-destination = missing destination file operand after {$operand}
+ln-error-missing-operand = missing operand
 ln-error-extra-operand = extra operand {$operand}
   Try '{$program} --help' for more information.
 ln-error-could-not-update = Could not update {$target}: {$error}
