@@ -202,7 +202,23 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     let stdout = stdout.lock();
     let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
 
-    let bytes_written = io::copy(&mut reader, &mut writer).map_err(wrap_in_stdout_error)?;
+    let mut buf = [0u8; BUF_SIZE];
+    let mut bytes_written = 0;
+
+    loop {
+        let bytes_read = reader
+            .read(&mut buf)
+            .map_err(|e| io::Error::new(e.kind(), uucore::error::strip_errno(&e)))?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        writer
+            .write_all(&buf[..bytes_read])
+            .map_err(wrap_in_stdout_error)?;
+        bytes_written += bytes_read as u64;
+    }
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
@@ -493,8 +509,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     continue;
                 }
             };
-            head_file(&mut file_handle, options)?;
-            Ok(())
+            head_file(&mut file_handle, options).map(|_| ())
         };
         if let Err(err) = res {
             let name = if file == "-" {

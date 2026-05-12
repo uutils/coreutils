@@ -934,6 +934,21 @@ fn test_do_not_attempt_to_read_a_directory() {
         .stderr_contains("error reading '.'");
 }
 
+/// Regression test: reading an unreadable special file such as /proc/self/mem
+/// must report a read error on that file, not a "error writing
+/// 'standard output'" message.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_proc_self_mem_reports_read_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        // Must mention the file, not stdout
+        .stderr_contains("error reading '/proc/self/mem'")
+        // Must NOT blame standard output
+        .stderr_does_not_contain("error writing 'standard output'");
+}
+
 /// Regression test for https://github.com/uutils/coreutils/issues/12215
 /// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
 #[test]
