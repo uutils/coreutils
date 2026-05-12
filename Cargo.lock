@@ -3496,6 +3496,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
+ "rustc_version",
  "rustix",
  "tempfile",
  "thiserror 2.0.20",
