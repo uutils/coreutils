@@ -342,6 +342,7 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
+filedescriptor = "0.8.3"
 filetime = "0.2.29"
 foldhash = "0.2.0"
 glob = "0.3.1"
@@ -673,6 +674,7 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)
 
 [target.'cfg(unix)'.dev-dependencies]
+filedescriptor = { workspace = true }
 nix = { workspace = true, features = ["fs", "signal"] }
 rustix = { workspace = true, features = ["net", "process"] }
 
@@ -681,6 +683,9 @@ phf_codegen.workspace = true
 
 [lints]
 workspace = true
+
+[patch.crates-io]
+filedescriptor = { git = "https://github.com/wezterm/wezterm.git", branch = "main" }
 
 [[bin]]
 name = "coreutils"

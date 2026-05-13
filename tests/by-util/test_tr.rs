@@ -1588,20 +1588,9 @@ fn test_broken_pipe_no_error() {
 #[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
-    use std::fs::File;
     use std::io::Write as _;
 
-    let (mut writer, reader): (File, File) = {
-        rustix::net::socketpair(
-            rustix::net::AddressFamily::UNIX,
-            rustix::net::SocketType::STREAM,
-            rustix::net::SocketFlags::empty(),
-            None,
-        )
-        .map(|(fd0, fd1)| (fd0.into(), fd1.into()))
-    }
-    .unwrap();
-
+    let (mut writer, reader) = filedescriptor::socketpair().unwrap();
     writer.write_all(b"::").unwrap();
     drop(writer);
 
