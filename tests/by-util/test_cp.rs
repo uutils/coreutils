@@ -3336,7 +3336,7 @@ fn test_cp_socket() {
 #[cfg(all(unix, not(target_vendor = "apple")))]
 fn find_other_group(current: u32) -> Option<u32> {
     // Get the first group that doesn't match current
-    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+    rustix::process::getgroups().ok()?.iter().find_map(|group| {
         let gid = group.as_raw();
         (gid != current).then_some(gid)
     })

@@ -2988,7 +2988,7 @@ fn test_mv_cross_device_file_symlink_preserved() {
 /// Non-root users can chgrp to any group they belong to.
 #[cfg(target_os = "linux")]
 fn find_other_group(current: u32) -> Option<u32> {
-    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+    rustix::process::getgroups().ok()?.iter().find_map(|group| {
         let gid = group.as_raw();
         (gid != current).then_some(gid)
     })
