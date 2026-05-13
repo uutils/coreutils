@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
+# spell-checker:ignore (libs) bigdecimal datetime filedescriptor foldhash serde gethostid kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -433,6 +433,7 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
+filedescriptor = "0.8.3"
 filetime = "0.2.29"
 foldhash = "0.2.0"
 fs_extra = "1.3.0"
@@ -594,6 +595,7 @@ ignored = ["clap", "fluent", "libstdbuf"]
 clap.workspace = true
 clap_complete = { workspace = true, optional = true }
 clap_mangen = { workspace = true, optional = true }
+filedescriptor.workspace = true
 fluent-syntax = { workspace = true, optional = true }
 itertools.workspace = true
 jiff = { workspace = true, optional = true }
@@ -771,6 +773,9 @@ phf_codegen.workspace = true
 
 [lints]
 workspace = true
+
+[patch.crates-io]
+filedescriptor = { git = "https://github.com/wezterm/wezterm.git", branch = "main" }
 
 [[bin]]
 name = "coreutils"
