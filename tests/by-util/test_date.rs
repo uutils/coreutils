@@ -12,7 +12,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
-use uucore::process::geteuid;
+use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
@@ -425,13 +425,12 @@ fn test_date_format_literal() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -446,7 +445,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error() {
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
@@ -460,7 +459,7 @@ fn test_date_set_permissions_error() {
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
 
         for date_str in test_cases {
@@ -494,13 +493,12 @@ fn test_date_set_mac_unavailable() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_2() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -575,26 +573,24 @@ fn test_date_for_file_mtime() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_3() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_4() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 

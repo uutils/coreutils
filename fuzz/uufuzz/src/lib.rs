@@ -158,8 +158,8 @@ where
     };
 
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
-        let out = s.spawn(|| read_from_fd(read_pipe_stdout.as_raw_fd()));
-        let err = s.spawn(|| read_from_fd(read_pipe_stderr.as_raw_fd()));
+        let out = s.spawn(|| read_from_fd(read_pipe_stdout));
+        let err = s.spawn(|| read_from_fd(read_pipe_stderr));
         #[allow(clippy::unnecessary_to_owned)]
         // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
@@ -200,7 +200,7 @@ where
     }
 }
 
-fn read_from_fd(fd: RawFd) -> String {
+fn read_from_fd(fd: impl std::os::fd::AsFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
 
@@ -222,8 +222,6 @@ fn read_from_fd(fd: RawFd) -> String {
         }
     }
 
-    // Forget the owned_fd to prevent it from closing the fd (the caller owns it)
-    std::mem::forget(owned_fd);
 
     String::from_utf8_lossy(&captured_output).into_owned()
 }

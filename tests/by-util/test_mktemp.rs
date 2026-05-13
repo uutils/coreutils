@@ -316,8 +316,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     scene
         .ucmd()
         .arg("-d")
@@ -325,8 +324,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]

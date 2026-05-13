@@ -233,15 +233,13 @@ fn test_zero_multiplier_warning() {
             .args(&[format!("{arg}=0").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
 
         new_ucmd!()
             .args(&[format!("{arg}=00x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
 
         new_ucmd!()
             .args(&[format!("{arg}=0x1").as_str(), "status=none"])

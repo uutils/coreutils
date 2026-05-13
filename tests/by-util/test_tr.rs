@@ -1649,20 +1649,19 @@ fn test_broken_pipe_no_error() {
         .fails_silently();
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
-    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
-    use nix::unistd::write;
+    use std::io::Write as _;
 
-    let (fd1, fd2) = socketpair(
-        AddressFamily::Unix,
-        SockType::Stream,
+    let (fd1, fd2) = rustix::net::socketpair(
+        rustix::net::AddressFamily::UNIX,
+        rustix::net::SocketType::STREAM,
+        rustix::net::SocketFlags::empty(),
         None,
-        SockFlag::empty(),
     )
     .unwrap();
-    write(fd1, b"::").unwrap();
+    std::fs::File::from(fd1).write_all(b"::").unwrap();
     new_ucmd!()
         .args(&[":", ";"])
         .set_stdin(fd2)

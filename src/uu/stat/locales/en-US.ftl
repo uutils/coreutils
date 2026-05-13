@@ -56,6 +56,7 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
 ## Error messages
 
 stat-error-invalid-quoting-style = Invalid quoting style: {$style}
+stat-warning-invalid-env-quoting-style = ignoring invalid value of environment variable QUOTING_STYLE: '{$style}'
 stat-error-missing-operand = missing operand
   Try 'stat --help' for more information.
 stat-error-invalid-directive = {$directive}: invalid directive

@@ -16,7 +16,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -921,13 +921,15 @@ impl Attributes {
         xattr: Preserve::No { explicit: false },
     };
 
-    // TODO: ownership is required if the user is root, for non-root users it's not required.
+    // xattr is intentionally NOT in DEFAULT — GNU `cp -p` only preserves
+    // mode, ownership, and timestamps. Default xattr preservation leaks
+    // capability / SELinux labels into copies and fails hard on filesystems
+    // without xattr support. See issue #9704.
     pub const DEFAULT: Self = Self {
         #[cfg(unix)]
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
         ..Self::NONE
     };
 
@@ -1778,6 +1780,14 @@ pub(crate) fn copy_attributes(
         attributes.mode
     };
 
+    // Track whether `chown` to the source's uid succeeded. If it did not
+    // (typical case: non-root user copying a root-owned setuid file), the
+    // mode preservation below must strip setuid/setgid so the destination
+    // does not give the copying user elevated privileges via the copy.
+    // Matches GNU cp. See issue #9750.
+    #[cfg(unix)]
+    let ownership_preserved = std::cell::Cell::new(true);
+
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
     handle_preserve(attributes.ownership, || -> CopyResult<()> {
@@ -1810,6 +1820,7 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
+            ownership_preserved.set(false);
             let _ = try_chown(None);
         }
         Ok(())
@@ -1822,13 +1833,37 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
+            #[cfg(unix)]
+            let source_perms = {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = source_metadata.permissions();
+                if !ownership_preserved.get() {
+                    // GNU cp strips setuid (04000) and setgid (02000) when
+                    // ownership could not be preserved. Keep the sticky bit
+                    // (01000) and all rwx bits.
+                    let mode = perms.mode() & !0o6000;
+                    perms.set_mode(mode);
+                }
+                perms
+            };
+            #[cfg(not(unix))]
+            let source_perms = source_metadata.permissions();
+
+            fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
+            // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
+            // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
+            // so we keep ACL parity with GNU without preserving user xattrs
+            // (which are intentionally excluded from the default -p set per
+            // issue #9704). Best-effort: ignore failures on filesystems that
+            // do not support ACL xattrs.
+            #[cfg(all(unix, not(target_os = "android")))]
+            copy_acls(source, dest);
         }
 
         Ok(())
@@ -2274,6 +2309,7 @@ fn handle_copy_mode(
                 context,
                 source_metadata,
                 symlinked_files,
+                source_in_command_line,
                 created_parent_dirs,
             )?;
         }
@@ -2294,6 +2330,7 @@ fn handle_copy_mode(
                             context,
                             source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
                         )?;
                     }
@@ -2327,6 +2364,7 @@ fn handle_copy_mode(
                             context,
                             source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
                         )?;
                     }
@@ -2339,6 +2377,7 @@ fn handle_copy_mode(
                     context,
                     source_metadata,
                     symlinked_files,
+                    source_in_command_line,
                     created_parent_dirs,
                 )?;
             }
@@ -2716,6 +2755,7 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
 
 /// Copy the file from `source` to `dest` either using the normal `fs::copy` or a
 /// copy-on-write scheme if --reflink is specified and the filesystem supports it.
+#[allow(clippy::too_many_arguments)]
 fn copy_helper(
     source: &Path,
     dest: &Path,
@@ -2723,6 +2763,7 @@ fn copy_helper(
     context: &str,
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
 ) -> CopyResult<()> {
     if options.parents {
@@ -2753,6 +2794,14 @@ fn copy_helper(
     if source_metadata.is_symlink() {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
+        // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
+        // In that case source_metadata was obtained via lstat, so a path swap
+        // to a symlink between lstat and open must be refused to close the
+        // TOCTOU window described in issue #10017. In deref mode cp
+        // intentionally follows symlinks, matching GNU cp's behavior of
+        // applying O_NOFOLLOW here only with `-P`.
+        #[cfg(unix)]
+        let nofollow = !options.dereference(source_in_command_line);
         let copy_debug = copy_on_write(
             source,
             dest,
@@ -2761,6 +2810,8 @@ fn copy_helper(
             context,
             #[cfg(unix)]
             is_stream(source_metadata),
+            #[cfg(unix)]
+            nofollow,
         )?;
 
         if !options.attributes_only && options.debug {

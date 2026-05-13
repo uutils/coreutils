@@ -364,6 +364,7 @@ uutils
 execfn
 fstatfs
 getcwd
+mkfifoat
 setpipe
 
 # * other

@@ -483,8 +483,6 @@ fn test_id_pretty_print_password_record() {
 #[test]
 #[cfg(all(feature = "chmod", feature = "chown"))]
 fn test_id_pretty_print_suid_binary() {
-    use uucore::process::{getgid, getuid};
-
     if let Some(suid_coreutils_path) = create_root_owned_suid_coreutils_binary() {
         let result = TestScenario::new(util_name!())
             .cmd(suid_coreutils_path.to_str().unwrap())
@@ -492,14 +490,14 @@ fn test_id_pretty_print_suid_binary() {
             .succeeds();
 
         // The `euid` line should be present only if the real UID does not belong to `root`
-        if getuid() == 0 {
+        if rustix::process::getuid().is_root() {
             result.stdout_does_not_contain("euid\t");
         } else {
             result.stdout_contains_line("euid\troot");
         }
 
         // The `rgid` line should be present only if the real GID does not belong to `root`
-        if getgid() == 0 {
+        if rustix::process::getgid().is_root() {
             result.stdout_does_not_contain("rgid\t");
         } else {
             result.stdout_contains("rgid\t");

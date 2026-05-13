@@ -1941,6 +1941,10 @@ fn test_ls_group_directories_first() {
     }
     filenames.sort_unstable();
 
+    for (i, name) in filenames.iter().enumerate() {
+        at.write_bytes(name, "a".repeat(i).as_bytes());
+    }
+
     let dirnames = ["aaa", "bbb", "ccc", "yyy"];
     for dirname in dirnames {
         at.mkdir(dirname);
@@ -1954,12 +1958,25 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dots.into_iter()
             .chain(dirnames.into_iter())
             .chain(filenames.into_iter())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
+    );
+
+    let result = scene
+        .ucmd()
+        .arg("-1")
+        .arg("--group-directories-first")
+        .arg("--sort=size")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().lines().collect::<Vec<_>>(),
+        dirnames
+            .into_iter()
+            .chain(filenames.into_iter().rev())
+            .collect::<Vec<_>>()
     );
 
     let result = scene
@@ -1968,13 +1985,12 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dirnames
             .into_iter()
             .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
     );
 
