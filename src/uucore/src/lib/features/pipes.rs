@@ -8,11 +8,10 @@
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::fs::File;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{
+    fs::File,
     io::{Read, Write},
-    os::fd::AsFd,
+    os::fd::{AsFd, OwnedFd},
     sync::OnceLock,
 };
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -40,13 +39,13 @@ pub fn pipe() -> std::io::Result<(File, File)> {
 /// useful to save RAM usage
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
-    let (read, write) = rustix::pipe::pipe()?;
+fn pipe_with_size(s: usize) -> std::io::Result<(OwnedFd, OwnedFd)> {
+    let pair = rustix::pipe::pipe()?;
     if s > KERNEL_DEFAULT_PIPE_SIZE {
-        let _ = fcntl_setpipe_size(&read, s);
+        let _ = fcntl_setpipe_size(&pair.0, s);
     }
 
-    Ok((File::from(read), File::from(write)))
+    Ok(pair)
 }
 
 /// Less noisy wrapper around [`rustix::pipe::splice`].
@@ -166,7 +165,7 @@ pub fn send_n_bytes(
     mut target: impl Write + AsFd,
     n: u64,
 ) -> std::io::Result<u64> {
-    static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
+    static PIPE_CACHE: OnceLock<Option<(OwnedFd, OwnedFd)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
     let mut n = n;
     let mut bytes_written: u64 = 0;
@@ -216,7 +215,9 @@ pub fn send_n_bytes(
                         debug_assert!(s <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
                         // drain pipe before fallback to raw write
                         let mut drain = Vec::with_capacity(s);
-                        broker_r.take(s as u64).read_to_end(&mut drain)?;
+                        crate::io::RawReader(broker_r)
+                            .take(s as u64)
+                            .read_to_end(&mut drain)?;
                         crate::io::RawWriter(&target).write_all(&drain)?;
                         break true;
                     }
