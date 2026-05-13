@@ -2941,12 +2941,12 @@ pub fn whoami() -> String {
 
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
-/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
-/// - controller_fd: The controller file descriptor
-/// - replica_fd: The replica file descriptor
+/// - controller: The controller file
+/// - replica: The replica file
 #[cfg(unix)]
-pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
     let pty = openpty(None, None).expect("Failed to create PTY");
@@ -2954,7 +2954,7 @@ pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
         .expect("Failed to get PTY path")
         .to_string_lossy()
         .to_string();
-    (path, pty.master, pty.slave)
+    (path, pty.master.into(), pty.slave.into())
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
