@@ -5035,6 +5035,16 @@ fn test_failed_write_is_reported() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_multiple_input_files_failed_write_is_reported() {
+    new_ucmd!()
+        .args(&["/etc/hosts", "/etc/hosts"])
+        .set_stdout(File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("tail: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;
