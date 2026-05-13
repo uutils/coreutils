@@ -4,8 +4,7 @@
 // file that was distributed with this source code.
 use super::{CatResult, FdReadable, InputHandle};
 
-use std::io::Write;
-use std::os::{fd::AsFd, unix::io::AsRawFd};
+use std::os::fd::AsFd;
 
 use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, might_fuse, splice};
 
@@ -17,7 +16,7 @@ use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, might_fuse, splice};
 /// The `bool` in the result value indicates if we need to fall back to normal
 /// copying or not. False means we don't have to.
 #[inline]
-pub(super) fn write_fast_using_splice<R: FdReadable, S: AsRawFd + AsFd + Write>(
+pub(super) fn write_fast_using_splice<R: FdReadable, S: AsFd>(
     handle: &InputHandle<R>,
     write_fd: &mut S,
 ) -> CatResult<bool> {

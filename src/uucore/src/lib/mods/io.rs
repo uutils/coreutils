@@ -30,20 +30,17 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
-// io::write_all but no buffering
-#[inline]
+// create writer without buffering
 #[cfg(any(unix, target_os = "wasi"))]
-pub fn write_all_raw(output: impl AsFd, buf: &[u8]) -> io::Result<()> {
-    let mut written = 0;
-    let len = buf.len();
-    while written < len {
-        match rustix::io::write(&output, &buf[written..]) {
-            Ok(n) => written += n,
-            Err(e) if e.kind() != io::ErrorKind::Interrupted => return Err(e.into()),
-            _ => {}
-        }
+pub struct RawWriter<T: AsFd>(pub T);
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> io::Write for RawWriter<T> {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        rustix::io::write(&self.0, b).map_err(Into::into)
     }
-    Ok(())
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 /// abstraction wrapper for native file handle / file descriptor

@@ -306,8 +306,7 @@ fn basic_succeeds() {
         ucmd.arg(group.as_raw().to_string())
             .arg("f1")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 

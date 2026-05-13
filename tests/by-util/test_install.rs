@@ -879,8 +879,7 @@ fn test_install_on_invalid_link_at_destination() {
         .arg(src_dir.join("test.sh"))
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[cfg(all(unix, feature = "chmod"))]
@@ -908,8 +907,7 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
         .arg("/dev/null")
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]

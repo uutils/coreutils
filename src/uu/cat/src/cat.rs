@@ -497,31 +497,13 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-#[cfg(any(unix, target_os = "wasi"))]
 fn print_unbuffered<R: FdReadable>(
     handle: &mut InputHandle<R>,
     stdout: io::Stdout,
 ) -> CatResult<()> {
-    // todo: since there is no cost by 0-fill, we could use larger heap buffer for throughput
-    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); 1024 * 64];
-    // use raw syscall to remove buffering
-    loop {
-        match rustix::io::read(&handle.reader, &mut buf) {
-            Ok(([], _)) => return Ok(()),
-            Ok((filled, _)) => {
-                uucore::io::write_all_raw(&stdout, filled).inspect_err(handle_broken_pipe)?;
-            }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
-            _ => {}
-        }
-    }
-}
-
-#[cfg(not(any(unix, target_os = "wasi")))]
-fn print_unbuffered<R: FdReadable>(
-    handle: &mut InputHandle<R>,
-    stdout: io::Stdout,
-) -> CatResult<()> {
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    #[cfg(not(any(unix, target_os = "wasi")))]
     let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
@@ -531,8 +513,9 @@ fn print_unbuffered<R: FdReadable>(
                 stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
-                // we cannot use rustix::io on Windows
+                // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                #[cfg(not(any(unix, target_os = "wasi")))]
                 stdout.flush().inspect_err(handle_broken_pipe)?;
             }
             Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),

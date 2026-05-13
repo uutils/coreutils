@@ -517,7 +517,7 @@ fn test_chown_only_user_id_nonexistent_user() {
     let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &["12345", "f"]) {
-        result.success().no_stdout().no_stderr();
+        result.success().no_output();
     } else {
         print!("Test skipped; requires root user");
     }
@@ -585,7 +585,7 @@ fn test_chown_only_group_id_nonexistent_group() {
     let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &[":12345", "f"]) {
-        result.success().no_stdout().no_stderr();
+        result.success().no_output();
     } else {
         print!("Test skipped; requires root user");
     }

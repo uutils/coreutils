@@ -430,8 +430,7 @@ fn test_date_set_valid() {
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -499,8 +498,7 @@ fn test_date_set_valid_2() {
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -580,8 +578,7 @@ fn test_date_set_valid_3() {
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -593,8 +590,7 @@ fn test_date_set_valid_4() {
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 

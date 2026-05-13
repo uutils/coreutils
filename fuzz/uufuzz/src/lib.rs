@@ -17,8 +17,6 @@ use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
-use std::os::unix::io::FromRawFd;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};
@@ -158,8 +156,8 @@ where
     };
 
     let (uumain_exit_status, captured_stdout, captured_stderr) = thread::scope(|s| {
-        let out = s.spawn(|| read_from_fd(read_pipe_stdout.as_raw_fd()));
-        let err = s.spawn(|| read_from_fd(read_pipe_stderr.as_raw_fd()));
+        let out = s.spawn(|| read_from_fd(read_pipe_stdout));
+        let err = s.spawn(|| read_from_fd(read_pipe_stderr));
         #[allow(clippy::unnecessary_to_owned)]
         // TODO: clippy wants us to use args.iter().cloned() ?
         let status = uumain_function(args.to_owned().into_iter());
@@ -200,15 +198,12 @@ where
     }
 }
 
-fn read_from_fd(fd: RawFd) -> String {
+fn read_from_fd(fd: impl std::os::fd::AsFd) -> String {
     let mut captured_output = Vec::new();
     let mut read_buffer = [0; 1024];
 
-    // Temporarily create an OwnedFd for reading (we won't drop it)
-    let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
-
     loop {
-        match read(&owned_fd, &mut read_buffer) {
+        match read(&fd, &mut read_buffer) {
             Ok(bytes_read) => {
                 if bytes_read == 0 {
                     break;
@@ -221,9 +216,6 @@ fn read_from_fd(fd: RawFd) -> String {
             }
         }
     }
-
-    // Forget the owned_fd to prevent it from closing the fd (the caller owns it)
-    std::mem::forget(owned_fd);
 
     String::from_utf8_lossy(&captured_output).into_owned()
 }

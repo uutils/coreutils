@@ -359,7 +359,7 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
             let is_file = if let Ok(metadata) = f.metadata() {
@@ -378,6 +378,8 @@ impl<'a> Input<'a> {
                 Source::Stdin(io::stdin())
             }
         };
+        #[cfg(all(not(unix), not(windows)))]
+        let mut src = Source::Stdin(io::stdin());
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]

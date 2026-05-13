@@ -41,9 +41,6 @@ windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
 ] }
 
-[target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
-
 [features]
 selinux = ["uucore/selinux"]
 
