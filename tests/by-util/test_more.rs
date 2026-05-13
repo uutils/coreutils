@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-use nix::unistd::{read, write};
+use rustix::io::write; // todo: incorrectly using write instead of write_all
 #[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
@@ -37,7 +37,7 @@ fn run_more_with_pty(
 
     child.delay(200);
     let mut output = vec![0u8; 1024];
-    let n = read(&controller, &mut output).unwrap();
+    let n = rustix::io::read(&controller, &mut output).unwrap();
     let output_str = String::from_utf8_lossy(&output[..n]).to_string();
 
     (child, controller, output_str)
