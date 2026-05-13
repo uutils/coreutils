@@ -201,13 +201,14 @@ fn print_n_bytes(input: impl Read + AsFd, n: u64) -> Result<u64, PrintError> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64, PrintError> {
+fn print_n_bytes(input: impl Read, n: u64) -> Result<u64, PrintError> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
 
     // Write those bytes to `stdout`.
     let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    let stdout = stdout.lock();
+    let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
 
     let mut buf = [0u8; BUF_SIZE];
     let mut bytes_written = 0u64;
@@ -226,7 +227,7 @@ fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64, PrintError> {
     }
 
     // flush prevents ignoring I/O error
-    stdout.flush().map_err(PrintError::write)?;
+    writer.flush().map_err(PrintError::write)?;
 
     Ok(bytes_written)
 }
