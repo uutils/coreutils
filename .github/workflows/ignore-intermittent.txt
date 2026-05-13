@@ -19,3 +19,4 @@ tests/misc/usage_vs_getopt
 tests/misc/tee
 tests/tail/follow-name
 tests/rm/isatty
+tests/misc/io-errors
