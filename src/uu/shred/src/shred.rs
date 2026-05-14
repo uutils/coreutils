@@ -750,6 +750,10 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
+        file.set_len(0).map_err_context(
+            || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
+        )?;
+
         do_remove(path, verbose, remove_method).map_err_context(
             || translate_text!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
