@@ -61,3 +61,42 @@ pub trait DfOutput {
         Ok(())
     }
 }
+
+/// A streaming sink that collects filesystem entries as they are emitted.
+#[derive(Debug, Default)]
+pub struct StreamingOutput {
+    filesystems: Vec<Filesystem>,
+}
+
+impl StreamingOutput {
+    /// Create a new empty streaming sink.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Get all collected filesystem entries.
+    pub fn filesystems(&self) -> &[Filesystem] {
+        &self.filesystems
+    }
+
+    /// Consume the collector and return all filesystem entries.
+    pub fn into_filesystems(self) -> Vec<Filesystem> {
+        self.filesystems
+    }
+
+    /// Clear all collected data.
+    pub fn clear(&mut self) {
+        self.filesystems.clear();
+    }
+}
+
+impl DfOutput for StreamingOutput {
+    fn stream_mode(&self) -> StreamMode {
+        StreamMode::Streaming
+    }
+
+    fn write_filesystem(&mut self, filesystem: &Filesystem, _options: &Options) -> UResult<()> {
+        self.filesystems.push(filesystem.clone());
+        Ok(())
+    }
+}
