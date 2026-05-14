@@ -635,10 +635,13 @@ fn wipe_file(
         ));
     }
     if !path.is_file() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-not-a-file", "file" => path.maybe_quote()),
-        ));
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-not-a-file", "file" => path.maybe_quote()),
+            ));
+        }
+        // Special files loop.
     }
 
     let metadata =
