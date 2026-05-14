@@ -634,15 +634,40 @@ fn wipe_file(
             translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
         ));
     }
-    if !path.is_file() {
+
+    let metadata =
+        fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+
+    #[cfg(unix)]
+    let mut exact = exact;
+
+    #[cfg(unix)]
+    let (is_valid_file, is_block_device, is_char_device) = {
+        use std::os::unix::fs::FileTypeExt;
+        let ft = metadata.file_type();
+        let is_char_device = ft.is_char_device();
+        let is_block_device = ft.is_block_device();
+        if is_block_device || is_char_device {
+            // GNU enforces --exact for devices since they have a fixed physical size
+            // and padding would write beyond the intended boundary.
+            exact = true;
+        }
+        (
+            path.is_file() || is_block_device || is_char_device,
+            is_block_device,
+            is_char_device,
+        )
+    };
+
+    #[cfg(not(unix))]
+    let (is_valid_file, is_block_device, is_char_device) = (path.is_file(), false, false);
+
+    if !is_valid_file {
         return Err(USimpleError::new(
             1,
             translate!("shred-not-a-file", "file" => path.maybe_quote()),
         ));
     }
-
-    let metadata =
-        fs::metadata(path).map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
 
     // If force is true, set file permissions to not-readonly.
     if force {
@@ -666,8 +691,9 @@ fn wipe_file(
 
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
-    if metadata.len() != 0 {
-        // Only add passes if the file is non-empty
+    if metadata.len() != 0 || is_block_device || is_char_device {
+        // For regular files, only add passes if not empty. For devices, always run passes:
+        // block devices report len=0 via metadata, char devices write until ENOSPC
 
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
@@ -700,6 +726,16 @@ fn wipe_file(
 
     let size = match size {
         Some(size) => size,
+        None if is_block_device => {
+            //metadata.len() returns 0 for block devices on Linux;
+            //seeking to the end gives the real size
+            let len = file
+                .seek(SeekFrom::End(0))
+                .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+            file.rewind()
+                .map_err_context(|| translate!("shred-failed-to-get-metadata"))?;
+            len
+        }
         None => metadata.len(),
     };
 
@@ -713,7 +749,15 @@ fn wipe_file(
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
+        do_pass(
+            &mut file,
+            &pass_type,
+            exact,
+            random_source,
+            size,
+            is_char_device,
+        )
+        .map_err_context(
             || translate!("shred-file-write-pass-failed", "file" => path.maybe_quote()),
         )?;
     }
@@ -749,11 +793,29 @@ fn do_pass(
     exact: bool,
     random_source: Option<&RefCell<File>>,
     file_size: u64,
+    is_char_device: bool,
 ) -> Result<(), io::Error> {
-    // We might be at the end of the file due to a previous iteration, so rewind.
-    file.rewind()?;
-
     let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
+
+    // Char devices with no known size: write until ENOSPC (e.g. /dev/full).
+    // Char devices with --size, and all regular/block paths, fall through below.
+    if is_char_device && file_size == 0 {
+        loop {
+            let block = writer.bytes_for_pass(BLOCK_SIZE)?;
+            match file.write_all(block) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::StorageFull => return Ok(()),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    // Regular files and block devices need rewinding between passes;
+    // char devices don't support seeking so we skip it.
+    if !is_char_device {
+        file.rewind()?;
+    }
+
     let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
 
     // We start by writing BLOCK_SIZE times as many time as possible.
@@ -766,7 +828,9 @@ fn do_pass(
     let block = writer.bytes_for_pass(bytes_left as usize)?;
     file.write_all(block)?;
 
-    file.sync_data()?;
+    if !is_char_device {
+        file.sync_data()?;
+    }
 
     Ok(())
 }
