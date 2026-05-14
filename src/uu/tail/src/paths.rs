@@ -8,7 +8,7 @@
 use crate::text;
 use std::ffi::OsStr;
 use std::fs::{File, Metadata};
-use std::io::{Seek, SeekFrom, Write, stdout};
+use std::io::{self, Seek, SeekFrom, Write, stdout};
 #[cfg(unix)]
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::{Path, PathBuf};
@@ -127,11 +127,11 @@ impl HeaderPrinter {
         }
     }
 
-    pub fn print_input(&mut self, input: &Input) -> UResult<()> {
+    pub fn print_input(&mut self, input: &Input) -> io::Result<()> {
         self.print(input.display_name.as_str())
     }
 
-    pub fn print(&mut self, string: &str) -> UResult<()> {
+    pub fn print(&mut self, string: &str) -> io::Result<()> {
         if self.verbose {
             let header_string = format!(
                 "{}==> {string} <==\n",
