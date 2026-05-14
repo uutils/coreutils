@@ -451,6 +451,72 @@ impl DfOutput for TextOutput {
     }
 }
 
+/// Display filesystem usage information, sending output to a custom sink.
+///
+/// This is the programmatic entry point for `df`. It gathers filesystems using
+/// the provided options and sends the results to `output` without requiring
+/// consumers to parse text output.
+pub fn df_with_output<P, O>(paths: Option<&[P]>, opt: &Options, output: &mut O) -> UResult<()>
+where
+    P: AsRef<Path>,
+    O: DfOutput,
+{
+    output.initialize(opt)?;
+
+    let filesystems = match paths {
+        None => {
+            let filesystems = get_all_filesystems(opt).map_err(|e| {
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+                USimpleError::new(e.code(), format!("{context}: {e}"))
+            })?;
+
+            if filesystems.is_empty() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed"),
+                ));
+            }
+
+            filesystems
+        }
+        Some(paths) => {
+            let filesystems = get_named_filesystems(paths, opt).map_err(|e| {
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+                USimpleError::new(e.code(), format!("{context}: {e}"))
+            })?;
+
+            // This can happen if paths are given as command-line arguments
+            // but none of the paths exist.
+            if filesystems.is_empty() {
+                output.finalize(opt)?;
+                return Ok(());
+            }
+
+            filesystems
+        }
+    };
+
+    if matches!(output.stream_mode(), StreamMode::Streaming) {
+        for filesystem in &filesystems {
+            output.write_filesystem(filesystem, opt)?;
+        }
+    } else {
+        output.write_filesystems(&filesystems, opt)?;
+    }
+
+    output.finalize(opt)?;
+    Ok(())
+}
+
+/// Display filesystem usage information as text on stdout.
+pub fn df<P>(paths: Option<&[P]>, opt: &Options) -> UResult<()>
+where
+    P: AsRef<Path>,
+{
+    let mut output = TextOutput;
+    df_with_output(paths, opt, &mut output)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
