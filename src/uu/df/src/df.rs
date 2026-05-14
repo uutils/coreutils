@@ -445,8 +445,12 @@ impl UError for DfError {
 pub struct TextOutput;
 
 impl DfOutput for TextOutput {
-    fn write_filesystems(&mut self, filesystems: &[Filesystem], options: &Options) -> UResult<()> {
-        Table::new(options, filesystems.to_vec()).write_to(&mut stdout())?;
+    fn write_filesystems(
+        &mut self,
+        filesystems: Vec<Filesystem>,
+        options: &Options,
+    ) -> UResult<()> {
+        Table::new(options, filesystems).write_to(&mut stdout())?;
         Ok(())
     }
 }
@@ -501,7 +505,7 @@ where
             output.write_filesystem(filesystem, opt)?;
         }
     } else {
-        output.write_filesystems(&filesystems, opt)?;
+        output.write_filesystems(filesystems, opt)?;
     }
 
     output.finalize(opt)?;
