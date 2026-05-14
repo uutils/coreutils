@@ -6,6 +6,7 @@
 mod blocks;
 mod columns;
 mod filesystem;
+pub mod output;
 mod table;
 
 use blocks::HumanReadable;
@@ -27,8 +28,9 @@ use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
-use crate::filesystem::Filesystem;
+pub use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
+pub use crate::output::{DfOutput, StreamMode, StreamingOutput};
 use crate::table::Table;
 
 static OPT_HELP: &str = "help";
@@ -58,7 +60,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 /// Most of these parameters control which rows and which columns are
 /// displayed. The `block_size` determines the units to use when
 /// displaying numbers of bytes or inodes.
-struct Options {
+pub struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     human_readable: Option<HumanReadable>,
@@ -112,6 +114,11 @@ impl Default for Options {
 }
 
 impl Options {
+    /// Convert command-line arguments into [`Options`].
+    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
+        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    }
+
     /// Whether -a, -l, -t, or -x options require the mount table.
     fn requires_mount_table(&self) -> bool {
         self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
