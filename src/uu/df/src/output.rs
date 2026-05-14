@@ -39,8 +39,12 @@ pub trait DfOutput {
     }
 
     /// Called with all filesystem entries in batch mode.
-    fn write_filesystems(&mut self, filesystems: &[Filesystem], options: &Options) -> UResult<()> {
-        for filesystem in filesystems {
+    fn write_filesystems(
+        &mut self,
+        filesystems: Vec<Filesystem>,
+        options: &Options,
+    ) -> UResult<()> {
+        for filesystem in &filesystems {
             self.write_filesystem(filesystem, options)?;
         }
         Ok(())
