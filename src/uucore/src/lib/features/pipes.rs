@@ -40,7 +40,7 @@ pub fn pipe() -> std::io::Result<(File, File)> {
 /// useful to save RAM usage
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
+pub fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
     if s > KERNEL_DEFAULT_PIPE_SIZE {
         let _ = fcntl_setpipe_size(&read, s);

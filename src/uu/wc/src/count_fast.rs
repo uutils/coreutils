@@ -27,7 +27,7 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe_with_size, splice, splice_exact};
 
 const BUF_SIZE: usize = 64 * 1024;
 
@@ -55,7 +55,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         }
     } else {
         // input is not pipe. needs broker to use splice() with additional cost
-        let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
+        let (pipe_rd, pipe_wr) = pipe_with_size(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| 0_usize)?;
         loop {
             match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
                 Ok(0) => return Ok(byte_count),
