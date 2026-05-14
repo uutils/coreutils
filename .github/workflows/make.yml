@@ -93,26 +93,6 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
-      shell: bash
-      run: |
-        set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
-        # Check that the progs have prefix
-        test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
-        # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
-        # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
-        # don't publish binaries with uu-
-        make uninstall PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-      env:
-        RUST_BACKTRACE: "1"
     - name: "`make install`"
       shell: bash
       run: |
@@ -290,6 +270,67 @@ jobs:
         # feature: feat_external_libstdbuf"
         # 2. the makefile doesn't try to install libstdbuf even though stdbuf is skipped
         DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
+
+  legacy_glibc:
+    name: Build/Makefile (legacy glibc)
+    permissions:
+      contents: write # Publish
+    runs-on: ${{ matrix.job.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { os: ubuntu-22.04 , features: feat_os_unix }
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: Swatinem/rust-cache@v2
+    # Test build on the system missing libselinux (don't install libselinux1-dev at here)
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.10
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
+      shell: bash
+      run: |
+        set -x
+        DESTDIR=/tmp/legacy/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that utils are built with given profile
+        ./target/release-small/true
+        # Check that the progs have prefix
+        test -f /tmp/legacy/usr/local/bin/uu-tty
+        test -f /tmp/legacy/usr/local/libexec/uu-coreutils/libstdbuf.*
+        # Check that the manpage is not present
+        ! test -f /tmp/legacy/usr/local/share/man/man1/uu-whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/legacy/usr/local/share/zsh/site-functions/_uu-install
+        ! test -f /tmp/legacy/usr/local/share/bash-completion/completions/uu-head.bash
+        ! test -f /tmp/legacy/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+      env:
+        RUST_BACKTRACE: "1"
+    - name: Package
+      shell: bash
+      run: |
+        mv target/release-small/deps/libstdbuf.so -t /tmp/legacy/usr/local/bin
+        strip -s /tmp/legacy/usr/local/bin/*
+        ZSTD_CLEVEL=19 tar --zstd -caf coreutils-x86_64-unknown-linux-gnu-legacy.tar.zst -C /tmp/legacy/usr/local bin
+    - name: Publish
+      uses: softprops/action-gh-release@v3
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          coreutils-x86_64-unknown-linux-gnu-legacy.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # keep this job minimal to avoid have many duplicated build with CICD
   build_makefile-other:
