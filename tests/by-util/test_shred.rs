@@ -692,3 +692,43 @@ fn test_shred_dash_rejects_stdout_pipe() {
         .stderr_contains("shred: -:")
         .stderr_does_not_contain("/dev/fd/1");
 }
+
+#[test]
+#[cfg(all(unix, feature = "chmod"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: chmod is unsupported"
+)]
+fn test_shred_truncates_before_unlink_readonly_parent() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir = "truncate_test";
+    let file_path = "truncate_test/file";
+    let probe_path = "truncate_test/probe";
+
+    at.mkdir(dir);
+    at.write_bytes(file_path, &[b'x'; 4096]);
+    at.touch(probe_path);
+
+    // Prevent removing files from the parent directory.
+    scene.ccmd("chmod").arg("a-w").arg(dir).succeeds();
+
+    // Privileged users may bypass directory permissions.
+    if std::fs::remove_file(at.plus(probe_path)).is_ok() {
+        scene.ccmd("chmod").arg("u+w").arg(dir).succeeds();
+        return;
+    }
+
+    // Unlinking fails, but the file must already be truncated.
+    scene
+        .ucmd()
+        .args(&["-n1", "-u", file_path])
+        .fails();
+
+    // Restore permissions before cleanup.
+    scene.ccmd("chmod").arg("u+w").arg(dir).succeeds();
+
+    assert!(at.file_exists(file_path));
+    assert_eq!(at.metadata(file_path).len(), 0);
+}
