@@ -107,15 +107,16 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    use uucore::io::RawWriter;
     use uucore::pipes::{pipe, splice, tee};
 
     const PAGE_SIZE: usize = 4096;
     let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
-    let mut stdout = io::stdout(); // no need to lock with zero-copy
+    let stdout = rustix::stdio::stdout();
     // improve throughput
-    let _ = rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE);
+    let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
     // don't show any error from fast-path and fallback to write for proper message
     if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
         && p_write.write_all(bytes).is_ok()
@@ -132,7 +133,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
                         remain -= s;
                     } else {
                         // avoid output breakage with reduced remain even if it would not happen
-                        stdout.write_all(&bytes[bytes.len() - remain..])?;
+                        RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
                         break 'hybrid;
                     }
                 }
@@ -140,7 +141,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
         }
     }
     // fallback
-    let mut stdout = stdout.lock();
+    let mut stdout = RawWriter(stdout);
     loop {
         stdout.write_all(bytes)?;
     }
