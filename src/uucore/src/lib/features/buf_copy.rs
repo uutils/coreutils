@@ -27,7 +27,6 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     use {
-        crate::pipes,
         std::fs::OpenOptions,
         std::{
             io::{Seek, SeekFrom},
@@ -50,11 +49,13 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     fn test_copy_stream() {
         let mut dest_file = new_temp_file();
 
-        let (mut pipe_read, mut pipe_write) = pipes::pipe().unwrap();
+        let (pipe_read, pipe_write) = rustix::pipe::pipe().unwrap();
+        let mut pipe_read: File = pipe_read.into();
+        let mut pipe_write: File = pipe_write.into();
         let data = b"Hello, world!";
         let thread = thread::spawn(move || {
             pipe_write.write_all(data).unwrap();
@@ -72,8 +73,8 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(target_os = "linux"))]
-    // Test for non-linux platforms. We use regular files instead.
+    #[cfg(not(unix))]
+    // Test for non-unix platforms. We use regular files instead.
     fn test_copy_stream() {
         let temp_dir = tempdir().unwrap();
         let src_path = temp_dir.path().join("src.txt");

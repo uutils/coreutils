@@ -20,30 +20,21 @@ pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
-/// A wrapper around [`rustix::pipe::pipe`] that ensures the pipe is cleaned up.
+/// return pipe larger than given size
+/// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
+/// e.g. writing size to pipe should not hang
 ///
-/// Returns two `File` objects: everything written to the second can be read
-/// from the first.
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn pipe() -> std::io::Result<(File, File)> {
+pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
-    // improve performance for splice
-    let _ = fcntl_setpipe_size(&read, MAX_ROOTLESS_PIPE_SIZE);
-
-    Ok((File::from(read), File::from(write)))
-}
-
-/// return pipe larger than given size and kernel's default size
-///
-/// useful to save RAM usage
-#[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
-    let (read, write) = rustix::pipe::pipe()?;
+    // guard unnecessary syscall
     if s > KERNEL_DEFAULT_PIPE_SIZE {
-        let _ = fcntl_setpipe_size(&read, s);
+        let r = fcntl_setpipe_size(&read, s);
+        if SIZE_REQUIRED {
+            r?;
+        }
     }
 
     Ok((File::from(read), File::from(write)))
@@ -126,7 +117,10 @@ where
     S: AsFd,
 {
     static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe().ok()).as_ref() else {
+    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE
+        .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
+        .as_ref()
+    else {
         return Ok(true);
     };
     // improve throughput
@@ -197,7 +191,7 @@ pub fn send_n_bytes(
             }
         }
     } else if let Some((broker_r, broker_w)) = PIPE_CACHE
-        .get_or_init(|| pipe_with_size(pipe_size).ok())
+        .get_or_init(|| pipe::<false>(pipe_size).ok())
         .as_ref()
     {
         // todo: create fn splice_bounded_broker

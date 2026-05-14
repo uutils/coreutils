@@ -55,7 +55,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         }
     } else {
         // input is not pipe. needs broker to use splice() with additional cost
-        let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
+        let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| 0_usize)?;
         loop {
             match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
                 Ok(0) => return Ok(byte_count),
