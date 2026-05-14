@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore apfs
+
 //! Output traits and types for programmatic access to df functionality.
 //!
 //! This module separates filesystem discovery from output formatting so
