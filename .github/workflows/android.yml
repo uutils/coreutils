@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest] # , macos-latest
+        os: [ubuntu-24.04] # , macos-latest
         cores: [4] # , 6
         ram: [4096]
         api-level: [28]

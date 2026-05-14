@@ -32,7 +32,7 @@ concurrency:
 jobs:
   detect:
     name: Detect changes on crates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       targets: ${{ steps.detect.outputs.targets }}
       all: ${{ steps.detect.outputs.all }}
@@ -113,7 +113,7 @@ jobs:
     name: Build and test uufuzz examples
     needs: detect
     if: needs.detect.outputs.all == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -147,7 +147,7 @@ jobs:
     name: Build the fuzzers
     needs: detect
     if: needs.detect.outputs.all == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -171,7 +171,7 @@ jobs:
     name: Fuzz (${{ matrix.target.name }})
     needs: detect
     if: needs.detect.outputs.targets != '[]'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       RUN_FOR: 60
@@ -271,7 +271,7 @@ jobs:
   fuzz-summary:
     needs: [detect, fuzz-run]
     name: Fuzzing Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: always() && needs.detect.outputs.targets != '[]'
     steps:
       - uses: actions/checkout@v7.0.1
