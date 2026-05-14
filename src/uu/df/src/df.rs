@@ -23,7 +23,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
@@ -532,44 +532,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
-    // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
-        None => {
-            let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
+    let opt = Options::from_matches(&matches)?;
+    let paths: Option<Vec<PathBuf>> = matches
+        .get_many::<OsString>(OPT_PATHS)
+        .map(|paths| paths.map(PathBuf::from).collect());
 
-            if filesystems.is_empty() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("df-error-no-file-systems-processed"),
-                ));
-            }
-
-            filesystems
-        }
-        Some(paths) => {
-            let paths: Vec<_> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
-
-            // This can happen if paths are given as command-line arguments
-            // but none of the paths exist.
-            if filesystems.is_empty() {
-                return Ok(());
-            }
-
-            filesystems
-        }
-    };
-
-    Table::new(&opt, filesystems).write_to(&mut stdout())?;
-
-    Ok(())
+    df(paths.as_deref(), &opt)
 }
 
 pub fn uu_app() -> Command {
