@@ -100,3 +100,65 @@ impl DfOutput for StreamingOutput {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use uucore::fsext::{FsUsage, MountInfo};
+
+    fn filesystem() -> Filesystem {
+        Filesystem {
+            file: Some(OsString::from("/tmp/file")),
+            mount_info: MountInfo {
+                dev_id: String::from("1"),
+                dev_name: String::from("/dev/disk1"),
+                fs_type: String::from("apfs"),
+                mount_dir: OsString::from("/"),
+                mount_option: String::new(),
+                mount_root: OsString::new(),
+                remote: false,
+                dummy: false,
+            },
+            usage: FsUsage {
+                blocksize: 1024,
+                blocks: 10,
+                bfree: 4,
+                bavail: 3,
+                bavail_top_bit_set: false,
+                files: 20,
+                ffree: 5,
+            },
+        }
+    }
+
+    #[test]
+    fn test_streaming_output_new() {
+        let output = StreamingOutput::new();
+        assert!(output.filesystems().is_empty());
+    }
+
+    #[test]
+    fn test_streaming_output_clear() {
+        let mut output = StreamingOutput::new();
+        output
+            .write_filesystem(&filesystem(), &Options::default())
+            .unwrap();
+        assert_eq!(output.filesystems().len(), 1);
+
+        output.clear();
+        assert!(output.filesystems().is_empty());
+    }
+
+    #[test]
+    fn test_streaming_output_into_filesystems() {
+        let mut output = StreamingOutput::new();
+        output
+            .write_filesystem(&filesystem(), &Options::default())
+            .unwrap();
+
+        let filesystems = output.into_filesystems();
+        assert_eq!(filesystems.len(), 1);
+        assert_eq!(filesystems[0].mount_info.dev_name, "/dev/disk1");
+    }
+}
