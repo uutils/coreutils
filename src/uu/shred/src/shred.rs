@@ -624,20 +624,6 @@ fn is_fifo(_metadata: &fs::Metadata) -> bool {
     false
 }
 
-/// A character or block device, which shred does not overwrite yet.
-#[cfg(unix)]
-fn is_special_file(metadata: &fs::Metadata) -> bool {
-    use std::os::unix::fs::FileTypeExt;
-    let file_type = metadata.file_type();
-    file_type.is_char_device() || file_type.is_block_device()
-}
-
-/// Anything but a regular file: `std` cannot tell the kinds apart here.
-#[cfg(not(unix))]
-fn is_special_file(metadata: &fs::Metadata) -> bool {
-    !metadata.is_file()
-}
-
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &OsString,
@@ -708,7 +694,8 @@ fn wipe_file(
                 translate_text!("shred-invalid-file-type", "file" => display_path.maybe_quote()),
             ));
         }
-        Ok(md) if is_special_file(&md) => {
+        #[cfg(not(unix))]
+        Ok(md) if !md.is_file() => {
             return Err(USimpleError::new(
                 1,
                 translate_text!("shred-not-a-file", "file" => display_path.maybe_quote()),
@@ -736,6 +723,20 @@ fn wipe_file(
         }
     };
 
+    #[cfg(unix)]
+    let (is_block_device, is_char_device) = {
+        use std::os::unix::fs::FileTypeExt;
+
+        let ft = metadata.file_type();
+        (ft.is_block_device(), ft.is_char_device())
+    };
+
+    #[cfg(not(unix))]
+    let (is_block_device, is_char_device) = (false, false);
+
+    // Avoid padding device writes beyond the intended size.
+    let exact = exact || is_block_device || is_char_device;
+
     // If force is true, set file permissions to not-readonly.
     if force && !is_stdout {
         let mut perms = metadata.permissions();
@@ -758,8 +759,9 @@ fn wipe_file(
 
     // Fill up our pass sequence
     let mut pass_sequence = Vec::new();
-    if metadata.len() != 0 {
-        // Only add passes if the file is non-empty
+    if metadata.len() != 0 || is_block_device || is_char_device {
+        // For regular files, only add passes if not empty. For devices, always run passes:
+        // block devices report len=0 via metadata, char devices write until ENOSPC
 
         if n_passes <= 3 {
             // Only random passes if n_passes <= 3
@@ -790,8 +792,19 @@ fn wipe_file(
             || translate_text!("shred-failed-to-open-for-writing", "file" => display_path.maybe_quote()),
         )?;
 
+    let write_until_enospc = is_char_device && size.is_none();
     let size = match size {
         Some(size) => size,
+        None if is_block_device => {
+            //metadata.len() returns 0 for block devices on Linux;
+            //seeking to the end gives the real size
+            let len = file
+                .seek(SeekFrom::End(0))
+                .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
+            file.rewind()
+                .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
+            len
+        }
         None => metadata.len(),
     };
 
@@ -805,7 +818,16 @@ fn wipe_file(
             );
         }
         // size is an optional argument for exactly how many bytes we want to shred
-        do_pass(&mut file, &pass_type, exact, random_source, size).map_err_context(
+        do_pass(
+            &mut file,
+            &pass_type,
+            exact,
+            random_source,
+            size,
+            is_char_device,
+            write_until_enospc,
+        )
+        .map_err_context(
             || translate_text!("shred-file-write-pass-failed", "file" => display_path.maybe_quote()),
         )?;
     }
@@ -849,11 +871,30 @@ fn do_pass(
     exact: bool,
     random_source: Option<&RefCell<File>>,
     file_size: u64,
+    is_char_device: bool,
+    write_until_enospc: bool,
 ) -> Result<(), io::Error> {
-    // We might be at the end of the file due to a previous iteration, so rewind.
-    file.rewind()?;
-
     let mut writer = BytesWriter::from_pass_type(pass_type, random_source)?;
+
+    // Char devices with no known size: write until ENOSPC (e.g. /dev/full).
+    // Char devices with --size, and all regular/block paths, fall through below.
+    if write_until_enospc {
+        loop {
+            let block = writer.bytes_for_pass(BLOCK_SIZE)?;
+            match file.write_all(block) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::StorageFull => return Ok(()),
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    // Regular files and block devices need rewinding between passes;
+    // char devices don't support seeking so we skip it.
+    if !is_char_device {
+        file.rewind()?;
+    }
+
     let (number_of_blocks, bytes_left) = split_on_blocks(file_size, exact);
 
     // We start by writing BLOCK_SIZE times as many time as possible.
@@ -866,7 +907,9 @@ fn do_pass(
     let block = writer.bytes_for_pass(bytes_left as usize)?;
     file.write_all(block)?;
 
-    file.sync_data()?;
+    if !is_char_device {
+        file.sync_data()?;
+    }
 
     Ok(())
 }
