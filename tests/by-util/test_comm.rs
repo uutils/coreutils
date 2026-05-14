@@ -687,13 +687,13 @@ fn test_output_lossy_utf8() {
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_comm_anonymous_pipes() {
     use std::{io::Write, os::fd::AsRawFd, process};
-    use uucore::pipes::{pipe_with_size, MAX_ROOTLESS_PIPE_SIZE};
+    use uucore::pipes::pipe;
 
     let scene = TestScenario::new(util_name!());
 
     // Open two anonymous pipes
-    let (comm1_reader, mut comm1_writer) = pipe_with_size(MAX_ROOTLESS_PIPE_SIZE).unwrap();
-    let (comm2_reader, mut comm2_writer) = pipe_with_size(MAX_ROOTLESS_PIPE_SIZE).unwrap();
+    let (comm1_reader, mut comm1_writer) = pipe().unwrap();
+    let (comm2_reader, mut comm2_writer) = pipe().unwrap();
 
     // comm reads the data in chunks
     // make content large enough, so that at least two chunks are read
