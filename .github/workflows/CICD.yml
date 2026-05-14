@@ -35,7 +35,7 @@ concurrency:
 jobs:
   cargo-deny:
     name: Style/cargo-deny
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -52,7 +52,7 @@ jobs:
         job:
           # note: `cargo-udeps` panics when processing stdbuf/libstdbuf ("uu_stdbuf_libstdbuf"); either b/c of the 'cpp' crate or 'libstdbuf' itself
           #   ... b/c of the panic, a more limited feature set is tested (though only excluding `stdbuf`)
-          - { os: ubuntu-latest  , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
+          - { os: ubuntu-24.04  , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
           - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
           - { os: windows-latest , features: feat_os_windows }
     steps:
@@ -98,7 +98,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: ubuntu-24.04  , features: feat_os_unix }
 # for now, don't build it on mac & windows because the doc is only published from linux
 # + it needs a bunch of duplication for build
 # and I don't want to add a doc step in the regular build to avoid long builds
@@ -166,7 +166,7 @@ jobs:
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-24.04 , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v6
       with:
@@ -253,7 +253,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-24.04 , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v6
       with:
@@ -276,7 +276,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: ubuntu-24.04  , features: feat_os_unix }
           - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
@@ -319,7 +319,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: feat_os_unix }
+          - { os: ubuntu-24.04  , features: feat_os_unix }
           - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
@@ -368,19 +368,19 @@ jobs:
       matrix:
         job:
           # - { os , target , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
-          - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-24.04  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
-          - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
-          - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
-          # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
-          - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross, skip-publish: true }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
-          - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
-          - { os: ubuntu-latest  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
-          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
-          - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
+          - { os: ubuntu-24.04  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-24.04  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
+          # - { os: ubuntu-24.04  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
+          - { os: ubuntu-24.04  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
+          - { os: ubuntu-24.04  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
+          - { os: ubuntu-24.04  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,test_risky_names", use-cross: use-cross, skip-publish: true }
+          - { os: ubuntu-24.04  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
+          - { os: ubuntu-24.04  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
+          - { os: ubuntu-24.04  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
+          - { os: ubuntu-24.04  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
+          - { os: ubuntu-24.04  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_unix, workspace-tests: true } # M1 CPU
           # PR #7964: chcon should not break build without the feature. cargo check is enough to detect it.
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
@@ -707,7 +707,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: unix }
+          - { os: ubuntu-24.04  , features: unix }
           # FIXME: Re-enable macos code coverage
           # - { os: macos-latest   , features: macos }
           # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
@@ -767,7 +767,7 @@ jobs:
         esac
 
         case '${{ matrix.job.os }}' in
-          ubuntu-latest)
+          ubuntu-24.04)
             # selinux and systemd headers needed to build tests
             sudo apt-get -y update
             sudo apt-get -y install libselinux1-dev libsystemd-dev
@@ -830,7 +830,7 @@ jobs:
   test_selinux:
     name: Build/SELinux
     needs: [ min_version, deps ]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -891,7 +891,7 @@ jobs:
 
   test_safe_traversal:
     name: Safe Traversal Security Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [ min_version, deps ]
 
     steps:

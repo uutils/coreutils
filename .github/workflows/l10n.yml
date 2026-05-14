@@ -30,7 +30,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: "feat_os_unix" }
+          - { os: ubuntu-24.04  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
@@ -83,7 +83,7 @@ jobs:
 
   l10n_fluent_syntax:
     name: L10n/Fluent Syntax Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -135,7 +135,7 @@ jobs:
 
   l10n_clap_error_localization:
     name: L10n/Clap Error Localization Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -298,7 +298,7 @@ jobs:
 
   l10n_french_integration:
     name: L10n/French Integration Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -408,7 +408,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: "feat_os_unix" }
+          - { os: ubuntu-24.04  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
@@ -561,7 +561,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: "feat_os_unix" }
+          - { os: ubuntu-24.04  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
     - uses: actions/checkout@v6
@@ -631,7 +631,7 @@ jobs:
         fi
 
         # Test French localization with make-installed binary (Ubuntu only)
-        if [ "${{ matrix.job.os }}" = "ubuntu-latest" ]; then
+        if [ "${{ matrix.job.os }}" = "ubuntu-24.04" ]; then
           echo "Testing French localization with make-installed binary..."
 
           # Set French locale
@@ -896,7 +896,7 @@ jobs:
 
   l10n_locale_support_verification:
     name: L10n/Locale Support Verification
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -1128,7 +1128,7 @@ jobs:
 
   l10n_embedded_locale_regression_test:
     name: L10n/Embedded Locale Regression Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -1154,7 +1154,7 @@ jobs:
 
   l10n_locale_embedding_cat:
     name: L10n/Locale Embedding - Cat Utility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -1185,7 +1185,7 @@ jobs:
 
   l10n_locale_embedding_ls:
     name: L10n/Locale Embedding - Ls Utility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -1216,7 +1216,7 @@ jobs:
 
   l10n_locale_embedding_multicall:
     name: L10n/Locale Embedding - Multicall Binary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:
@@ -1249,7 +1249,7 @@ jobs:
 
   l10n_locale_embedding_cargo_install:
     name: L10n/Locale Embedding - Cargo Install
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v6
       with:

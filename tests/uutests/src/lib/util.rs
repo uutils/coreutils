@@ -2975,7 +2975,7 @@ pub fn host_name_for(util_name: &str) -> Cow<'_, str> {
     util_name.into()
 }
 
-// Choose same coreutils version with ubuntu-latest runner: https://github.com/actions/runner-images/tree/main/images/ubuntu
+// Choose same coreutils version with ubuntu-24.04 runner: https://github.com/actions/runner-images/tree/main/images/ubuntu
 const VERSION_MIN: &str = "9.4"; // minimum Version for the reference `coreutil` in `$PATH`
 
 const UUTILS_WARNING: &str = "uutils-tests-warning";
