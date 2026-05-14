@@ -441,6 +441,16 @@ impl UError for DfError {
     }
 }
 
+/// Text output implementation that formats filesystem data as the standard `df` table.
+pub struct TextOutput;
+
+impl DfOutput for TextOutput {
+    fn write_filesystems(&mut self, filesystems: &[Filesystem], options: &Options) -> UResult<()> {
+        Table::new(options, filesystems.to_vec()).write_to(&mut stdout())?;
+        Ok(())
+    }
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
