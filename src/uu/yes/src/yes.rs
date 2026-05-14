@@ -56,29 +56,24 @@ pub fn uu_app() -> Command {
 /// create a buffer filled by words `i` separated by spaces.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
     let mut buf = Vec::with_capacity(BUF_SIZE);
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
     #[cfg(any(unix, target_os = "wasi"))]
-    {
-        #[cfg(unix)]
-        use std::os::unix::ffi::OsStrExt;
-        #[cfg(target_os = "wasi")]
-        use std::os::wasi::ffi::OsStrExt;
-
-        for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
-            buf.extend_from_slice(part);
-        }
+    for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
+        buf.extend_from_slice(part);
     }
-
     // But, on Windows, we must hop through a String.
     #[cfg(not(any(unix, target_os = "wasi")))]
-    {
-        for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-            let bytes = part
-                .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
-                .as_bytes();
-            buf.extend_from_slice(bytes);
-        }
+    for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
+        let bytes = part
+            .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+            .as_bytes();
+        buf.extend_from_slice(bytes);
     }
 
     buf.push(b'\n');
