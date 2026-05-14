@@ -612,3 +612,17 @@ fn test_numeric_looking_file_name_verbose_remove() {
         .stderr_contains("shred: 2.50: removed\n");
     assert!(!at.file_exists("2.50"));
 }
+
+/// shred /dev/full should succeed (ENOSPC is a valid termination condition for devices)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_dev_full() {
+    new_ucmd!().arg("/dev/full").succeeds();
+}
+
+/// shred /dev/null should loop until interrupted; with --size we can bound it
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_dev_null() {
+    new_ucmd!().arg("--size=1M").arg("/dev/null").succeeds();
+}
