@@ -281,6 +281,16 @@ impl Params {
             let prefix_str = prefix_path.to_string_lossy();
             if prefix_str.ends_with(MAIN_SEPARATOR) {
                 (prefix_path, String::new())
+            } else if prefix_from_template.ends_with("/.") || prefix_from_template == "." {
+                // Path normalizes trailing '.' away, making both parent() and file_name()
+                // return wrong results for hidden files like /tmp/.XXXXXXXX.
+                // Use prefix_from_template directly instead.
+                let directory = Path::new(&prefix_from_option)
+                    .join(&prefix_from_template[..prefix_from_template.len() - 1]); // strip trailing '.'
+
+                let prefix = ".".to_string();
+
+                (directory, prefix)
             } else {
                 let directory = match prefix_path.parent() {
                     None => PathBuf::new(),
