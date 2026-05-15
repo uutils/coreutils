@@ -32,6 +32,8 @@ We provide prebuilt binaries, manpages, and shell completions from main branch a
 The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
 Bug reporters should use binary from latest commit.
 
+Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-musl` is not compatible with your system.
+
 </div>
 
 <!-- markdownlint-disable-next-line MD026 -->
@@ -49,7 +51,7 @@ Our key objectives include:
 - [Extensions](docs/src/extensions.md) when relevant (example: --progress)
 
 uutils aims to work on as many platforms as possible, to be able to use the same
-utils on Linux, macOS, Windows and other platforms. This ensures, for example,
+utils on Linux, macOS, *BSD, Windows, WASI and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
 <div class="oranda-hide">
@@ -114,6 +116,8 @@ as a feature:
 cargo build --release --features windows
 # or ...
 cargo build --release --features unix
+# or ...
+cargo build --release --target wasm32-wasip1 --no-default-features --features feat_wasm
 ```
 
 To build SELinux-specific features, including `chcon` and `runcon`, ensure that `libselinux`
