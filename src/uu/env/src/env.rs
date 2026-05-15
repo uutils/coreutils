@@ -1080,7 +1080,16 @@ where
         let Ok(sig) = signal_from_value(sig_value) else {
             return Ok(());
         };
-        signal_fn(sig)?;
+        match signal_fn(sig) {
+            Ok(()) => {}
+            Err(_) if !explicit => {
+                // When applying to all signals, silently skip signals that
+                // the OS refuses to change (e.g. SIGTHR on OpenBSD).
+                // GNU env also ignores these.
+                return Ok(());
+            }
+            Err(e) => return Err(e),
+        }
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
