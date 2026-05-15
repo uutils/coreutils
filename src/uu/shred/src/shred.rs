@@ -626,8 +626,16 @@ fn wipe_file(
     verbose: bool,
     force: bool,
 ) -> UResult<()> {
-    // Get these potential errors out of the way first
+    #[cfg(unix)]
+    let path = if path_str == "-" {
+        Path::new("/dev/fd/1")
+    } else {
+        Path::new(path_str)
+    };
+
+    #[cfg(not(unix))]
     let path = Path::new(path_str);
+
     if !path.exists() {
         return Err(USimpleError::new(
             1,

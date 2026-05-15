@@ -420,3 +420,18 @@ fn test_gnu_shred_passes_different_counts() {
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
 }
+
+#[test]
+#[cfg(unix)]
+fn test_shred_dash_wipes_stdout_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "secret.txt";
+    at.write(file, "secret data");
+
+    ucmd.arg("-n1")
+        .arg("-")
+        .set_stdout(at.make_file(file))
+        .succeeds();
+
+    assert_ne!(at.read(file), "secret data");
+}
