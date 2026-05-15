@@ -917,6 +917,25 @@ fn test_write_to_dev_full() {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_write_to_dev_full_with_named_file() {
+    use std::fs::OpenOptions;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("input", "hello\nworld\n");
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ts.ucmd()
+        .arg("input")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("head: error writing 'standard output': No space left on device\n");
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]

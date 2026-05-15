@@ -193,7 +193,16 @@ fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     Ok(bytes_written)
 }
 
-fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
+enum HeadFileError {
+    Read(io::Error),
+    WriteStdout(io::Error),
+}
+
+fn print_n_lines(
+    input: &mut impl io::BufRead,
+    n: u64,
+    separator: u8,
+) -> Result<u64, HeadFileError> {
     // Read the first `n` lines from the `input` reader.
     let mut reader = take_lines(input, n, separator);
 
@@ -205,21 +214,27 @@ fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Res
     let mut bytes_written = 0;
     let mut buf = [0; BUF_SIZE];
     loop {
-        let n = match reader.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) => return Err(e),
-        };
+        let bytes_read = reader.read(&mut buf).map_err(HeadFileError::Read)?;
 
-        writer.write_all(&buf[..n]).map_err(wrap_in_stdout_error)?;
+        if bytes_read == 0 {
+            break;
+        }
 
-        bytes_written += n as u64;
+        writer
+            .write_all(&buf[..bytes_read])
+            .map_err(wrap_in_stdout_error)
+            .map_err(HeadFileError::WriteStdout)?;
+
+        bytes_written += bytes_read as u64;
     }
 
     // Make sure we finish writing everything to the target before
     // exiting. Otherwise, when Rust is implicitly flushing, any
     // error will be silently ignored.
-    writer.flush().map_err(wrap_in_stdout_error)?;
+    writer
+        .flush()
+        .map_err(wrap_in_stdout_error)
+        .map_err(HeadFileError::WriteStdout)?;
 
     Ok(bytes_written)
 }
@@ -400,15 +415,17 @@ fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> i
     }
 }
 
-fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
+fn head_file(input: &mut File, options: &HeadOptions) -> Result<u64, HeadFileError> {
     match options.mode {
-        Mode::FirstBytes(n) => print_n_bytes(input, n),
+        Mode::FirstBytes(n) => print_n_bytes(input, n).map_err(HeadFileError::WriteStdout),
         Mode::FirstLines(n) => print_n_lines(
             &mut io::BufReader::with_capacity(BUF_SIZE, input),
             n,
             options.line_ending.into(),
         ),
-        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => head_backwards_file(input, options),
+        Mode::AllButLastBytes(_) | Mode::AllButLastLines(_) => {
+            head_backwards_file(input, options).map_err(HeadFileError::WriteStdout)
+        }
     }
 }
 
@@ -436,10 +453,30 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     // last byte read so that any tools that parse the remainder of
                     // the stdin stream read from the correct place.
 
-                    let bytes_read = head_file(&mut stdin_file, options)?;
+                    let bytes_read = match head_file(&mut stdin_file, options) {
+                        Ok(bytes_read) => bytes_read,
+                        Err(HeadFileError::Read(err)) => {
+                            return Err(HeadError::Io {
+                                name: "standard input".into(),
+                                err,
+                            }
+                            .into());
+                        }
+                        Err(HeadFileError::WriteStdout(err)) => return Err(err.into()),
+                    };
                     stdin_file.seek(SeekFrom::Start(current_pos + bytes_read))?;
                 } else {
-                    let _bytes_read = head_file(&mut stdin_file, options)?;
+                    match head_file(&mut stdin_file, options) {
+                        Ok(_) => {}
+                        Err(HeadFileError::Read(err)) => {
+                            return Err(HeadError::Io {
+                                name: "standard input".into(),
+                                err,
+                            }
+                            .into());
+                        }
+                        Err(HeadFileError::WriteStdout(err)) => return Err(err.into()),
+                    }
                 }
             }
 
@@ -507,13 +544,14 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             };
             match head_file(&mut file_handle, options) {
                 Ok(_) => {}
-                Err(err) => {
+                Err(HeadFileError::Read(err)) => {
                     show!(HeadError::Io {
                         name: file.into(),
                         err
                     });
                     continue;
                 }
+                Err(HeadFileError::WriteStdout(err)) => return Err(err.into()),
             }
             Ok(())
         };
