@@ -484,14 +484,31 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
             {
                 let mut stdin = stdin.lock();
 
-                match options.mode {
-                    Mode::FirstBytes(n) => print_n_bytes(&mut stdin, n),
-                    Mode::AllButLastBytes(n) => print_but_last_n_bytes(&mut stdin, n),
+                let result = match options.mode {
+                    Mode::FirstBytes(n) => {
+                        print_n_bytes(&mut stdin, n).map_err(HeadFileError::WriteStdout)
+                    }
+                    Mode::AllButLastBytes(n) => {
+                        print_but_last_n_bytes(&mut stdin, n).map_err(HeadFileError::WriteStdout)
+                    }
                     Mode::FirstLines(n) => print_n_lines(&mut stdin, n, options.line_ending.into()),
                     Mode::AllButLastLines(n) => {
                         print_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                            .map_err(HeadFileError::WriteStdout)
                     }
-                }?;
+                };
+
+                match result {
+                    Ok(_) => {}
+                    Err(HeadFileError::Read(err)) => {
+                        return Err(HeadError::Io {
+                            name: "standard input".into(),
+                            err,
+                        }
+                        .into());
+                    }
+                    Err(HeadFileError::WriteStdout(err)) => return Err(err.into()),
+                }
             }
 
             Ok(())
