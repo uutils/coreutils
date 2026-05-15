@@ -25,7 +25,7 @@ path = "src/who.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 clap = { workspace = true }
 rustix = { workspace = true }
 uucore = { workspace = true, features = ["utmpx"] }
@@ -34,3 +34,4 @@ fluent = { workspace = true }
 [[bin]]
 name = "who"
 path = "src/main.rs"
+required-features = ["uucore/utmpx"]

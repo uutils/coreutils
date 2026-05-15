@@ -37,6 +37,9 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
+    let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
+    let is_unix = env::var_os("CARGO_CFG_UNIX").is_some();
+
     let mut crates = Vec::new();
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
@@ -46,6 +49,12 @@ pub fn main() {
             match krate.as_ref() {
                 #[cfg(not(any(target_os = "linux", target_os = "android")))]
                 "chcon" | "runcon" => {
+                    continue;
+                }
+                "nohup" if !is_unix => {
+                    continue;
+                }
+                "who" if !(is_unix && target_os != "redox") => {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
