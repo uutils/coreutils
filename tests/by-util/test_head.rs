@@ -251,6 +251,22 @@ fn test_multiple_nonexistent_files() {
         .stderr_contains("cannot open 'bogusfile2' for reading: No such file or directory");
 }
 
+#[test]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_multiple_files_read_error_continues_to_next_file() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("a", "hello\n");
+
+    ts.ucmd()
+        .args(&["/proc/self/mem", "a"])
+        .fails()
+        .stdout_is("==> /proc/self/mem <==\n\n==> a <==\nhello\n")
+        .stderr_contains("head: error reading '/proc/self/mem': Input/output error");
+}
+
 // there was a bug not caught by previous tests
 // where for negative n > 3, the total amount of lines
 // was correct, but it would eat from the second line
