@@ -437,12 +437,16 @@ impl DirFd {
         Ok(())
     }
 
-    /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Open a newly-created file for writing relative to this directory.
+    /// Fails if the final path component already exists or is a symlink.
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
+        let flags = OFlag::O_CREAT
+            | OFlag::O_EXCL
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_WRONLY
+            | OFlag::O_CLOEXEC;
         let mode = Mode::from_bits_truncate(0o666); // Default file permissions
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)

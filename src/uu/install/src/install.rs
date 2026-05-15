@@ -9,7 +9,13 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
-use filetime::{FileTime, set_file_times};
+#[cfg(not(unix))]
+use filetime::set_file_times;
+use filetime::{FileTime, set_file_handle_times};
+#[cfg(unix)]
+use rustix::fs::{Gid, Uid, fchown};
+#[cfg(unix)]
+use rustix::io::dup;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -39,7 +45,9 @@ use uucore::translate;
 use uucore::{format_usage, show, show_error, show_if_err};
 
 #[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::prelude::OsStrExt;
 
@@ -764,9 +772,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     );
                 }
 
-                copy_file_safe(source, parent_fd, filename.as_os_str())?;
+                let dest = copy_file_safe(source, parent_fd, filename.as_os_str())?;
 
-                finalize_installed_file(source, &target, b, backup_path)
+                finalize_installed_file(source, &target, b, backup_path, &dest)
             } else {
                 copy(source, &target, b)
             }
@@ -905,7 +913,11 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
 /// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(unix)]
-fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
+fn copy_file_safe(
+    from: &Path,
+    to_parent_fd: &DirFd,
+    to_filename: &std::ffi::OsStr,
+) -> UResult<File> {
     let from_meta = metadata(from)?;
 
     // Check if source and destination are the same file
@@ -923,7 +935,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
     copy_stream(&mut src, &mut dst)?;
 
-    Ok(())
+    Ok(dst)
 }
 
 /// Copy a file from one path to another. Handles the certain cases of special
@@ -938,7 +950,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 /// Returns an empty Result or an error in case of failure.
 ///
-fn copy_file(from: &Path, to: &Path) -> UResult<()> {
+fn copy_file(from: &Path, to: &Path) -> UResult<File> {
     use std::os::unix::fs::OpenOptionsExt;
     if let Ok(to_abs) = to.canonicalize()
         && from.canonicalize()? == to_abs
@@ -976,9 +988,10 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
 
-    Ok(())
+    Ok(dest)
 }
 
+#[cfg(not(unix))]
 /// Strip a file using an external program.
 ///
 /// # Parameters
@@ -1020,6 +1033,67 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn fd_operation_path(fd: &File) -> PathBuf {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        PathBuf::from(format!("/proc/self/fd/{}", fd.as_raw_fd()))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        PathBuf::from(format!("/dev/fd/{}", fd.as_raw_fd()))
+    }
+}
+
+#[cfg(unix)]
+fn path_matches_open_file(path: &Path, file: &File) -> UResult<bool> {
+    let file_meta = file.metadata().map_err(InstallError::MetadataFailed)?;
+    let path_meta = match metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+
+    Ok(file_meta.dev() == path_meta.dev() && file_meta.ino() == path_meta.ino())
+}
+
+#[cfg(unix)]
+fn discard_installed_path_if_unchanged(path: &Path, file: &File) {
+    if path_matches_open_file(path, file).unwrap_or(false) {
+        let _ = fs::remove_file(path);
+    }
+}
+
+#[cfg(unix)]
+fn strip_file_fd(to: &Path, file: &File, b: &Behavior) -> UResult<()> {
+    let strip_fd = dup(file).map_err(|e| InstallError::StripProgramFailed(e.to_string()))?;
+    let strip_file = File::from(strip_fd);
+    let strip_arg = fd_operation_path(&strip_file);
+
+    match process::Command::new(&b.strip_program)
+        .arg(&strip_arg)
+        .status()
+    {
+        Ok(status) => {
+            if !status.success() {
+                discard_installed_path_if_unchanged(to, file);
+                return Err(InstallError::StripProgramFailed(
+                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
+                )
+                .into());
+            }
+        }
+        Err(e) => {
+            discard_installed_path_if_unchanged(to, file);
+            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
 /// Set ownership and permissions on the destination file.
 ///
 /// # Parameters
@@ -1045,6 +1119,37 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn chown_optional_user_group_fd(file: &File, path: &Path, b: &Behavior) -> UResult<()> {
+    let (owner_id, group_id) = if b.owner_id.is_some() || b.group_id.is_some() {
+        (b.owner_id, b.group_id)
+    } else {
+        return Ok(());
+    };
+
+    fchown(
+        file,
+        owner_id.map(Uid::from_raw),
+        group_id.map(Gid::from_raw),
+    )
+    .map_err(|e| InstallError::ChownFailed(path.to_path_buf(), e.to_string()))?;
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_ownership_and_permissions_fd(file: &File, to: &Path, b: &Behavior) -> UResult<()> {
+    file.set_permissions(fs::Permissions::from_mode(b.mode()))
+        .map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
+
+    if b.privileged {
+        chown_optional_user_group_fd(file, to, b)?;
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
 /// Preserve timestamps on the destination file.
 ///
 /// # Parameters
@@ -1072,7 +1177,91 @@ fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+fn preserve_timestamps_fd(from: &Path, file: &File) -> UResult<()> {
+    let meta = match metadata(from) {
+        Ok(meta) => meta,
+        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
+    };
+
+    let modified_time = FileTime::from_last_modification_time(&meta);
+    let accessed_time = FileTime::from_last_access_time(&meta);
+
+    if let Err(e) = set_file_handle_times(file, Some(accessed_time), Some(modified_time)) {
+        show_error!("{e}");
+    }
+    Ok(())
+}
+
 /// Apply post-copy operations: strip, ownership, permissions, timestamps, SELinux, and verbose output.
+#[cfg(unix)]
+fn finalize_installed_file(
+    from: &Path,
+    to: &Path,
+    b: &Behavior,
+    backup_path: Option<PathBuf>,
+    file: &File,
+) -> UResult<()> {
+    if b.strip {
+        strip_file_fd(to, file, b)?;
+    }
+
+    set_ownership_and_permissions_fd(file, to, b)?;
+
+    if b.preserve_timestamps {
+        preserve_timestamps_fd(from, file)?;
+    }
+
+    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    if b.privileged {
+        if b.preserve_context {
+            let context = get_selinux_security_context(from, false)
+                .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+            if !context.is_empty() {
+                set_selinux_security_context(&fd_operation_path(file), Some(&context))
+                    .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+            }
+        } else if b.default_context {
+            match get_default_context_for_path(to) {
+                Ok(Some(default_ctx)) => {
+                    set_selinux_security_context(&fd_operation_path(file), Some(&default_ctx))
+                        .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?
+                }
+                Ok(None) | Err(_) => set_selinux_default_context(to)
+                    .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?,
+            }
+        } else if b.context.is_some() {
+            let context = get_context_for_selinux(b);
+            set_selinux_security_context(&fd_operation_path(file), context)
+                .map_err(|e| InstallError::SelinuxContextFailed(e.to_string()))?;
+        }
+    }
+
+    if !path_matches_open_file(to, file)? {
+        return Err(InstallError::InstallFailed(
+            from.to_path_buf(),
+            to.to_path_buf(),
+            String::from("destination path changed during installation"),
+        )
+        .into());
+    }
+
+    if b.verbose {
+        write!(stdout(), "{} -> {}", from.quote(), to.quote())?;
+        match backup_path {
+            Some(path) => writeln!(
+                stdout(),
+                " {}",
+                translate!("install-verbose-backup", "backup" => path.quote())
+            )?,
+            None => writeln!(stdout())?,
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(not(unix))]
 fn finalize_installed_file(
     from: &Path,
     to: &Path,
@@ -1140,9 +1329,16 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
     // Declare the path here as we may need it for the verbose output below.
     let backup_path = perform_backup(to, b)?;
 
-    copy_file(from, to)?;
+    let dest = copy_file(from, to)?;
 
-    finalize_installed_file(from, to, b, backup_path)
+    #[cfg(unix)]
+    {
+        finalize_installed_file(from, to, b, backup_path, &dest)
+    }
+    #[cfg(not(unix))]
+    {
+        finalize_installed_file(from, to, b, backup_path)
+    }
 }
 
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]

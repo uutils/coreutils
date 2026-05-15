@@ -823,7 +823,10 @@ fn test_install_and_strip_with_program_hyphen() {
 
     let at = &scene.fixtures;
     let content = r#"#!/bin/sh
-    printf -- '%s\n' "$1" | grep '^[^-]'
+    case "$1" in
+      /proc/self/fd/*|/dev/fd/*) printf './proc-self-fd\n' ;;
+      *) printf -- '%s\n' "$1" ;;
+    esac | grep '^[^-]'
     "#;
     at.write("no-hyphen", content);
     scene.ccmd("chmod").arg("+x").arg("no-hyphen").succeeds();
@@ -839,7 +842,11 @@ fn test_install_and_strip_with_program_hyphen() {
         .arg("-dest")
         .succeeds()
         .no_stderr()
-        .stdout_is("./-dest\n");
+        .stdout_is(if cfg!(unix) {
+            "./proc-self-fd\n"
+        } else {
+            "./-dest\n"
+        });
 
     scene
         .ucmd()
@@ -851,7 +858,56 @@ fn test_install_and_strip_with_program_hyphen() {
         .arg("./-dest")
         .succeeds()
         .no_stderr()
-        .stdout_is("./-dest\n");
+        .stdout_is(if cfg!(unix) {
+            "./proc-self-fd\n"
+        } else {
+            "./-dest\n"
+        });
+}
+
+#[cfg(all(unix, feature = "chmod"))]
+#[test]
+fn test_install_strip_program_symlink_swap_does_not_touch_victim() {
+    use std::os::unix::fs::symlink;
+    use std::time::Duration;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "ORIGINAL-SOURCE");
+    at.write("victim", "VICTIM");
+    at.write(
+        "fake-strip.sh",
+        "#!/bin/sh\nsleep 0.2\nprintf 'PWNED-BY-STRIP' > \"$1\"\n",
+    );
+    scene.ccmd("chmod").arg("+x").arg("fake-strip.sh").succeeds();
+
+    let dest_path = at.plus("dest");
+    let victim_path = at.plus("victim");
+    let swapper = std::thread::spawn(move || {
+        for _ in 0..20_000 {
+            if fs::symlink_metadata(&dest_path).is_ok() {
+                let _ = fs::remove_file(&dest_path);
+                symlink("victim", &dest_path).unwrap();
+                return;
+            }
+            sleep(Duration::from_micros(50));
+        }
+        panic!("destination was never created");
+    });
+
+    scene
+        .ucmd()
+        .arg("-s")
+        .arg("--strip-program")
+        .arg("./fake-strip.sh")
+        .arg("src")
+        .arg("dest")
+        .fails()
+        .stderr_contains("destination path changed during installation");
+
+    swapper.join().unwrap();
+    assert_eq!(fs::read_to_string(victim_path).unwrap(), "VICTIM");
 }
 
 #[cfg(all(unix, feature = "chmod"))]
