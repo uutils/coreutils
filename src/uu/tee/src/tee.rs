@@ -13,6 +13,10 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 
+// This error kind will never be raised by std
+// Use it for termination when all writers exited, or to stop all writers
+use ErrorKind::Other as AllWriterExited;
+
 mod cli;
 pub use crate::cli::uu_app;
 use crate::cli::{Options, OutputErrorMode, options};
@@ -58,17 +62,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 fn tee(options: &Options) -> Result<()> {
     #[cfg(unix)]
-    {
-        // ErrorKind::Other is raised by MultiWriter when all writers have exited.
-        // This is therefore just a clever way to stop all writers
-
-        if options.ignore_interrupts {
-            ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
-        }
-        if options.output_error.is_some() {
-            disable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
-        }
+    if options.ignore_interrupts {
+        ignore_interrupts().map_err(|_| Error::from(AllWriterExited))?;
     }
+    #[cfg(unix)]
+    if options.output_error.is_some() {
+        disable_pipe_errors().map_err(|_| Error::from(AllWriterExited))?;
+    }
+
     let mut writers: Vec<NamedWriter> = options
         .files
         .iter()
@@ -97,17 +98,12 @@ fn tee(options: &Options) -> Result<()> {
 
     // We cannot use std::io::copy here as it doesn't flush the output buffer
     let res = match output.copy_unbuffered(input) {
-        // ErrorKind::Other is raised by MultiWriter when all writers
-        // have exited, so that copy will abort. It's equivalent to
-        // success of this part (if there was an error that should
-        // cause a failure from any writer, that error would have been
-        // returned instead).
-        Err(e) if e.kind() != ErrorKind::Other => Err(e),
+        Err(e) if e.kind() != AllWriterExited => Err(e),
         _ => Ok(()),
     };
 
     if had_open_errors || res.is_err() || output.error_occurred() {
-        Err(Error::from(ErrorKind::Other))
+        Err(Error::from(AllWriterExited))
     } else {
         Ok(())
     }
@@ -199,6 +195,7 @@ impl MultiWriter {
         self.writers
             .retain_mut(|writer| match writer.inner.write_all(buf) {
                 Ok(()) => true,
+                // if let guard needs Rust 1.95+ <https://github.com/rust-lang/rust/issues/51114>
                 Err(e) => {
                     if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
                         self.aborted.get_or_insert(e);
@@ -208,8 +205,7 @@ impl MultiWriter {
             });
         match self.aborted.take() {
             Some(e) => Err(e),
-            // This error kind will never be raised by std, so we can use it for termination when all writers exited
-            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None if self.writers.is_empty() => Err(Error::from(AllWriterExited)),
             None => Ok(()),
         }
     }
