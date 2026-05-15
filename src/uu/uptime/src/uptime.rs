@@ -5,6 +5,11 @@
 
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
+#![cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))
+))]
+
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use clap::{ValueHint, builder::ValueParser};

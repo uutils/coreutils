@@ -5,6 +5,11 @@
 
 // spell-checker:ignore (paths) wtmp
 
+#![cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))
+))]
+
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::Path;

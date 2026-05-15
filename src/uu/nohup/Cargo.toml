@@ -19,7 +19,7 @@ path = "src/nohup.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 libc = { workspace = true }
 rustix = { workspace = true, features = ["process", "stdio"] }
@@ -30,3 +30,4 @@ fluent = { workspace = true }
 [[bin]]
 name = "nohup"
 path = "src/main.rs"
+required-features = ["uucore/default"]
