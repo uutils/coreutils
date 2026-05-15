@@ -303,7 +303,7 @@ jobs:
       run: |
         set -x
         pacman -Sy --noconfirm --needed make rust base-devel
-        DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n SKIP_UTILS=date # FIXME: build date
+        DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
         ./target/release-small/true
         # Check that the progs have prefix
