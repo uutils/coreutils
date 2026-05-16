@@ -38,7 +38,7 @@ enum FileType {
 }
 
 impl FileType {
-    fn to_rustix(self) -> RustixFileType {
+    fn to_file_type(self) -> RustixFileType {
         match self {
             Self::Block => RustixFileType::BlockDevice,
             Self::Character => RustixFileType::CharacterDevice,
@@ -110,7 +110,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     // Label the node at creation, as GNU does; relabelling after leaves a window.
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     let _selinux_guard = if config.set_security_context {
-        let mode = config.file_type.to_rustix().as_raw_mode() | config.mode.as_raw_mode();
+        let mode = config.file_type.to_file_type().as_raw_mode() | config.mode.as_raw_mode();
         match uucore::selinux::FsCreateContext::new(
             std::path::Path::new(file_name),
             Some(mode),
@@ -134,7 +134,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
     let mknod_err = do_mknod(
         file_name,
-        config.file_type.to_rustix(),
+        config.file_type.to_file_type(),
         config.mode,
         config.dev as _,
     )
