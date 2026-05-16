@@ -638,6 +638,10 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
 
     let mut lock = io::stdout().lock();
 
+    // Name lookup failures in the default output are non-fatal: GNU `id`
+    // happily prints just the numeric id and exits 0. Docker containers
+    // routinely run as uids that don't have a /etc/passwd entry, and exit
+    // 1 here breaks init scripts that probe with `id`.
     write!(
         lock,
         "uid={uid}({})",
@@ -646,7 +650,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                 "{}",
                 translate!("id-error-cannot-find-user-name", "uid" => uid)
             );
-            set_exit_code(1);
             uid.to_string()
         })
     )?;
@@ -658,7 +661,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                 "{}",
                 translate!("id-error-cannot-find-group-name", "gid" => gid)
             );
-            set_exit_code(1);
             gid.to_string()
         })
     )?;
@@ -671,7 +673,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                     "{}",
                     translate!("id-error-cannot-find-user-name", "uid" => euid)
                 );
-                set_exit_code(1);
                 euid.to_string()
             })
         )?;
@@ -686,7 +687,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                     "{}",
                     translate!("id-error-cannot-find-group-name", "gid" => egid)
                 );
-                set_exit_code(1);
                 egid.to_string()
             })
         )?;
@@ -703,7 +703,6 @@ fn id_print(state: &State, groups: &[u32]) -> io::Result<()> {
                         "{}",
                         translate!("id-error-cannot-find-group-name", "gid" => gr)
                     );
-                    set_exit_code(1);
                     gr.to_string()
                 })
             ))
