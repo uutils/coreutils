@@ -419,6 +419,18 @@ fn test_numeric_unsorted_ints() {
 }
 
 #[test]
+fn test_numeric_leading_plus_not_numeric() {
+    // GNU sort -n doesn't accept a leading '+' as a sign, so "+1", "+10", "+2"
+    // should compare lexicographically (i.e., stay in their original order
+    // since sort is stable on equal keys), not numerically.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("+1\n+10\n+2\n")
+        .succeeds()
+        .stdout_is("+1\n+10\n+2\n");
+}
+
+#[test]
 fn test_human_block_sizes() {
     test_helper(
         "human_block_sizes",

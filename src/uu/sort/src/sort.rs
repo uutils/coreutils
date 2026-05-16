@@ -668,8 +668,9 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
-            let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
+            // exclude inf, nan, scientific notation, and a leading '+' which
+            // GNU sort -n doesn't accept (only -g does).
+            let line_num_float = (!line.iter().any(|&b| b.is_ascii_alphabetic() || b == b'+'))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
                 .and_then(|s| s.parse::<f64>().ok());
