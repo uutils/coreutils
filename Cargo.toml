@@ -416,6 +416,7 @@ ansi-width = "0.1.0"
 # is what catches it; keep the bound tight enough that only patch releases
 # arrive without one running.
 ariadne = "0.6.0"
+assert_matches = "1.5.0"
 base64-simd = "0.8"
 bigdecimal = "0.4"
 bstr = "1.9.1"
