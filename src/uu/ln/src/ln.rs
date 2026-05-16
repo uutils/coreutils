@@ -526,3 +526,67 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_exec_missing_operand() {
+        let settings: Settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: false,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&[], &settings);
+        assert_matches!(result, Err(LnError::MissingOperand));
+    }
+
+    #[test]
+    fn test_exec_missing_destination() {
+        let settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: true,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&["a".into()], &settings);
+        assert_matches!(result, Err(LnError::MissingDestination(path)) if *path == *"a");
+    }
+
+    #[test]
+    fn test_exec_extra_operand() {
+        let settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: true,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&["a".into(), "b".into(), "c".into()], &settings);
+        assert_matches!(result, Err(LnError::ExtraOperand(operand, _)) if operand == "c");
+    }
+}
