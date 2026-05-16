@@ -1067,17 +1067,20 @@ impl BlockWriter<'_> {
     }
 
     /// Truncate the file to the final cursor location.
-    fn truncate(&mut self) {
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
-        match self {
-            Self::Unbuffered(o) => o.truncate().ok(),
-            Self::Buffered(o) => o.truncate().ok(),
+    fn truncate(&mut self) -> io::Result<()> {
+        let result = match self {
+            Self::Unbuffered(o) => o.truncate(),
+            Self::Buffered(o) => o.truncate(),
         };
+        // ftruncate returns EINVAL when the destination isn't a regular
+        // file (e.g. `of=/dev/null`), which GNU dd silently ignores.
+        // Anything else (ENOSPC, EROFS, ...) is a real failure we need
+        // to surface so the user doesn't end up with stale data.
+        match result {
+            Ok(()) => Ok(()),
+            Err(err) if err.kind() == io::ErrorKind::InvalidInput => Ok(()),
+            Err(err) => Err(err),
+        }
     }
 
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
@@ -1308,7 +1311,7 @@ fn finalize<T>(
 
     // Truncate the file to the final cursor location.
     if truncate {
-        output.truncate();
+        output.truncate()?;
     }
 
     // Print the final read/write statistics.
