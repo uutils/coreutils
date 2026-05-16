@@ -36,7 +36,7 @@ enum FileType {
 }
 
 impl FileType {
-    fn to_rustix(self) -> RustixFileType {
+    fn to_file_type(self) -> RustixFileType {
         match self {
             Self::Block => RustixFileType::BlockDevice,
             Self::Character => RustixFileType::CharacterDevice,
@@ -113,7 +113,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
     let mknod_err = do_mknod(
         file_name,
-        config.file_type.to_rustix(),
+        config.file_type.to_file_type(),
         config.mode,
         config.dev,
     )
@@ -121,7 +121,12 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     let errno = if mknod_err.is_some() { -1 } else { 0 };
 
     if let Some(err) = mknod_err {
-        eprintln!("{}: {err}", uucore::execution_phrase());
+        use std::io::Write as _;
+        let _ = writeln!(
+            std::io::stderr(),
+            "{}: {err}",
+            uucore::execution_phrase()
+        );
     }
 
     // Apply SELinux context if requested
