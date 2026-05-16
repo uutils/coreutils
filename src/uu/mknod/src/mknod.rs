@@ -3,11 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
+// spell-checker:ignore (ToDO) parsemode makedev sysmacros perror RAII mknodat
+
+use std::ffi::CString;
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use rustix::fs::{FileType as RustixFileType, Mode};
+use rustix::process::umask;
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -15,8 +17,7 @@ use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
 
-#[allow(clippy::unnecessary_cast)]
-const MODE_RW_UGO: u32 = (S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH) as u32;
+const MODE_RW_UGO: u32 = 0o666;
 
 mod options {
     pub const MODE: &str = "mode";
@@ -27,7 +28,7 @@ mod options {
     pub const CONTEXT: &str = "context";
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Copy, PartialEq)]
 enum FileType {
     Block,
     Character,
@@ -35,11 +36,11 @@ enum FileType {
 }
 
 impl FileType {
-    fn as_sflag(&self) -> SFlag {
+    fn to_file_type(self) -> RustixFileType {
         match self {
-            Self::Block => SFlag::S_IFBLK,
-            Self::Character => SFlag::S_IFCHR,
-            Self::Fifo => SFlag::S_IFIFO,
+            Self::Block => RustixFileType::BlockDevice,
+            Self::Character => RustixFileType::CharacterDevice,
+            Self::Fifo => RustixFileType::Fifo,
         }
     }
 }
@@ -71,34 +72,57 @@ struct Config {
     context: Option<String>,
 }
 
+/// RAII guard to restore umask on drop, ensuring cleanup even on panic.
+struct UmaskGuard(Mode);
+
+impl UmaskGuard {
+    fn set(new_mask: Mode) -> Self {
+        let old_mask = umask(new_mask);
+        Self(old_mask)
+    }
+}
+
+impl Drop for UmaskGuard {
+    fn drop(&mut self) {
+        umask(self.0);
+    }
+}
+
+/// Create a special file using `mknod(2)`.
+///
+/// Uses `libc::mknod` directly since `rustix::fs::mknodat` is unavailable on
+/// Apple targets. Combines `file_type` (S_IF* bits) with `mode` (permission
+/// bits) into the raw `mode_t` argument expected by the syscall.
+fn do_mknod(path: &str, file_type: RustixFileType, mode: Mode, dev: u64) -> std::io::Result<()> {
+    let raw_mode = file_type.as_raw_mode() | mode.as_raw_mode();
+    let c_path = CString::new(path)?;
+    let result = unsafe { libc::mknod(c_path.as_ptr(), raw_mode as _, dev as _) };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
 fn mknod(file_name: &str, config: Config) -> i32 {
-    // set umask to 0 and store previous umask
-    let have_prev_umask = if config.use_umask {
+    let _guard = if config.use_umask {
         None
     } else {
-        Some(nix_umask(Mode::empty()))
+        Some(UmaskGuard::set(Mode::empty()))
     };
 
-    let mknod_err = nix_mknod(
+    let mknod_err = do_mknod(
         file_name,
-        config.file_type.as_sflag(),
+        config.file_type.to_file_type(),
         config.mode,
-        config.dev as _,
+        config.dev,
     )
     .err();
     let errno = if mknod_err.is_some() { -1 } else { 0 };
 
-    // set umask back to original value
-    if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
-    }
-
     if let Some(err) = mknod_err {
-        eprintln!(
-            "{}: {}",
-            uucore::execution_phrase(),
-            std::io::Error::from(err)
-        );
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), "{}: {err}", uucore::execution_phrase());
     }
 
     // Apply SELinux context if requested
@@ -149,7 +173,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
         }
     };
-    let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
+    let mode = Mode::from_bits_truncate(mode_permissions as _);
 
     let file_name = matches
         .get_one::<String>("name")
@@ -190,7 +214,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let config = Config {
         mode,
-        file_type: file_type.clone(),
+        file_type: *file_type,
         use_umask,
         dev,
         #[cfg(any(
