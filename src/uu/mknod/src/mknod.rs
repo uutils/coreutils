@@ -122,11 +122,7 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
     if let Some(err) = mknod_err {
         use std::io::Write as _;
-        let _ = writeln!(
-            std::io::stderr(),
-            "{}: {err}",
-            uucore::execution_phrase()
-        );
+        let _ = writeln!(std::io::stderr(), "{}: {err}", uucore::execution_phrase());
     }
 
     // Apply SELinux context if requested
