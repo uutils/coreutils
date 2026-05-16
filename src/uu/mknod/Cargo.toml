@@ -20,7 +20,8 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-nix = { workspace = true, features = ["fs"] }
+rustix = { workspace = true, features = ["process", "fs"] }
+libc = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
 
 [features]
