@@ -206,6 +206,7 @@ feat_wasm = [
   "ln",
   "ls",
   "mkdir",
+  "mktemp",
   "mv",
   "nl",
   "nproc",
