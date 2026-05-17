@@ -10,18 +10,8 @@ use crate::error::UResult;
 /// Buffer-based copying utilities for unix (excluding Linux).
 use std::{
     io::{Read, Write},
-    os::fd::{AsFd, AsRawFd},
+    os::fd::AsFd,
 };
-
-/// A readable file descriptor.
-pub trait FdReadable: Read + AsRawFd + AsFd {}
-
-impl<T> FdReadable for T where T: Read + AsFd + AsRawFd {}
-
-/// A writable file descriptor.
-pub trait FdWritable: Write + AsFd + AsRawFd {}
-
-impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 
 /// Copy data from `Read` implementor `source` into a `Write` implementor
 /// `dest`. This works by reading a chunk of data from `source` and writing the
@@ -36,8 +26,8 @@ impl<T> FdWritable for T where T: Write + AsFd + AsRawFd {}
 /// * `dest` - `Write` implementor to copy data to.
 pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<()>
 where
-    R: Read + AsFd + AsRawFd,
-    S: Write + AsFd + AsRawFd,
+    R: Read + AsFd,
+    S: Write + AsFd,
 {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
