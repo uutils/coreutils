@@ -21,9 +21,13 @@ pub use other::copy_stream;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::fs::File;
-    use tempfile::tempdir;
+    #[cfg(any(not(unix), target_os = "linux"))]
+    use {
+        super::*,
+        std::fs::File,
+        std::io::{Read, Write},
+        tempfile::tempdir,
+    };
 
     #[cfg(target_os = "linux")]
     use {
@@ -33,8 +37,6 @@ mod tests {
             thread,
         },
     };
-
-    use std::io::{Read, Write};
 
     #[cfg(target_os = "linux")]
     fn new_temp_file() -> File {
@@ -49,7 +51,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     fn test_copy_stream() {
         let mut dest_file = new_temp_file();
 
