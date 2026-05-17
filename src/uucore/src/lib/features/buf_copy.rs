@@ -20,12 +20,12 @@ pub mod other;
 pub use other::copy_stream;
 
 #[cfg(test)]
+#[cfg(any(target_os = "linux", target_os = "android"))] // copy_stream is a thin wrapper for io::copy. nothing to test...
 mod tests {
     use super::*;
     use std::fs::File;
     use tempfile::tempdir;
 
-    #[cfg(target_os = "linux")]
     use {
         std::fs::OpenOptions,
         std::{
@@ -36,7 +36,6 @@ mod tests {
 
     use std::io::{Read, Write};
 
-    #[cfg(target_os = "linux")]
     fn new_temp_file() -> File {
         let temp_dir = tempdir().unwrap();
         OpenOptions::new()
@@ -49,7 +48,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_copy_stream() {
         let mut dest_file = new_temp_file();
 
@@ -66,31 +64,6 @@ mod tests {
         // We would have been at the end already, so seek again to the start.
         dest_file.seek(SeekFrom::Start(0)).unwrap();
 
-        let mut buf = Vec::new();
-        dest_file.read_to_end(&mut buf).unwrap();
-
-        assert_eq!(buf, data);
-    }
-
-    #[test]
-    #[cfg(not(unix))]
-    // Test for non-unix platforms. We use regular files instead.
-    fn test_copy_stream() {
-        let temp_dir = tempdir().unwrap();
-        let src_path = temp_dir.path().join("src.txt");
-        let dest_path = temp_dir.path().join("dest.txt");
-
-        let mut src_file = File::create(&src_path).unwrap();
-        let mut dest_file = File::create(&dest_path).unwrap();
-
-        let data = b"Hello, world!";
-        src_file.write_all(data).unwrap();
-        src_file.sync_all().unwrap();
-
-        let mut src_file = File::open(&src_path).unwrap();
-        copy_stream(&mut src_file, &mut dest_file).unwrap();
-
-        let mut dest_file = File::open(&dest_path).unwrap();
         let mut buf = Vec::new();
         dest_file.read_to_end(&mut buf).unwrap();
 

@@ -169,11 +169,11 @@ impl ChildExt for Child {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(not(target_os = "redox"))]
     fn test_getsid() {
+        use super::{getpid, getsid};
+
         assert_eq!(
             getsid(getpid()).expect("getsid(getpid)"),
             // zero is a special value for SID.
