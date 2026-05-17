@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -1371,13 +1371,12 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
-        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
-    }
+    let rlim_cur = getrlimit(Resource::Nofile)
+        .current
+        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
@@ -1410,8 +1409,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1770,7 +1767,6 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 

@@ -451,16 +451,32 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
     }
 }
 
+fn warn_invalid_quoting_style(style: &str) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        show_error!(
+            "{}",
+            translate!("stat-warning-invalid-env-quoting-style", "style" => style.to_string())
+        );
+    }
+}
+
 fn get_quoted_file_name(
     display_name: &str,
     file: &OsString,
     file_type: FileType,
     from_user: bool,
 ) -> Result<String, i32> {
-    let quoting_style = env::var("QUOTING_STYLE")
-        .ok()
-        .and_then(|style| style.parse().ok())
-        .unwrap_or_default();
+    let quoting_style = match env::var("QUOTING_STYLE") {
+        Ok(style) => style.parse().unwrap_or_else(|_| {
+            // Match GNU coreutils 9.11: warn (once) when QUOTING_STYLE is set
+            // to a value we don't understand, then fall back to the default.
+            warn_invalid_quoting_style(&style);
+            QuotingStyle::default()
+        }),
+        Err(_) => QuotingStyle::default(),
+    };
 
     if file_type.is_symlink() {
         let quoted_display_name = quote_file_name(display_name, &quoting_style);

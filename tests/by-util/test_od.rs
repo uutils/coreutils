@@ -689,7 +689,7 @@ fn test_hex_offset() {
                    00000000 00000000 00000000 00000000
             000010 00000000 00000000 00000000 00000000
                    00000000 00000000 00000000 00000000
-            00001F
+            00001f
             ",
     );
 
@@ -1342,4 +1342,21 @@ fn test_write_error_dev_full() {
         .fails()
         .code_is(1)
         .stderr_contains("No space left on device");
+}
+
+#[test]
+fn test_hex_lowercase() {
+    let input = [0u8; 10];
+    // Test verifies that the output hex byte offset is in lowercase
+    new_ucmd!()
+        .arg("-Ax")
+        .run_piped_stdin(input)
+        .success()
+        .no_stderr()
+        .stdout_only(unindent(
+            r"
+                000000 000000 000000 000000 000000 000000
+                00000a
+            ",
+        ));
 }

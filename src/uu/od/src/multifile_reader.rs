@@ -6,8 +6,6 @@
 
 use std::fs::File;
 use std::io;
-#[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd};
 
 use uucore::display::Quotable;
 use uucore::show_error;
@@ -56,20 +54,27 @@ impl MultifileReader<'_> {
                     // For performance reasons we do still do buffered reads from stdin, but
                     // the buffering is done elsewhere and in a way that is aware of the `-N`
                     // limit.
-                    let stdin = io::stdin();
-                    #[cfg(unix)]
+                    #[cfg(any(unix, target_os = "wasi"))]
                     {
-                        let stdin_raw_fd = stdin.as_raw_fd();
-                        let stdin_file = unsafe { File::from_raw_fd(stdin_raw_fd) };
-                        self.curr_file = Some(Box::new(stdin_file));
+                        use std::os::fd::AsFd;
+                        // todo: definition is generic enough to move to uucore::io::RawReader if useful
+                        struct RawReader<T: AsFd>(pub T);
+                        impl<T: AsFd> io::Read for RawReader<T> {
+                            fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+                                rustix::io::read(&self.0, b).map_err(Into::into)
+                            }
+                        }
+                        let stdin = RawReader(rustix::stdio::stdin());
+                        self.curr_file = Some(Box::new(stdin));
                     }
 
                     // For non-unix platforms we don't have GNU compatibility requirements, so
                     // we don't need to prevent stdin buffering. This is sub-optimal (since
                     // there will still be additional buffering further up the stack), but
                     // doesn't seem worth worrying about at this time.
-                    #[cfg(not(unix))]
+                    #[cfg(not(any(unix, target_os = "wasi")))]
                     {
+                        let stdin = io::stdin();
                         self.curr_file = Some(Box::new(stdin));
                     }
                     break;

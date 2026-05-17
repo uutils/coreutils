@@ -12,7 +12,8 @@ use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, o
 
 use uucore::checksum::compute::OutputFormat;
 use uucore::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, parse_blake_length, sanitize_sha2_sha3_length_str,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, parse_blake_length,
+    sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
@@ -47,7 +48,7 @@ fn print_cpu_debug_info() {
 fn maybe_sanitize_length(
     algo_cli: Option<AlgoKind>,
     input_length: Option<&str>,
-) -> UResult<Option<usize>> {
+) -> UResult<Option<HashLength>> {
     match (algo_cli, input_length) {
         // No provided length is not a problem so far.
         (_, None) => Ok(None),
@@ -63,7 +64,7 @@ fn maybe_sanitize_length(
         // will have its extra bits set to zero.
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
-            Ok(l) => Ok(Some(l)),
+            Ok(l) => Ok(Some(HashLength::from_bits(l))),
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
 

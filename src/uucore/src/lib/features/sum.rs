@@ -136,6 +136,7 @@ pub struct Blake3 {
 impl Blake3 {
     /// Default length for the BLAKE3 digest in bytes.
     pub const DEFAULT_BYTE_SIZE: usize = 32;
+    pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
     pub fn with_output_bytes(output_bytes: usize) -> Self {
         Self {

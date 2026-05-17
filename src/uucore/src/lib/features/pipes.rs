@@ -10,36 +10,31 @@ use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::fs::File;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use std::{io::Read, os::fd::AsFd, sync::OnceLock};
+use std::{
+    io::{Read, Write},
+    os::fd::AsFd,
+    sync::OnceLock,
+};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
-/// A wrapper around [`rustix::pipe::pipe`] that ensures the pipe is cleaned up.
+/// return pipe larger than given size
+/// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
+/// e.g. writing size to pipe should not hang
 ///
-/// Returns two `File` objects: everything written to the second can be read
-/// from the first.
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn pipe() -> std::io::Result<(File, File)> {
+pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(File, File)> {
     let (read, write) = rustix::pipe::pipe()?;
-    // improve performance for splice
-    let _ = fcntl_setpipe_size(&read, MAX_ROOTLESS_PIPE_SIZE);
-
-    Ok((File::from(read), File::from(write)))
-}
-
-/// return pipe larger than given size and kernel's default size
-///
-/// useful to save RAM usage
-#[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn pipe_with_size(s: usize) -> std::io::Result<(File, File)> {
-    let (read, write) = rustix::pipe::pipe()?;
+    // guard unnecessary syscall
     if s > KERNEL_DEFAULT_PIPE_SIZE {
-        let _ = fcntl_setpipe_size(&read, s);
+        let r = fcntl_setpipe_size(&read, s);
+        if SIZE_REQUIRED {
+            r?;
+        }
     }
 
     Ok((File::from(read), File::from(write)))
@@ -93,7 +88,7 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 pub fn splice_unbounded<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
 where
     R: Read + AsFd,
-    S: AsFd + std::io::Write,
+    S: AsFd,
 {
     // improve throughput
     // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
@@ -119,10 +114,13 @@ where
 pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
 where
     R: Read + AsFd,
-    S: AsFd + std::io::Write,
+    S: AsFd,
 {
     static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe().ok()).as_ref() else {
+    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE
+        .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
+        .as_ref()
+    else {
         return Ok(true);
     };
     // improve throughput
@@ -139,12 +137,12 @@ where
                     // If the first splice manages to copy to the intermediate
                     // pipe, but the second splice to stdout fails for some reason
                     // we can recover by copying the data that we have from the
-                    // intermediate pipe to stdout using normal read/write. Then
+                    // intermediate pipe to stdout using unbuffered read/write. Then
                     // we tell the caller to fall back.
                     debug_assert!(n <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
                     let mut drain = Vec::with_capacity(n);
                     pipe_rd.take(n as u64).read_to_end(&mut drain)?;
-                    dest.write_all(&drain)?;
+                    crate::io::RawWriter(&dest).write_all(&drain)?;
                     return Ok(true);
                 }
             }
@@ -159,7 +157,7 @@ where
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn send_n_bytes(
     input: impl Read + AsFd,
-    mut target: impl std::io::Write + AsFd,
+    mut target: impl Write + AsFd,
     n: u64,
 ) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
@@ -193,7 +191,7 @@ pub fn send_n_bytes(
             }
         }
     } else if let Some((broker_r, broker_w)) = PIPE_CACHE
-        .get_or_init(|| pipe_with_size(pipe_size).ok())
+        .get_or_init(|| pipe::<false>(pipe_size).ok())
         .as_ref()
     {
         // todo: create fn splice_bounded_broker
@@ -210,9 +208,10 @@ pub fn send_n_bytes(
                         }
                     } else {
                         debug_assert!(s <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
+                        // drain pipe before fallback to raw write
                         let mut drain = Vec::with_capacity(s);
                         broker_r.take(s as u64).read_to_end(&mut drain)?;
-                        target.write_all(&drain)?;
+                        crate::io::RawWriter(&target).write_all(&drain)?;
                         break true;
                     }
                 }

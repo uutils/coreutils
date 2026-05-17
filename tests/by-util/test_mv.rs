@@ -69,7 +69,7 @@ fn test_mv_with_source_file_opened_and_target_file_exists() {
 
     at.touch(dst);
 
-    ucmd.arg(src).arg(dst).succeeds().no_stderr().no_stdout();
+    ucmd.arg(src).arg(dst).succeeds().no_output();
 
     drop(f);
 }
@@ -361,8 +361,7 @@ fn test_mv_arg_update_interactive() {
         .arg("-i")
         .arg("--update")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -637,13 +636,7 @@ fn test_mv_broken_symlink_to_another_fs() {
         TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
     let dest = other_fs_tempdir.path().join("foo");
 
-    scene
-        .ucmd()
-        .arg("foo")
-        .arg(dest)
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    scene.ucmd().arg("foo").arg(dest).succeeds().no_output();
 }
 
 #[test]
@@ -1161,8 +1154,7 @@ fn test_mv_arg_update_none() {
         .arg(file2)
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(file2), file2_content);
 }
@@ -1183,8 +1175,7 @@ fn test_mv_arg_update_all() {
         .arg(file2)
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(file2), file1_content);
 }
@@ -1208,8 +1199,7 @@ fn test_mv_arg_update_older_dest_not_older() {
         .arg(new)
         .arg("--update=older")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), new_content);
 }
@@ -1236,8 +1226,7 @@ fn test_mv_arg_update_none_then_all() {
         .arg("--update=none")
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "old content\n");
 }
@@ -1264,8 +1253,7 @@ fn test_mv_arg_update_all_then_none() {
         .arg("--update=all")
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -1289,8 +1277,7 @@ fn test_mv_arg_update_older_dest_older() {
         .arg(old)
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(old), new_content);
 }
@@ -1335,12 +1322,7 @@ fn test_mv_arg_update_short_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(new)
-        .arg(old)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(new).arg(old).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(old), new_content);
 }
@@ -1361,12 +1343,7 @@ fn test_mv_arg_update_short_no_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(old)
-        .arg(new)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(old).arg(new).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(new), new_content);
 }
@@ -3011,7 +2988,7 @@ fn test_mv_cross_device_file_symlink_preserved() {
 /// Non-root users can chgrp to any group they belong to.
 #[cfg(target_os = "linux")]
 fn find_other_group(current: u32) -> Option<u32> {
-    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+    rustix::process::getgroups().ok()?.iter().find_map(|group| {
         let gid = group.as_raw();
         (gid != current).then_some(gid)
     })

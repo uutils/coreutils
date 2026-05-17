@@ -1113,5 +1113,5 @@ fn test_seed_long_range_no_repeat() {
 
 #[test]
 fn test_empty_range_no_repeat() {
-    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
+    new_ucmd!().arg("-i4-3").succeeds().no_output();
 }

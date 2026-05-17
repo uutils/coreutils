@@ -364,9 +364,11 @@ uutils
 execfn
 fstatfs
 getcwd
+mkfifoat
 setpipe
 
 # * other
+auxv
 getlimits
 weblate
 algs

@@ -36,7 +36,7 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "pipe", "process"] }
+rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -92,6 +92,9 @@ fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = [
   "dir",
@@ -104,9 +107,6 @@ nix = { workspace = true, features = [
 ] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
@@ -170,7 +170,7 @@ parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
-pipes = []
+pipes = ["fs"]
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
