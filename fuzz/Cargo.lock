@@ -2078,6 +2078,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "rustix",
  "thiserror",
  "uucore",
 ]

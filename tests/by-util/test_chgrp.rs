@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) nosuchgroup groupname
 
+use rustix::process::getegid;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
-use uucore::process::getegid;
 use uutests::{at_and_ucmd, new_ucmd};
 #[cfg(not(target_vendor = "apple"))]
 use uutests::{util::TestScenario, util_name};
@@ -63,7 +63,7 @@ fn test_invalid_group() {
 
 #[test]
 fn test_error_1() {
-    if getegid() != 0 {
+    if getegid().as_raw() != 0 {
         new_ucmd!().arg("bin").arg(DIR).fails().stderr_contains(
             // linux fails with "Operation not permitted (os error 1)"
             // because of insufficient permissions,
@@ -76,7 +76,7 @@ fn test_error_1() {
 
 #[test]
 fn test_fail_silently() {
-    if getegid() != 0 {
+    if getegid().as_raw() != 0 {
         for opt in ["-f", "--silent", "--quiet", "--sil", "--qui"] {
             new_ucmd!()
                 .arg(opt)
@@ -201,7 +201,7 @@ fn test_reference() {
     // skip for root or MS-WSL
     // * MS-WSL is bugged (as of 2019-12-25), allowing non-root accounts su-level privileges for `chgrp`
     // * for MS-WSL, succeeds and stdout == 'group of /etc retained as root'
-    if !(getegid() == 0 || uucore::os::is_wsl_1()) {
+    if !(getegid().as_raw() == 0 || uucore::os::is_wsl_1()) {
         new_ucmd!()
             .arg("-v")
             .arg("--reference=/etc/passwd")
@@ -267,7 +267,7 @@ fn test_missing_files() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_big_p() {
-    if getegid() != 0 {
+    if getegid().as_raw() != 0 {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")
@@ -282,7 +282,7 @@ fn test_big_p() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_big_h() {
-    if getegid() != 0 {
+    if getegid().as_raw() != 0 {
         assert!(
             new_ucmd!()
                 .arg("-RH")
@@ -611,7 +611,7 @@ fn test_chgrp_non_utf8_paths() {
     std::fs::write(at.plus(&filename), b"test content").unwrap();
 
     // Get current user's primary group
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
 
     ucmd.arg(current_gid.to_string()).arg(&filename).succeeds();
 }
@@ -627,7 +627,7 @@ fn test_chgrp_recursive_on_file() {
 
     at.touch("regular_file");
 
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
 
     ucmd.arg("-R")
         .arg(current_gid.to_string())
@@ -645,7 +645,7 @@ fn test_chgrp_recursive_on_file() {
 fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
     use std::os::unix::prelude::PermissionsExt;
 
-    let current_gid = getegid();
+    let current_gid = getegid().as_raw();
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
     at.mkdir("dir/a");
