@@ -25,6 +25,9 @@ libc = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process"] }
 
+[target.'cfg(not(windows))'.dependencies]
+rustix = { workspace = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

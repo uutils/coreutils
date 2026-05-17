@@ -10,6 +10,7 @@ mod mode;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
 use filetime::{FileTime, set_file_times};
+use rustix::process::{getegid, geteuid};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -27,7 +28,6 @@ use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
-use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior, create_dir_all_safe};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -1196,7 +1196,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     // Check if the destination file's owner differs from the effective user ID
-    if to_meta.uid() != geteuid() {
+    if to_meta.uid() != geteuid().as_raw() {
         return true;
     }
 
@@ -1208,7 +1208,7 @@ fn needs_copy_for_ownership(to: &Path, to_meta: &fs::Metadata) -> bool {
         .parent()
         .and_then(|parent| metadata(parent).ok())
         .filter(|parent_meta| parent_meta.mode() & 0o2000 != 0)
-        .map_or(getegid(), |parent_meta| parent_meta.gid());
+        .map_or(getegid().as_raw(), |parent_meta| parent_meta.gid());
 
     to_meta.gid() != expected_gid
 }

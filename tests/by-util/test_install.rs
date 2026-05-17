@@ -6,6 +6,7 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
+use rustix::process::{getegid, geteuid};
 use std::fs::{self, File};
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
@@ -18,7 +19,6 @@ use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
-use uucore::process::{getegid, geteuid};
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
@@ -402,7 +402,7 @@ fn test_install_target_new_file_with_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let gid = getegid();
+    let gid = getegid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -429,7 +429,7 @@ fn test_install_target_new_file_with_owner() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
     let dir = "target_dir";
-    let uid = geteuid();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -570,8 +570,8 @@ fn test_multiple_mode_arguments_override_not_error() {
     let dir = "source_dir";
 
     let file = "source_file";
-    let gid = getegid();
-    let uid = geteuid();
+    let gid = getegid().as_raw();
+    let uid = geteuid().as_raw();
 
     at.touch(file);
     at.mkdir(dir);
@@ -2667,7 +2667,7 @@ fn test_install_non_utf8_paths() {
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
-    if geteuid() == 0 {
+    if geteuid().as_raw() == 0 {
         return;
     }
 
@@ -2693,7 +2693,7 @@ fn test_install_unprivileged_option_u_skips_chown() {
         .no_stderr();
 
     assert!(at.file_exists(dst_ok));
-    assert_eq!(at.metadata(dst_ok).uid(), geteuid());
+    assert_eq!(at.metadata(dst_ok).uid(), geteuid().as_raw());
 }
 
 #[test]

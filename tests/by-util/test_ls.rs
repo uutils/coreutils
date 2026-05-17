@@ -6519,7 +6519,7 @@ fn test_acl_padding_not_inflated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let uid = uucore::process::getuid();
+    let uid = rustix::process::getuid().as_raw();
     let names = ["file1", "file2", "file3", "file4", "file5"];
     for name in &names {
         at.touch(name);

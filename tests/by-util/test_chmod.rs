@@ -1366,13 +1366,13 @@ fn test_chmod_non_utf8_paths() {
 
 #[test]
 fn test_chmod_operator_only_still_calls_syscall() {
-    use uucore::process::geteuid;
+    use rustix::process::geteuid;
 
     // An operator with no permission letters ('+', '-', '=') leaves the mode
     // bits unchanged, yet chmod must still issue the chmod(2) call so that a
     // lack of permission is reported instead of silently succeeding. As a
     // non-root user, '/' (owned by root) is a file we cannot chmod.
-    if geteuid() == 0 {
+    if geteuid().as_raw() == 0 {
         return;
     }
     if metadata("/").map_or(0, |m| m.uid()) != 0 {
