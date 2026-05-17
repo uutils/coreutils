@@ -4323,6 +4323,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "rustix",
  "tempfile",
  "thiserror 2.0.19",
  "uucore",
@@ -4518,6 +4519,7 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
  "windows-sys 0.61.2",
 ]
