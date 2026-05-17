@@ -414,12 +414,20 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
 
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
+    // Invalidate an empty string env var (GNU treats unset and empty differently for some vars,
+    // but an empty value should not override a lower-precedence variable).
+    let locale_var = |name| std::env::var(name).ok().filter(|v| !v.is_empty());
+
+    // Check LC_ALL -> LC_MESSAGES -> LANG, then fall back to DEFAULT_LOCALE.
+    let locale_str = locale_var("LC_ALL")
+        .or_else(|| locale_var("LC_MESSAGES"))
+        .or_else(|| locale_var("LANG"))
+        .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
         .split('.')
         .next()
         .unwrap_or(DEFAULT_LOCALE)
         .to_string();
+
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
@@ -429,7 +437,7 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// Always loads common strings in addition to utility-specific strings.
 ///
 /// This function initializes the localization system based on the system's locale
-/// preferences (via the LANG environment variable) or falls back to English
+/// preferences (via `LC_ALL`, `LC_MESSAGES`, or `LANG`) or falls back to English
 /// if the system locale cannot be determined or the locale file doesn't exist.
 /// English is always loaded as a fallback.
 ///
@@ -1328,11 +1336,13 @@ invalid-syntax = This is { $missing
 
     #[test]
     fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lc_messages = env::var("LC_MESSAGES").ok();
         let original_lang = env::var("LANG").ok();
 
-        // Remove LANG environment variable
         unsafe {
+            env::remove_var("LC_ALL");
+            env::remove_var("LC_MESSAGES");
             env::remove_var("LANG");
         }
 
@@ -1340,13 +1350,44 @@ invalid-syntax = This is { $missing
         assert!(result.is_ok());
         assert_eq!(result.unwrap().to_string(), "en-US");
 
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
+        unsafe {
+            if let Some(val) = original_lc_all {
+                env::set_var("LC_ALL", val);
+            }
+            if let Some(val) = original_lc_messages {
+                env::set_var("LC_MESSAGES", val);
+            }
+            if let Some(val) = original_lang {
                 env::set_var("LANG", val);
             }
-        } else {
-            {} // Was already unset
+        }
+    }
+
+    #[test]
+    fn test_detect_system_locale_prefers_lc_all_over_lang() {
+        let original_lc_all = env::var("LC_ALL").ok();
+        let original_lang = env::var("LANG").ok();
+
+        unsafe {
+            env::set_var("LC_ALL", "fr-FR.UTF-8");
+            env::set_var("LANG", "en-US.UTF-8");
+        }
+
+        let result = detect_system_locale();
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().to_string(), "fr-FR");
+
+        unsafe {
+            if let Some(val) = original_lc_all {
+                env::set_var("LC_ALL", val);
+            } else {
+                env::remove_var("LC_ALL");
+            }
+            if let Some(val) = original_lang {
+                env::set_var("LANG", val);
+            } else {
+                env::remove_var("LANG");
+            }
         }
     }
 
