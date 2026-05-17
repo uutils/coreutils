@@ -303,62 +303,11 @@ pub fn copy_all_but_n_lines<R: Read, W: Write>(
     Ok(total_bytes_copied)
 }
 
-/// Like `std::io::Take`, but for lines instead of bytes.
-///
-/// This struct is generally created by calling [`take_lines`] on a
-/// reader. Please see the documentation of [`take_lines`] for more
-/// details.
-pub struct TakeLines<T> {
-    inner: T,
-    limit: u64,
-    separator: u8,
-}
-
-impl<T: Read> Read for TakeLines<T> {
-    /// Read bytes from a buffer up to the requested number of lines.
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if self.limit == 0 {
-            return Ok(0);
-        }
-        match self.inner.read(buf) {
-            Ok(0) => Ok(0),
-            Ok(n) => {
-                for i in memchr_iter(self.separator, &buf[..n]) {
-                    self.limit -= 1;
-                    if self.limit == 0 {
-                        return Ok(i + 1);
-                    }
-                }
-                Ok(n)
-            }
-            Err(e) => Err(e),
-        }
-    }
-}
-
-/// Create an adaptor that will read at most `limit` lines from a given reader.
-///
-/// This function returns a new instance of `Read` that will read at
-/// most `limit` lines, after which it will always return EOF
-/// (`Ok(0)`).
-///
-/// The `separator` defines the character to interpret as the line
-/// ending. For the usual notion of "line", set this to `b'\n'`.
-pub fn take_lines<R>(reader: R, limit: u64, separator: u8) -> TakeLines<R> {
-    TakeLines {
-        inner: reader,
-        limit,
-        separator,
-    }
-}
-
 #[cfg(test)]
 mod tests {
 
-    use std::io::{BufRead, BufReader};
-
     use crate::take::{
-        TakeAllBuffer, TakeAllLinesBuffer, copy_all_but_n_bytes, copy_all_but_n_lines, take_lines,
+        TakeAllBuffer, TakeAllLinesBuffer, copy_all_but_n_bytes, copy_all_but_n_lines,
     };
 
     #[test]
@@ -634,34 +583,5 @@ mod tests {
             copy_all_but_n_lines(&mut input_reader, &mut output_reader, 3, separator).unwrap();
         assert_eq!(bytes_copied, 2);
         assert_eq!(output_reader.get_ref()[..], input_buffer.as_bytes()[0..2]);
-    }
-
-    #[test]
-    fn test_zero_lines() {
-        let input_reader = std::io::Cursor::new("a\nb\nc\n");
-        let output_reader = BufReader::new(take_lines(input_reader, 0, b'\n'));
-        let mut iter = output_reader.lines().map(|l| l.unwrap());
-        assert_eq!(None, iter.next());
-    }
-
-    #[test]
-    fn test_fewer_lines() {
-        let input_reader = std::io::Cursor::new("a\nb\nc\n");
-        let output_reader = BufReader::new(take_lines(input_reader, 2, b'\n'));
-        let mut iter = output_reader.lines().map(|l| l.unwrap());
-        assert_eq!(Some(String::from("a")), iter.next());
-        assert_eq!(Some(String::from("b")), iter.next());
-        assert_eq!(None, iter.next());
-    }
-
-    #[test]
-    fn test_more_lines() {
-        let input_reader = std::io::Cursor::new("a\nb\nc\n");
-        let output_reader = BufReader::new(take_lines(input_reader, 4, b'\n'));
-        let mut iter = output_reader.lines().map(|l| l.unwrap());
-        assert_eq!(Some(String::from("a")), iter.next());
-        assert_eq!(Some(String::from("b")), iter.next());
-        assert_eq!(Some(String::from("c")), iter.next());
-        assert_eq!(None, iter.next());
     }
 }

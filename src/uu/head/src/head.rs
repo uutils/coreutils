@@ -6,7 +6,7 @@
 // spell-checker:ignore (vars) memrchr
 
 use clap::ArgMatches;
-use memchr::memrchr_iter;
+use memchr::{memchr_iter, memrchr_iter};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
@@ -31,7 +31,6 @@ mod parse;
 mod take;
 use take::copy_all_but_n_bytes;
 use take::copy_all_but_n_lines;
-use take::take_lines;
 
 #[derive(Error, Debug)]
 enum HeadError {
@@ -203,29 +202,37 @@ fn print_n_lines(
     n: u64,
     separator: u8,
 ) -> Result<u64, HeadFileError> {
-    // Read the first `n` lines from the `input` reader.
-    let mut reader = take_lines(input, n, separator);
-
-    // Write those bytes to `stdout`.
     let stdout = io::stdout();
     let stdout = stdout.lock();
     let mut writer = BufWriter::with_capacity(BUF_SIZE, stdout);
 
-    let mut bytes_written = 0;
-    let mut buf = [0; BUF_SIZE];
-    loop {
-        let bytes_read = reader.read(&mut buf).map_err(HeadFileError::Read)?;
+    let mut bytes_written: u64 = 0;
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = input.fill_buf().map_err(HeadFileError::Read)?;
 
-        if bytes_read == 0 {
+        if chunk.is_empty() {
             break;
         }
 
+        let mut take_len = chunk.len(); // default: take everything
+        let mut separators_seen: u64 = 0;
+        for separator_idx in memchr_iter(separator, chunk) {
+            separators_seen += 1;
+            if separators_seen == remaining {
+                take_len = separator_idx + 1; // include the separator itself
+                break;
+            }
+        }
+        remaining -= separators_seen;
+
         writer
-            .write_all(&buf[..bytes_read])
+            .write_all(&chunk[..take_len])
             .map_err(wrap_in_stdout_error)
             .map_err(HeadFileError::WriteStdout)?;
 
-        bytes_written += bytes_read as u64;
+        input.consume(take_len);
+        bytes_written += take_len as u64;
     }
 
     // Make sure we finish writing everything to the target before
