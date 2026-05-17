@@ -1249,7 +1249,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_positional_12_digits() {
+    fn test_parse_positional_valid_inputs() {
+        // 12 digits: full date with 4-digit year
         let result = parse_positional_set_datetime("010112002025", true).unwrap();
         assert_eq!(result.year(), 2025);
         assert_eq!(result.month(), 1);
@@ -1257,10 +1258,8 @@ mod tests {
         assert_eq!(result.hour(), 12);
         assert_eq!(result.minute(), 0);
         assert_eq!(result.second(), 0);
-    }
 
-    #[test]
-    fn test_parse_positional_8_digits() {
+        // 8 digits: year defaults to current year
         let result = parse_positional_set_datetime("01011200", true).unwrap();
         let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
         assert_eq!(result.year(), current_year);
@@ -1268,52 +1267,51 @@ mod tests {
         assert_eq!(result.day(), 1);
         assert_eq!(result.hour(), 12);
         assert_eq!(result.minute(), 0);
-    }
 
-    #[test]
-    fn test_parse_positional_10_digits_century_rule() {
-        // 25 -> 2025
-        let result = parse_positional_set_datetime("0101120025", true).unwrap();
-        assert_eq!(result.year(), 2025);
+        // 10 digits: 2-digit year century rule (00-68 -> 20xx, 69-99 -> 19xx)
+        assert_eq!(
+            parse_positional_set_datetime("0101120025", true)
+                .unwrap()
+                .year(),
+            2025
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120068", true)
+                .unwrap()
+                .year(),
+            2068
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120069", true)
+                .unwrap()
+                .year(),
+            1969
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120099", true)
+                .unwrap()
+                .year(),
+            1999
+        );
 
-        // 68 -> 2068 (boundary)
-        let result = parse_positional_set_datetime("0101120068", true).unwrap();
-        assert_eq!(result.year(), 2068);
-
-        // 69 -> 1969 (boundary)
-        let result = parse_positional_set_datetime("0101120069", true).unwrap();
-        assert_eq!(result.year(), 1969);
-
-        // 99 -> 1999
-        let result = parse_positional_set_datetime("0101120099", true).unwrap();
-        assert_eq!(result.year(), 1999);
-    }
-
-    #[test]
-    fn test_parse_positional_with_seconds() {
-        // 12 digits + seconds
+        // Optional .ss seconds suffix on each length variant
         let result = parse_positional_set_datetime("010112002025.45", true).unwrap();
         assert_eq!(result.year(), 2025);
-        assert_eq!(result.hour(), 12);
         assert_eq!(result.second(), 45);
-
-        // 10 digits + seconds
         let result = parse_positional_set_datetime("0101120025.30", true).unwrap();
         assert_eq!(result.year(), 2025);
         assert_eq!(result.second(), 30);
-
-        // 8 digits + seconds
         let result = parse_positional_set_datetime("01011200.59", true).unwrap();
         assert_eq!(result.hour(), 12);
         assert_eq!(result.second(), 59);
+        assert_eq!(
+            parse_positional_set_datetime("010112002025.00", true)
+                .unwrap()
+                .second(),
+            0
+        );
 
-        // Seconds boundary: .00
-        let result = parse_positional_set_datetime("010112002025.00", true).unwrap();
-        assert_eq!(result.second(), 0);
-    }
-
-    #[test]
-    fn test_parse_positional_local_timezone() {
+        // Local timezone (utc = false)
         let result = parse_positional_set_datetime("010112002025", false).unwrap();
         assert_eq!(result.year(), 2025);
         assert_eq!(result.month(), 1);
