@@ -33,8 +33,8 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
-use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use jiff::Zoned;
+use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
 
@@ -654,12 +654,12 @@ mod tests {
         let date = make_test_date(1999, 6, 1, 0);
         let config = get_config();
         let result = format_with_modifiers(&date, "%N", &config).unwrap();
-        // %N wihtout width should return 9 digits
+        // %N without width should return 9 digits
         assert_eq!(result.len(), 9);
     }
 
     #[test]
-    fn test_n_specifier_tuncates_from_right() {
+    fn test_n_specifier_truncates_from_right() {
         let date = make_test_date(1999, 6, 1, 0);
         let config = get_config();
         let result = format_with_modifiers(&date, "%3N", &config).unwrap();

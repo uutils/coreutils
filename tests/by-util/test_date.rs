@@ -3012,3 +3012,24 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     // compare to 4 because of \n
     assert_eq!(result.stdout().len(), 4);
 }
+
+// date: width prefix in %N format specifier fix #12098
+#[test]
+fn test_date_n_flag() {
+    let cases = [
+        ("%N", "123456789\n"),
+        ("%3N", "123\n"),
+        ("%-3N", "123\n"),
+        ("%20N", "12345678900000000000\n"),
+        ("%-20N", "123456789\n"),
+    ];
+
+    for (fmt, expected) in cases {
+        new_ucmd!()
+            .arg("-d")
+            .arg("@0.123456789")
+            .arg(format!("+{fmt}"))
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
