@@ -926,6 +926,21 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     Ok(())
 }
 
+// checks if a path is symlink to a device e.g /dev/stdin
+fn is_path_device(path: &Path) -> bool {
+    #[cfg(unix)]
+    use std::os::unix::fs::FileTypeExt;
+    {
+        if let Ok(metadata) = metadata(path) {
+            let file_type = metadata.file_type();
+            if file_type.is_fifo() {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Copy a file from one path to another. Handles the certain cases of special
 /// files (e.g character specials).
 ///
@@ -940,12 +955,13 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
-    if let Ok(to_abs) = to.canonicalize()
-        && from.canonicalize()? == to_abs
-    {
-        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+    if !is_path_device(from) && !is_path_device(to) {
+        if let Ok(to_abs) = to.canonicalize()
+            && from.canonicalize()? == to_abs
+        {
+            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+        }
     }
-
     if to.is_dir() && !from.is_dir() {
         return Err(InstallError::OverrideDirectoryFailed(
             to.to_path_buf().clone(),
