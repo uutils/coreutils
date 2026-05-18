@@ -51,9 +51,7 @@ mod tests {
     fn test_copy_stream() {
         let mut dest_file = new_temp_file();
 
-        let (pipe_read, pipe_write) = rustix::pipe::pipe().unwrap();
-        let mut pipe_read: File = pipe_read.into();
-        let mut pipe_write: File = pipe_write.into();
+        let (mut pipe_read, mut pipe_write) = std::io::pipe().unwrap();
         let data = b"Hello, world!";
         let thread = thread::spawn(move || {
             pipe_write.write_all(data).unwrap();
