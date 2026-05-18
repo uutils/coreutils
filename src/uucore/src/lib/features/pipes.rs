@@ -81,26 +81,21 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 }
 
 /// splice all of source to dest
-/// return true if we need read/write fallback
-/// fails if one of in/output should be pipe
+/// return true if splice failed (e.g. both of in/output are not pipe)
+///
+/// splice_unbounded_broker can be used as a fallback
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+fn splice_unbounded<R, S>(source: &R, dest: &mut S) -> bool
 where
-    R: Read + AsFd,
+    R: AsFd,
     S: AsFd,
 {
-    // improve throughput
-    // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
     loop {
         match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(1..) => {}
-            Ok(0) => return Ok(false),
-            Err(_) => return Ok(true),
+            Ok(0) => return false,
+            Ok(_) => {}
+            Err(_) => return true,
         }
     }
 }
@@ -111,7 +106,7 @@ where
 /// This should not be used if one of them are pipe to save resources
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
 where
     R: Read + AsFd,
     S: AsFd,
@@ -123,11 +118,6 @@ where
     else {
         return Ok(true);
     };
-    // improve throughput
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
@@ -159,10 +149,17 @@ where
     R: Read + AsFd,
     S: AsFd,
 {
-    // use splice to check that input or output is pipe which is efficient
-    let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest)?,
-        _ => splice_unbounded_broker(source, dest)?,
+    // use fcntl or splice to check that input or output is pipe which is efficient
+    // no need to increase pipe size of input for throughput since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    // todo: cache this fcntl call
+    let is_direct_splice = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE).is_ok()
+        || splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE).is_ok();
+    let fallback = if is_direct_splice {
+        splice_unbounded(source, dest)
+    } else {
+        splice_unbounded_broker(source, dest)?
     };
     Ok(fallback)
 }
