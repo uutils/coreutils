@@ -928,7 +928,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 
 // checks if a path is fifo e.g /dev/stdin
 fn is_path_fifo(path: &Path) -> bool {
-    #[cfg(any(target_os = "android", unix))]
+    #[cfg(unix)]
     use std::os::unix::fs::FileTypeExt;
     {
         if let Ok(metadata) = metadata(path) {
