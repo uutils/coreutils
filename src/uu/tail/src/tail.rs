@@ -591,7 +591,7 @@ fn print_target_section<
     } else {
         // zero-copy fast-path
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)? {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

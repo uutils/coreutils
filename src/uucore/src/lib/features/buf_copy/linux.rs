@@ -39,21 +39,14 @@ where
     R: Read + AsFd + AsRawFd,
     S: Write + AsFd + AsRawFd,
 {
-    // If we're on Linux or Android, try to use the splice() system call
-    // for faster writing. If it works, we're done.
-    // todo: bypass broker pipe this if input or output is pipe. We use this mostly for stream.
-    if !crate::pipes::splice_unbounded_broker(src, dest)? {
-        return Ok(());
+    // try to use the splice() system call
+    // for faster writing. If it works, we're done
+    if crate::pipes::splice_unbounded_auto(&src, dest)? {
+        std::io::copy(src, dest)?;
+        // todo: Do not mix writing by raw syscall and std's buffered write,
+        // or order of output would be wrong when this was called multiple times
+        // and splice_unbounded_auto sent content partially. flush works as an workaround.
+        dest.flush()?;
     }
-
-    // If the splice() call failed, fall back on slower writing.
-    std::io::copy(src, dest)?;
-
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    dest.flush()?;
     Ok(())
 }

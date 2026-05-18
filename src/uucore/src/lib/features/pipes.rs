@@ -151,6 +151,22 @@ where
     }
 }
 
+/// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn splice_unbounded_auto<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+where
+    R: Read + AsFd,
+    S: AsFd,
+{
+    // use splice to check that input or output is pipe which is efficient
+    let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(_) => splice_unbounded(source, dest)?,
+        _ => splice_unbounded_broker(source, dest)?,
+    };
+    Ok(fallback)
+}
+
 /// splice `n` bytes with safe read/write fallback
 /// return actually sent bytes
 #[inline]

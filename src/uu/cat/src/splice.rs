@@ -6,8 +6,6 @@ use super::{CatResult, FdReadable, InputHandle};
 
 use std::os::fd::AsFd;
 
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, might_fuse, splice};
-
 /// This function is called from `write_fast()` on Linux and Android. The
 /// function `splice()` is used to move data between two file descriptors
 /// without copying between kernel and user spaces. This results in a large
@@ -20,10 +18,6 @@ pub(super) fn write_fast_using_splice<R: FdReadable, S: AsFd>(
     handle: &InputHandle<R>,
     write_fd: &mut S,
 ) -> CatResult<bool> {
-    let res = match splice(&handle.reader, &write_fd, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => uucore::pipes::splice_unbounded(&handle.reader, write_fd)?,
-        // both of in/output are not pipe
-        _ => uucore::pipes::splice_unbounded_broker(&handle.reader, write_fd)?,
-    };
-    Ok(res || might_fuse(&handle.reader))
+    let res = uucore::pipes::splice_unbounded_auto(&handle.reader, write_fd)?;
+    Ok(res || uucore::pipes::might_fuse(&handle.reader))
 }
