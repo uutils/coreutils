@@ -86,8 +86,9 @@ fn load_output_as_input(
             error,
         })?;
         // SAFETY: We keep the read_fd open for the lifetime of the memory-map,
-        // and we only read from it. The file is not modified while the
-        // memory-map exists (writing happens later via a separate FD).
+        // and we only read from it and the file is not modified while the
+        // memory-map exists by the current process (writing happens later via a separate FD).
+        // Yet, it may be possible that another process alter the content and consequently read corrupted data
         let output_as_input = Arc::new(unsafe { MemoryMap::map(&read_fd) }.map_err(|error| {
             SortError::ReadFailed {
                 path: output_path.clone(),
