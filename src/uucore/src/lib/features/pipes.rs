@@ -27,8 +27,10 @@ const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(File, File)> {
-    let (read, write) = rustix::pipe::pipe()?;
+pub fn pipe<const SIZE_REQUIRED: bool>(
+    s: usize,
+) -> std::io::Result<(std::io::PipeReader, std::io::PipeWriter)> {
+    let (read, write) = std::io::pipe()?;
     // guard unnecessary syscall
     if s > KERNEL_DEFAULT_PIPE_SIZE {
         let r = fcntl_setpipe_size(&read, s);
@@ -37,7 +39,7 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(File, File)
         }
     }
 
-    Ok((File::from(read), File::from(write)))
+    Ok((read, write))
 }
 
 /// Less noisy wrapper around [`rustix::pipe::splice`].
@@ -116,7 +118,8 @@ where
     R: Read + AsFd,
     S: AsFd,
 {
-    static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
+    static PIPE_CACHE: OnceLock<Option<(std::io::PipeReader, std::io::PipeWriter)>> =
+        OnceLock::new();
     let Some((pipe_rd, pipe_wr)) = PIPE_CACHE
         .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
         .as_ref()
@@ -160,7 +163,8 @@ pub fn send_n_bytes(
     mut target: impl Write + AsFd,
     n: u64,
 ) -> std::io::Result<u64> {
-    static PIPE_CACHE: OnceLock<Option<(File, File)>> = OnceLock::new();
+    static PIPE_CACHE: OnceLock<Option<(std::io::PipeReader, std::io::PipeWriter)>> =
+        OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
     let mut n = n;
     let mut bytes_written: u64 = 0;
