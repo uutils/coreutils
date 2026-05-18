@@ -2658,3 +2658,17 @@ fn test_install_d_symlink_race_condition_concurrent() {
         "Intermediate directory should be a real directory, not a symlink"
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_install_device_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "existing-file-to-be-overwritten.txt";
+    at.touch(file);
+    scene
+        .ucmd()
+        .args(&["-m644", "/dev/stdin", "existing-file-to-be-overwritten.txt"])
+        .pipe_in("some stuff\n")
+        .succeeds();
+}
