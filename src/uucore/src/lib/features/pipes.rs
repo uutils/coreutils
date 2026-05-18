@@ -39,6 +39,12 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
     Ok(pair)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub enum SpliceState {
+    Ended,
+    Fallback,
+}
+
 /// Less noisy wrapper around [`rustix::pipe::splice`].
 ///
 /// Up to `len` bytes are moved from `source` to `target`. Returns the number
@@ -80,11 +86,11 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 }
 
 /// splice all of source to dest
-/// return true if we need read/write fallback
-/// fails if one of in/output should be pipe
+/// return `SpliceState` indicating if we need read/write fallback
+/// fallback if one of in/output should be pipe
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
+pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<SpliceState> {
     // improve throughput
     // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
     // no need to increase pipe size of input fd since
@@ -94,19 +100,19 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Re
     loop {
         match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(1..) => {}
-            Ok(0) => return Ok(false),
-            Err(_) => return Ok(true),
+            Ok(0) => return Ok(SpliceState::Ended),
+            Err(_) => return Ok(SpliceState::Fallback),
         }
     }
 }
 
 /// force-splice source to dest even both of them are not pipe
-/// return true if we need read/write fallback
+/// return `SpliceState` indicating if we need read/write fallback
 ///
 /// This should not be used if one of them are pipe to save resources
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
+pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<SpliceState>
 where
     R: Read + AsFd,
     S: AsFd,
@@ -116,7 +122,7 @@ where
         .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
         .as_ref()
     else {
-        return Ok(true);
+        return Ok(SpliceState::Fallback);
     };
     // improve throughput
     // no need to increase pipe size of input fd since
@@ -126,7 +132,7 @@ where
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(false),
+            Ok(0) => return Ok(SpliceState::Ended),
             Ok(n) => {
                 if splice_exact(&pipe_rd, dest, n).is_err() {
                     // If the first splice manages to copy to the intermediate
@@ -138,10 +144,10 @@ where
                     let mut drain = Vec::with_capacity(n);
                     pipe_rd.take(n as u64).read_to_end(&mut drain)?;
                     crate::io::RawWriter(&dest).write_all(&drain)?;
-                    return Ok(true);
+                    return Ok(SpliceState::Fallback);
                 }
             }
-            Err(_) => return Ok(true),
+            Err(_) => return Ok(SpliceState::Fallback),
         }
     }
 }

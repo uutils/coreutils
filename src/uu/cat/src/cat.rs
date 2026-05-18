@@ -487,8 +487,9 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     {
         // If we're on Linux or Android, try to use the splice() system call
         // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &mut stdout)? {
-            return Ok(());
+        match splice::write_fast_using_splice(handle, &mut stdout)? {
+            uucore::pipes::SpliceState::Ended => return Ok(()),
+            uucore::pipes::SpliceState::Fallback => {}
         }
     }
     // If we're not on Linux or Android, or the splice() call failed,

@@ -32,18 +32,18 @@ where
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
     // todo: bypass broker pipe this if input or output is pipe. We use this mostly for stream.
-    if !crate::pipes::splice_unbounded_broker(src, dest)? {
-        return Ok(());
+    match crate::pipes::splice_unbounded_broker(src, dest)? {
+        crate::pipes::SpliceState::Ended => Ok(()),
+        crate::pipes::SpliceState::Fallback => {
+            std::io::copy(src, dest)?;
+
+            // If the splice() call failed and there has been some data written to
+            // stdout via while loop above AND there will be second splice() call
+            // that will succeed, data pushed through splice will be output before
+            // the data buffered in stdout.lock. Therefore additional explicit flush
+            // is required here.
+            dest.flush()?;
+            Ok(())
+        }
     }
-
-    // If the splice() call failed, fall back on slower writing.
-    std::io::copy(src, dest)?;
-
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    dest.flush()?;
-    Ok(())
 }
