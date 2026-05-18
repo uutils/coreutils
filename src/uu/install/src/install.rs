@@ -926,8 +926,8 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     Ok(())
 }
 
-// checks if a path is symlink to a device e.g /dev/stdin
-fn is_path_device(path: &Path) -> bool {
+// checks if a path is fifo e.g /dev/stdin
+fn is_path_fifo(path: &Path) -> bool {
     #[cfg(unix)]
     use std::os::unix::fs::FileTypeExt;
     {
@@ -955,7 +955,7 @@ fn is_path_device(path: &Path) -> bool {
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
-    if !is_path_device(from) && !is_path_device(to) {
+    if !is_path_fifo(from) && !is_path_fifo(to) {
         if let Ok(to_abs) = to.canonicalize()
             && from.canonicalize()? == to_abs
         {
