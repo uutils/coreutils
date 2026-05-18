@@ -2661,7 +2661,7 @@ fn test_install_d_symlink_race_condition_concurrent() {
 
 #[test]
 #[cfg(unix)]
-fn test_install_device_path() {
+fn test_install_fifo_path() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file = "existing-file-to-be-overwritten.txt";
