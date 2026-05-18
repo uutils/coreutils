@@ -1187,7 +1187,6 @@ fn test_merge_duplicate_files_interleaved() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("merge_duplicates_1.txt", "1\n3\n5\n");
     at.write("merge_duplicates_2.txt", "2\n4\n6\n");
-    println!("Sub sir: {}", at.as_string());
     // Test merging file1, file2, file1 - same file appears twice
     ucmd.arg("-m")
         .arg("merge_duplicates_1.txt")
