@@ -22,7 +22,7 @@ byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
 rustix = { workspace = true, features = ["stdio"] }
-uucore = { workspace = true, features = ["parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
 libc.workspace = true
 

@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin};
+use std::io::{Error, ErrorKind, Read, Result, Write, stderr};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -88,7 +88,12 @@ fn tee(options: &Options) -> Result<()> {
     );
 
     let mut output = MultiWriter::new(writers, options.output_error);
-    let input = NamedReader { inner: stdin() };
+    let input = NamedReader {
+        #[cfg(any(unix, target_os = "wasi"))]
+        inner: uucore::io::RawReader(rustix::stdio::stdin()),
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        inner: std::io::stdin(),
+    };
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
@@ -279,6 +284,9 @@ struct NamedWriter {
 }
 
 struct NamedReader {
+    #[cfg(any(unix, target_os = "wasi"))]
+    inner: uucore::io::RawReader<rustix::fd::BorrowedFd<'static>>,
+    #[cfg(not(any(unix, target_os = "wasi")))]
     inner: std::io::Stdin,
 }
 
