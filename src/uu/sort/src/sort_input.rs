@@ -13,10 +13,7 @@ use std::{
     fs::File,
     io::{self, Read},
     path::{Path, PathBuf},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::Arc,
 };
 
 use memmap2::Mmap as MemoryMap;
@@ -33,7 +30,7 @@ enum SortInputInner {
     /// independent cursor per instance.
     FileRead {
         data: Arc<MemoryMap>,
-        offset: AtomicUsize,
+        offset: usize,
     },
     Stdin,
     /// A unique file whose open() is deferred until iteration.
@@ -70,10 +67,7 @@ impl SortInput {
 
     fn from_memory_map(data: Arc<MemoryMap>) -> Self {
         Self {
-            inner: SortInputInner::FileRead {
-                data,
-                offset: AtomicUsize::new(0),
-            },
+            inner: SortInputInner::FileRead { data, offset: 0 },
         }
     }
 
@@ -94,12 +88,12 @@ impl Read for SortInput {
         match &mut self.inner {
             SortInputInner::File(file) => file.read(buf),
             SortInputInner::FileRead { data, offset } => {
-                let pos = offset.load(Ordering::Relaxed);
+                let pos = *offset;
                 let available = data.len().saturating_sub(pos);
                 let to_read = buf.len().min(available);
                 if to_read > 0 {
                     buf[..to_read].copy_from_slice(&data[pos..pos + to_read]);
-                    offset.fetch_add(to_read, Ordering::Relaxed);
+                    *offset = pos + to_read;
                 }
                 Ok(to_read)
             }
@@ -507,7 +501,7 @@ mod tests {
             inner: match &inputs.iter().next().expect("should get first input").inner {
                 SortInputInner::FileRead { data, offset } => SortInputInner::FileRead {
                     data: data.clone(),
-                    offset: AtomicUsize::new(offset.load(Ordering::Relaxed)),
+                    offset: *offset,
                 },
                 _ => panic!("Expected mmap"),
             },
@@ -522,7 +516,7 @@ mod tests {
             inner: match &inputs.iter().nth(1).expect("should get second input").inner {
                 SortInputInner::FileRead { data, offset } => SortInputInner::FileRead {
                     data: data.clone(),
-                    offset: AtomicUsize::new(offset.load(Ordering::Relaxed)),
+                    offset: *offset,
                 },
                 _ => panic!("Expected mmap"),
             },
