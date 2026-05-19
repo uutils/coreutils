@@ -5,8 +5,6 @@
 
 // spell-checker:ignore (vars) RDONLY CLOEXEC
 
-#![cfg(any(target_os = "linux", target_os = "android"))]
-
 use core::ffi::{CStr, c_int, c_long, c_short};
 use std::ffi::{CString, OsStr};
 use std::marker::PhantomData;
