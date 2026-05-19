@@ -109,8 +109,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     use uucore::pipes::{pipe, splice, tee};
 
-    const PAGE_SIZE: usize = 4096;
-    let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
+    let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
     let mut stdout = io::stdout(); // no need to lock with zero-copy
@@ -120,7 +119,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
         && p_write.write_all(bytes).is_ok()
     {
-        if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+        if safe_partial_send && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
             while let Ok(1..) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
         } else if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
             // tee() cannot control offset and write to non-pipe
