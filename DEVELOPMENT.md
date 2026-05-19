@@ -65,8 +65,6 @@ Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
 the suggested changes, and run `git commit ...` again.
 
-**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components.
-
 ### clippy
 
 ```shell
