@@ -564,7 +564,6 @@ itertools.workspace = true
 jiff = { workspace = true, optional = true }
 phf.workspace = true
 regex = { workspace = true, optional = true }
-selinux = { workspace = true, optional = true }
 textwrap.workspace = true
 uucore.workspace = true
 zip = { workspace = true, optional = true }
@@ -714,6 +713,7 @@ rstest_reuse.workspace = true
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 rustix.workspace = true
+selinux = { workspace = true, optional = true }
 
 # this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
 # factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
