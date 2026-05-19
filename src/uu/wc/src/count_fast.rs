@@ -27,7 +27,7 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
 
 const BUF_SIZE: usize = 64 * 1024;
 
@@ -61,7 +61,9 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
                 Ok(0) => return Ok(byte_count),
                 Ok(res) => {
                     byte_count += res;
-                    splice_exact(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
+                    // pipe to null is not blocked. So this returns res at most cases
+                    // next splice does not hang if we discarded 1+ pages
+                    splice(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
                 }
                 Err(_) => return Err(byte_count),
             }
