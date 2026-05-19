@@ -73,7 +73,7 @@ jobs:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
           - { os: macos-latest   , features: feat_os_unix }
-          - { os: windows-latest , features: feat_os_windows }
+          - { os: windows-latest , features: feat_os_windows , workspace: true }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
     - uses: actions/checkout@v6
