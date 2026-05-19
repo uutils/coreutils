@@ -16,8 +16,11 @@ use uucore::translate;
 
 use uucore::{format_usage, show};
 
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut checksum: u16 = 0;
     loop {
@@ -41,7 +44,7 @@ fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
 }
 
 fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut ret = 0u32;
 
