@@ -70,12 +70,8 @@ the suggested changes, and run `git commit ...` again.
 ### clippy
 
 ```shell
-cargo clippy --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features
 ```
-
-The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
-lints pertaining to newer features by specifying the minimum supported Rust
-version (MSRV).
 
 ### rustfmt
 
