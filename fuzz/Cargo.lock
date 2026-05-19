@@ -2012,7 +2012,6 @@ dependencies = [
  "itertools",
  "libc",
  "memchr",
- "nix",
  "rand",
  "rayon",
  "rustix",

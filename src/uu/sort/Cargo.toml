@@ -48,13 +48,10 @@ fluent = { workspace = true }
 foldhash = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
-rustix = { workspace = true, features = ["process"] }
+rustix = { workspace = true, features = ["system", "process"] }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
-
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-nix = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
