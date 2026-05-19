@@ -149,44 +149,36 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     }
                 }
             }
+            // Else, if we're on Linux and our file is a FIFO pipe
+            // (or stdin), we use splice to count the number of bytes.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            {
-                // Else, if we're on Linux and our file is a FIFO pipe
-                // (or stdin), we use splice to count the number of bytes.
-                if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
-                    match count_bytes_using_splice(handle) {
-                        Ok(n) => return (n, None),
-                        Err(n) => byte_count = n,
-                    }
+            if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
+                match count_bytes_using_splice(handle) {
+                    Ok(n) => return (n, None),
+                    Err(n) => byte_count = n,
                 }
             }
         }
     }
 
     #[cfg(windows)]
+    if let Some(file) = handle.inner_file()
+        && let Ok(metadata) = file.metadata()
     {
-        if let Some(file) = handle.inner_file() {
-            if let Ok(metadata) = file.metadata() {
-                let attributes = metadata.file_attributes();
-
-                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
-                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
-                {
-                    return (metadata.file_size() as usize, None);
-                }
-            }
+        let attributes = metadata.file_attributes();
+        if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0 || (attributes & FILE_ATTRIBUTE_NORMAL) != 0 {
+            return (metadata.file_size() as usize, None);
         }
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
+
     let mut buf = [0_u8; BUF_SIZE];
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return (byte_count, None),
-            Ok(n) => {
-                byte_count += n;
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Ok(n) => byte_count += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
     }
@@ -250,7 +242,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     };
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
     }
