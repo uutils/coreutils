@@ -39,6 +39,7 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
+    let is_feat_selinux = env::var_os("CARGO_FEATURE_FEAT_SELINUX").is_some();
     let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
     for (key, val) in env::vars() {
         if val == "1" && key.starts_with(ENV_FEATURE_PREFIX) {
@@ -46,7 +47,9 @@ pub fn main() {
             // Allow this as we have a bunch of info in the comments
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
-                "chcon" | "runcon" if !(target_os == "linux" || target_os == "android") => {
+                "chcon" | "runcon"
+                    if !(is_feat_selinux && (target_os == "linux" || target_os == "android")) =>
+                {
                     continue;
                 }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
