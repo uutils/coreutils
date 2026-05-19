@@ -2617,7 +2617,7 @@ fn test_mv_cross_device_permission_denied() {
 }
 
 #[test]
-#[cfg(feature = "selinux")]
+#[cfg(feature = "feat_selinux")]
 fn test_mv_selinux_context() {
     let test_cases = [
         ("-Z", None),
