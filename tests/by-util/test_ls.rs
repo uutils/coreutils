@@ -10,8 +10,6 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(unix, feature = "chmod"))]
-use nix::unistd::{close, dup};
 use regex::Regex;
 #[cfg(unix)]
 use rlimit::Resource;
@@ -599,8 +597,8 @@ fn test_ls_io_errors() {
 
         at.touch("some-dir4/bad-fd.txt");
         let fd1 = at.open("some-dir4/bad-fd.txt");
-        let fd2 = dup(dbg!(&fd1)).unwrap();
-        close(fd1).unwrap();
+        let fd2 = rustix::io::dup(dbg!(&fd1)).unwrap();
+        drop(fd1); //close
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
@@ -644,7 +642,7 @@ fn test_ls_io_errors() {
             .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
-        let _ = close(fd2);
+        drop(fd2); //close
     }
 }
 
