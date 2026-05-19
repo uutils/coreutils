@@ -1570,10 +1570,9 @@ fn test_wrong_args_exit_code() {
 #[test]
 #[cfg(unix)]
 fn test_tmp_files_deleted_on_sigint() {
-    use std::{fs::read_dir, time::Duration};
-
-    use nix::{sys::signal, unistd::Pid};
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{fs::read_dir, time::Duration};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
@@ -1609,7 +1608,7 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
-    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     // wait for `sort` to exit
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
