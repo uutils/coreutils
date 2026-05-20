@@ -18,7 +18,7 @@ use std::{
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
+pub const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
 /// return pipe larger than given size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed

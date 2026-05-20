@@ -25,6 +25,7 @@ libc = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
   "parser-size",
+  "pipes",
   "quoting-style",
   "fs",
   "signals",

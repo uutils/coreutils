@@ -183,11 +183,43 @@ impl Num {
 /// This is more efficient than `io::copy` with `BufReader` because it reads
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
-fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::with_capacity(buf_size);
+fn read_and_discard<
+    #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + AsFd,
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
+>(
+    reader: &mut R,
+    n: u64,
+    buf_size: usize,
+) -> io::Result<u64> {
+    let mut buf = Vec::new(); // vec allocation should be after splice, but needed for tests?
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
+
+    // try fast-discard by zero-copy (FIFO support only currently)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use uucore::pipes::KERNEL_DEFAULT_PIPE_SIZE;
+        if buf_size.min(remaining as usize) > KERNEL_DEFAULT_PIPE_SIZE
+            && let Some(null) = uucore::pipes::dev_null()
+        {
+            while remaining > 0 {
+                // no need to increase pipe size of input fd since
+                // - sender with splice probably increased size already
+                // - sender without splice is bottleneck of our wc -c
+                // posix dd does not read more than block size
+                match uucore::pipes::splice(reader, &null, buf_size.min(remaining as usize)) {
+                    Ok(0) => return Ok(total),
+                    Ok(s) => {
+                        total += s as u64;
+                        remaining -= s as u64;
+                    }
+                    Err(_) => break,
+                }
+            }
+        }
+    }
+
     while remaining > 0 {
         let to_read = cmp::min(remaining, buf_size as u64);
         buf.clear();
