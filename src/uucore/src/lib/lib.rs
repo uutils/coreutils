@@ -331,6 +331,57 @@ pub fn localized_help_template_with_colors(
     template
 }
 
+/// Creates a localized help template that places the `Usage:` line first,
+/// matching GNU coreutils' help output ordering.
+///
+/// The default [`localized_help_template`] puts the `about` text before the
+/// usage line. GNU coreutils — including `true(1)` and `false(1)` — puts
+/// `Usage:` on the very first line of `--help`. Use this variant for
+/// utilities that need that GNU-style layout (see GH #10279).
+pub fn localized_help_template_usage_first(util_name: &str) -> clap::builder::StyledStr {
+    use std::io::IsTerminal;
+
+    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
+        false
+    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
+        true
+    } else {
+        IsTerminal::is_terminal(&std::io::stdout())
+            && std::env::var("TERM").unwrap_or_default() != "dumb"
+    };
+
+    localized_help_template_usage_first_with_colors(util_name, colors_enabled)
+}
+
+/// Like [`localized_help_template_usage_first`] but with explicit color control.
+pub fn localized_help_template_usage_first_with_colors(
+    util_name: &str,
+    colors_enabled: bool,
+) -> clap::builder::StyledStr {
+    use std::fmt::Write;
+
+    let _ = locale::setup_localization(util_name);
+    let usage_label = crate::locale::translate!("common-usage");
+
+    let mut template = clap::builder::StyledStr::new();
+
+    // Usage first.
+    if colors_enabled {
+        writeln!(template, "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}").unwrap();
+    } else {
+        writeln!(template, "{usage_label}: {{usage}}").unwrap();
+    }
+
+    // Then the about text, then options.
+    write!(
+        template,
+        "{{before-help}}{{about-with-newline}}\n{{all-args}}{{after-help}}"
+    )
+    .unwrap();
+
+    template
+}
+
 /// Used to check if the utility is the second argument.
 /// Used to check if we were called as a multicall binary (`coreutils <utility>`)
 pub fn get_utility_is_second_arg() -> bool {
