@@ -35,6 +35,7 @@ jobs:
   build_makefile:
     name: Build/Makefile and measure binary size
     env:
+      # to reduce the size:
       RUSTFLAGS: "-C force-unwind-tables=no -C strip=symbols -Clink-arg=-z -Clink-arg=pack-relative-relocs"
     permissions:
       contents: write # Publish individual binaries
