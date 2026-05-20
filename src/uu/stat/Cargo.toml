@@ -25,6 +25,7 @@ uucore = { workspace = true, features = [
   "libc",
   "fs",
   "fsext",
+  "quoting-style",
   "time",
 ] }
 thiserror = { workspace = true }

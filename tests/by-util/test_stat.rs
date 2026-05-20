@@ -449,6 +449,34 @@ fn test_quoting_style_locale() {
         .stdout_only("\'\"\'\n");
 }
 
+/// GH #9925: file names containing control characters (newline, tab, ...)
+/// must be encoded with `$'\X'` shell-escape sequences in the `%N` output,
+/// matching GNU `stat`. Before the fix the newline was emitted literally
+/// inside the single quotes.
+#[test]
+fn test_format_n_handles_newline() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a\nb");
+    ts.ucmd()
+        .args(&["-c", "%N", "a\nb"])
+        .succeeds()
+        .stdout_only("'a'$'\\n''b'\n");
+}
+
+/// Sanity check: a tab character inside a file name should also be encoded
+/// (`$'\t'`), not embedded as a raw byte.
+#[test]
+fn test_format_n_handles_tab() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a\tb");
+    ts.ucmd()
+        .args(&["-c", "%N", "a\tb"])
+        .succeeds()
+        .stdout_only("'a'$'\\t''b'\n");
+}
+
 #[test]
 fn test_quoting_style_invalid_env() {
     let ts = TestScenario::new(util_name!());

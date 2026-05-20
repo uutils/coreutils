@@ -440,12 +440,29 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
 fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
     match quoting_style {
         QuotingStyle::Locale | QuotingStyle::Shell => {
+            // GNU's `locale` style (and the unreachable-from-env `shell`)
+            // keeps the simple backslash-escape form; see GNU coreutils
+            // test `tests/stat/stat-fmt.sh` which expects `'\''` for a
+            // file named `'`. Control characters are emitted as-is here,
+            // matching GNU behavior in this style.
             let escaped = file_name.replace('\'', r"\'");
             format!("'{escaped}'")
         }
         QuotingStyle::ShellEscapeAlways => {
-            let quote = if file_name.contains('\'') { '"' } else { '\'' };
-            format!("{quote}{file_name}{quote}")
+            // GH #9925: this is the default `%N` style. Delegate to
+            // uucore's shell-escape implementation so control characters
+            // (newlines, tabs, ...) in file names are properly encoded
+            // as `$'\n'`, `$'\t'`, ... matching GNU `stat -c %N`
+            // behavior. uucore picks single-quote wrapping when the name
+            // contains control chars, and double-quote wrapping when it
+            // only contains a literal single quote, matching GNU exactly.
+            use std::ffi::OsStr;
+            uucore::quoting_style::locale_aware_escape_name(
+                OsStr::new(file_name),
+                uucore::quoting_style::QuotingStyle::SHELL_ESCAPE_QUOTE,
+            )
+            .to_string_lossy()
+            .into_owned()
         }
         QuotingStyle::Quote => file_name.to_string(),
     }
