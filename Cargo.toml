@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -26,6 +26,31 @@ unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
 expensive_tests = []
+# Opt-in: use OpenSSL (libcrypto) for md5/sha1/sha2-family digests in the
+# checksum utilities instead of the pure-Rust crates. Provides large speedups
+# on CPUs without SHA-NI.
+#
+# Enable with: `cargo build --release --features unix,openssl`
+#
+# By default OpenSSL is built from source and statically linked (via the
+# `vendored` feature of the `openssl` crate), mirroring how `expr` links
+# oniguruma. To link against the system libcrypto/libssl dynamically instead,
+# set `OPENSSL_NO_VENDOR=1` at build time.
+#
+# The `?/openssl` entries propagate the choice into each standalone checksum
+# crate only when that crate is itself enabled, so disabling this feature
+# genuinely turns OpenSSL off everywhere. On Windows the feature is a no-op
+# and the pure-Rust implementations are used regardless.
+openssl = [
+  "cksum?/openssl",
+  "md5sum?/openssl",
+  "sha1sum?/openssl",
+  "sha224sum?/openssl",
+  "sha256sum?/openssl",
+  "sha384sum?/openssl",
+  "sha512sum?/openssl",
+  "uucore/openssl",
+]
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
@@ -472,6 +497,7 @@ blake3 = "1.5.1"
 sm3 = "0.5.0"
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.11.0"
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Fluent dependencies
 fluent = "0.17.0"

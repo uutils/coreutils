@@ -1,4 +1,4 @@
-# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind
+# spell-checker:ignore (features) bigdecimal zerocopy extendedbigdecimal tzdb zoneinfo logind libcrypto
 
 [package]
 name = "uucore"
@@ -108,6 +108,9 @@ nix = { workspace = true, features = [
   "user",
   "zerocopy",
 ] }
+# OpenSSL is only used on Unix targets. On Windows, enabling the `openssl`
+# feature is a no-op and the pure-Rust digest implementations are used.
+openssl = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
@@ -199,6 +202,10 @@ sum = [
   "crc-fast",
   "data-encoding",
 ]
+# Use OpenSSL (libcrypto) for md5/sha1/sha2-family digests instead of the
+# pure-Rust crates. This dramatically speeds up checksum utilities on CPUs
+# without SHA-NI by using OpenSSL's optimized assembly implementations.
+openssl = ["dep:openssl"]
 update-control = ["parser"]
 utf8 = []
 utmpx = ["time", "time/macros", "libc", "dns-lookup"]
