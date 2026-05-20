@@ -1830,7 +1830,10 @@ fn test_cp_preserve_xattr() {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", not(feature = "feat_selinux")))]
+#[cfg(all(
+    not(feature = "feat_selinux"),
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_cp_preserve_all_context_fails_on_non_selinux() {
     new_ucmd!()
         .arg(TEST_COPY_FROM_FOLDER_FILE)
@@ -6802,7 +6805,10 @@ fn test_cp_selinux() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7871,7 +7877,10 @@ fn test_cp_a_preserves_context() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_cp_preserve_context_with_z_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
