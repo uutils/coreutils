@@ -18,6 +18,9 @@ workspace = true
 path = "src/stat.rs"
 doctest = false
 
+[build-dependencies]
+cfg_aliases.workspace = true
+
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = [
