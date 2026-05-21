@@ -251,14 +251,14 @@ impl FileLines<'_> {
 }
 
 impl Iterator for FileLines<'_> {
-    type Item = Line;
+    type Item = Result<Line, std::io::Error>;
 
-    fn next(&mut self) -> Option<Line> {
+    fn next(&mut self) -> Option<Result<Line, std::io::Error>> {
         let mut buf = Vec::new();
         match self.reader.read_until(b'\n', &mut buf) {
             Ok(0) => return None,
             Ok(_) => {}
-            Err(_) => return None,
+            Err(e) => return Some(Err(e)),
         }
         if buf.ends_with(b"\n") {
             buf.pop();
@@ -273,7 +273,7 @@ impl Iterator for FileLines<'_> {
         // Err(true) indicates that this was a linebreak,
         // which is important to know when detecting mail headers
         if n.iter().all(|&b| is_fmt_whitespace_byte(b)) {
-            return Some(Line::NoFormatLine(Vec::new(), true));
+            return Some(Ok(Line::NoFormatLine(Vec::new(), true)));
         }
 
         let (pmatch, poffset) = self.match_prefix(&n[..]);
@@ -281,7 +281,7 @@ impl Iterator for FileLines<'_> {
         // if this line does not match the prefix,
         // emit the line unprocessed and iterate again
         if !pmatch {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Ok(Line::NoFormatLine(n, false)));
         }
 
         // if the line matches the prefix, but is blank after,
@@ -294,26 +294,26 @@ impl Iterator for FileLines<'_> {
                 .iter()
                 .all(|&b| is_fmt_whitespace_byte(b))
         {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Ok(Line::NoFormatLine(n, false)));
         }
 
         // skip if this line matches the anti_prefix
         // (NOTE definition of match_anti_prefix is TRUE if we should process)
         if !self.match_anti_prefix(&n[..]) {
-            return Some(Line::NoFormatLine(n, false));
+            return Some(Ok(Line::NoFormatLine(n, false)));
         }
 
         // figure out the indent, prefix, and prefixindent ending points
         let prefix_end = poffset + self.opts.prefix.as_ref().map_or(0, String::len);
         let (indent_end, prefix_len, indent_len) = self.compute_indent(&n[..], prefix_end);
 
-        Some(Line::FormatLine(FileLine {
+        Some(Ok(Line::FormatLine(FileLine {
             line: n,
             indent_end,
             prefix_indent_end: poffset,
             indent_len,
             prefix_len,
-        }))
+        })))
     }
 }
 
@@ -390,22 +390,33 @@ impl ParagraphStream<'_> {
     }
 }
 
+pub enum ParagraphStreamError {
+    /// A line that should be passed through unformatted
+    NoFormatLine(Vec<u8>),
+    /// An IO error encountered while reading
+    IoError(std::io::Error),
+}
+
 impl Iterator for ParagraphStream<'_> {
-    type Item = Result<Paragraph, Vec<u8>>;
+    type Item = Result<Paragraph, ParagraphStreamError>;
 
     #[allow(clippy::cognitive_complexity)]
-    fn next(&mut self) -> Option<Result<Paragraph, Vec<u8>>> {
+    fn next(&mut self) -> Option<Result<Paragraph, ParagraphStreamError>> {
         // return a NoFormatLine in an Err; it should immediately be output
         let noformat = match self.lines.peek()? {
-            Line::FormatLine(_) => false,
-            Line::NoFormatLine(_, _) => true,
+            Err(_) => {
+                let e = self.lines.next().unwrap().unwrap_err();
+                return Some(Err(ParagraphStreamError::IoError(e)));
+            }
+            Ok(Line::FormatLine(_)) => false,
+            Ok(Line::NoFormatLine(_, _)) => true,
         };
 
         // found a NoFormatLine, immediately dump it out
         if noformat {
-            let (s, nm) = self.lines.next().unwrap().get_noformatline();
+            let (s, nm) = self.lines.next().unwrap().unwrap().get_noformatline();
             self.next_mail = nm;
-            return Some(Err(s));
+            return Some(Err(ParagraphStreamError::NoFormatLine(s)));
         }
 
         // found a FormatLine, now build a paragraph
@@ -421,7 +432,7 @@ impl Iterator for ParagraphStream<'_> {
 
         let mut in_mail = false;
         let mut second_done = false; // for when we use crown or tagged mode
-        while let Some(Line::FormatLine(fl)) = self.lines.peek() {
+        while let Some(Ok(Line::FormatLine(fl))) = self.lines.peek() {
             // peek ahead
             // need to explicitly force fl out of scope before we can call self.lines.next()
             if p_lines.is_empty() {
@@ -503,7 +514,7 @@ impl Iterator for ParagraphStream<'_> {
                 }
             }
 
-            p_lines.push(self.lines.next().unwrap().get_formatline().line);
+            p_lines.push(self.lines.next().unwrap().unwrap().get_formatline().line);
 
             // when we're in split-only mode, we never join lines, so stop here
             if self.opts.split_only {
