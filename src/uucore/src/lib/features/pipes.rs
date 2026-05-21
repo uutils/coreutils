@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Thin zero-copy-related wrappers around functions from the `rustix` crate.
+//! Thin zero-copy-related wrappers around functions.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
@@ -39,7 +39,7 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
     Ok(pair)
 }
 
-/// Less noisy wrapper around [`rustix::pipe::splice`].
+/// Less noisy wrapper around splice syscall
 ///
 /// Up to `len` bytes are moved from `source` to `target`. Returns the number
 /// of successfully moved bytes.
@@ -245,14 +245,10 @@ pub fn dev_null() -> Option<File> {
         .ok()?;
     let stat = rustix::fs::fstat(&null).ok()?;
     let dev = stat.st_rdev;
-    if (rustix::fs::major(dev), rustix::fs::minor(dev)) == (1, 3) {
-        Some(null)
-    } else {
-        None
-    }
+    ((rustix::fs::major(dev), rustix::fs::minor(dev)) == (1, 3)).then_some(null)
 }
 
-// Less noisy wrapper around [`rustix::pipe::tee`]
+// Less noisy wrapper around tee syscall
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
