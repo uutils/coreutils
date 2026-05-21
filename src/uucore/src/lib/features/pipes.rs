@@ -80,22 +80,25 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 }
 
 /// splice all of source to dest
-/// return true if we need read/write fallback
-/// fails if one of in/output should be pipe
-#[inline]
+/// return bytes splice sent even error was returned
+///
+/// if it failed, one of in/output is probably not a pipe
+#[inline] // try to remove unused byte count
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
+pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> Result<usize, usize> {
     // improve throughput
     // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
+    // todo: cache fcntl call
     // no need to increase pipe size of input fd since
     // - sender with splice probably increased size already
     // - sender without splice is bottleneck
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+    let mut sent = 0;
     loop {
         match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(1..) => {}
-            Ok(0) => return Ok(false),
-            Err(_) => return Ok(true),
+            Ok(0) => return Ok(sent),
+            Ok(n) => sent += n,
+            Err(_) => return Err(sent),
         }
     }
 }
@@ -159,7 +162,7 @@ where
 {
     // use splice to check that input or output is pipe which is efficient
     let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest)?,
+        Ok(_) => splice_unbounded(source, dest).is_err(),
         _ => splice_unbounded_broker(source, dest)?,
     };
     Ok(fallback)

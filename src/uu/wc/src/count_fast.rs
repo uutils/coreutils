@@ -39,23 +39,19 @@ const BUF_SIZE: usize = 64 * 1024;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
-    let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
-    let mut byte_count = 0;
-    if let Ok(res) = splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-        byte_count += res;
+    let mut null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
+    if let Ok(first_count) = splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
         // no need to increase pipe size of input fd since
         // - sender with splice probably increased size already
         // - sender without splice is bottleneck of our wc -c
-        loop {
-            match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => return Ok(byte_count),
-                Ok(res) => byte_count += res,
-                Err(_) => return Err(byte_count),
-            }
+        match uucore::pipes::splice_unbounded(fd, &mut null_file) {
+            Ok(n) => Ok(n + first_count),
+            Err(n) => Err(n + first_count),
         }
     } else {
         // input is not pipe. needs broker to use splice() with additional cost
         let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| 0_usize)?;
+        let mut byte_count = 0;
         loop {
             match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
                 0 => return Ok(byte_count),
