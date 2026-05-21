@@ -291,6 +291,31 @@ fn test_fmt_continues_after_missing_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_fmt_read_error() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    // fmt must propagate the read error instead of treating it as EOF.
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        .stderr_contains("fmt: error reading '/proc/self/mem'");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_fmt_continues_after_read_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("valid.txt", "one\ntwo\n");
+
+    ucmd.args(&["/proc/self/mem", "valid.txt"])
+        .fails_with_code(1)
+        .stdout_is("one two\n")
+        .stderr_contains("fmt: error reading '/proc/self/mem'");
+}
+
+#[test]
 fn test_fmt_invalid_goal() {
     for param in ["-g", "--goal"] {
         new_ucmd!()
