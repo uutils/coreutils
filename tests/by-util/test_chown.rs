@@ -249,12 +249,14 @@ fn test_chown_dot_separator_warning() {
     );
 
     // chown user: file should not warn
-    scene
-        .ucmd()
-        .arg(format!("{user_name}:"))
-        .arg(file1)
-        .succeeds()
-        .stderr_does_not_contain("warning");
+    let result = scene.ucmd().arg(format!("{user_name}:")).arg(file1).run();
+
+    // In ci some platforms run with the user `runner` and that user has no GID
+    // trying to parse it causes an error
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.success().stderr_does_not_contain("warning");
 }
 
 #[test]
