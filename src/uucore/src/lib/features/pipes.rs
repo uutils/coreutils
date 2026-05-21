@@ -54,14 +54,14 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
 
-/// Splice wrapper which fully finishes the write.
+/// Try to splice `len` bytes from `source` into `target`.
 ///
-/// Exactly `len` bytes are moved from `source` into `target`.
-///
-/// Panics if `source` runs out of data before `len` bytes have been moved.
+/// Note that this splice_exact does not provide bytes sent when it failed.
+/// In the case failed relaying splice via pipe, all content of the pipe
+/// should be drained by `read` to keep bytes sent accurate.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<()> {
+pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<()> {
     let mut left = len;
     while left > 0 {
         let written = splice(source, target, left)?;
