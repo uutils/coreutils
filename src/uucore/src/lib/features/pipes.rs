@@ -80,24 +80,22 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 }
 
 /// splice all of source to dest
-/// return true if we need read/write fallback
-/// fails if one of in/output should be pipe
+/// returns Ok(()) at end of file
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
-    // improve throughput
-    // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
-    // no need to increase pipe size of input fd since
+pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
+    // avoid fcntl overhead for small input. splice twice to catch end of file.
+    if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
+        || splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
+    {
+        return Ok(());
+    }
+    // fcntl for input would not improve throughput since
     // - sender with splice probably increased size already
     // - sender without splice is bottleneck
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
-    loop {
-        match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(1..) => {}
-            Ok(0) => return Ok(false),
-            Err(_) => return Ok(true),
-        }
-    }
+    while splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? > 0 {}
+    Ok(())
 }
 
 /// force-splice source to dest even both of them are not pipe
@@ -159,7 +157,7 @@ where
 {
     // use splice to check that input or output is pipe which is efficient
     let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest)?,
+        Ok(_) => splice_unbounded(source, dest).is_err(),
         _ => splice_unbounded_broker(source, dest)?,
     };
     Ok(fallback)
