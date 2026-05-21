@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale ilog
+// spell-checker:ignore nohash strtime clocale ilog drwxr
 
 use core::ops::RangeInclusive;
 use std::cell::LazyCell;
@@ -53,6 +53,10 @@ use crate::config::Files;
 use crate::dired::{self, DiredOutput};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
 
+/// Width of the standard Unix permissions string (one file-type char plus
+/// nine permission bits, e.g. `drwxr-xr-x`).
+const PERMISSIONS_WIDTH: usize = 10;
+
 // Fields that can be removed or added to the long format
 pub(crate) struct LongFormat {
     pub(crate) author: bool,
@@ -75,10 +79,11 @@ pub(crate) struct PaddingCollection {
     #[cfg(unix)]
     pub(crate) minor: usize,
     pub(crate) block_size: usize,
-    /// True if any listed item has an ACL or non-trivial security context,
-    /// which requires reserving one extra column for the `+`/`.` indicator
-    /// so link-count columns align across items with and without it.
-    pub(crate) has_alt_access: bool,
+    /// Width of the permissions field. [`PERMISSIONS_WIDTH`] by default
+    /// (e.g. `drwxr-xr-x`), or one more when any listed item has an ACL or
+    /// non-trivial security context and an extra column must be reserved for
+    /// the `+`/`.` indicator.
+    pub(crate) permissions: usize,
 }
 
 pub(crate) struct DisplayItemName {
@@ -300,6 +305,20 @@ impl ExtendPad for Vec<u8> {
 // additional copies.
 fn pad_left(string: &str, count: usize) -> String {
     format!("{string:>count$}")
+}
+
+/// Returns the alternate-access indicator that follows the 9-bit permission
+/// string in long-format output: `.` for a non-trivial security context, `+`
+/// for an ACL, otherwise a space (which acts as a placeholder so columns line
+/// up across items that don't carry an indicator themselves).
+fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u8 {
+    if item.security_context(config).len() > 1 {
+        b'.'
+    } else if is_acl_set {
+        b'+'
+    } else {
+        b' '
+    }
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -878,20 +897,15 @@ fn display_item_long(
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
-        if item.security_context(config).len() > 1 {
-            // GNU `ls` uses a "." character to indicate a file with a security context,
-            // but not other alternate access method.
-            state.display_buf.push(b'.');
-        } else if is_acl_set {
-            state.display_buf.push(b'+');
-        } else {
-            state.display_buf.push(b' ');
+        if padding.permissions > PERMISSIONS_WIDTH {
+            state
+                .display_buf
+                .push(alt_access_indicator(item, config, is_acl_set));
         }
-
-        state.display_buf.extend_pad_left(
-            &display_symlink_count(md),
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        state.display_buf.push(b' ');
+        state
+            .display_buf
+            .extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1036,16 +1050,15 @@ fn display_item_long(
 
         state.display_buf.push(leading_char as u8);
         state.display_buf.extend(b"?????????");
-        if item.security_context(config).len() > 1 {
-            // GNU `ls` uses a "." character to indicate a file with a security context,
-            // but not other alternate access method.
-            state.display_buf.push(b'.');
+        if padding.permissions > PERMISSIONS_WIDTH {
+            // Metadata is unknown, so we can't probe for ACLs; only the
+            // security-context indicator is detectable here.
+            state
+                .display_buf
+                .push(alt_access_indicator(item, config, false));
         }
         state.display_buf.push(b' ');
-        state.display_buf.extend_pad_left(
-            "?",
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        state.display_buf.extend_pad_left("?", padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1228,7 +1241,7 @@ fn calculate_padding_collection(
         major: 1,
         minor: 1,
         block_size: 1,
-        has_alt_access: false,
+        permissions: PERMISSIONS_WIDTH,
     };
 
     for item in items {
@@ -1260,16 +1273,17 @@ fn calculate_padding_collection(
                 padding_collections.context = context_len.max(padding_collections.context);
             }
 
-            // Track whether any item has an ACL or non-trivial security context so
-            // rendering can reserve a single extra column for the `+`/`.` indicator.
+            // If any item has an ACL or non-trivial security context, widen
+            // the permissions column by one to reserve space for the `+`/`.`
+            // indicator.
             {
                 #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
+                let is_acl_set = has_acl(item.path());
                 if context_len > 1 || is_acl_set {
-                    padding_collections.has_alt_access = true;
+                    padding_collections.permissions = PERMISSIONS_WIDTH + 1;
                 }
             }
 
@@ -1310,7 +1324,7 @@ fn calculate_padding_collection(
         context: 1,
         size: 1,
         block_size: 1,
-        has_alt_access: false,
+        permissions: PERMISSIONS_WIDTH,
     };
 
     for item in items {
