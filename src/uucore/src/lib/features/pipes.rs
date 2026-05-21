@@ -267,9 +267,18 @@ pub fn dev_null() -> Option<File> {
     ((rustix::fs::major(dev), rustix::fs::minor(dev)) == (1, 3)).then_some(null)
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub enum TeeState {
+    Ended(usize),
+    Fallback(usize),
+}
+
 // Less noisy wrapper around tee syscall
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
-    rustix::pipe::tee(source, target, len, SpliceFlags::empty())
+pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> TeeState {
+    match rustix::pipe::tee(source, target, len, SpliceFlags::empty()) {
+        Ok(n @ 1..) => TeeState::Ended(n),
+        _ => TeeState::Fallback(0),
+    }
 }

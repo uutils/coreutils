@@ -10,7 +10,7 @@ use std::ffi::OsString;
 use std::io::{self, Write};
 use uucore::error::{UResult, USimpleError, strip_errno};
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, TeeState};
 use uucore::{format_usage, translate};
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -113,6 +113,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
+    debug_assert!(!bytes.is_empty());
     let stdout = rustix::stdio::stdout();
     // improve throughput
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
@@ -120,11 +121,12 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
         && p_write.write_all(bytes).is_ok()
     {
-        if safe_partial_send && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
-            while let Ok(1..) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
+        if safe_partial_send {
+            while let TeeState::Ended(_) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
         } else if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
             // tee() cannot control offset and write to non-pipe
-            'hybrid: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+            'hybrid: while let TeeState::Ended(mut remain) =
+                tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
             {
                 debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
                 while remain > 0 {
