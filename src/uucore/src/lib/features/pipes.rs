@@ -50,8 +50,15 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
 /// this is still very efficient.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
-    rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
+pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<usize> {
+    Ok(rustix::pipe::splice(
+        source,
+        None,
+        target,
+        None,
+        len,
+        SpliceFlags::empty(),
+    )?)
 }
 
 /// Splice wrapper which fully finishes the write.
@@ -270,6 +277,11 @@ pub fn dev_null() -> Option<File> {
 // Less noisy wrapper around tee syscall
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
-    rustix::pipe::tee(source, target, len, SpliceFlags::empty())
+pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<usize> {
+    Ok(rustix::pipe::tee(
+        source,
+        target,
+        len,
+        SpliceFlags::empty(),
+    )?)
 }
