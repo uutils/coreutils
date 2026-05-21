@@ -144,13 +144,23 @@ fn test_chown_only_owner_colon() {
     // In some test environments user and group are different, and the user
     // is not allowed the file to its current group, in those cases, it should fail.
     if group_name == user_name {
-        scene
+        let success = scene
             .ucmd()
             .arg(format!("{user_name}:"))
             .arg("--verbose")
             .arg(file1)
-            .succeeds()
-            .stderr_contains("retained as");
+            .succeeds();
+        let stderr = success.stderr_str();
+        #[cfg(target_os = "openbsd")]
+        {
+            // Ugly hack because the openbsd runner has sticky file creation set to wheel for
+            // our directory, which make the group change when invoked
+            assert!(stderr.contains("retained as") || stderr.contains("changed ownership"));
+        }
+        #[cfg(not(target_os = "openbsd"))]
+        {
+            assert!(stderr.contains("retained as"));
+        }
     } else {
         let failure = scene
             .ucmd()
