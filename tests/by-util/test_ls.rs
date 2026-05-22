@@ -28,7 +28,7 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "feat_selinux"))]
+#[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 
@@ -1168,7 +1168,7 @@ fn test_ls_long() {
 
 #[cfg(not(windows))]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
@@ -1766,7 +1766,7 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
@@ -3386,7 +3386,7 @@ fn test_ls_color() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
@@ -4915,10 +4915,7 @@ fn test_ls_long_self_referential_dir_lists_contents() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4933,10 +4930,7 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4952,10 +4946,7 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -4974,10 +4965,7 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5007,10 +4995,7 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -5025,10 +5010,7 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5061,10 +5043,7 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -6565,7 +6544,7 @@ fn test_acl_padding_not_inflated() {
 // setting is also configured).
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());

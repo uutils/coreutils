@@ -8,10 +8,7 @@
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
@@ -1848,7 +1845,7 @@ fn test_cp_preserve_xattr() {
 
 #[test]
 #[cfg(all(
-    not(feature = "feat_selinux"),
+    not(feature = "selinux"),
     any(target_os = "linux", target_os = "android")
 ))]
 fn test_cp_preserve_all_context_fails_on_non_selinux() {
@@ -7007,10 +7004,7 @@ fn test_cp_from_stream_permission() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7035,10 +7029,7 @@ fn test_cp_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7062,10 +7053,7 @@ fn test_cp_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7103,10 +7091,7 @@ fn test_cp_preserve_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_selinux_admin_context() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7165,10 +7150,7 @@ fn test_cp_preserve_selinux_admin_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_context_priority() {
     // This test verifies that -Z takes priority over --context
 
@@ -7248,10 +7230,7 @@ fn test_cp_selinux_context_priority() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_empty_context() {
     // This test verifies that --context without a value works like -Z
 
@@ -7297,10 +7276,7 @@ fn test_cp_selinux_empty_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_recursive() {
     // Test SELinux context preservation in recursive directory copies
 
@@ -7354,10 +7330,7 @@ fn test_cp_selinux_recursive() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_context_root() {
     use uutests::util::run_ucmd_as_root;
     let scene = TestScenario::new(util_name!());
@@ -8207,10 +8180,7 @@ fn test_cp_gnu_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_z_overrides_context() {
     // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
     use std::path::Path;
@@ -8228,10 +8198,7 @@ fn test_cp_a_z_overrides_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_preserves_context() {
     use std::path::Path;
     use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
@@ -8254,10 +8221,7 @@ fn test_cp_a_preserves_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_context_with_z_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
