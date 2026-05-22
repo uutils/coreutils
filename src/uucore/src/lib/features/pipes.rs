@@ -5,20 +5,16 @@
 
 //! Thin zero-copy-related wrappers around functions.
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#![cfg(any(target_os = "linux", target_os = "android"))]
+
 use crate::io::{RawReader, RawWriter};
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
-#[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{
-    fs::File,
     io::{PipeReader, PipeWriter, Read, Write},
     os::fd::AsFd,
     sync::OnceLock,
 };
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
-#[cfg(any(target_os = "linux", target_os = "android"))]
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
 /// return pipe larger than given size
@@ -27,7 +23,6 @@ const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 ///
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader, PipeWriter)> {
     let pair = std::io::pipe()?;
     // guard unnecessary syscall
@@ -51,7 +46,6 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
 /// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
 /// this is still very efficient.
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
@@ -62,7 +56,6 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 /// In the case failed relaying splice via pipe, all content of the pipe
 /// should be drained by `read` to keep bytes sent accurate.
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<()> {
     let mut left = len;
     while left > 0 {
@@ -76,7 +69,6 @@ pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> rusti
 /// check that source is FUSE
 /// we fallback to read() at FUSE <https://github.com/uutils/coreutils/issues/9609>
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn might_fuse(source: &impl AsFd) -> bool {
     rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
 }
@@ -84,7 +76,6 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 /// splice all of source to dest
 /// returns Ok(()) at end of file
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
     // avoid fcntl overhead for small input. splice twice to catch end of file.
     if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
@@ -108,7 +99,6 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
 /// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_unbounded_broker(
     source: &impl AsFd,
     dest: &mut impl AsFd,
@@ -153,7 +143,6 @@ pub fn splice_unbounded_broker(
 /// return true if write fallback is needed
 /// (the fallback will be embedded to this function in the future)
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
     // use splice to check that input or output is pipe which is efficient
     let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
@@ -166,7 +155,6 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::i
 /// splice `n` bytes with safe read/write fallback
 /// return actually sent bytes
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
@@ -242,8 +230,7 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
 ///
 /// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn dev_null() -> Option<File> {
+pub fn dev_null() -> Option<std::fs::File> {
     let null = std::fs::OpenOptions::new()
         .write(true)
         .open("/dev/null")
@@ -255,7 +242,6 @@ pub fn dev_null() -> Option<File> {
 
 // Less noisy wrapper around tee syscall
 #[inline]
-#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn tee(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::tee(source, target, len, SpliceFlags::empty())
 }
