@@ -37,6 +37,7 @@ uudoc = [
   "dep:regex",
   "dep:zip",
 ]
+selinux = ["dep:selinux"]
 ## features
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
