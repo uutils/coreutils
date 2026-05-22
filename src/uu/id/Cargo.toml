@@ -30,7 +30,7 @@ name = "id"
 path = "src/main.rs"
 
 [features]
-feat_selinux = ["selinux"]
+selinux = ["dep:selinux"]
 smack = ["uucore/smack"]
 
 [lints]

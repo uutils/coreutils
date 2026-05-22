@@ -61,6 +61,7 @@ uudoc = [
   "dep:regex",
   "dep:zip",
 ]
+selinux = ["dep:selinux"]
 ## features
 # "feat_diagnostics" == render errors against the argument list with a caret
 # when stderr is a terminal. On by default; build with `--no-default-features`

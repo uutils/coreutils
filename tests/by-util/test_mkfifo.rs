@@ -5,10 +5,7 @@
 
 // spell-checker:ignore nconfined
 
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -171,10 +168,7 @@ fn test_create_fifo_permission_denied() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mkfifo_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -198,10 +192,7 @@ fn test_mkfifo_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_mkfifo_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

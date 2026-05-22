@@ -13,10 +13,7 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::thread::sleep;
 use uucore::error::strip_errno;
 use uucore::process::{getegid, geteuid};
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -2464,10 +2461,7 @@ fn test_install_no_target_basic() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2516,10 +2510,7 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_invalid_args() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2552,10 +2543,7 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_selinux_default_context() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
