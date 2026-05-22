@@ -13,6 +13,8 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
+#[cfg(windows)]
+use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
@@ -473,7 +475,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Err(err) => {
                     #[cfg(windows)]
                     // On Windows, `File::open` on a directory fails with "Permission denied").
-                    if err.kind() == std::io::ErrorKind::PermissionDenied {
+                    if err.kind() == io::ErrorKind::PermissionDenied {
                         if let Ok(m) = Path::new(file).metadata() {
                             if m.is_dir() {
                                 // We need to print the header, as we have an existing directory
