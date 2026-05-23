@@ -19,51 +19,17 @@ concurrency:
 
 jobs:
   benchmarks:
-    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
+    name: Run ${{ matrix.type }} benchmarks for ${{ matrix.group }} group (CodSpeed)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
     strategy:
       fail-fast: false
-      max-parallel: 12
+      max-parallel: 4
       matrix:
         type: [simulation, memory]
-        package: [
-          uu_base64,
-          uu_cksum,
-          uu_cp,
-          uu_cat,
-          uu_cut,
-          uu_dd,
-          uu_df,
-          uu_du,
-          uu_echo,
-          uu_expand,
-          uu_fold,
-          uu_hostname,
-          uu_join,
-          uu_ls,
-          uu_mv,
-          uu_nl,
-          uu_numfmt,
-          uu_rm,
-          uu_seq,
-          uu_shuf,
-          uu_sort,
-          uu_split,
-          uu_tee,
-          uu_timeout,
-          uu_tsort,
-          uu_unexpand,
-          uu_uniq,
-          uu_wc,
-          uu_factor,
-          uu_date,
-          uu_csplit,
-          uu_true,
-          uu_false
-        ]
+        group: [text, file, numeric, misc]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -94,19 +60,44 @@ jobs:
         with:
           tool: cargo-codspeed
 
-      - name: Build benchmarks for ${{ matrix.package }} (${{ matrix.type }})
+      - name: Select benchmark packages
+        id: packages
         shell: bash
         run: |
-          echo "Building ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-          cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
+          case "${{ matrix.group }}" in
+            text)
+              packages="uu_cat uu_cut uu_fold uu_join uu_nl uu_sort uu_uniq uu_wc"
+              ;;
+            file)
+              packages="uu_cp uu_dd uu_df uu_du uu_ls uu_mv uu_rm"
+              ;;
+            numeric)
+              packages="uu_cksum uu_numfmt uu_seq uu_factor"
+              ;;
+            misc)
+              packages="uu_base64 uu_echo uu_expand uu_hostname uu_shuf uu_split uu_tee uu_timeout uu_tsort uu_unexpand uu_date uu_csplit uu_true uu_false"
+              ;;
+          esac
 
-      - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
+          echo "packages=${packages}" >> "$GITHUB_OUTPUT"
+
+      - name: Build benchmarks for ${{ matrix.group }} group (${{ matrix.type }})
+        shell: bash
+        run: |
+          for package in ${{ steps.packages.outputs.packages }}; do
+            echo "Building ${{ matrix.type }} benchmarks for ${package}"
+            cargo codspeed build -m ${{ matrix.type }} -p "${package}"
+          done
+
+      - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.group }} group
         uses: CodSpeedHQ/action@v4
         env:
           CODSPEED_LOG: debug
         with:
           mode: ${{ matrix.type }}
           run: |
-            echo "Running ${{ matrix.type }} benchmarks for ${{ matrix.package }}"
-            cargo codspeed run -p ${{ matrix.package }} > /dev/null
+            for package in ${{ steps.packages.outputs.packages }}; do
+              echo "Running ${{ matrix.type }} benchmarks for ${package}"
+              cargo codspeed run -p "${package}" > /dev/null
+            done
           token: ${{ secrets.CODSPEED_TOKEN }}
