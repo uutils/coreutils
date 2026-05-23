@@ -950,6 +950,8 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
 
     if let Ok(to_meta) = metadata(to) {
         let from_meta = handle.metadata()?;
+        // Refuse to replace the source file with itself; otherwise removing
+        // the destination below would delete the opened input before copying.
         if from_meta.dev() == to_meta.dev() && from_meta.ino() == to_meta.ino() {
             return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
         }
