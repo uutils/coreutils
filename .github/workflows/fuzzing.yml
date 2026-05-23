@@ -1,7 +1,7 @@
 name: Fuzzing
 
 # spell-checker:ignore (people) taiki-e
-# spell-checker:ignore (misc) fuzzer
+# spell-checker:ignore (misc) fuzzer PIPESTATUS
 
 env:
   CARGO_INCREMENTAL: "0"
