@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Thin zero-copy-related wrappers around functions.
+//! Zero-copy-related functions.
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 
@@ -41,10 +41,8 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
 /// Up to `len` bytes are moved from `source` to `target`. Returns the number
 /// of successfully moved bytes.
 ///
-/// At least one of `source` and `target` must be some sort of pipe.
-/// To get around this requirement, consider splicing from your source into
-/// a [`pipe`] and then from the pipe into your target (with `drain_pipe`):
-/// this is still very efficient.
+/// splice fails if both of `source` and `target` are not pipe. Consider using
+/// splice_unbounded_broker or splice_unbounded_auto in the case.
 #[inline]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
@@ -107,8 +105,8 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
 
 /// force-splice source to dest even both of them are not pipe via broker pipe
 /// returns Ok(Ok(())) if splice succeeds
-/// returns Ok(Err()) if splice failed, but you can fallback to read/write
-/// returns std::io::Result if splice from broker failed and read/write fallback from broker failed
+/// returns Ok(Err(())) if splice failed, but you can fallback to read/write
+/// returns Err(e) if splice from broker failed and read/write fallback from broker failed
 ///
 /// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
@@ -156,7 +154,7 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::i
     Ok(fallback)
 }
 
-/// splice `n` bytes with safe read/write fallback
+/// splice `n` bytes with read/write fallback
 /// return actually sent bytes
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
