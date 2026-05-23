@@ -25,6 +25,8 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
     strategy:
+      fail-fast: false
+      max-parallel: 8
       matrix:
         type: [simulation, memory]
         package: [
