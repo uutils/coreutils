@@ -176,16 +176,21 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
+    } else if matches.get_flag("mega") {
+        Ok(BlockSize::Bytes(1024 * 1024))
+    } else if matches.get_flag("kilo") {
+        Ok(BlockSize::Bytes(1024))
     } else if matches.get_flag(OPT_PORTABILITY) {
         Ok(BlockSize::default())
     } else if let Some(bytes) =
         parse_block_size::block_size_from_env(&["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
     {
-        Ok(BlockSize::Bytes(bytes))
+        Ok(BlockSize::Bytes(bytes)) 
     } else {
         Ok(BlockSize::default())
     }
 }
+
 
 impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
