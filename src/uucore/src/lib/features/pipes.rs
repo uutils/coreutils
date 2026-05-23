@@ -100,19 +100,24 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
     Ok(())
 }
 
-/// force-splice source to dest even both of them are not pipe
-/// return true if we need read/write fallback
+/// force-splice source to dest even both of them are not pipe via broker pipe
+/// returns Ok(Ok(())) if splice succeeds
+/// returns Ok(Err()) if splice failed, but you can fallback to read/write
+/// returns std::io::Result if splice from broker failed and read/write fallback from broker failed
 ///
+/// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
+pub fn splice_unbounded_broker(
+    source: &impl AsFd,
+    dest: &mut impl AsFd,
+) -> std::io::Result<Result<(), ()>> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE
-        .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
-        .as_ref()
+    let Some((pipe_rd, pipe_wr)) =
+        PIPE_CACHE.get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
     else {
-        return Ok(true);
+        return Ok(Err(()));
     };
     // improve throughput
     // no need to increase pipe size of input fd since
@@ -122,7 +127,7 @@ pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> std:
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(false),
+            Ok(0) => return Ok(Ok(())),
             Ok(n) => {
                 if splice_exact(&pipe_rd, dest, n).is_err() {
                     // If the first splice manages to copy to the intermediate
@@ -135,10 +140,10 @@ pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> std:
                     let mut drain = Vec::with_capacity(n);
                     pipe_rd.take(n as u64).read_to_end(&mut drain)?;
                     RawWriter(&dest).write_all(&drain)?;
-                    return Ok(true);
+                    return Ok(Err(()));
                 }
             }
-            Err(_) => return Ok(true),
+            Err(_) => return Ok(Err(())),
         }
     }
 }
@@ -153,7 +158,7 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::i
     // use splice to check that input or output is pipe which is efficient
     let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
         Ok(_) => splice_unbounded(source, dest).is_err(),
-        _ => splice_unbounded_broker(source, dest)?,
+        _ => splice_unbounded_broker(source, dest)?.is_err(),
     };
     Ok(fallback)
 }
