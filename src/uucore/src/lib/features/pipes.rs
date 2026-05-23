@@ -207,9 +207,9 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
             match splice(&input, &broker_w, n as usize) {
                 Ok(0) => break might_fuse(&input),
                 Ok(s) => {
+                    n -= s as u64;
+                    bytes_written += s as u64;
                     if splice_exact(&broker_r, &target, s).is_ok() {
-                        n -= s as u64;
-                        bytes_written += s as u64;
                         if n == 0 {
                             // avoid unnecessary splice for small input
                             break false;
