@@ -311,13 +311,13 @@ impl<'a> RowFormatter<'a> {
                 bytes_column.bytes
             };
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
-        }else {
+        } else {
             match &self.options.block_size {
-                /// if it has a suffix, append it to the size (but not on the 'total' row)
+                // if it has a suffix, append it to the size (but not on the 'total' row)
                 BlockSize::PrefixedBytes(_, suffix) if !self.is_total_row => {
-                    format!("{}{}", size, suffix)
+                    format!("{size}{suffix}")
                 }
-                /// else, just print the raw number as before
+                // else, just print the raw number as before
                 _ => size.to_string(),
             }
         };
@@ -332,11 +332,11 @@ impl<'a> RowFormatter<'a> {
             to_magnitude_and_suffix(size, SuffixType::HumanReadable(h), true)
         } else {
             match &self.options.block_size {
-                /// if it has a suffix, append it to the size (but not on the 'total' row)
+                // if it has a suffix, append it to the size (but not on the 'total' row)
                 BlockSize::PrefixedBytes(_, suffix) if !self.is_total_row => {
-                    format!("{}{}", size, suffix)
+                    format!("{size}{suffix}")
                 }
-                /// else, just print the raw number as before
+                // else, just print the raw number as before
                 _ => size.to_string(),
             }
         };

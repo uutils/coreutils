@@ -191,7 +191,6 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
     }
 }
 
-
 impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
