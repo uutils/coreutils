@@ -185,7 +185,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
     } else if let Some(bytes) =
         parse_block_size::block_size_from_env(&["DF_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
     {
-        Ok(BlockSize::Bytes(bytes)) 
+        Ok(BlockSize::Bytes(bytes))
     } else {
         Ok(BlockSize::default())
     }
