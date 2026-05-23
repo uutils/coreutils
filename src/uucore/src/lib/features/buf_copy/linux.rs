@@ -23,7 +23,7 @@ pub fn copy_stream(
 ) -> crate::error::UResult<()> {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
-    if crate::pipes::splice_unbounded_auto(src, dest)? {
+    if crate::pipes::splice_unbounded_auto(src, dest)?.is_err() {
         // If the splice() call failed, fall back on writing "without buffering", or order of output would be wrong
         // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
         // RawWriter also removes io::copy's specialization
