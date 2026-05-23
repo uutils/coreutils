@@ -1150,3 +1150,40 @@ fn test_df_masked_proc_fallback() {
         }
     }
 }
+
+#[test]
+fn test_df_m_flag() {
+    new_ucmd!()
+        .arg("-m")
+        .succeeds()
+        .stdout_contains("1M-blocks");
+}
+
+#[test]
+fn test_blocksize_output_suffix() {
+    fn get_size_value(args: &[&str]) -> String {
+        let output = new_ucmd!()
+            .args(args)
+            .arg("--output=size")
+            .arg(".")
+            .succeeds()
+            .stdout_str_lossy();
+        output.lines().nth(1).unwrap().trim().to_string()
+    }
+
+    let val_m = get_size_value(&["-BM"]);
+    assert!(val_m.ends_with('M'), "Expected suffix 'M', got: {}", val_m);
+
+    let val_k = get_size_value(&["-BK"]);
+    assert!(val_k.ends_with('K'), "Expected suffix 'K', got: {}", val_k);
+
+    let val_mega = get_size_value(&["-m"]);
+    assert!(!val_mega.ends_with('M'), "Expected NO suffix 'M' for -m, got: {}", val_mega);
+
+    let val_kilo = get_size_value(&["-k"]);
+    assert!(!val_kilo.ends_with('K'), "Expected NO suffix 'K' for -k, got: {}", val_kilo);
+
+    let val_numeric = get_size_value(&["-B", "1048576"]);
+    assert!(!val_numeric.ends_with('M'), "Expected NO suffix 'M' for numeric blocks, got: {}", val_numeric);
+}
+
