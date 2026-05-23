@@ -142,16 +142,17 @@ pub fn splice_unbounded_broker(
 
 /// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
 ///
-/// return true if write fallback is needed
-/// (the fallback will be embedded to this function in the future)
+/// see splice_unbounded_broker to handle returned error
 #[inline]
-pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
-    // use splice to check that input or output is pipe which is efficient
-    let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest).is_err(),
-        _ => splice_unbounded_broker(source, dest)?.is_err(),
-    };
-    Ok(fallback)
+pub fn splice_unbounded_auto(
+    source: &impl AsFd,
+    dest: &mut impl AsFd,
+) -> std::io::Result<Result<(), ()>> {
+    if splice_unbounded(source, dest).is_err() {
+        // input or output is not pipe
+        return splice_unbounded_broker(source, dest);
+    }
+    Ok(Ok(()))
 }
 
 /// splice `n` bytes with read/write fallback
