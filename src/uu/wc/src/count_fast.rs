@@ -41,30 +41,25 @@ const BUF_SIZE: usize = 64 * 1024;
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
     let mut byte_count = 0;
-    if let Ok(res) = splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-        byte_count += res;
-        // no need to increase pipe size of input fd since
-        // - sender with splice probably increased size already
-        // - sender without splice is bottleneck of our wc -c
-        loop {
-            match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => return Ok(byte_count),
-                Ok(res) => byte_count += res,
-                Err(_) => return Err(byte_count),
-            }
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck of our wc -c
+    loop {
+        match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(byte_count),
+            Ok(res) => byte_count += res,
+            Err(_) => break, // input is not pipe. needs additional pipe...
         }
-    } else {
-        // input is not pipe. needs broker to use splice() with additional cost
-        let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| 0_usize)?;
-        loop {
-            match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
-                0 => return Ok(byte_count),
-                res => {
-                    byte_count += res;
-                    // pipe to null is not blocked. So this returns res at most cases
-                    // next splice does not hang if we discarded 1+ pages
-                    splice(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
-                }
+    }
+    let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)?;
+    loop {
+        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
+            0 => return Ok(byte_count),
+            res => {
+                byte_count += res;
+                // pipe to null is not blocked. So this returns res at most cases
+                // next splice does not hang if we discarded 1+ pages
+                splice(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
             }
         }
     }
