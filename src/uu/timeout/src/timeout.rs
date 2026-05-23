@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid getppid
 
 mod status;
 
@@ -27,6 +27,8 @@ use uucore::{
 
 use nix::sys::signal::{SigHandler, Signal, kill};
 use nix::unistd::{Pid, getpid, setpgid};
+#[cfg(target_os = "linux")]
+use nix::unistd::getppid;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
@@ -362,6 +364,12 @@ fn timeout(
         let death_sig = Signal::try_from(signal as i32).ok();
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
+        // Capture our PID before fork so the child can detect reparenting.
+        // If we are already PID 1 (e.g. inside a PID namespace), the child
+        // cannot distinguish reparenting from the normal case, so we skip
+        // the post-fork race check.
+        #[cfg(target_os = "linux")]
+        let my_pid = getpid();
 
         unsafe {
             cmd_builder.pre_exec(move || {
@@ -376,9 +384,22 @@ fn timeout(
                 if stdin_was_closed {
                     libc::close(libc::STDIN_FILENO);
                 }
+                // Parent-death guard: best-effort, never fatal.
+                // If set_pdeathsig fails (e.g. inside certain containers or
+                // security contexts), we silently continue.
                 #[cfg(target_os = "linux")]
                 if let Some(sig) = death_sig {
                     let _ = nix::sys::prctl::set_pdeathsig(sig);
+                    // Close the post-fork race: if the monitor already exited
+                    // between set_pdeathsig and here, our parent will have
+                    // changed. Skip this check when the monitor is PID 1
+                    // (e.g. inside `unshare --pid --fork`) because reparenting
+                    // to init is indistinguishable from the normal case.
+                    if my_pid.as_raw() != 1 && getppid() != my_pid {
+                        // The monitor died before exec; deliver the signal
+                        // ourselves so the child never starts unsupervised.
+                        let _ = nix::sys::signal::raise(sig);
+                    }
                 }
                 Ok(())
             });
