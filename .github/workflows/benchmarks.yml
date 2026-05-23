@@ -63,7 +63,7 @@ jobs:
           uu_false
         ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 

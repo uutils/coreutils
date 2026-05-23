@@ -25,7 +25,7 @@ jobs:
     name: Build and test uufuzz examples
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - name: Build uufuzz library
@@ -54,7 +54,7 @@ jobs:
     name: Build the fuzzers
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - name: Install `cargo-fuzz`
@@ -100,7 +100,7 @@ jobs:
           - { name: fuzz_dirname, should_pass: true }
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v5
       with:
         persist-credentials: false
     - name: Install `cargo-fuzz`
@@ -202,7 +202,7 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Download all stats
