@@ -3,13 +3,17 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid itimer itimerval timeval suseconds setitimer wstatus
 
 mod status;
 
 use crate::status::ExitStatus;
 use clap::{Arg, ArgAction, Command};
-use std::io::{ErrorKind, Write};
+#[cfg(all(unix, not(target_os = "android")))]
+use libc::ITIMER_REAL;
+use std::io::ErrorKind;
+#[cfg(unix)]
+use std::io::Write;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{self, Child, Stdio};
 use std::sync::atomic::{self, AtomicBool};
@@ -25,7 +29,7 @@ use uucore::{
     signals::{signal_by_name_or_value, signal_list_name_by_value},
 };
 
-use nix::sys::signal::{SigHandler, Signal, kill};
+use nix::sys::signal::{self, SaFlags, SigAction, SigHandler, SigSet, Signal, kill};
 use nix::unistd::{Pid, getpid, setpgid};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -182,7 +186,7 @@ pub fn uu_app() -> Command {
 /// Install SIGCHLD handler to ensure waiting for child works even if parent ignored SIGCHLD.
 fn install_sigchld() {
     extern "C" fn chld(_: libc::c_int) {}
-    let _ = unsafe { nix::sys::signal::signal(Signal::SIGCHLD, SigHandler::Handler(chld)) };
+    let _ = unsafe { signal::signal(Signal::SIGCHLD, SigHandler::Handler(chld)) };
 }
 
 /// We should terminate child process when receiving termination signals.
@@ -200,6 +204,11 @@ fn install_signal_handlers(term_signal: usize) {
     let handler = SigHandler::Handler(handle_signal);
     let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
 
+    // SaFlags::empty() intentionally omits SA_RESTART so that waitpid
+    // returns EINTR when a signal arrives, allowing wait_with_itimer to
+    // detect timeouts and forward external signals to the child.
+    let action = SigAction::new(handler, SaFlags::empty(), SigSet::empty());
+
     for sig in [
         Signal::SIGALRM,
         Signal::SIGINT,
@@ -213,11 +222,11 @@ fn install_signal_handlers(term_signal: usize) {
         if sig == Signal::SIGPIPE && sigpipe_ignored {
             continue; // Skip SIGPIPE if it was ignored by parent
         }
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+        let _ = unsafe { signal::sigaction(sig, &action) };
     }
 
     if let Ok(sig) = Signal::try_from(term_signal as i32) {
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+        let _ = unsafe { signal::sigaction(sig, &action) };
     }
 }
 
@@ -283,8 +292,21 @@ fn wait_or_kill_process(
     foreground: bool,
     verbose: bool,
 ) -> std::io::Result<i32> {
-    // ignore `SIGTERM` here
-    match process.wait_or_timeout(duration, None) {
+    #[cfg(all(unix, not(target_os = "android")))]
+    let timer = arm_timer(duration);
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    let wait_result = match timer {
+        TimerHandle::Posix => wait_with_itimer(process, foreground),
+
+        // ignore `SIGTERM` here
+        TimerHandle::Polling => process.wait_or_timeout(duration, None),
+    };
+
+    #[cfg(any(not(unix), target_os = "android"))]
+    let wait_result = process.wait_or_timeout(duration, None);
+
+    match wait_result {
         Ok(Some(status)) => {
             if preserve_status {
                 let exit_code = status.code().unwrap_or_else(|| {
@@ -366,11 +388,11 @@ fn timeout(
         unsafe {
             cmd_builder.pre_exec(move || {
                 // Reset terminal signals to default
-                let _ = nix::sys::signal::signal(Signal::SIGTTIN, SigHandler::SigDfl);
-                let _ = nix::sys::signal::signal(Signal::SIGTTOU, SigHandler::SigDfl);
+                let _ = signal::signal(Signal::SIGTTIN, SigHandler::SigDfl);
+                let _ = signal::signal(Signal::SIGTTOU, SigHandler::SigDfl);
                 // Preserve SIGPIPE ignore status if parent had it ignored
                 if sigpipe_was_ignored {
-                    let _ = nix::sys::signal::signal(Signal::SIGPIPE, SigHandler::SigIgn);
+                    let _ = signal::signal(Signal::SIGPIPE, SigHandler::SigIgn);
                 }
                 // If stdin was closed before Rust reopened it as /dev/null, close it in child
                 if stdin_was_closed {
@@ -411,7 +433,20 @@ fn timeout(
     // TODO The structure of this block is extremely similar to the
     // structure of `wait_or_kill_process()`. They can probably be
     // refactored into some common function.
-    match process.wait_or_timeout(duration, Some(&SIGNALED)) {
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    let timer = arm_timer(duration);
+
+    #[cfg(all(unix, not(target_os = "android")))]
+    let wait_result = match timer {
+        TimerHandle::Posix => wait_with_itimer(process, foreground),
+        TimerHandle::Polling => process.wait_or_timeout(duration, Some(&SIGNALED)),
+    };
+
+    #[cfg(any(not(unix), target_os = "android"))]
+    let wait_result = process.wait_or_timeout(duration, Some(&SIGNALED));
+
+    match wait_result {
         Ok(Some(status)) => {
             let exit_code = status.code().unwrap_or_else(|| {
                 status
@@ -428,6 +463,10 @@ fn timeout(
             } else {
                 signal
             };
+
+            // Clear previously received flag
+            SIGNALED.store(false, atomic::Ordering::Relaxed);
+            RECEIVED_SIGNAL.store(0, atomic::Ordering::Relaxed);
 
             report_if_verbose(signal_to_send, &cmd[0], verbose);
             send_signal(process, signal_to_send, foreground);
@@ -475,4 +514,122 @@ fn timeout(
             Err(ExitStatus::TimeoutFailed.into())
         }
     }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+enum TimerHandle {
+    Posix,
+    Polling,
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+fn arm_timer(duration: Duration) -> TimerHandle {
+    // A duration of zero means no timeout, fall back to polling
+    // which handles this correctly via wait_or_timeout.
+    if duration == Duration::ZERO {
+        return TimerHandle::Polling;
+    }
+
+    let secs = duration.as_secs();
+    let usecs = duration.subsec_micros();
+
+    // itimer has a precision of microseconds. Clamp sub-microsecond durations
+    // to 1 microsecond to ensure the timer fires rather than be disarmed.
+    // A zero itimerval disarms the timer instead of firing it immediately.
+    let (secs, usecs) = if duration.as_micros() == 0 {
+        (0, 1)
+    } else {
+        (secs, usecs)
+    };
+
+    let time = libc::itimerval {
+        it_interval: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+        it_value: libc::timeval {
+            tv_sec: secs as libc::time_t,
+            tv_usec: usecs as libc::suseconds_t,
+        },
+    };
+
+    let ret = unsafe { libc::setitimer(ITIMER_REAL, &raw const time, std::ptr::null_mut()) };
+
+    if ret == 0 {
+        TimerHandle::Posix
+    } else {
+        TimerHandle::Polling
+    }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+fn disarm_timer() {
+    let time = libc::itimerval {
+        it_interval: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+        it_value: libc::timeval {
+            tv_sec: 0,
+            tv_usec: 0,
+        },
+    };
+
+    unsafe {
+        libc::setitimer(ITIMER_REAL, &raw const time, std::ptr::null_mut());
+    }
+}
+
+#[cfg(all(unix, not(target_os = "android")))]
+fn wait_with_itimer(
+    process: &mut Child,
+    foreground: bool,
+) -> std::io::Result<Option<process::ExitStatus>> {
+    // The timer may have fired before we even entered this function.
+    // Check immediately so we don't block in waitpid until child terminates.
+    if SIGNALED.load(atomic::Ordering::Relaxed)
+        && RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed) == libc::SIGALRM
+    {
+        disarm_timer();
+        return Ok(None);
+    }
+
+    let mut wstatus: libc::c_int = 0;
+    let pid = process.id() as libc::pid_t;
+
+    loop {
+        let ret = unsafe { libc::waitpid(pid, &raw mut wstatus, 0) };
+        if ret == -1 {
+            let err = std::io::Error::last_os_error();
+            if err.kind() == ErrorKind::Interrupted {
+                if SIGNALED.load(atomic::Ordering::Relaxed)
+                    && RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed) == libc::SIGALRM
+                {
+                    // EINTR was caused by our SIGALRM handler setting SIGNALED.
+                    // The child is still alive, return Ok(None) so the caller
+                    // sends term_signal and begins the kill_after sequence if configured.
+                    disarm_timer();
+                    return Ok(None);
+                }
+                // EINTR from an unrelated signal.
+                // The child is still running, retry waitpid.
+                let sig = RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed);
+
+                if sig != 0 {
+                    send_signal(process, sig as usize, foreground);
+                }
+
+                SIGNALED.store(false, atomic::Ordering::Relaxed);
+                RECEIVED_SIGNAL.store(0, atomic::Ordering::Relaxed);
+
+                continue;
+            }
+            return Err(err);
+        }
+        break;
+    }
+
+    disarm_timer();
+
+    Ok(Some(process::ExitStatus::from_raw(wstatus)))
 }
