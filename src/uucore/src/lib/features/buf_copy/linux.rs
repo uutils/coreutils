@@ -4,14 +4,7 @@
 // file that was distributed with this source code.
 
 //! Buffer-based copying implementation for Linux and Android.
-
-use crate::error::UResult;
-
-/// Buffer-based copying utilities for unix (excluding Linux).
-use std::{
-    io::{Read, Write},
-    os::fd::AsFd,
-};
+use std::os::fd::AsFd;
 
 /// Copy data from `Read` implementor `source` into a `Write` implementor
 /// `dest`. This works by reading a chunk of data from `source` and writing the
@@ -24,26 +17,16 @@ use std::{
 /// # Arguments
 /// * `source` - `Read` implementor to copy data from.
 /// * `dest` - `Write` implementor to copy data to.
-pub fn copy_stream<R, S>(src: &mut R, dest: &mut S) -> UResult<()>
-where
-    R: Read + AsFd,
-    S: Write + AsFd,
-{
+pub fn copy_stream(
+    src: &mut (impl std::io::Read + AsFd),
+    dest: &mut impl AsFd,
+) -> crate::error::UResult<()> {
     // If we're on Linux or Android, try to use the splice() system call
     // for faster writing. If it works, we're done.
-    // todo: bypass broker pipe this if input or output is pipe. We use this mostly for stream.
-    if !crate::pipes::splice_unbounded_broker(src, dest)? {
-        return Ok(());
+    if crate::pipes::splice_unbounded_auto(src, dest)? {
+        // If the splice() call failed, fall back on writing "without buffering", or order of output would be wrong
+        // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
+        std::io::copy(src, &mut crate::io::RawWriter(dest))?;
     }
-
-    // If the splice() call failed, fall back on slower writing.
-    std::io::copy(src, dest)?;
-
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    dest.flush()?;
     Ok(())
 }
