@@ -280,19 +280,12 @@ struct NamedReader {
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        loop {
-            match self.inner.read(buf) {
-                Ok(n) => return Ok(n),
-                Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => {
-                    let _ = writeln!(
-                        stderr(),
-                        "tee: {}",
-                        translate!("tee-error-stdin", "error" => strip_errno(&e))
-                    );
-                    return Err(e);
-                }
-            }
-        }
+        self.inner.read(buf).inspect_err(|e| {
+            let _ = writeln!(
+                stderr(),
+                "tee: {}",
+                translate!("tee-error-stdin", "error" => strip_errno(e))
+            );
+        })
     }
 }
