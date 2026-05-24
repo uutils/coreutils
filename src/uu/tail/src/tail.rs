@@ -455,6 +455,33 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
     }
 }
 
+/// Returns `true` if there is nothing left to output, avoiding an unnecessary
+/// pipe creation in print_target_section on Linux.
+/// For regular files, checks position against file length.
+/// For char/block devices, probes by reading one byte; if data exists, writes
+/// it to `out` so it isn't lost (char devices don't support seeking back).
+#[allow(unused_variables)]
+fn is_file_exhausted(file: &mut File, out: &mut impl Write) -> io::Result<bool> {
+    let meta = file.metadata()?;
+    if meta.is_file() {
+        return Ok(file.stream_position().unwrap_or(0) >= meta.len());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::FileTypeExt;
+        let ft = meta.file_type();
+        if ft.is_char_device() || ft.is_block_device() {
+            let mut buf = [0u8; 1];
+            match file.read(&mut buf) {
+                Ok(0) => return Ok(true),
+                Ok(_) => out.write_all(&buf)?,
+                Err(_) => {} // best-effort; proceed and let print_target_section handle it
+            }
+        }
+    }
+    Ok(false)
+}
+
 /// When tail'ing a file, we do not need to read the whole file from start to
 /// finish just to find the last n lines or bytes. Instead, we can seek to the
 /// end of the file, and then read the file "backwards" in blocks of size
@@ -491,6 +518,15 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
+    }
+
+    // Avoid unnecessary pipe creation for empty/exhausted files on Linux.
+    // Only needed for the unbounded case; the bounded case reads exactly `limit` bytes.
+    if limit.is_none() {
+        let stdout = stdout();
+        if is_file_exhausted(file, &mut stdout.lock()).unwrap_or(false) {
+            return Ok(());
+        }
     }
 
     print_target_section(file, limit)?;
