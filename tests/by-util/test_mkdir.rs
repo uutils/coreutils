@@ -415,6 +415,38 @@ fn test_mkdir_acl_inheritance_with_restrictive_mask() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_mkdir_p_respects_umask_without_acl() {
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-p").arg("a/b/c").umask(0o022).succeeds();
+    let perms = at.metadata("a/b/c").permissions().mode();
+    assert_eq!(perms & 0o777, 0o755);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mkdir_explicit_mode_zero() {
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-m").arg("0").arg("d").umask(0o022).succeeds();
+    let perms = at.metadata("d").permissions().mode();
+    assert_eq!(perms & 0o777, 0o000);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mkdir_explicit_mode_with_umask() {
+    // -m must win over umask: requesting 0o777 with a restrictive umask must
+    // still yield 0o777, since the umask is shaped to not block requested bits.
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-m").arg("777").arg("d").umask(0o077).succeeds();
+    let perms = at.metadata("d").permissions().mode();
+    assert_eq!(perms & 0o777, 0o777);
+}
+
+#[test]
 fn test_mkdir_trailing_dot() {
     new_ucmd!().arg("-p").arg("-v").arg("test_dir").succeeds();
 
