@@ -596,7 +596,7 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
+        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)?.is_err() {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

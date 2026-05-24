@@ -6,6 +6,8 @@
 //! Thin zero-copy-related wrappers around functions.
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
+use crate::io::{RawReader, RawWriter};
+#[cfg(any(target_os = "linux", target_os = "android"))]
 use rustix::pipe::{SpliceFlags, fcntl_setpipe_size};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::{
@@ -54,14 +56,14 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
 
-/// Splice wrapper which fully finishes the write.
+/// Try to splice `len` bytes from `source` into `target`.
 ///
-/// Exactly `len` bytes are moved from `source` into `target`.
-///
-/// Panics if `source` runs out of data before `len` bytes have been moved.
+/// Note that this splice_exact does not provide bytes sent when it failed.
+/// In the case failed relaying splice via pipe, all content of the pipe
+/// should be drained by `read` to keep bytes sent accurate.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> std::io::Result<()> {
+pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<()> {
     let mut left = len;
     while left > 0 {
         let written = splice(source, target, left)?;
@@ -80,43 +82,42 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 }
 
 /// splice all of source to dest
-/// return true if we need read/write fallback
-/// fails if one of in/output should be pipe
+/// returns Ok(()) at end of file
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
-    // improve throughput
-    // todo: avoid fcntl overhead for small input, but don't fcntl inside of the loop
-    // no need to increase pipe size of input fd since
+pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
+    // avoid fcntl overhead for small input. splice twice to catch end of file.
+    if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
+        || splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
+    {
+        return Ok(());
+    }
+    // fcntl for input would not improve throughput since
     // - sender with splice probably increased size already
     // - sender without splice is bottleneck
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
-    loop {
-        match splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(1..) => {}
-            Ok(0) => return Ok(false),
-            Err(_) => return Ok(true),
-        }
-    }
+    while splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? > 0 {}
+    Ok(())
 }
 
-/// force-splice source to dest even both of them are not pipe
-/// return true if we need read/write fallback
+/// force-splice source to dest even both of them are not pipe via broker pipe
+/// returns Ok(Ok(())) if splice succeeds
+/// returns Ok(Err()) if splice failed, but you can fallback to read/write
+/// returns std::io::Result if splice from broker failed and read/write fallback from broker failed
 ///
+/// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded_broker<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
-where
-    R: Read + AsFd,
-    S: AsFd,
-{
+pub fn splice_unbounded_broker(
+    source: &impl AsFd,
+    dest: &mut impl AsFd,
+) -> std::io::Result<Result<(), ()>> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE
-        .get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
-        .as_ref()
+    let Some((pipe_rd, pipe_wr)) =
+        PIPE_CACHE.get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
     else {
-        return Ok(true);
+        return Ok(Err(()));
     };
     // improve throughput
     // no need to increase pipe size of input fd since
@@ -126,7 +127,7 @@ where
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(false),
+            Ok(0) => return Ok(Ok(())),
             Ok(n) => {
                 if splice_exact(&pipe_rd, dest, n).is_err() {
                     // If the first splice manages to copy to the intermediate
@@ -134,14 +135,15 @@ where
                     // we can recover by copying the data that we have from the
                     // intermediate pipe to stdout using unbuffered read/write. Then
                     // we tell the caller to fall back.
+                    // use read_to_end to drain pipe for the case write failed
                     debug_assert!(n <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
                     let mut drain = Vec::with_capacity(n);
                     pipe_rd.take(n as u64).read_to_end(&mut drain)?;
-                    crate::io::RawWriter(&dest).write_all(&drain)?;
-                    return Ok(true);
+                    RawWriter(&dest).write_all(&drain)?;
+                    return Ok(Err(()));
                 }
             }
-            Err(_) => return Ok(true),
+            Err(_) => return Ok(Err(())),
         }
     }
 }
@@ -152,15 +154,11 @@ where
 /// (the fallback will be embedded to this function in the future)
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn splice_unbounded_auto<R, S>(source: &R, dest: &mut S) -> std::io::Result<bool>
-where
-    R: Read + AsFd,
-    S: AsFd,
-{
+pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
     // use splice to check that input or output is pipe which is efficient
     let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest)?,
-        _ => splice_unbounded_broker(source, dest)?,
+        Ok(_) => splice_unbounded(source, dest).is_err(),
+        _ => splice_unbounded_broker(source, dest)?.is_err(),
     };
     Ok(fallback)
 }
@@ -169,11 +167,7 @@ where
 /// return actually sent bytes
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn send_n_bytes(
-    input: impl Read + AsFd,
-    mut target: impl Write + AsFd,
-    n: u64,
-) -> std::io::Result<u64> {
+pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
     let mut n = n;
@@ -222,10 +216,10 @@ pub fn send_n_bytes(
                         }
                     } else {
                         debug_assert!(s <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
-                        // drain pipe before fallback to raw write
+                        // use read_to_end to drain pipe at this fallback for the case write failed
                         let mut drain = Vec::with_capacity(s);
                         broker_r.take(s as u64).read_to_end(&mut drain)?;
-                        crate::io::RawWriter(&target).write_all(&drain)?;
+                        RawWriter(&target).write_all(&drain)?;
                         break true;
                     }
                 }
@@ -239,17 +233,9 @@ pub fn send_n_bytes(
     if !fallback {
         return Ok(bytes_written);
     }
-    let mut reader = input.take(n);
-    let mut buf = vec![0u8; (32 * 1024).min(n as usize)]; //use heap to avoid early allocation
-    loop {
-        match reader.read(&mut buf)? {
-            0 => return Ok(bytes_written),
-            n => {
-                target.write_all(&buf[..n])?;
-                bytes_written += n as u64;
-            }
-        }
-    }
+    // do not buffer at this fallback, or order of output would be wrong with multiple input
+    bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+    Ok(bytes_written)
 }
 
 /// Return verified /dev/null
