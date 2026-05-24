@@ -1072,10 +1072,11 @@ impl BlockWriter<'_> {
             Self::Unbuffered(o) => o.truncate(),
             Self::Buffered(o) => o.truncate(),
         };
-        // ftruncate returns EINVAL when the destination isn't a regular
-        // file (e.g. `of=/dev/null`), which GNU dd silently ignores.
-        // Anything else (ENOSPC, EROFS, ...) is a real failure we need
-        // to surface so the user doesn't end up with stale data.
+        // set_len() returns InvalidInput (EINVAL) when the destination
+        // isn't a regular file (e.g. `of=/dev/null`), which GNU dd
+        // silently ignores. Anything else (ENOSPC, EROFS, ...) is a real
+        // failure we need to surface so the user doesn't end up with
+        // stale data.
         match result {
             Ok(()) => Ok(()),
             Err(err) if err.kind() == io::ErrorKind::InvalidInput => Ok(()),
