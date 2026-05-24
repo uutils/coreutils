@@ -165,22 +165,18 @@ impl MultiWriter {
         let mut buffer = [0u8; BUF_SIZE];
         // fast-path for small input. needs 2+ read to catch end of file
         for _ in 0..2 {
-            match input.read(&mut buffer) {
-                Ok(0) => return Ok(()), // end of file
-                Ok(received) => self.write_flush(&buffer[..received])?,
-                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-                _ => {}
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
         }
         // buffer is too small optimize for large input
         //stack array makes code path for smaller file slower
         let mut buffer = vec![0u8; 4 * BUF_SIZE];
         loop {
-            match input.read(&mut buffer) {
-                Ok(0) => return Ok(()), // end of file
-                Ok(received) => self.write_flush(&buffer[..received])?,
-                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-                _ => {}
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
         }
     }
@@ -284,12 +280,19 @@ struct NamedReader {
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.inner.read(buf).inspect_err(|e| {
-            let _ = writeln!(
-                stderr(),
-                "tee: {}",
-                translate!("tee-error-stdin", "error" => strip_errno(e))
-            );
-        })
+        loop {
+            match self.inner.read(buf) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr(),
+                        "tee: {}",
+                        translate!("tee-error-stdin", "error" => strip_errno(&e))
+                    );
+                    return Err(e);
+                }
+            }
+        }
     }
 }
