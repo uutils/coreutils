@@ -460,7 +460,6 @@ fn backwards_thru_file(file: &mut File, num_delimiters: u64, delimiter: u8) {
 /// For regular files, checks position against file length.
 /// For char/block devices, probes by reading one byte; if data exists, writes
 /// it to `out` so it isn't lost (char devices don't support seeking back).
-#[allow(unused_variables)]
 fn is_file_exhausted(file: &mut File, out: &mut impl Write) -> io::Result<bool> {
     let meta = file.metadata()?;
     if meta.is_file() {
