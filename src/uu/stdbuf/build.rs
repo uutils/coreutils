@@ -90,9 +90,8 @@ fn main() {
     // OUT_DIR is always .../target/[triple/]{profile}/build/{pkg-hash}/out, so the profile
     // is exactly 3 parent levels up — regardless of whether a target triple is in the path.
     let profile = Path::new(&out_dir)
-        .parent() // .../build/{pkg-hash}
-        .and_then(|p| p.parent()) // .../build
-        .and_then(|p| p.parent()) // .../{profile}
+        .ancestors()
+        .nth(3)
         .and_then(|p| p.file_name())
         .and_then(|s| s.to_str())
         .unwrap_or("debug");
