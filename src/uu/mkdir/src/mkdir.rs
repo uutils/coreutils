@@ -259,9 +259,10 @@ impl Drop for UmaskGuard {
 
 /// Create a directory with the exact mode specified, bypassing umask.
 ///
-/// GNU mkdir temporarily sets umask to shaped mask before calling mkdir(2), ensuring the
-/// directory is created atomically with the correct permissions. This avoids a
-/// race condition where the directory briefly exists with umask-based permissions.
+/// GNU mkdir temporarily sets umask to a shaped umask before calling mkdir(2),
+/// ensuring the directory is created atomically with the correct permissions.
+/// This avoids a race condition where the directory briefly exists with
+/// umask-based permissions.
 #[cfg(unix)]
 fn create_dir_with_mode(
     path: &Path,
@@ -282,12 +283,12 @@ fn create_dir_with_mode(path: &Path, _mode: u32, _shaped_umask: u32) -> std::io:
 
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
-#[allow(unused_variables)]
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
     #[cfg(unix)]
     let (mkdir_mode, shaped_umask) = {
-        let umask = mode::get_umask();
-        let umask_bits = rustix::fs::Mode::from_bits_truncate(umask as rustix::fs::RawMode);
+        let mode_bits = |x: u32| rustix::fs::Mode::from_bits_truncate(x as rustix::fs::RawMode);
+        let umask_bits = mode_bits(mode::get_umask());
         if is_parent {
             // Parent directories are never affected by -m (matches GNU behavior).
             // We pass 0o777 as the mode and shape the umask so it cannot block
@@ -295,17 +296,11 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             // write into the parent to create children. All other umask bits are
             // preserved so the kernel applies them — and any default ACL on the
             // grandparent — through the normal mkdir(2) path.
-            (
-                DEFAULT_PERM,
-                umask_bits & !rustix::fs::Mode::from_bits_truncate(0o300 as rustix::fs::RawMode),
-            )
+            (DEFAULT_PERM, umask_bits & !mode_bits(0o300))
         } else {
             match config.mode {
                 // Explicit -m: shape umask so it cannot block explicitly requested bits.
-                Some(m) => (
-                    m,
-                    umask_bits & !rustix::fs::Mode::from_bits_truncate(m as rustix::fs::RawMode),
-                ),
+                Some(m) => (m, umask_bits & !mode_bits(m)),
                 // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
                 None => (DEFAULT_PERM, umask_bits),
             }
