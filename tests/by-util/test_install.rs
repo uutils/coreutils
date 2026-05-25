@@ -2582,7 +2582,7 @@ fn test_install_normal_file_replaces_symlink() {
 
 #[test]
 #[cfg(unix)]
-fn test_install_d_symlink_race_condition() {
+fn test_install_d_symlink_in_path_is_followed() {
     // Test that pre-existing symlinks in the path are followed (GNU coreutils behavior).
     // install -D should traverse symlink components rather than replacing them.
     use std::os::unix::fs::symlink;
@@ -2617,45 +2617,6 @@ fn test_install_d_symlink_race_condition() {
     // The symlink must not have been replaced with a real directory
     assert!(
         at.plus("testdir/a/b").is_symlink(),
-        "Intermediate symlink should be preserved, not replaced with a real directory"
-    );
-}
-
-#[test]
-#[cfg(unix)]
-fn test_install_d_symlink_race_condition_concurrent() {
-    // Verify symlink-following behavior is consistent (companion to the test above).
-    use std::os::unix::fs::symlink;
-
-    let scene = TestScenario::new(util_name!());
-    let at = &scene.fixtures;
-
-    at.mkdir("target2");
-    at.write("source_file2", "test content 2");
-
-    at.mkdir_all("testdir2/a");
-    symlink(at.plus("target2"), at.plus("testdir2/a/b")).unwrap();
-
-    scene
-        .ucmd()
-        .arg("-D")
-        .arg(at.plus("source_file2"))
-        .arg(at.plus("testdir2/a/b/c/file"))
-        .succeeds();
-
-    // File should be in the real target directory (symlink was followed)
-    assert!(
-        at.plus("target2/c/file").exists(),
-        "File should be written through the symlink into the real target directory"
-    );
-    assert_eq!(
-        fs::read_to_string(at.plus("target2/c/file")).unwrap(),
-        "test content 2"
-    );
-
-    // Symlink should be preserved
-    assert!(
-        at.plus("testdir2/a/b").is_symlink(),
         "Intermediate symlink should be preserved, not replaced with a real directory"
     );
 }
