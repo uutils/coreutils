@@ -25,6 +25,7 @@ clap = { workspace = true }
 uucore = { workspace = true, features = [
   "format",
   "fsext",
+  "i18n-decimal",
   "parser-size",
   "parser-glob",
   "time",

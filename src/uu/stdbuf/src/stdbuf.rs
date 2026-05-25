@@ -4,8 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) tempdir dyld dylib optgrps libstdbuf
-#[cfg(not(unix))]
-compile_error!("stdbuf is not supported on the target");
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
@@ -42,7 +40,10 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 #[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
-#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    any(target_os = "cygwin", target_os = "windows")
+))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 
 enum BufferType {
@@ -89,7 +90,7 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(target_os = "cygwin")]
+#[cfg(any(target_os = "cygwin", windows))]
 fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "dll")
 }
@@ -211,7 +212,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     command.args(command_params);
 
     // Replace the current process with the target program (no fork) using exec.
+    #[cfg(unix)]
     let e = command.exec();
+    #[cfg(windows)]
+    let e = match command.spawn() {
+        Ok(mut child) => {
+            let status = child.wait().unwrap();
+            process::exit(status.code().unwrap_or(0));
+        }
+        Err(err) => err,
+    };
     // exec() only returns if there was an error
     match e.kind() {
         std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
@@ -230,10 +240,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
+    #[cfg(unix)]
+    let about = translate!("stdbuf-about");
+    #[cfg(windows)]
+    let about = translate!("stdbuf-about-windows");
     Command::new("stdbuf")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template("stdbuf"))
-        .about(translate!("stdbuf-about"))
+        .about(about)
         .after_help(translate!("stdbuf-after-help"))
         .override_usage(format_usage(&translate!("stdbuf-usage")))
         .trailing_var_arg(true)

@@ -23,10 +23,6 @@ use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
-
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
 // would be enough for billions of universe lifetimes.
@@ -483,14 +479,14 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
+    // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    if !uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?
+        && !uucore::pipes::might_fuse(&handle.reader)
     {
-        // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &mut stdout)? {
-            return Ok(());
-        }
+        return Ok(());
     }
+
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     print_unbuffered(handle, stdout)

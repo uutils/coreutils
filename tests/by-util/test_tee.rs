@@ -256,26 +256,25 @@ mod linux_only {
     use uutests::util::{AtPath, CmdResult, UCommand};
 
     use std::fmt::Write;
-    use std::fs::File;
     use std::process::Stdio;
     use std::time::Duration;
     use uutests::at_and_ucmd;
     use uutests::new_ucmd;
 
-    fn make_broken_pipe() -> File {
-        let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    fn make_broken_pipe() -> std::io::PipeWriter {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
         // Drop the read end of the pipe
         drop(read);
-        // Make the write end of the pipe into a Rust File
-        write.into()
+        // Return the write end of the pipe
+        write
     }
 
-    fn make_hanging_read() -> File {
-        let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    fn make_hanging_read() -> std::io::PipeReader {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
         // PURPOSELY leak the write end of the pipe, so the read end hangs.
         std::mem::forget(write);
         // Return the read end of the pipe
-        read.into()
+        read
     }
 
     fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
@@ -726,10 +725,9 @@ fn test_output_error_flag_without_value_defaults_warn_nopipe() {
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_output_error_presence_only_broken_pipe_unix() {
-    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Close the read end to simulate a broken pipe on stdout
     drop(read);
-    let write: std::fs::File = write.into();
     let content = (0..10_000).map(|_| "x").collect::<String>();
     let result = new_ucmd!()
         .arg("--output-error") // presence-only flag
@@ -745,10 +743,9 @@ fn test_output_error_presence_only_broken_pipe_unix() {
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[test]
 fn test_broken_pipe_early_termination_stdout_only() {
-    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Create a broken stdout
     drop(read);
-    let write: std::fs::File = write.into();
     let content = (0..10_000).map(|_| "x").collect::<String>();
     let mut proc = new_ucmd!();
     let result = proc

@@ -691,10 +691,8 @@ fn test_comm_anonymous_pipes() {
     let scene = TestScenario::new(util_name!());
 
     // Open two anonymous pipes
-    let (comm1_reader, comm1_writer) = rustix::pipe::pipe().unwrap();
-    let mut comm1_writer: std::fs::File = comm1_writer.into();
-    let (comm2_reader, comm2_writer) = rustix::pipe::pipe().unwrap();
-    let mut comm2_writer: std::fs::File = comm2_writer.into();
+    let (comm1_reader, mut comm1_writer) = std::io::pipe().unwrap();
+    let (comm2_reader, mut comm2_writer) = std::io::pipe().unwrap();
 
     // comm reads the data in chunks
     // make content large enough, so that at least two chunks are read
