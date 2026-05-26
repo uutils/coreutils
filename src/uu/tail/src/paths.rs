@@ -225,7 +225,7 @@ impl PathExtTail for Path {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
     }
 
-    /// Return true if `path` is is a file type that can be tailed
+    /// Return true if `path` is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         path_is_tailable(self)
     }
