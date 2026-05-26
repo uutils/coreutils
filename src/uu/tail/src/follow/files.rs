@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
 use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -76,6 +78,19 @@ impl FileHandling {
 
     pub fn keys(&self) -> Keys<'_, PathBuf, PathData> {
         self.map.keys()
+    }
+
+    #[cfg(unix)]
+    pub fn fifo_keys(&self) -> Vec<PathBuf> {
+        self.map
+            .iter()
+            .filter(|(_, data)| {
+                data.metadata
+                    .as_ref()
+                    .is_some_and(|metadata| metadata.file_type().is_fifo())
+            })
+            .map(|(path, _)| path.clone())
+            .collect()
     }
 
     pub fn contains_key(&self, k: &Path) -> bool {

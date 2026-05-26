@@ -145,7 +145,7 @@ impl Observer {
         update_last: bool,
     ) -> UResult<()> {
         if self.follow.is_some() {
-            let path = if path.is_relative() {
+            let path = if path.is_relative() && !path.is_stdin() {
                 std::env::current_dir()?.join(path)
             } else {
                 path.to_owned()
@@ -480,6 +480,15 @@ impl Observer {
 
 #[allow(clippy::cognitive_complexity)]
 pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
+    if settings.debug {
+        let message = if observer.use_polling {
+            translate!("tail-debug-using-polling-mode")
+        } else {
+            translate!("tail-debug-using-notification-mode")
+        };
+        show_error!("{message}");
+    }
+
     if observer.files.no_files_remaining(settings) && !observer.files.only_stdin_remaining() {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
     }
@@ -614,6 +623,8 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
             }
             Err(mpsc::RecvTimeoutError::Timeout) => {
                 timeout_counter += 1;
+                #[cfg(unix)]
+                paths.extend(observer.files.fifo_keys());
                 // Check if stdout pipe is still open
                 #[cfg(target_os = "linux")]
                 if let Ok(false) = ensure_stdout_not_broken() {
