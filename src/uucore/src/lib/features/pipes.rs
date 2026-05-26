@@ -17,6 +17,14 @@ use std::{
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
+/// A type allows to
+/// - check that zero-copy succeed by ?.is_ok()
+/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
+/// - catch the read/write fallback's error by ? or let Err(e)
+///
+/// use rustix::io::Result for functions without read/write fallback
+type PipeRes = std::io::Result<Result<(), ()>>;
+
 /// return pipe larger than given size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
 /// e.g. writing size to pipe should not hang
@@ -49,18 +57,8 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 }
 
 /// splice `len` bytes from `pipe` into `dest`.
-///
-/// returns Ok(Ok(())) if splice succeed
-/// returns Ok(Err(())) if splice failed, but read/write fallback succeed
-/// returns Err(e) if read/write fallback failed too
-///
-/// Thus, ?.is_err() returns serious error at early stage and checks that splice failed
 #[inline]
-pub fn drain_pipe(
-    pipe: &PipeReader,
-    dest: &impl AsFd,
-    len: usize,
-) -> std::io::Result<Result<(), ()>> {
+pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
     debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
     let mut remaining = len;
     while remaining > 0 {
@@ -104,17 +102,10 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
 }
 
 /// force-splice source to dest even both of them are not pipe via broker pipe
-/// returns Ok(Ok(())) if splice succeeds
-/// returns Ok(Err(())) if splice failed, but you can fallback to read/write
-/// returns Err(e) if splice from broker failed and read/write fallback from broker failed
 ///
-/// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
 #[inline]
-pub fn splice_unbounded_broker(
-    source: &impl AsFd,
-    dest: &mut impl AsFd,
-) -> std::io::Result<Result<(), ()>> {
+pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let Some((pipe_rd, pipe_wr)) =
         PIPE_CACHE.get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
@@ -141,13 +132,8 @@ pub fn splice_unbounded_broker(
 }
 
 /// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
-///
-/// see splice_unbounded_broker to handle returned error
 #[inline]
-pub fn splice_unbounded_auto(
-    source: &impl AsFd,
-    dest: &mut impl AsFd,
-) -> std::io::Result<Result<(), ()>> {
+pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
     if splice_unbounded(source, dest).is_err() {
         // input or output is not pipe
         return splice_unbounded_broker(source, dest);
