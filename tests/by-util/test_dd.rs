@@ -1210,6 +1210,20 @@ fn test_outfile_dev_null() {
     new_ucmd!().arg("of=/dev/null").succeeds().no_stdout();
 }
 
+/// Regression test for the truncate path: writing data to /dev/null must
+/// still succeed even though set_len() returns InvalidInput on
+/// non-regular files. The fix narrows the error swallow to InvalidInput,
+/// so this case must remain green.
+#[cfg(unix)]
+#[test]
+fn test_outfile_dev_null_with_input() {
+    new_ucmd!()
+        .arg("of=/dev/null")
+        .pipe_in("some data\n")
+        .succeeds()
+        .no_stdout();
+}
+
 #[test]
 fn test_block_sync() {
     new_ucmd!()
