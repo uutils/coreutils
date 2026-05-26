@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore ilog wc wc's
+// spell-checker:ignore ctype ilog wc wc's
 
 mod count_fast;
 mod countable;
@@ -26,7 +26,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable, i18n::charmap::is_effective_ctype_c_or_posix, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
@@ -38,7 +38,7 @@ use uucore::{
 };
 
 use crate::{
-    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast, is_c_or_posix_locale},
+    count_fast::{count_bytes_chars_and_lines_fast, count_bytes_fast},
     countable::WordCountable,
     word_count::WordCount,
 };
@@ -663,7 +663,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
-    let chars_are_bytes = SHOW_CHARS && is_c_or_posix_locale();
+    let chars_are_bytes = SHOW_CHARS && is_effective_ctype_c_or_posix();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {

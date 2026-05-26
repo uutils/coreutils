@@ -14,6 +14,7 @@ use std::num::IntErrorKind;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::i18n::charmap::is_effective_ctype_c_or_posix;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::posix::{OBSOLETE, posix_version};
 use uucore::translate;
@@ -186,14 +187,6 @@ impl Uniq {
         }
     }
 
-    fn is_c_locale() -> bool {
-        ["LC_ALL", "LC_CTYPE", "LANG"]
-            .iter()
-            .find_map(|&key| std::env::var_os(key))
-            .filter(|v| !v.is_empty())
-            .is_none_or(|v| v == "C" || v == "POSIX")
-    }
-
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -202,7 +195,7 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if Self::is_c_locale() {
+                if is_effective_ctype_c_or_posix() {
                     // for C or POSIX we count bytes
                     key_start + remainder.len().min(limit)
                 } else if let Ok(valid) = std::str::from_utf8(remainder) {

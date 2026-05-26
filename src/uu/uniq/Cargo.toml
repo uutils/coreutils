@@ -21,8 +21,8 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
+uucore = { workspace = true, features = ["i18n-charmap", "parser"] }
 
 [dev-dependencies]
 divan = { workspace = true }
