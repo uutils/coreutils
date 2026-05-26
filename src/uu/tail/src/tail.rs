@@ -359,6 +359,15 @@ fn tail_stdin(
         } else {
             let mut reader = BufReader::new(stdin().take(limit));
             unbounded_tail(&mut reader, settings)?;
+            // Stdin has no path: insert the `-` key so a stdin-only `-f --pid`
+            // follow loop finds a remaining file and exits when the process dies,
+            // instead of reporting "no files remaining".
+            observer.add_path(
+                Path::new(text::DASH),
+                input.display_name.as_str(),
+                Some(Box::new(reader)),
+                true,
+            )?;
         }
     }
 
