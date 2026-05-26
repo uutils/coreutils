@@ -20,13 +20,11 @@ mod wasi_stubs {
     use std::path::Path;
     use uucore::error::{UResult, USimpleError};
 
-    pub struct Observer {
-        pub use_polling: bool,
-    }
+    pub struct Observer {}
 
     impl Observer {
         pub fn from(_settings: &Settings) -> Self {
-            Self { use_polling: false }
+            Self {}
         }
 
         #[allow(clippy::unnecessary_wraps)]
