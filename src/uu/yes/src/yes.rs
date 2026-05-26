@@ -120,11 +120,13 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
         && p_write.write_all(bytes).is_ok()
     {
-        // tee() cannot control offset. Check that output is pipe by tee
-        if safe_partial_send && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
+        // tee() cannot control offset. But omit splice if it is possible
+        if safe_partial_send {
+            // fails if stdout is not a pipe
             while tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {}
-        } else if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
-            'hybrid: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+        }
+        if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
+            'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
             {
                 debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
                 while remain > 0 {
@@ -133,7 +135,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
                     } else {
                         // avoid output breakage with reduced remain even if it would not happen
                         RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
-                        break 'hybrid;
+                        break 'splice;
                     }
                 }
             }
