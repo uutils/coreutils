@@ -983,6 +983,7 @@ fn test_posixly_correct_whitespace() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI has no native C/POSIX locale")]
 fn test_wc_chars_c_locale() {
     // In C/POSIX locale, wc -m should count bytes, not UTF-8 characters
     // Vietnamese "Tiếng Việt" uses diacritics (2 bytes per char in UTF-8)
@@ -1057,6 +1058,7 @@ fn test_wc_chars_utf8_locale() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI has no native C/POSIX locale")]
 fn test_wc_chars_default_locale() {
     // When no locale is set (empty LC_ALL), it defaults to POSIX (chars == bytes)
     // This ensures backward compatibility
@@ -1084,6 +1086,7 @@ fn test_wc_chars_default_locale() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI has no native C/POSIX locale")]
 fn test_wc_multibyte_c_locale() {
     // Issue #9712 and #5831: Test various multibyte characters in C locale
     // All should be counted as bytes

@@ -41,11 +41,24 @@ fn get_effective_ctype_locale() -> Option<String> {
 
 /// Return whether the effective `LC_CTYPE` locale is the byte-oriented C/POSIX locale.
 ///
-/// A missing effective locale defaults to POSIX behavior. Only exact `C` and
-/// `POSIX` locale values are treated as explicit C/POSIX locales; locales such
-/// as `C.UTF-8` are not.
+/// WASI has no native locale environment, so it keeps the existing
+/// UTF-8-compatible behavior regardless of forwarded locale variables.
+#[cfg(target_os = "wasi")]
 pub fn is_effective_ctype_c_or_posix() -> bool {
-    get_effective_ctype_locale().is_none_or(|locale| locale == "C" || locale == "POSIX")
+    false
+}
+
+/// Return whether the effective `LC_CTYPE` locale is the byte-oriented C/POSIX locale.
+///
+/// A missing effective locale defaults to POSIX behavior on platforms with a
+/// native locale environment.
+#[cfg(not(target_os = "wasi"))]
+pub fn is_effective_ctype_c_or_posix() -> bool {
+    match get_effective_ctype_locale().as_deref() {
+        Some("C" | "POSIX") => true,
+        Some(_) => false,
+        None => true,
+    }
 }
 
 fn get_encoding() -> &'static MbEncoding {
