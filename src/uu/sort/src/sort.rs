@@ -20,7 +20,7 @@ mod numeric_str_cmp;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
-use chunks::LineData;
+use chunks::{LineData, collation_key_end_entry, skipped_collation_key_entry};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
@@ -134,6 +134,7 @@ const POSITIVE: &u8 = &b'+';
 const MIN_AUTOMATIC_BUF_SIZE: usize = 512 * 1024; // 512 KiB
 const FALLBACK_AUTOMATIC_BUF_SIZE: usize = 32 * 1024 * 1024; // 32 MiB
 const MAX_AUTOMATIC_BUF_SIZE: usize = 1024 * 1024 * 1024; // 1 GiB
+const MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN: usize = u16::MAX as usize;
 
 #[derive(Debug, Error)]
 pub enum SortError {
@@ -643,10 +644,18 @@ impl<'a> Line<'a> {
     ) -> Self {
         #[cfg(feature = "i18n-collator")]
         if settings.precomputed.fast_locale_collation {
-            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
-            line_data
-                .collation_key_ends
-                .push(line_data.collation_key_buffer.len());
+            if line.len() <= MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN {
+                compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+                let end = line_data.collation_key_buffer.len();
+                line_data
+                    .collation_key_ends
+                    .push(collation_key_end_entry(end));
+            } else {
+                let end = line_data.collation_key_buffer.len();
+                line_data
+                    .collation_key_ends
+                    .push(skipped_collation_key_entry(end));
+            }
             return Self { line, index };
         }
 
@@ -2650,9 +2659,13 @@ fn compare_by<'a>(
 
     #[cfg(feature = "i18n-collator")]
     if global_settings.precomputed.fast_locale_collation {
-        let a_key = a_line_data.collation_key(a.index);
-        let b_key = b_line_data.collation_key(b.index);
-        let mut cmp = a_key.cmp(b_key);
+        let mut cmp = match (
+            a_line_data.collation_key(a.index),
+            b_line_data.collation_key(b.index),
+        ) {
+            (Some(a_key), Some(b_key)) => a_key.cmp(b_key),
+            _ => locale_cmp(a.line, b.line),
+        };
         // If collation keys are equal, fall back to lexicographic comparison
         // This can be the case for inputs like `01` and `0_1`, which have equal keys
         if cmp == Ordering::Equal {
