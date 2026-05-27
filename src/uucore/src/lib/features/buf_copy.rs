@@ -10,17 +10,27 @@
 //! does not handle copying special files (e.g pipes, character/block devices).
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub mod linux;
+use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub use linux::*;
+pub fn copy_stream(
+    src: &mut (impl std::io::Read + AsFd),
+    dest: &mut impl AsFd,
+) -> std::io::Result<()> {
+    // try to splice() system call for throughput
+    if crate::pipes::splice_unbounded_auto(src, dest)?.is_err() {
+        // fall back on writing "without buffering", or order of output would be wrong
+        // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
+        // RawWriter also removes io::copy's specialization slower than our splice
+        std::io::copy(src, &mut crate::io::RawWriter(dest))?;
+    }
+    Ok(())
+}
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub mod other;
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub use other::copy_stream;
+pub use std::io::copy as copy_stream;
 
 #[cfg(test)]
-#[cfg(any(target_os = "linux", target_os = "android"))] // copy_stream is a thin wrapper for io::copy. nothing to test...
+#[cfg(any(target_os = "linux", target_os = "android"))] // copy_stream is io::copy on other platforms. nothing to test.
 mod tests {
     use super::*;
     use std::fs::File;
