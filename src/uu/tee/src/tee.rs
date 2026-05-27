@@ -206,17 +206,12 @@ impl MultiWriter {
                     false
                 }
             });
-        self.aborted.take().map_or(
-            if self.writers.is_empty() {
-                // This error kind will never be raised by the standard
-                // library, so we can use it for early termination of
-                // `copy`
-                Err(Error::from(ErrorKind::Other))
-            } else {
-                Ok(())
-            },
-            Err,
-        )
+        match self.aborted.take() {
+            Some(e) => Err(e),
+            // This error kind will never be raised by std, so we can use it for termination when all writers exited
+            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None => Ok(()),
+        }
     }
 }
 
