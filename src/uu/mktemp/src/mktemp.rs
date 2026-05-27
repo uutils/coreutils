@@ -415,26 +415,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let dry_run = options.dry_run;
-    let suppress_file_err = options.quiet;
-    let make_dir = options.directory;
+    let res = mktemp(&options);
 
-    // Parse file path parameters from the command-line options.
-    let Params {
-        directory: tmpdir,
-        prefix,
-        num_rand_chars: rand,
-        suffix,
-    } = Params::from(options)?;
-
-    // Create the temporary file or directory, or simulate creating it.
-    let res = if dry_run {
-        Ok(dry_exec(&tmpdir, &prefix, rand, &suffix))
-    } else {
-        exec(&tmpdir, &prefix, rand, &suffix, make_dir)
-    };
-
-    let res = if suppress_file_err {
+    let res = if options.quiet {
         // Mapping all UErrors to ExitCodes prevents the errors from being printed
         res.map_err(|e| e.code().into())
     } else {
@@ -641,6 +624,8 @@ fn get_tmpdir_env_or_default() -> PathBuf {
 /// Create a temporary file or directory
 ///
 /// Behavior is determined by the `options` parameter, see [`Options`] for details.
+///
+/// The function is public so it can be used by nushell and others.
 pub fn mktemp(options: &Options) -> UResult<PathBuf> {
     // Parse file path parameters from the command-line options.
     let Params {
