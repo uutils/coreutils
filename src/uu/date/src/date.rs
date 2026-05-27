@@ -853,11 +853,17 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 
             if let Some(tz) = tz {
                 let date_part = s.trim_end_matches(last_word).trim();
-                // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
+                // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
                 if let Ok(parsed) = parse_datetime::parse_datetime_at_date(now.clone(), date_part) {
                     let dt = parsed.datetime();
                     if let Ok(zoned) = dt.to_zoned(tz) {
-                        return Some(zoned);
+                        // The trailing abbreviation only describes the *input*
+                        // timezone. For display, re-zone to the system timezone
+                        // (i.e. `now`'s zone, which is UTC under `-u`). This
+                        // matches GNU `date` and keeps this path consistent
+                        // with the generic `parse_datetime` fallback below,
+                        // which already re-zones via `to_zoned(now.time_zone())`.
+                        return Some(zoned.with_time_zone(now.time_zone().clone()));
                     }
                 }
             }

@@ -124,6 +124,15 @@ fn test_out_of_memory() {
 }
 
 #[test]
+fn test_out_of_memory_skip() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .arg("skip=1")
+        .fails_with_code(1)
+        .stderr_contains("memory");
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();
@@ -233,15 +242,13 @@ fn test_zero_multiplier_warning() {
             .args(&[format!("{arg}=0").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
 
         new_ucmd!()
             .args(&[format!("{arg}=00x1").as_str(), "status=none"])
             .pipe_in("")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
 
         new_ucmd!()
             .args(&[format!("{arg}=0x1").as_str(), "status=none"])
@@ -2106,4 +2113,18 @@ fn test_ascii_case_conversion_fallback() {
         .pipe_in(expected)
         .succeeds();
     assert_eq!(result.stdout(), input);
+}
+
+#[test]
+fn test_bs_not_positive() {
+    for bs in [-5, 0, 0x0] {
+        for bs_param in ["bs", "ibs", "obs", "cbs"] {
+            new_ucmd!()
+                .args(&[format!("{bs_param}={bs}")])
+                .fails()
+                .no_stdout()
+                .code_is(1)
+                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+        }
+    }
 }

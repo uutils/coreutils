@@ -333,25 +333,17 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
+
     #[cfg(not(windows))]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&mounts, &m, None).ok();
-        Ok(mounts
-            .clone()
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
+    let maybe_mount = |m| Filesystem::from_mount(&mounts, m, None).ok();
     #[cfg(windows)]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&m, None).ok();
-        Ok(mounts
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
+    let maybe_mount = |m| Filesystem::from_mount(m, None).ok();
+
+    Ok(mounts
+        .iter()
+        .filter_map(maybe_mount)
+        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+        .collect())
 }
 
 /// For each path, get the filesystem that contains that path.

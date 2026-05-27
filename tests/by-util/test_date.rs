@@ -12,7 +12,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
-use uucore::process::geteuid;
+use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
@@ -425,13 +425,12 @@ fn test_date_format_literal() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -446,7 +445,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error() {
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
@@ -460,7 +459,7 @@ fn test_date_set_permissions_error() {
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
 
         for date_str in test_cases {
@@ -494,13 +493,12 @@ fn test_date_set_mac_unavailable() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_2() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -575,26 +573,24 @@ fn test_date_for_file_mtime() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_3() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_4() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -1398,14 +1394,7 @@ fn test_date_locale_hour_c_locale() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_hour_en_us() {
     // en_US locale typically uses 12-hour format when available
     // Note: If locale is not installed on system, falls back to C locale (24-hour)
@@ -1440,14 +1429,7 @@ fn test_date_explicit_format_overrides_locale() {
 
 // Comprehensive locale formatting tests to verify actual locale format strings are used
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_leading_zeros_en_us() {
     // Test for leading zeros in en_US locale
     // en_US uses %I (01-12) with leading zeros, not %l (1-12) without
@@ -1576,14 +1558,7 @@ fn test_date_locale_format_not_hardcoded() {
 }
 
 #[test]
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
+#[cfg(unix)]
 fn test_date_locale_en_us_vs_c_difference() {
     // Verify that en_US and C locales produce different outputs
     // (if en_US locale is available on the system)
@@ -1898,10 +1873,12 @@ fn test_date_input_hhmm_ampm() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/281 — GNU date re-zones input with trailing TZ abbreviation (e.g. `2024-01-01 EST`) into the local TZ; uutils keeps the input TZ on output."]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
-    // (GNU: 04:00:00 UTC), not leave it in EST (uutils: 00:00:00 -05).
+    // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
+    // behavior was 00:00:00 -05). The trailing abbreviation only specifies
+    // the input timezone; output should be re-zoned to local.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/281.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC+1")
@@ -3027,4 +3004,13 @@ fn test_korean_time_zone() {
         .arg("+%F %T %Z")
         .succeeds()
         .stdout_is("2026-01-15 01:00:00 UTC\n");
+}
+
+// https://github.com/uutils/coreutils/issues/12001
+// date: width prefix in %N format specifier is ignored ( %3N, %6N always output full 9 nanosecond digits) #12001
+#[test]
+fn test_nanoseconds_width_prefix_ignored_issue12001() {
+    let result = new_ucmd!().arg("+%3N").succeeds();
+    // compare to 4 because of \n
+    assert_eq!(result.stdout().len(), 4);
 }

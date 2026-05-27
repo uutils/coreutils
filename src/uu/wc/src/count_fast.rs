@@ -27,7 +27,7 @@ const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use libc::S_IFIFO;
 #[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
 
 const BUF_SIZE: usize = 64 * 1024;
 
@@ -40,27 +40,29 @@ const BUF_SIZE: usize = 64 * 1024;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
-    // todo: avoid generating broker if input is pipe (fcntl_setpipe_size succeed) and directly splice() to /dev/null to save RAM usage
-    let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
-
     let mut byte_count = 0;
-    // improve throughput from pipe
-    let _ = rustix::pipe::fcntl_setpipe_size(fd, MAX_ROOTLESS_PIPE_SIZE);
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck of our wc -c
     loop {
-        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => break,
-            Ok(res) => {
-                byte_count += res;
-                // Silent the warning as we want to the error message
-                if splice_exact(&pipe_rd, &null_file, res).is_err() {
-                    return Err(byte_count);
-                }
-            }
-            Err(_) => return Err(byte_count),
+        match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(byte_count),
+            Ok(res) => byte_count += res,
+            Err(_) => break, // input is not pipe. needs additional pipe...
         }
     }
-
-    Ok(byte_count)
+    let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)?;
+    loop {
+        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
+            0 => return Ok(byte_count),
+            res => {
+                byte_count += res;
+                // pipe to null is not blocked. So this returns res at most cases
+                // next splice does not hang if we discarded 1+ pages
+                splice(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
+            }
+        }
+    }
 }
 
 /// In the special case where we only need to count the number of bytes. There
@@ -143,44 +145,36 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     }
                 }
             }
+            // Else, if we're on Linux and our file is a FIFO pipe
+            // (or stdin), we use splice to count the number of bytes.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            {
-                // Else, if we're on Linux and our file is a FIFO pipe
-                // (or stdin), we use splice to count the number of bytes.
-                if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
-                    match count_bytes_using_splice(handle) {
-                        Ok(n) => return (n, None),
-                        Err(n) => byte_count = n,
-                    }
+            if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
+                match count_bytes_using_splice(handle) {
+                    Ok(n) => return (n, None),
+                    Err(n) => byte_count = n,
                 }
             }
         }
     }
 
     #[cfg(windows)]
+    if let Some(file) = handle.inner_file()
+        && let Ok(metadata) = file.metadata()
     {
-        if let Some(file) = handle.inner_file() {
-            if let Ok(metadata) = file.metadata() {
-                let attributes = metadata.file_attributes();
-
-                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
-                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
-                {
-                    return (metadata.file_size() as usize, None);
-                }
-            }
+        let attributes = metadata.file_attributes();
+        if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0 || (attributes & FILE_ATTRIBUTE_NORMAL) != 0 {
+            return (metadata.file_size() as usize, None);
         }
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
+
     let mut buf = [0_u8; BUF_SIZE];
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return (byte_count, None),
-            Ok(n) => {
-                byte_count += n;
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Ok(n) => byte_count += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
     }
@@ -244,7 +238,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     };
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
     }

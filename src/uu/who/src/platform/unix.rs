@@ -10,13 +10,12 @@ use crate::uu_app;
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use uucore::libc::S_IWGRP;
 use uucore::translate;
 
 use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
-use std::ffi::CStr;
 use std::fmt::Write;
 use std::io::{Write as _, stdout};
 use std::os::unix::fs::MetadataExt;
@@ -179,17 +178,10 @@ fn time_string(ut: &UtmpxRecord) -> String {
     ut.login_time().format(&time_format).unwrap()
 }
 
-#[inline]
 fn current_tty() -> String {
-    let p = unsafe { ttyname(STDIN_FILENO) };
-    if p.is_null() {
-        String::new()
-    } else {
-        unsafe { CStr::from_ptr(p) }
-            .to_string_lossy()
-            .trim_start_matches("/dev/")
-            .to_owned()
-    }
+    rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(16))
+        .map(|s| s.to_string_lossy().trim_start_matches("/dev/").to_owned())
+        .unwrap_or_default()
 }
 
 impl Who {

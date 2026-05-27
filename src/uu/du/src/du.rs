@@ -6,7 +6,7 @@
 // spell-checker:ignore fstatat openat dirfd
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
-use glob::Pattern;
+use glob::{Pattern, PatternError};
 use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -426,6 +426,10 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
+        const S_IFMT: u32 = 0o170_000;
+        const S_IFDIR: u32 = 0o040_000;
+        const S_IFLNK: u32 = 0o120_000;
+
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
@@ -439,9 +443,6 @@ fn safe_du(
         };
 
         // Check if it's a symlink
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
         #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
@@ -575,11 +576,12 @@ fn du_regular(
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+    // Maximum symlink depth to prevent infinite loops
+    const MAX_SYMLINK_DEPTH: usize = 40;
+
     let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
 
     // Add current directory to ancestors if it's a directory
     let my_inode = if my_stat.metadata.is_dir() {
@@ -749,19 +751,17 @@ enum DuError {
     InvalidTimeStyleArg(String),
 
     #[error("{}", translate!("du-error-invalid-glob", "error" => _0))]
-    InvalidGlob(String),
+    InvalidGlob(PatternError),
 }
 
 impl UError for DuError {}
 
 /// Read a file and return each line in a vector of String
-fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
-    let file = File::open(filename).expect("no such file");
+fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
+    let file = File::open(filename)?;
     let buf = BufReader::new(file);
-
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .collect()
+    let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
+    Ok(lines)
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -770,7 +770,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(file_as_vec);
+        .map(file_as_vec)
+        .collect::<UResult<Vec<Vec<String>>>>()?
+        .into_iter()
+        .flatten();
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)
@@ -785,10 +788,8 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
                 translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
             );
         }
-        match parse_glob::from_str(&f) {
-            Ok(glob) => exclude_patterns.push(glob),
-            Err(err) => return Err(DuError::InvalidGlob(err.to_string()).into()),
-        }
+        let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;
+        exclude_patterns.push(glob);
     }
     Ok(exclude_patterns)
 }
@@ -1288,6 +1289,8 @@ pub fn uu_app() -> Command {
                 .short('a')
                 .long(options::ALL)
                 .help(translate!("du-help-all"))
+                .conflicts_with(options::SUMMARIZE)
+                .overrides_with(options::ALL)
                 .action(ArgAction::SetTrue),
         )
         .arg(
@@ -1295,68 +1298,78 @@ pub fn uu_app() -> Command {
                 .short('A')
                 .long(options::APPARENT_SIZE)
                 .help(translate!("du-help-apparent-size"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::APPARENT_SIZE),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE)
                 .short('B')
                 .long(options::BLOCK_SIZE)
                 .value_name("SIZE")
-                .help(translate!("du-help-block-size")),
+                .help(translate!("du-help-block-size"))
+                .overrides_with(options::BLOCK_SIZE),
         )
         .arg(
             Arg::new(options::BYTES)
                 .short('b')
                 .long("bytes")
                 .help(translate!("du-help-bytes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BYTES),
         )
         .arg(
             Arg::new(options::TOTAL)
                 .long("total")
                 .short('c')
                 .help(translate!("du-help-total"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::TOTAL),
         )
         .arg(
             Arg::new(options::MAX_DEPTH)
                 .short('d')
                 .long("max-depth")
                 .value_name("N")
-                .help(translate!("du-help-max-depth")),
+                .help(translate!("du-help-max-depth"))
+                .overrides_with(options::MAX_DEPTH),
         )
         .arg(
             Arg::new(options::HUMAN_READABLE)
                 .long("human-readable")
                 .short('h')
                 .help(translate!("du-help-human-readable"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::HUMAN_READABLE),
         )
         .arg(
             Arg::new(options::INODES)
                 .long(options::INODES)
                 .help(translate!("du-help-inodes"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::INODES),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1K)
                 .short('k')
                 .help(translate!("du-help-block-size-1k"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1K),
         )
         .arg(
             Arg::new(options::COUNT_LINKS)
                 .short('l')
                 .long("count-links")
                 .help(translate!("du-help-count-links"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::COUNT_LINKS),
         )
         .arg(
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
                 .help(translate!("du-help-dereference"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE),
         )
         .arg(
             Arg::new(options::DEREFERENCE_ARGS)
@@ -1364,7 +1377,8 @@ pub fn uu_app() -> Command {
                 .visible_short_alias('H')
                 .long(options::DEREFERENCE_ARGS)
                 .help(translate!("du-help-dereference-args"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::DEREFERENCE_ARGS),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE)
@@ -1372,47 +1386,54 @@ pub fn uu_app() -> Command {
                 .long(options::NO_DEREFERENCE)
                 .help(translate!("du-help-no-dereference"))
                 .overrides_with(options::DEREFERENCE)
+                .overrides_with(options::NO_DEREFERENCE)
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::BLOCK_SIZE_1M)
                 .short('m')
                 .help(translate!("du-help-block-size-1m"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::BLOCK_SIZE_1M),
         )
         .arg(
             Arg::new(options::NULL)
                 .short('0')
                 .long("null")
                 .help(translate!("du-help-null"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::NULL),
         )
         .arg(
             Arg::new(options::SEPARATE_DIRS)
                 .short('S')
                 .long("separate-dirs")
                 .help(translate!("du-help-separate-dirs"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SEPARATE_DIRS),
         )
         .arg(
             Arg::new(options::SUMMARIZE)
                 .short('s')
                 .long("summarize")
                 .help(translate!("du-help-summarize"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SUMMARIZE),
         )
         .arg(
             Arg::new(options::SI)
                 .long(options::SI)
                 .help(translate!("du-help-si"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::SI),
         )
         .arg(
             Arg::new(options::ONE_FILE_SYSTEM)
                 .short('x')
                 .long(options::ONE_FILE_SYSTEM)
                 .help(translate!("du-help-one-file-system"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::ONE_FILE_SYSTEM),
         )
         .arg(
             Arg::new(options::THRESHOLD)
@@ -1421,14 +1442,16 @@ pub fn uu_app() -> Command {
                 .value_name("SIZE")
                 .num_args(1)
                 .allow_hyphen_values(true)
-                .help(translate!("du-help-threshold")),
+                .help(translate!("du-help-threshold"))
+                .overrides_with(options::THRESHOLD),
         )
         .arg(
             Arg::new(options::VERBOSE)
                 .short('v')
                 .long("verbose")
                 .help(translate!("du-help-verbose"))
-                .action(ArgAction::SetTrue),
+                .action(ArgAction::SetTrue)
+                .overrides_with(options::VERBOSE),
         )
         .arg(
             Arg::new(options::EXCLUDE)
@@ -1466,13 +1489,15 @@ pub fn uu_app() -> Command {
                     PossibleValue::new("ctime").alias("status"),
                     PossibleValue::new("creation").alias("birth"),
                 ]))
-                .help(translate!("du-help-time")),
+                .help(translate!("du-help-time"))
+                .overrides_with(options::TIME),
         )
         .arg(
             Arg::new(options::TIME_STYLE)
                 .long(options::TIME_STYLE)
                 .value_name("STYLE")
-                .help(translate!("du-help-time-style")),
+                .help(translate!("du-help-time-style"))
+                .overrides_with(options::TIME_STYLE),
         )
         .arg(
             Arg::new(options::FILE)

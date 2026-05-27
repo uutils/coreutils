@@ -27,8 +27,6 @@ use pretty_assertions::assert_eq;
 use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
-#[cfg(not(windows))]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -1165,12 +1163,13 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn mkfifo(&self, fifo: &str) {
+        // rustix::fs::mkfifoat is linux only
+        use nix::sys::stat::Mode;
         let full_path = self.plus_as_string(fifo);
         log_info("mkfifo", &full_path);
-        unsafe {
-            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
-            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
-        }
+
+        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
@@ -2942,12 +2941,12 @@ pub fn whoami() -> String {
 
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
-/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
-/// - controller_fd: The controller file descriptor
-/// - replica_fd: The replica file descriptor
+/// - controller: The controller file
+/// - replica: The replica file
 #[cfg(unix)]
-pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
     let pty = openpty(None, None).expect("Failed to create PTY");
@@ -2955,7 +2954,7 @@ pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
         .expect("Failed to get PTY path")
         .to_string_lossy()
         .to_string();
-    (path, pty.master, pty.slave)
+    (path, pty.master.into(), pty.slave.into())
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
@@ -3244,7 +3243,7 @@ mod tests {
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
-    #[ctor::ctor]
+    #[ctor::ctor(unsafe)]
     fn init() {
         unsafe {
             env::set_var("UUTESTS_BINARY_PATH", "");

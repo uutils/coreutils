@@ -185,7 +185,8 @@ impl Num {
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
     // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::with_capacity(buf_size);
+    let mut buf = Vec::new();
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
     while remaining > 0 {
@@ -359,7 +360,7 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
             let is_file = if let Ok(metadata) = f.metadata() {
@@ -378,6 +379,8 @@ impl<'a> Input<'a> {
                 Source::Stdin(io::stdin())
             }
         };
+        #[cfg(all(not(unix), not(windows)))]
+        let mut src = Source::Stdin(io::stdin());
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]

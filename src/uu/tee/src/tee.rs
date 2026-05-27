@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
+use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -80,11 +80,14 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Writer::Stdout(stdout()),
+            #[cfg(any(unix, target_os = "wasi"))]
+            inner: Writer::Stdout(uucore::io::RawWriter(rustix::stdio::stdout())),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            inner: Writer::Stdout(std::io::stdout()),
         },
     );
 
-    let mut output = MultiWriter::new(writers, options.output_error.clone());
+    let mut output = MultiWriter::new(writers, options.output_error);
     let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
@@ -144,6 +147,7 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
+    aborted: Option<Error>,
 }
 
 impl MultiWriter {
@@ -159,29 +163,20 @@ impl MultiWriter {
         // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
         const BUF_SIZE: usize = 8 * 1024;
         let mut buffer = [0u8; BUF_SIZE];
-        // fast-path for small input
-        match input.read(&mut buffer) {
-            Ok(0) => return Ok(()), // end of file
-            Ok(received) => {
-                self.write_all(&buffer[..received])?;
-                self.flush()?; // avoid buffering
+        // fast-path for small input. needs 2+ read to catch end of file
+        for _ in 0..2 {
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
-            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-            _ => {}
         }
         // buffer is too small optimize for large input
         //stack array makes code path for smaller file slower
         let mut buffer = vec![0u8; 4 * BUF_SIZE];
         loop {
-            match input.read(&mut buffer) {
-                Ok(0) => return Ok(()), // end of file
-                Ok(received) => {
-                    self.write_all(&buffer[..received])?;
-                    // avoid buffering
-                    self.flush()?;
-                }
-                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-                _ => {}
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
         }
     }
@@ -191,17 +186,38 @@ impl MultiWriter {
             writers,
             output_error_mode,
             ignored_errors: 0,
+            aborted: None,
         }
     }
 
     fn error_occurred(&self) -> bool {
         self.ignored_errors != 0
     }
+
+    fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
+        let mode = self.output_error_mode;
+        self.writers
+            .retain_mut(|writer| match writer.inner.write_all(buf) {
+                Ok(()) => true,
+                Err(e) => {
+                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
+                        self.aborted.get_or_insert(e);
+                    }
+                    false
+                }
+            });
+        match self.aborted.take() {
+            Some(e) => Err(e),
+            // This error kind will never be raised by std, so we can use it for termination when all writers exited
+            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None => Ok(()),
+        }
+    }
 }
 
 fn process_error(
-    mode: Option<&OutputErrorMode>,
-    f: Error,
+    mode: Option<OutputErrorMode>,
+    e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {
@@ -210,80 +226,40 @@ fn process_error(
         None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
     );
 
-    if ignore_pipe && f.kind() == ErrorKind::BrokenPipe {
+    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
         return Ok(());
     }
-    let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
+    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
-        Err(f)
+        Err(e)
     } else {
         *ignored_errors += 1;
         Ok(())
     }
 }
 
-impl Write for MultiWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            writer
-                .write_all(buf)
-                .map_err(|f| {
-                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
-                        .map_err(|e| aborted.get_or_insert(e));
-                })
-                .is_ok()
-        });
-        self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else if self.writers.is_empty() {
-            // This error kind will never be raised by the standard
-            // library, so we can use it for early termination of
-            // `copy`
-            Err(Error::from(ErrorKind::Other))
-        } else {
-            Ok(buf.len())
-        }
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            writer
-                .flush()
-                .map_err(|f| {
-                    let _ = process_error(mode.as_ref(), f, writer, &mut errors)
-                        .map_err(|e| aborted.get_or_insert(e));
-                })
-                .is_ok()
-        });
-        self.ignored_errors += errors;
-        aborted.map_or(Ok(()), Err)
-    }
-}
-
 enum Writer {
     File(std::fs::File),
+    // remove buffering for posix requirement and improve throughput
+    #[cfg(any(unix, target_os = "wasi"))]
+    Stdout(uucore::io::RawWriter<rustix::fd::BorrowedFd<'static>>),
+    #[cfg(not(any(unix, target_os = "wasi")))]
     Stdout(std::io::Stdout),
 }
 
-impl Write for Writer {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+impl Writer {
+    pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         match self {
-            Self::File(f) => f.write(buf),
-            Self::Stdout(s) => s.write(buf),
-        }
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        match self {
-            Self::File(f) => f.flush(),
-            Self::Stdout(s) => s.flush(),
+            // File does not have line buffering
+            Self::File(f) => f.write_all(buf),
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::Stdout(s) => s.write_all(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            Self::Stdout(s) => {
+                s.write_all(buf)?;
+                // needs unsafe to remove buffering... flush after write_all to keep overhead minimal
+                s.flush()
+            }
         }
     }
 }
@@ -293,28 +269,25 @@ struct NamedWriter {
     pub name: OsString,
 }
 
-impl Write for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
-
 struct NamedReader {
     inner: std::io::Stdin,
 }
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.inner.read(buf).inspect_err(|e| {
-            let _ = writeln!(
-                stderr(),
-                "tee: {}",
-                translate!("tee-error-stdin", "error" => strip_errno(e))
-            );
-        })
+        loop {
+            match self.inner.read(buf) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr(),
+                        "tee: {}",
+                        translate!("tee-error-stdin", "error" => strip_errno(&e))
+                    );
+                    return Err(e);
+                }
+            }
+        }
     }
 }

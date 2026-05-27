@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -668,10 +668,11 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
+            // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
+                .filter(|s| !s.trim_ascii_start().starts_with('+'))
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
@@ -697,7 +698,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
             self.write_debug(settings, writer)?;
         } else {
@@ -1371,13 +1372,12 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
-        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
-    }
+    let rlim_cur = getrlimit(Resource::Nofile)
+        .current
+        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
@@ -1410,8 +1410,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1770,7 +1768,6 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
@@ -2655,7 +2652,13 @@ fn compare_by<'a>(
     if global_settings.precomputed.fast_locale_collation {
         let a_key = a_line_data.collation_key(a.index);
         let b_key = b_line_data.collation_key(b.index);
-        let cmp = a_key.cmp(b_key);
+        let mut cmp = a_key.cmp(b_key);
+        // If collation keys are equal, fall back to lexicographic comparison
+        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        if cmp == Ordering::Equal {
+            // Reversing the order to match sort's sorting behaviour
+            cmp = b.line.cmp(a.line);
+        }
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -2834,11 +2837,12 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
+    // check for inf, -inf and nan
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
     for &allowed_prefix in ALLOWED_PREFIXES {
         if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -3141,7 +3145,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())

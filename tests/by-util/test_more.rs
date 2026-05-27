@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-use nix::unistd::{read, write};
-#[cfg(unix)]
 use std::fs::File;
 #[cfg(unix)]
 use std::fs::{Permissions, set_permissions};
+#[cfg(unix)]
+use std::io::{Read as _, Write as _};
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStrExt;
 #[cfg(unix)]
@@ -23,8 +23,8 @@ fn run_more_with_pty(
     args: &[&str],
     file: &str,
     content: &str,
-) -> (uutests::util::UChild, std::os::fd::OwnedFd, String) {
-    let (path, controller, _replica) = pty_path();
+) -> (uutests::util::UChild, File, String) {
+    let (path, mut controller, _replica) = pty_path();
     let (at, mut ucmd) = at_and_ucmd!();
     at.write(file, content);
 
@@ -37,15 +37,15 @@ fn run_more_with_pty(
 
     child.delay(200);
     let mut output = vec![0u8; 1024];
-    let n = read(&controller, &mut output).unwrap();
+    let n = controller.read(&mut output).unwrap();
     let output_str = String::from_utf8_lossy(&output[..n]).to_string();
 
     (child, controller, output_str)
 }
 
 #[cfg(unix)]
-fn quit_more(controller: &std::os::fd::OwnedFd, mut child: uutests::util::UChild) {
-    write(controller, b"q").unwrap();
+fn quit_more(controller: &mut File, mut child: uutests::util::UChild) {
+    controller.write_all(b"q").unwrap();
     child.delay(50);
 }
 
@@ -88,7 +88,7 @@ fn test_valid_arg() {
 #[cfg(unix)]
 fn test_alive(args: &[&str]) {
     let (at, mut ucmd) = at_and_ucmd!();
-    let (path, controller, _replica) = pty_path();
+    let (path, mut controller, _replica) = pty_path();
 
     let content = "test content";
     let file = "test_file";
@@ -107,7 +107,7 @@ fn test_alive(args: &[&str]) {
     assert!(child.is_alive(), "Command should still be alive");
 
     // cleanup
-    write(&controller, b"q").unwrap();
+    controller.write_all(b"q").unwrap();
     child.delay(50);
 }
 
@@ -217,39 +217,40 @@ fn test_more_non_utf8_paths() {
 #[test]
 #[cfg(unix)]
 fn test_basic_display() {
-    let (child, controller, output) = run_more_with_pty(&[], "test.txt", "line1\nline2\nline3\n");
+    let (child, mut controller, output) =
+        run_more_with_pty(&[], "test.txt", "line1\nline2\nline3\n");
     assert!(output.contains("line1"));
-    quit_more(&controller, child);
+    quit_more(&mut controller, child);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_squeeze_blank_lines() {
-    let (child, controller, output) =
+    let (child, mut controller, output) =
         run_more_with_pty(&["-s"], "test.txt", "line1\n\n\n\nline2\n");
     assert!(output.contains("line1"));
-    quit_more(&controller, child);
+    quit_more(&mut controller, child);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_pattern_search() {
-    let (child, controller, output) = run_more_with_pty(
+    let (child, mut controller, output) = run_more_with_pty(
         &["-P", "target"],
         "test.txt",
         "foo\nbar\nbaz\ntarget\nend\n",
     );
     assert!(output.contains("target"));
     assert!(!output.contains("foo"));
-    quit_more(&controller, child);
+    quit_more(&mut controller, child);
 }
 
 #[test]
 #[cfg(unix)]
 fn test_from_line_option() {
-    let (child, controller, output) =
+    let (child, mut controller, output) =
         run_more_with_pty(&["-F", "2"], "test.txt", "line1\nline2\nline3\nline4\n");
     assert!(output.contains("line2"));
     assert!(!output.contains("line1"));
-    quit_more(&controller, child);
+    quit_more(&mut controller, child);
 }

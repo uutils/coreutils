@@ -524,7 +524,7 @@ fn process_file(
         Err(Error::from_io1(s, &file_full_name, r))
     };
 
-    // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
+    // SAFETY: If `entry.fts_statp` is not null, then it is assumed to be valid.
     let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
         st.try_into()?
     } else {
@@ -627,6 +627,8 @@ fn change_file_context(
     context: &SELinuxSecurityContext,
     path: &Path,
 ) -> Result<()> {
+    type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
+
     match &options.mode {
         CommandLineMode::Custom {
             user,
@@ -672,8 +674,6 @@ fn change_file_context(
                     let err = io::ErrorKind::InvalidInput.into();
                     Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                 })?;
-
-            type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
 
             let list: &[(&Option<OsString>, SetValueProc)] = &[
                 (user, OpaqueSecurityContext::set_user),

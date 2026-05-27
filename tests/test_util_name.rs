@@ -16,9 +16,8 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 // Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
-    // No need for unsafe here
     unsafe {
         env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
@@ -27,7 +26,11 @@ fn init() {
 }
 
 #[test]
-#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
+#[cfg(all(
+    feature = "env",
+    any(target_os = "linux", target_os = "android"),
+    not(target_env = "musl")
+))]
 fn binary_name_protection() {
     let ts = TestScenario::new("env");
     let bin = ts.bin_path.clone();
@@ -38,6 +41,18 @@ fn binary_name_protection() {
         .arg("--version")
         .succeeds()
         .stdout_contains("coreutils");
+}
+
+#[test]
+fn test_coreutils_help_ignore_args() {
+    let scenario = TestScenario::new("help_ignoring_args");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg("--help")
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]

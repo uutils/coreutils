@@ -3,15 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(unix, feature = "chmod"))]
-use nix::unistd::{close, dup};
 use regex::Regex;
 #[cfg(unix)]
 use rlimit::Resource;
@@ -599,8 +597,8 @@ fn test_ls_io_errors() {
 
         at.touch("some-dir4/bad-fd.txt");
         let fd1 = at.open("some-dir4/bad-fd.txt");
-        let fd2 = dup(dbg!(&fd1)).unwrap();
-        close(fd1).unwrap();
+        let fd2 = rustix::io::dup(dbg!(&fd1)).unwrap();
+        drop(fd1); //close
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
@@ -644,7 +642,7 @@ fn test_ls_io_errors() {
             .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
-        let _ = close(fd2);
+        drop(fd2); //close
     }
 }
 
@@ -1983,6 +1981,10 @@ fn test_ls_group_directories_first() {
     }
     filenames.sort_unstable();
 
+    for (i, name) in filenames.iter().enumerate() {
+        at.write_bytes(name, "a".repeat(i).as_bytes());
+    }
+
     let dirnames = ["aaa", "bbb", "ccc", "yyy"];
     for dirname in dirnames {
         at.mkdir(dirname);
@@ -1996,12 +1998,25 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dots.into_iter()
             .chain(dirnames.into_iter())
             .chain(filenames.into_iter())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
+    );
+
+    let result = scene
+        .ucmd()
+        .arg("-1")
+        .arg("--group-directories-first")
+        .arg("--sort=size")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().lines().collect::<Vec<_>>(),
+        dirnames
+            .into_iter()
+            .chain(filenames.into_iter().rev())
+            .collect::<Vec<_>>()
     );
 
     let result = scene
@@ -2010,13 +2025,12 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dirnames
             .into_iter()
             .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
     );
 
@@ -3807,7 +3821,7 @@ fn test_ls_version_sort() {
     );
 
     let result = scene.ucmd().arg("-a1v").succeeds();
-    expected.insert(expected.len() - 1, "..");
+    expected.insert(0, "..");
     expected.insert(0, ".");
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
@@ -4786,7 +4800,10 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4801,7 +4818,10 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4817,7 +4837,10 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -4836,7 +4859,10 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4866,7 +4892,10 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -4881,7 +4910,10 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4914,7 +4946,10 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5200,16 +5235,7 @@ fn test_tabsize_formatting() {
         .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris",
-    target_vendor = "apple"
-))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
@@ -6369,7 +6395,7 @@ fn test_acl_padding_not_inflated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let uid = unsafe { libc::getuid() };
+    let uid = uucore::process::getuid();
     let names = ["file1", "file2", "file3", "file4", "file5"];
     for name in &names {
         at.touch(name);
@@ -7389,4 +7415,21 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
         .succeeds()
         .stdout_contains("..")
         .no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_al_no_capabilities_insufficient_on_wasi() {
+    // `ls -al` reads metadata for every entry including "..". Without the
+    // WASI fallback, stat on ".." at the preopened root returns
+    // ERRNO_NOTCAPABLE, which surfaces to the user as "Capabilities
+    // insufficient". Guard against that regression here.
+    let scene = TestScenario::new(util_name!());
+    let out = scene.ucmd().arg("-al").succeeds();
+    out.no_stderr();
+    assert!(
+        !out.stdout_str().contains("Capabilities insufficient"),
+        "ls -al stdout leaked a WASI capability error: {}",
+        out.stdout_str()
+    );
 }

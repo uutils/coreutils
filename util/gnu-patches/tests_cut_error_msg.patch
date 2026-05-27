@@ -11,6 +11,7 @@ Index: gnu/tests/cut/cut.pl
 -my $inval_fld = "$prog: invalid field range\n$try";
 -my $inval_pos = "$prog: invalid byte or character range\n$try";
 -my $no_endpoint = "$prog: invalid range with no endpoint: -\n$try";
+-my $one_list = "$prog: only one list may be specified\n$try";
 -my $nofield = "$prog: an input delimiter may be specified only when " .
 -              "operating on fields\n$try";
 +my $from_field1 = "$prog: range '' was invalid: failed to parse range\n";
@@ -21,6 +22,7 @@ Index: gnu/tests/cut/cut.pl
 +my $inval_fld = "$prog: range '--' was invalid: failed to parse range\n";
 +my $inval_pos = "$prog: range '--' was invalid: failed to parse range\n";
 +my $no_endpoint = "$prog: range '-' was invalid: invalid range with no endpoint\n";
++my $one_list = "$prog: only one list may be specified\n$try";
 +my $nofield = "$prog: invalid input: The '--delimiter' ('-d') option can only be used when printing a sequence of fields\n";
 
  my @Tests =

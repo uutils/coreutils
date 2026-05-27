@@ -13,7 +13,7 @@ use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -22,10 +22,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
-
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -84,10 +80,6 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
-    /// Wrapper around `rustix::io::Errno`
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    #[error("{0}")]
-    Rustix(#[from] rustix::io::Errno),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -106,6 +98,13 @@ enum CatError {
 }
 
 type CatResult<T> = Result<T, CatError>;
+
+#[cfg(any(unix, target_os = "wasi"))]
+impl From<rustix::io::Errno> for CatError {
+    fn from(value: rustix::io::Errno) -> Self {
+        Self::Io(value.into())
+    }
+}
 
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -142,7 +141,7 @@ impl OutputOptions {
 
     /// We can write fast if we can simply copy the contents of the file to
     /// stdout, without augmenting the output with e.g. line numbers.
-    fn can_write_fast(&self) -> bool {
+    fn can_print_fast(&self) -> bool {
         !(self.show_tabs
             || self.show_nonprint
             || self.show_ends
@@ -167,14 +166,14 @@ struct OutputState {
     one_blank_kept: bool,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 trait FdReadable: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 trait FdReadable: Read {}
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl<T> FdReadable for T where T: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 impl<T> FdReadable for T where T: Read {}
 
 /// Represents an open file handle, stream, or other device
@@ -359,10 +358,10 @@ fn cat_handle<R: FdReadable>(
     options: &OutputOptions,
     state: &mut OutputState,
 ) -> CatResult<()> {
-    if options.can_write_fast() {
-        write_fast(handle)
+    if options.can_print_fast() {
+        print_fast(handle)
     } else {
-        write_lines(handle, options, state)
+        print_lines(handle, options, state)
     }
 }
 
@@ -453,7 +452,7 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
                     return Err(CatError::TooManySymlinks);
                 }
             }
-            return Err(CatError::Io(e));
+            return Err(e.into());
         }
     };
     match ft {
@@ -476,53 +475,54 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
-fn write_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
+fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
+    // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok()
+        && !uucore::pipes::might_fuse(&handle.reader)
     {
-        // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &mut stdout)? {
-            return Ok(());
-        }
+        return Ok(());
     }
+
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
-    let mut stdout_lock = stdout.lock();
-    // stack allocation is overhead when splice succeed
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    let mut buf = vec![0; 1024 * 64];
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    print_unbuffered(handle, stdout)
+}
+
+#[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
+fn print_unbuffered<R: FdReadable>(
+    handle: &mut InputHandle<R>,
+    stdout: io::Stdout,
+) -> CatResult<()> {
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
+            Ok(0) => return Ok(()),
             Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-                stdout_lock
+                stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
+                // cannot use rustix::io on Windows
+                // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                #[cfg(not(any(unix, target_os = "wasi")))]
+                stdout.flush().inspect_err(handle_broken_pipe)?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e.into()),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
+            _ => {}
         }
     }
-
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
-    Ok(())
 }
 
 /// Outputs file contents to stdout in a line-by-line fashion,
 /// propagating any errors that might occur.
-fn write_lines<R: FdReadable>(
+fn print_lines<R: FdReadable>(
     handle: &mut InputHandle<R>,
     options: &OutputOptions,
     state: &mut OutputState,

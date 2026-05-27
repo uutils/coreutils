@@ -873,3 +873,19 @@ fn test_expand_tab_does_not_consume_next_argument() {
     new_ucmd!().args(&["-ea", test_file_path]).succeeds();
     new_ucmd!().args(&["-ea1", test_file_path]).succeeds();
 }
+
+#[test]
+fn test_zero_columns() {
+    new_ucmd!()
+        .arg("--column=0")
+        .fails_with_code(1)
+        .stderr_contains("pr: invalid --column argument '0'");
+}
+
+#[test]
+fn test_zero_columns_shortcut() {
+    new_ucmd!()
+        .arg("-0")
+        .fails_with_code(1)
+        .stderr_contains("pr: invalid --column argument '0'");
+}

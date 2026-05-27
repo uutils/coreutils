@@ -194,8 +194,8 @@ sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
 # our messages are better
-sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
-sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
+sed -i "s|cp: cannot stat 'symlink': .*|cp: not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+sed -i "s|cp: target directory 'symlink': .*|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
@@ -215,7 +215,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
-sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+sed -i -e "s|rm: cannot remove 'rel': \$EACCES|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
 # Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
 # This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory

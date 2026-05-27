@@ -18,7 +18,7 @@ pub mod options {
     pub const OUTPUT_ERROR: &str = "output-error";
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum OutputErrorMode {
     /// Diagnose write error on any output
     Warn,

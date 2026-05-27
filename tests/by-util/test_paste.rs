@@ -450,20 +450,12 @@ fn test_paste_non_utf8_paths() {
 }
 
 #[cfg(target_os = "linux")]
-fn make_broken_pipe() -> std::fs::File {
-    use std::os::unix::io::FromRawFd;
-
-    let mut fds: [libc::c_int; 2] = [0, 0];
-    assert_eq!(
-        unsafe { libc::pipe(fds.as_mut_ptr()) },
-        0,
-        "Failed to create pipe"
-    );
-
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Drop the read end so writes fail with EPIPE.
-    let _ = unsafe { std::fs::File::from_raw_fd(fds[0]) };
-
-    unsafe { std::fs::File::from_raw_fd(fds[1]) }
+    drop(read);
+    // Return the write end of the pipe
+    write
 }
 
 #[test]

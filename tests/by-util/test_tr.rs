@@ -382,6 +382,15 @@ fn test_truncate_with_set1_shorter_than_set2() {
 }
 
 #[test]
+fn test_truncate_applies_before_complement_with_class() {
+    new_ucmd!()
+        .args(&["-ct", "[:digit:]", "X"])
+        .pipe_in("A")
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
+}
+
+#[test]
 fn missing_args_fails() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.fails().stderr_contains("missing operand");
@@ -1231,7 +1240,7 @@ fn check_against_gnu_tr_tests_invalid_cc() {
         .args(&["[:fooclass:]", "x"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: invalid character class '[:fooclass:]'\n");
+        .stderr_is("tr: invalid character class 'fooclass'\n");
 }
 
 #[test]
@@ -1640,20 +1649,19 @@ fn test_broken_pipe_no_error() {
         .fails_silently();
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
-    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
-    use nix::unistd::write;
+    use std::io::Write as _;
 
-    let (fd1, fd2) = socketpair(
-        AddressFamily::Unix,
-        SockType::Stream,
+    let (fd1, fd2) = rustix::net::socketpair(
+        rustix::net::AddressFamily::UNIX,
+        rustix::net::SocketType::STREAM,
+        rustix::net::SocketFlags::empty(),
         None,
-        SockFlag::empty(),
     )
     .unwrap();
-    write(fd1, b"::").unwrap();
+    std::fs::File::from(fd1).write_all(b"::").unwrap();
     new_ucmd!()
         .args(&[":", ";"])
         .set_stdin(fd2)

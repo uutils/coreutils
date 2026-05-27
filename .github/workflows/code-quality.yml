@@ -72,7 +72,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: feat_os_unix }
+          - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
@@ -87,7 +87,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -214,12 +214,12 @@ jobs:
           persist-credentials: false
 
       - name: ruff
-        uses: astral-sh/ruff-action@v3
+        uses: astral-sh/ruff-action@v4.0.0
         with:
           src: "./util"
 
       - name: ruff - format
-        uses: astral-sh/ruff-action@v3
+        uses: astral-sh/ruff-action@v4.0.0
         with:
           src: "./util"
           args: format --check

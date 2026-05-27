@@ -147,7 +147,7 @@ impl FileHandling {
             }
 
             let mut writer = BufWriter::new(stdout().lock());
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
             writer.flush()?;
 
             self.last.replace(path.to_owned());
