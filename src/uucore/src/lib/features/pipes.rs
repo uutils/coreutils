@@ -147,65 +147,60 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
+    // improve throughput or save RAM usage
+    // expected that input is already extended if it is coming from splice
+    // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
+    if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+        let _ = fcntl_setpipe_size(&target, pipe_size);
+    }
     let mut n = n;
     let mut bytes_written: u64 = 0;
-    // do not always fallback to write as it needs 2 Ctrl+D to exit process on tty
-    let fallback = if let Ok(b) = splice(&input, &target, n as usize) {
-        bytes_written = b as u64;
-        n -= bytes_written;
+    let succeed_or_fuse = loop {
         if n == 0 {
-            // avoid unnecessary syscalls
+            // avoid unnecessary syscall
             return Ok(bytes_written);
         }
-
-        // improve throughput or save RAM usage
-        // expected that input is already extended if it is coming from splice
-        // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
-        if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
-            let _ = fcntl_setpipe_size(&target, pipe_size);
-        }
-
-        loop {
-            match splice(&input, &target, n as usize) {
-                Ok(0) => break might_fuse(&input),
-                Ok(s) => {
-                    n -= s as u64;
-                    bytes_written += s as u64;
-                }
-                _ => break true,
+        match splice(&input, &target, n as usize) {
+            Ok(0) => break true,
+            Ok(s) => {
+                n -= s as u64;
+                bytes_written += s as u64;
             }
+            _ => break false, // input or output is not pipe
         }
-    } else if let Some((broker_r, broker_w)) = PIPE_CACHE
-        .get_or_init(|| pipe::<false>(pipe_size).ok())
-        .as_ref()
-    {
-        // todo: create fn splice_bounded_broker
-        loop {
-            match splice(&input, &broker_w, n as usize) {
-                Ok(0) => break might_fuse(&input),
-                Ok(s) => {
-                    n -= s as u64;
-                    bytes_written += s as u64;
-                    if drain_pipe(broker_r, &target, s)?.is_err() {
-                        break true;
-                    }
-                    if n == 0 {
-                        // avoid unnecessary splice for small input
-                        break false;
-                    }
-                }
-                _ => break true,
-            }
-        }
-    } else {
-        true
     };
-
-    if !fallback {
-        return Ok(bytes_written);
+    let succeed_or_fuse = succeed_or_fuse
+        || if let Some((broker_r, broker_w)) = PIPE_CACHE
+            .get_or_init(|| pipe::<false>(pipe_size).ok())
+            .as_ref()
+        {
+            // todo: create fn splice_bounded_broker
+            loop {
+                if n == 0 {
+                    return Ok(bytes_written);
+                }
+                match splice(&input, &broker_w, n as usize) {
+                    Ok(0) => break true,
+                    Ok(s) => {
+                        n -= s as u64;
+                        bytes_written += s as u64;
+                        if drain_pipe(broker_r, &target, s)?.is_err() {
+                            break false;
+                        }
+                    }
+                    _ => break false,
+                }
+            }
+        } else {
+            false
+        };
+    // do not always fallback to write for fuse, or 2 Ctrl+D is required to exit on tty
+    // todo: move fuse patch to callers
+    if !succeed_or_fuse || might_fuse(&input) {
+        // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
+        bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
     }
-    // do not buffer at this fallback, or order of output would be wrong with multiple input
-    bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+
     Ok(bytes_written)
 }
 
