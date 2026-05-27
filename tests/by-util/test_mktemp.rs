@@ -698,6 +698,14 @@ fn test_too_few_xs_suffix_directory() {
 }
 
 #[test]
+fn test_too_few_xs_quiet() {
+    new_ucmd!()
+        .args(&["-q", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
+}
+
+#[test]
 fn test_too_many_arguments() {
     new_ucmd!()
         .args(&["-q", "a", "b"])
