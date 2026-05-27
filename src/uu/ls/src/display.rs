@@ -62,6 +62,7 @@ use crate::colors::{StyleManager, color_name};
 use crate::config::Files;
 use crate::dired::{self, DiredOutput};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
+use lscolors::Indicator;
 
 // Fields that can be removed or added to the long format
 pub(crate) struct LongFormat {
@@ -717,6 +718,19 @@ fn display_item_name(
 
     let dired_name_len = if config.dired { name.len() } else { 0 };
 
+    let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
+        sm.has_indicator_style(Indicator::OrphanedSymbolicLink)
+            || sm.has_indicator_style(Indicator::MissingFile)
+    });
+    // Only stat symlink target when:
+    // 1. Color is enabled AND LS_COLORS has mi= or or=, OR
+    // 2. Long format AND (--classify or --file-type)
+    let should_stat_target = has_mi_or_or
+        || matches!(
+            config.indicator_style,
+            Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+        );
+
     if config.format == Format::Long
         && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference
@@ -732,76 +746,81 @@ fn display_item_name(
 
                 // We get the absolute path to be able to construct PathData with valid Metadata.
                 // This is because relative symlinks will fail to get_metadata.
-                let absolute_target = if target_path.is_relative() {
-                    match path.path().parent() {
-                        Some(p) => &p.join(&target_path),
-                        None => &target_path,
+                if should_stat_target {
+                    let absolute_target = if target_path.is_relative() {
+                        match path.path().parent() {
+                            Some(p) => &p.join(&target_path),
+                            None => &target_path,
+                        }
+                    } else {
+                        &target_path
+                    };
+                    match fs::canonicalize(absolute_target) {
+                        Ok(resolved_target) => {
+                            let target_data = PathData::new(
+                                resolved_target.as_path().into(),
+                                None,
+                                target_path.file_name().map(Cow::Borrowed),
+                                config,
+                                false,
+                            );
+
+                            let target_display = if let Some(style_manager) = style_manager {
+                                let md = match target_data.metadata() {
+                                    Some(md) => Some(Cow::Borrowed(md)),
+                                    None => {
+                                        target_data.p_buf.symlink_metadata().ok().map(Cow::Owned)
+                                    }
+                                };
+                                // Check if the target actually needs coloring
+                                if style_manager
+                                    .colors
+                                    .style_for_path_with_metadata(&target_data.p_buf, md.as_deref())
+                                    .is_some()
+                                {
+                                    // Only apply coloring if there's actually a style
+                                    color_name(
+                                        escaped_target,
+                                        &target_data,
+                                        style_manager,
+                                        None,
+                                        is_wrap(name.len()),
+                                    )
+                                } else {
+                                    // For regular files with no coloring, just use plain text
+                                    escaped_target
+                                }
+                            } else {
+                                escaped_target
+                            };
+                            name.push(target_display);
+                            // Add appropriate indicator based on indicator_style
+                            if let Some(c) = indicator_char(&target_data, config.indicator_style) {
+                                if matches!(
+                                    config.indicator_style,
+                                    Some(IndicatorStyle::Classify)
+                                        | Some(IndicatorStyle::FileType)
+                                        | Some(IndicatorStyle::Slash)
+                                ) {
+                                    let _ = name.write_char(c);
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            if let Some(style_manager) = &mut style_manager {
+                                name.push(style_manager.apply_missing_target_style(
+                                    escaped_target,
+                                    is_wrap(name.len()),
+                                ));
+                            } else {
+                                // If no coloring is required, we just use target as is.
+                                // with the right quoting
+                                name.push(escaped_target);
+                            }
+                        }
                     }
                 } else {
-                    &target_path
-                };
-
-                match fs::canonicalize(absolute_target) {
-                    Ok(resolved_target) => {
-                        let target_data = PathData::new(
-                            resolved_target.as_path().into(),
-                            None,
-                            target_path.file_name().map(Cow::Borrowed),
-                            config,
-                            false,
-                        );
-
-                        let target_display = if let Some(style_manager) = style_manager {
-                            let md = match target_data.metadata() {
-                                Some(md) => Some(Cow::Borrowed(md)),
-                                None => target_data.p_buf.symlink_metadata().ok().map(Cow::Owned),
-                            };
-                            // Check if the target actually needs coloring
-                            if style_manager
-                                .colors
-                                .style_for_path_with_metadata(&target_data.p_buf, md.as_deref())
-                                .is_some()
-                            {
-                                // Only apply coloring if there's actually a style
-                                &color_name(
-                                    escaped_target,
-                                    &target_data,
-                                    style_manager,
-                                    None,
-                                    is_wrap(name.len()),
-                                )
-                            } else {
-                                // For regular files with no coloring, just use plain text
-                                &escaped_target
-                            }
-                        } else {
-                            &escaped_target
-                        };
-
-                        name.push(target_display);
-                        if let Some(c) = indicator_char(&target_data, config.indicator_style) {
-                            if matches!(
-                                config.indicator_style,
-                                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
-                            ) {
-                                let _ = name.write_char(c);
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        if let Some(style_manager) = &mut style_manager {
-                            name.push(
-                                style_manager.apply_missing_target_style(
-                                    escaped_target,
-                                    is_wrap(name.len()),
-                                ),
-                            );
-                        } else {
-                            // If no coloring is required, we just use target as is.
-                            // with the right quoting
-                            name.push(escaped_target);
-                        }
-                    }
+                    name.push(&escaped_target);
                 }
             }
             Err(err) => {
