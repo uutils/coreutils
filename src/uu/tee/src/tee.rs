@@ -249,26 +249,23 @@ enum Writer {
 
 impl Writer {
     pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
-        let mut buf = buf;
-        while !buf.is_empty() {
-            match self {
-                Self::File(f) => match f.write(buf) {
-                    Ok(0) => return Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer")),
-                    Ok(n) => buf = &buf[n..],
-                    Err(e) => return Err(e),
-                },
-                Self::Stdout(s) => match s.write(buf) {
-                    Ok(0) => return Err(Error::new(ErrorKind::WriteZero, "failed to write whole buffer")),
-                    Ok(n) => {
-                        buf = &buf[n..];
-                        #[cfg(not(any(unix, target_os = "wasi")))]
-                        s.flush()?;
-                    }
-                    Err(e) => return Err(e),
-                },
+        #[cfg(any(unix, target_os = "wasi"))]
+        use uucore::io::AsFdExt as _;
+        match self {
+            // File does not have line buffering
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::File(f) => f.write_all_no_retry(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            Self::File(f) => f.write_all(buf),
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::Stdout(s) => s.0.write_all_no_retry(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            Self::Stdout(s) => {
+                s.write_all(buf)?;
+                // needs unsafe to remove buffering... flush after write_all to keep overhead minimal
+                s.flush()
             }
         }
-        Ok(())
     }
 }
 

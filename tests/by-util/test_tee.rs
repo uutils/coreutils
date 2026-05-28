@@ -700,6 +700,7 @@ mod linux_only {
 
     #[test]
     fn test_eintr_on_write_is_not_retried() {
+        use std::io::Write;
         if std::process::Command::new("strace")
             .arg("--version")
             .output()
@@ -707,8 +708,6 @@ mod linux_only {
         {
             return;
         }
-
-        use std::io::Write;
 
         let mut child = std::process::Command::new("strace")
             .args([
