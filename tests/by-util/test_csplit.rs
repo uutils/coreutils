@@ -1585,9 +1585,8 @@ fn test_write_error_dev_full_keep_files() {
 
 #[test]
 fn test_repeat_count_overflow() {
-    // Repro for #12495: a `{N}` repetition count whose digits exceed usize::MAX
-    // used to panic on `parse::<usize>().unwrap()`. It must now fail cleanly.
-    // We use a different error message than GNU.
+    // Repro for #12495: a `{N}` count above usize::MAX used to panic on
+    // `parse::<usize>().unwrap()`; it must now fail cleanly.
     new_ucmd!()
         .args(&["numbers50.txt", "10", "{99999999999999999999999999999999}"])
         .fails_with_code(1)
@@ -1596,19 +1595,19 @@ fn test_repeat_count_overflow() {
 
 #[test]
 fn test_repeat_count_saturates_at_usize_max() {
-    // Repro for #12495: `{usize::MAX}` overflowed the `+ 1` (panic in debug,
-    // silent wrap to 0 in release). The count now saturates, so the repetition
-    // runs and fails when it walks past the end of input, matching GNU.
+    // Repro for #12495: the `+ 1` on a usize::MAX count used to overflow.
+    // usize::MAX is formatted so the count parses on 32- and 64-bit alike.
+    let max = usize::MAX;
     new_ucmd!()
-        .args(&["numbers50.txt", "10", "{18446744073709551615}"])
+        .args(&["numbers50.txt", "10", &format!("{{{max}}}")])
         .fails_with_code(1)
         .stderr_is("csplit: '10': line number out of range on repetition 5\n");
 }
 
 #[test]
 fn test_match_offset_overflow() {
-    // Repro for #12495: a `/regex/OFF` offset outside i32 range used to panic on
-    // `parse().unwrap()`. It must now fail cleanly, matching GNU's message.
+    // Repro for #12495: a `/regex/OFF` offset outside i32 range used to panic
+    // on `parse().unwrap()`; it must now fail cleanly.
     new_ucmd!()
         .args(&["numbers50.txt", "/9$/-2147483649"])
         .fails_with_code(1)
