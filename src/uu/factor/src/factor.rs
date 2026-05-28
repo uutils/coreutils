@@ -15,11 +15,26 @@ use std::num::IntErrorKind;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr3_iter;
 use num_bigint::BigUint;
-use num_prime::nt_funcs::{factorize64, factorize128, factors};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
+
+// Factorization algorithm modules
+mod algorithm_selection;
+mod crypto_bigint_adapter;
+mod ecm;
+mod ecm_bsgs;
+mod fermat;
+mod montgomery;
+mod montgomery_u128;
+mod pollard_rho;
+mod precomputed_curves;
+mod trial_division;
+mod u64_factor;
+
+// Export factorize for benchmarking without CLI/stdout overhead
+pub use algorithm_selection::factorize;
 
 mod options {
     pub static EXPONENTS: &str = "exponents";
@@ -53,14 +68,29 @@ fn write_factors_str(
     };
 
     match x {
-        // use num_prime's factorize64 algorithm for u64 integers
-        Number::U64(x) if x > 1 => write_result(w, &x, factorize64(x), print_exponents),
+        Number::U64(x) if x > 1 => {
+            let (prime_factors, remaining) = factorize(&BigUint::from(x));
+            if remaining.is_some() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("factor-error-factorization-incomplete"),
+                ));
+            }
+            write_result(w, &x, prime_factors, print_exponents)
+        }
         Number::U64(x) => write_result(w, &x, BTreeMap::<u64, usize>::new(), print_exponents),
-        // use num_prime's factorize128 algorithm for u128 integers
-        Number::U128(x) => write_result(w, &x, factorize128(x), print_exponents),
-        // use num_prime's fallible factorization for anything greater than u128::MAX
+        Number::U128(x) => {
+            let (prime_factors, remaining) = factorize(&BigUint::from(x));
+            if remaining.is_some() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("factor-error-factorization-incomplete"),
+                ));
+            }
+            write_result(w, &x, prime_factors, print_exponents)
+        }
         Number::BigUint(x) => {
-            let (prime_factors, remaining) = factors(x.clone(), None);
+            let (prime_factors, remaining) = factorize(&x);
             if remaining.is_some() {
                 return Err(USimpleError::new(
                     1,
