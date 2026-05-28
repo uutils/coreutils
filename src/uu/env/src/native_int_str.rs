@@ -13,8 +13,10 @@
 // this conversion needs to be done only once in the beginning and at the end.
 
 use std::ffi::OsString;
-#[cfg(not(target_os = "windows"))]
+#[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
+#[cfg(target_os = "wasi")]
+use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 #[cfg(target_os = "windows")]
 use std::os::windows::prelude::*;
 use std::{borrow::Cow, ffi::OsStr};
