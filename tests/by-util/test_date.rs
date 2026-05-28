@@ -2562,11 +2562,14 @@ fn test_date_format_modifier_huge_width_fails_without_abort() {
 
 #[test]
 fn test_date_format_modifier_parseable_huge_width_fails_without_hanging() {
+    // Target pointer width can affect the reported parsed width, so assert the
+    // stable diagnostic shape instead of the exact oversized literal.
     new_ucmd!()
         .arg("+%8888888888888s")
         .fails()
         .code_is(1)
-        .stderr_contains("format modifier width '8888888888888' is too large");
+        .stderr_contains("format modifier width '")
+        .stderr_contains("' is too large for specifier '%s'");
 }
 
 #[test]
