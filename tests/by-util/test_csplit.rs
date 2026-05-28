@@ -1582,3 +1582,35 @@ fn test_write_error_dev_full_keep_files() {
     assert!(at.file_exists("xx00"));
     assert_eq!(at.read("xx00"), "1\n");
 }
+
+#[test]
+fn test_repeat_count_overflow() {
+    // Repro for #12495: a `{N}` repetition count whose digits exceed usize::MAX
+    // used to panic on `parse::<usize>().unwrap()`. It must now fail cleanly.
+    // We use a different error message than GNU.
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", "{99999999999999999999999999999999}"])
+        .fails_with_code(1)
+        .stderr_contains("invalid pattern");
+}
+
+#[test]
+fn test_repeat_count_saturates_at_usize_max() {
+    // Repro for #12495: `{usize::MAX}` overflowed the `+ 1` (panic in debug,
+    // silent wrap to 0 in release). The count now saturates, so the repetition
+    // runs and fails when it walks past the end of input, matching GNU.
+    new_ucmd!()
+        .args(&["numbers50.txt", "10", "{18446744073709551615}"])
+        .fails_with_code(1)
+        .stderr_is("csplit: '10': line number out of range on repetition 5\n");
+}
+
+#[test]
+fn test_match_offset_overflow() {
+    // Repro for #12495: a `/regex/OFF` offset outside i32 range used to panic on
+    // `parse().unwrap()`. It must now fail cleanly, matching GNU's message.
+    new_ucmd!()
+        .args(&["numbers50.txt", "/9$/-2147483649"])
+        .fails_with_code(1)
+        .stderr_is("csplit: '/9$/-2147483649': line number out of range\n");
+}
