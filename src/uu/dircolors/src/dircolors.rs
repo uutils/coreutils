@@ -261,7 +261,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-pub trait StrUtils {
+trait StrUtils {
     /// Remove comments and trim whitespace
     fn purify(&self) -> &Self;
     /// Like `split_whitespace()` but only produce 2 parts
