@@ -249,18 +249,31 @@ enum Writer {
 
 impl Writer {
     pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
-        match self {
-            // File does not have line buffering
-            Self::File(f) => f.write_all(buf),
-            #[cfg(any(unix, target_os = "wasi"))]
-            Self::Stdout(s) => s.write_all(buf),
-            #[cfg(not(any(unix, target_os = "wasi")))]
-            Self::Stdout(s) => {
-                s.write_all(buf)?;
-                // needs unsafe to remove buffering... flush after write_all to keep overhead minimal
-                s.flush()
+        let mut buf = buf;
+        let writer: &mut dyn Write = match self {
+            Self::File(f) => f,
+            Self::Stdout(s) => s,
+        };
+        while !buf.is_empty() {
+            match writer.write(buf) {
+                Ok(0) => {
+                    return Err(Error::new(
+                        ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ));
+                }
+                Ok(n) => {
+                    buf = &buf[n..];
+                    #[cfg(not(any(unix, target_os = "wasi")))]
+                    if let Self::Stdout(s) = self {
+                        // needs unsafe to remove buffering... flush after write_all to keep overhead minimal
+                        writer.flush()?;
+                    }
+                }
+                Err(e) => return Err(e),
             }
         }
+        Ok(())
     }
 }
 
