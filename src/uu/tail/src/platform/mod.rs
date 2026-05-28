@@ -19,6 +19,21 @@ pub use self::windows::{Pid, ProcessChecker, supports_pid_checks};
 pub type Pid = u64;
 
 #[cfg(target_os = "wasi")]
+#[allow(dead_code)]
+pub struct ProcessChecker;
+
+#[cfg(target_os = "wasi")]
+#[allow(dead_code)]
+impl ProcessChecker {
+    pub fn new(_pid: Pid) -> Self {
+        Self
+    }
+    pub fn is_dead(&self) -> bool {
+        true
+    }
+}
+
+#[cfg(target_os = "wasi")]
 pub fn supports_pid_checks(_pid: Pid) -> bool {
     false
 }
