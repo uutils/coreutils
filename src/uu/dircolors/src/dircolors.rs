@@ -534,4 +534,24 @@ mod tests {
         assert_eq!(Some(OutputFmt::Shell), guess_syntax("foo"));
         assert_eq!(None, guess_syntax(""));
     }
+
+    #[test]
+    fn test_purify() {
+        let s = "  asd#zcv #hk\t\n  ";
+        assert_eq!("asd#zcv", s.purify());
+    }
+
+    #[test]
+    fn test_fnmatch() {
+        let s = "con256asd";
+        assert!(s.fnmatch("*[2][3-6][5-9]?sd")); // spell-checker:disable-line
+    }
+
+    #[test]
+    fn test_split_two() {
+        let s = "zxc \t\nqwe jlk    hjl"; // spell-checker:disable-line
+        let (k, v) = s.split_two();
+        assert_eq!("zxc", k);
+        assert_eq!("qwe jlk    hjl", v);
+    }
 }
