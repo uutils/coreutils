@@ -53,6 +53,31 @@ impl<T: AsFd> io::Write for RawWriter<T> {
     }
 }
 
+// write_all retries with EINTR which is sometimes not compatible with GNU
+#[cfg(any(unix, target_os = "wasi"))]
+pub trait AsFdExt {
+    fn write_all_no_retry(&self, buf: &[u8]) -> io::Result<()>;
+}
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> AsFdExt for T {
+    fn write_all_no_retry(&self, mut buf: &[u8]) -> io::Result<()> {
+        let fd = self.as_fd();
+        while !buf.is_empty() {
+            match rustix::io::write(fd, buf) {
+                Ok(0) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write whole buffer",
+                    ));
+                }
+                Ok(n) => buf = &buf[n..],
+                Err(e) => return Err(e.into()),
+            }
+        }
+        Ok(())
+    }
+}
+
 /// abstraction wrapper for native file handle / file descriptor
 // todo: remove clone introducing additional syscall dependency
 pub struct OwnedFileDescriptorOrHandle {
