@@ -2561,6 +2561,15 @@ fn test_date_format_modifier_huge_width_fails_without_abort() {
 }
 
 #[test]
+fn test_date_format_modifier_parseable_huge_width_fails_without_hanging() {
+    new_ucmd!()
+        .arg("+%8888888888888s")
+        .fails()
+        .code_is(1)
+        .stderr_contains("format modifier width '8888888888888' is too large");
+}
+
+#[test]
 fn test_date_format_large_width_no_oom() {
     // Regression: very large width like %8888888888r caused OOM.
     // GNU caps width to i32::MAX; verify we don't crash.
