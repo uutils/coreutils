@@ -465,26 +465,26 @@ impl DirFd {
     }
 }
 
-/// Find the deepest existing real directory ancestor for a path.
+/// Find the deepest existing directory ancestor for a path.
 ///
 /// Returns the existing ancestor path and a list of components that need to be created.
-/// Uses `symlink_metadata` to detect symlinks - symlinks are NOT followed and are
-/// treated as components that need to be created/replaced.
+/// Uses `metadata` (follows symlinks) so that symlinks to directories are treated as
+/// existing ancestors rather than components to create.
 fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
     let mut current = path.to_path_buf();
     let mut components: Vec<OsString> = Vec::new();
 
     loop {
-        // Use symlink_metadata to NOT follow symlinks
-        match fs::symlink_metadata(&current) {
+        // Use metadata (follow symlinks) so that symlinks to directories are
+        // treated as existing ancestors rather than components to create.
+        match fs::metadata(&current) {
             Ok(meta) => {
-                if meta.is_dir() && !meta.file_type().is_symlink() {
-                    // Found a real directory (not a symlink to a directory)
+                if meta.is_dir() {
+                    // Found a directory (real or via symlink)
                     components.reverse();
                     return Ok((current, components));
                 }
-                // It's a symlink, file, or other non-directory - treat as needing creation
-                // This ensures symlinks get replaced by open_or_create_subdir
+                // It's a file or other non-directory - treat as needing creation
                 if let Some(file_name) = current.file_name() {
                     components.push(file_name.to_os_string());
                 }
@@ -537,8 +537,8 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// Open or create a subdirectory using fd-based operations only.
 ///
 /// This is a helper function for `create_dir_all_safe` that handles a single
-/// path component. If a symlink exists where a directory should be, it is
-/// removed and replaced with a real directory.
+/// path component. If a symlink to a directory exists, it is followed (GNU
+/// coreutils behavior). Dangling symlinks and non-directory entries are errors.
 ///
 /// # Arguments
 /// * `parent_fd` - The parent directory file descriptor
@@ -554,9 +554,10 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
             match file_type {
                 libc::S_IFDIR => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
                 libc::S_IFLNK => {
-                    parent_fd.unlink_at(name, false)?;
-                    parent_fd.mkdir_at(name, mode)?;
-                    parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+                    // Follow symlinks to directories (GNU coreutils behavior).
+                    // O_DIRECTORY in open_subdir ensures we only succeed if the
+                    // symlink resolves to a directory; dangling or non-dir symlinks error out.
+                    parent_fd.open_subdir(name, SymlinkBehavior::Follow)
                 }
                 _ => Err(io::Error::new(
                     io::ErrorKind::AlreadyExists,
@@ -579,8 +580,8 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// This prevents symlink race conditions by anchoring all operations to directory fds.
 ///
 /// # Security
-/// This function prevents TOCTOU race conditions by:
-/// 1. Finding the deepest existing ancestor directory (path-based, but safe since it exists)
+/// This function prevents TOCTOU race conditions for newly created directories by:
+/// 1. Finding the deepest existing ancestor directory (path-based, following symlinks)
 /// 2. Opening that ancestor with a file descriptor
 /// 3. Creating all new directories using fd-based operations (mkdirat, openat with O_NOFOLLOW)
 ///
@@ -588,8 +589,10 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
 /// as the anchor. If an attacker replaces a newly-created directory with a symlink,
 /// our openat with O_NOFOLLOW will fail, preventing the attack.
 ///
-/// Existing symlinks in the path (like /var -> /private/var on macOS) are followed
-/// when finding the ancestor, which is safe since they already exist.
+/// Pre-existing symlinks to directories in the path are followed (GNU coreutils behavior).
+/// `O_DIRECTORY` is used when opening them, so dangling or non-directory symlinks error out.
+/// Note that a residual TOCTOU window exists between stat and open for such symlinks,
+/// which is the same trade-off made by GNU coreutils.
 ///
 /// # Arguments
 /// * `path` - The path to create directories for
@@ -1251,23 +1254,23 @@ mod tests {
     }
 
     #[test]
-    fn test_create_dir_all_safe_replaces_symlink() {
+    fn test_create_dir_all_safe_follows_symlink() {
         let temp_dir = TempDir::new().unwrap();
         let target_dir = temp_dir.path().join("target");
         fs::create_dir(&target_dir).unwrap();
 
-        // Create a symlink where we want to create a directory
-        let symlink_path = temp_dir.path().join("link_to_replace");
+        // Create a symlink pointing to an existing directory
+        let symlink_path = temp_dir.path().join("link");
         symlink(&target_dir, &symlink_path).unwrap();
         assert!(symlink_path.is_symlink());
 
-        // create_dir_all_safe should replace the symlink with a real directory
+        // create_dir_all_safe should follow the symlink (GNU coreutils behavior)
         let dir_fd = create_dir_all_safe(&symlink_path, 0o755).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
 
-        // Verify the symlink was replaced with a real directory
-        assert!(symlink_path.is_dir());
-        assert!(!symlink_path.is_symlink());
+        // Verify the symlink is preserved (not replaced with a real directory)
+        assert!(symlink_path.is_symlink());
+        assert!(symlink_path.is_dir()); // still resolves to a directory via the symlink
     }
 
     #[test]
@@ -1284,8 +1287,8 @@ mod tests {
     fn test_create_dir_all_safe_nested_symlink_in_path() {
         let temp_dir = TempDir::new().unwrap();
 
-        // Create: parent/symlink -> target
-        // Then try to create: parent/symlink/subdir
+        // Create: parent/link -> target
+        // Then create: parent/link/subdir
         let parent = temp_dir.path().join("parent");
         let target = temp_dir.path().join("target");
         fs::create_dir(&parent).unwrap();
@@ -1294,18 +1297,17 @@ mod tests {
         let symlink_in_path = parent.join("link");
         symlink(&target, &symlink_in_path).unwrap();
 
-        // Try to create parent/link/subdir - the symlink should be replaced
+        // Try to create parent/link/subdir - the symlink should be followed (GNU behavior)
         let nested_path = symlink_in_path.join("subdir");
         let dir_fd = create_dir_all_safe(&nested_path, 0o755).unwrap();
         assert!(dir_fd.as_raw_fd() >= 0);
 
-        // The symlink should have been replaced with a real directory
-        assert!(!symlink_in_path.is_symlink());
-        assert!(symlink_in_path.is_dir());
-        assert!(nested_path.is_dir());
+        // The symlink should be preserved, not replaced
+        assert!(symlink_in_path.is_symlink());
+        assert!(symlink_in_path.is_dir()); // resolves via symlink
 
-        // Target directory should not contain subdir (race attack prevented)
-        assert!(!target.join("subdir").exists());
+        // subdir should have been created inside the real target directory
+        assert!(target.join("subdir").exists());
     }
 
     #[test]

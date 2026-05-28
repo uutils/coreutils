@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default posix_acl_access
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
@@ -13,16 +13,24 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-/// Copies extended attributes (xattrs) from one file or directory to another.
-///
-/// # Arguments
-///
-/// * `source` - A reference to the source path.
-/// * `dest` - A reference to the destination path.
-///
-/// # Returns
-///
-/// A result indicating success or failure.
+/// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
+/// distinct on the BSDs).
+#[cfg(unix)]
+fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+    matches!(
+        err.raw_os_error(),
+        Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
+    )
+}
+
+#[cfg(not(unix))]
+fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+    false
+}
+
+/// Copies extended attributes (xattrs) from one path to another.
+/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
+/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
@@ -30,6 +38,43 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
+/// for callers where xattr preservation is best-effort.
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    match copy_xattrs(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Copies xattrs between two open file descriptors. Pins both inodes so
+/// list/get/set calls cannot be redirected by a concurrent renamer, unlike
+/// the path-based [`copy_xattrs`].
+#[cfg(unix)]
+pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
+    use xattr::FileExt;
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            dest.set_xattr(&attr_name, &value)?;
+        }
+    }
+    Ok(())
+}
+
+/// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn copy_xattrs_fd_ignore_unsupported(
+    source: &std::fs::File,
+    dest: &std::fs::File,
+) -> std::io::Result<()> {
+    match copy_xattrs_fd(source, dest) {
+        Ok(()) => Ok(()),
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        Err(e) => Err(e),
+    }
 }
 
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
@@ -220,6 +265,35 @@ mod tests {
 
         let copied_value = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied_value, test_value);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_xattrs_fd() {
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("source.txt");
+        let dest_path = temp_dir.path().join("dest.txt");
+
+        File::create(&source_path).unwrap();
+        File::create(&dest_path).unwrap();
+
+        let test_attr = "user.fd_test";
+        let test_value = b"fd value";
+        // Skip silently if the test fs doesn't support user xattrs.
+        if xattr::set(&source_path, test_attr, test_value).is_err() {
+            return;
+        }
+
+        let src = File::open(&source_path).unwrap();
+        let dst = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&dest_path)
+            .unwrap();
+
+        copy_xattrs_fd(&src, &dst).unwrap();
+
+        let copied = xattr::get(&dest_path, test_attr).unwrap().unwrap();
+        assert_eq!(copied, test_value);
     }
 
     #[test]

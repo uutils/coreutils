@@ -7,15 +7,11 @@
 
 // spell-checker:ignore backport
 
-#[cfg(unix)]
-use libc::mkfifo;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -892,37 +888,6 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
-/// Make a FIFO, also known as a named pipe.
-///
-/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
-/// which makes a [named
-/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
-///
-/// # Errors
-///
-/// If the named pipe cannot be created.
-///
-/// # Examples
-///
-/// ```ignore
-/// use uucore::fs::make_fifo;
-///
-/// make_fifo("my-pipe").expect("failed to create the named pipe");
-///
-/// std::thread::spawn(|| { std::fs::write("my-pipe", b"hello").unwrap(); });
-/// assert_eq!(std::fs::read("my-pipe").unwrap(), b"hello");
-/// ```
-#[cfg(unix)]
-pub fn make_fifo(path: &Path) -> std::io::Result<()> {
-    let name = CString::new(path.to_str().unwrap()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        Err(Error::last_os_error())
-    } else {
-        Ok(())
-    }
-}
-
 // Redox's libc appears not to include the following utilities
 
 #[cfg(target_os = "redox")]
@@ -949,8 +914,6 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
-    #[cfg(unix)]
-    use std::os::unix::fs::FileTypeExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
@@ -1215,26 +1178,5 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_make_fifo() {
-        // Create the FIFO in a temporary directory.
-        let tempdir = tempdir().unwrap();
-        let path = tempdir.path().join("f");
-        assert!(make_fifo(&path).is_ok());
-
-        // Check that it is indeed a FIFO.
-        assert!(fs::metadata(&path).unwrap().file_type().is_fifo());
-
-        // Check that we can write to it and read from it.
-        //
-        // Write and read need to happen in different threads,
-        // otherwise `write` would block indefinitely while waiting
-        // for the `read`.
-        let path2 = path.clone();
-        std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
-        assert_eq!(fs::read(&path).unwrap(), b"foo");
     }
 }

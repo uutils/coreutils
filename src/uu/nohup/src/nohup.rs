@@ -12,6 +12,7 @@ use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
 use std::env;
 use std::fs::{File, OpenOptions};
 use std::io::{Error, ErrorKind, IsTerminal};
+use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -152,7 +153,15 @@ fn find_stdout() -> UResult<File> {
 }
 
 fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
-    let file = OpenOptions::new().create(true).append(true).open(path)?;
+    // POSIX nohup creates the output file with mode 0600 so that other
+    // users on a shared host can't read whatever the detached job logs.
+    // Setting `.mode()` here only affects newly-created files; if the
+    // file already exists its permissions are left alone.
+    let file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .mode(0o600)
+        .open(path)?;
 
     show_error!(
         "{}",

@@ -185,7 +185,8 @@ impl Num {
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
     // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::with_capacity(buf_size);
+    let mut buf = Vec::new();
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
     while remaining > 0 {

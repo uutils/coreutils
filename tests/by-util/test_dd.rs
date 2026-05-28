@@ -124,6 +124,15 @@ fn test_out_of_memory() {
 }
 
 #[test]
+fn test_out_of_memory_skip() {
+    new_ucmd!()
+        .arg("bs=1PB")
+        .arg("skip=1")
+        .fails_with_code(1)
+        .stderr_contains("memory");
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();

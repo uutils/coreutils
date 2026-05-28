@@ -524,7 +524,7 @@ fn process_file(
         Err(Error::from_io1(s, &file_full_name, r))
     };
 
-    // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
+    // SAFETY: If `entry.fts_statp` is not null, then it is assumed to be valid.
     let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
         st.try_into()?
     } else {
