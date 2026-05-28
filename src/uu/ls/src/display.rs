@@ -717,23 +717,20 @@ fn display_item_name(
 
     let dired_name_len = if config.dired { name.len() } else { 0 };
 
-    let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
-        sm.has_indicator_style(Indicator::OrphanedSymbolicLink)
-            || sm.has_indicator_style(Indicator::MissingFile)
-    });
-    // Only stat symlink target when:
-    // 1. Color is enabled AND LS_COLORS has mi= or or=, OR
-    // 2. Long format AND (--classify or --file-type)
-    let should_stat_target = has_mi_or_or
-        || matches!(
-            config.indicator_style,
-            Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
-        );
+    if is_long_symlink {
+        let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
+            sm.has_indicator_style(Indicator::OrphanedSymbolicLink)
+                || sm.has_indicator_style(Indicator::MissingFile)
+        });
+        // Only stat symlink target when:
+        // 1. Color is enabled AND LS_COLORS has mi= or or=, OR
+        // 2. Long format AND (--classify or --file-type)
+        let should_stat_target = has_mi_or_or
+            || matches!(
+                config.indicator_style,
+                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+            );
 
-    if config.format == Format::Long
-        && path.file_type().is_some_and(FileType::is_symlink)
-        && !path.must_dereference
-    {
         match path.path().read_link() {
             Ok(target_path) => {
                 name.push(" -> ");
@@ -796,14 +793,7 @@ fn display_item_name(
                             name.push(target_display);
                             // Add appropriate indicator based on indicator_style
                             if let Some(c) = indicator_char(&target_data, config.indicator_style) {
-                                if matches!(
-                                    config.indicator_style,
-                                    Some(IndicatorStyle::Classify)
-                                        | Some(IndicatorStyle::FileType)
-                                        | Some(IndicatorStyle::Slash)
-                                ) {
-                                    let _ = name.write_char(c);
-                                }
+                                let _ = name.write_char(c);
                             }
                         }
                         Err(_) => {
