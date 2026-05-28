@@ -110,7 +110,7 @@ impl Suffix {
     ///   `-a N` or `--suffix-length=N`
     /// - OFF if suffix length is auto pre-calculated (auto-width)
     ///
-    /// Suffix auto-width: Determine if the the output file names suffix length should be automatically pre-calculated
+    /// Suffix auto-width: Determine if the output file names suffix length should be automatically pre-calculated
     /// based on number of files that need to written into, having number of files known upfront
     /// Suffix length auto pre-calculation rules:
     /// - Pre-calculate new suffix length when `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)

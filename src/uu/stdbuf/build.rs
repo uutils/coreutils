@@ -10,6 +10,11 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
+    if env::var("CARGO_CFG_UNIX").is_err() {
+        println!("cargo:rustc-cfg=feature=\"feat_external_libstdbuf\"");
+        return;
+    }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
 
@@ -38,11 +43,7 @@ fn main() {
 
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
-    let target_family = env::var("CARGO_CFG_TARGET_FAMILY").unwrap();
 
-    if target_family != "unix" {
-        return;
-    }
     let dylib_ext = if target_vendor == "apple" {
         ".dylib"
     } else if target_os == "cygwin" {

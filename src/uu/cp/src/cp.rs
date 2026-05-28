@@ -29,8 +29,6 @@ use thiserror::Error;
 use platform::copy_on_write;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code};
-#[cfg(unix)]
-use uucore::fs::make_fifo;
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
@@ -898,11 +896,11 @@ impl Attributes {
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
         context: {
-            #[cfg(feature = "feat_selinux")]
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             {
                 Preserve::Yes { required: false }
             }
-            #[cfg(not(feature = "feat_selinux"))]
+            #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
             {
                 Preserve::No { explicit: false }
             }
@@ -1143,7 +1141,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(feature = "selinux"))]
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
@@ -1694,7 +1692,7 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<(
     Ok(())
 }
 
-#[cfg(all(feature = "selinux", target_os = "linux"))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> CopyResult<()> {
     if !uucore::selinux::is_selinux_enabled() {
         return Ok(());
@@ -2672,7 +2670,7 @@ fn copy_file(
         fs::File::create(dest).map(|f| f.set_len(0)).ok();
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if options.set_selinux_context {
         set_selinux_context(dest, options.context.as_ref())?;
     }
@@ -2830,8 +2828,8 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         overwrite.verify(dest, debug)?;
         fs::remove_file(dest)?;
     }
-
-    make_fifo(dest)
+    // rustix::fs::mkfifoat is linux only
+    nix::unistd::mkfifo(dest, Mode::from_bits_truncate(0o666))
         .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
 }
 

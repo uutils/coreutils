@@ -368,6 +368,7 @@ mkfifoat
 setpipe
 
 # * other
+auxv
 getlimits
 weblate
 algs

@@ -81,7 +81,7 @@ $(info Detected OS = $(OS))
 ifeq (,$(findstring windows,$(OS)))
 	FEATURE_EXTRACT_UTILS := feat_os_unix
 else
-	FEATURE_EXTRACT_UTILS := feat_Tier1
+	FEATURE_EXTRACT_UTILS := windows
 endif
 PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
 

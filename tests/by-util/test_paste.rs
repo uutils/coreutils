@@ -450,12 +450,12 @@ fn test_paste_non_utf8_paths() {
 }
 
 #[cfg(target_os = "linux")]
-fn make_broken_pipe() -> std::fs::File {
-    let (read, write) = rustix::pipe::pipe().expect("Failed to create pipe");
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Drop the read end so writes fail with EPIPE.
     drop(read);
-
-    write.into()
+    // Return the write end of the pipe
+    write
 }
 
 #[test]

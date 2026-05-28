@@ -13,23 +13,16 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))]
-use nix::sys::signal::{Signal, kill};
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))]
-use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
+use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
@@ -653,7 +646,7 @@ fn test_follow_name_multiple() {
         child
             .make_assertion_with_delay(delay)
             .is_alive()
-            .with_current_output()
+            .with_all_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
 
         let first_append = "trois\n";
@@ -790,7 +783,11 @@ fn test_follow_with_pid() {
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
     // kill the dummy process and give tail time to notice this
-    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    kill_process(
+        Pid::from_raw(i32::try_from(pid).unwrap()).unwrap(),
+        Signal::USR1,
+    )
+    .unwrap();
     let _ = dummy.wait();
 
     child.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
@@ -2770,7 +2767,11 @@ fn test_fifo_with_pid() {
 
     child.make_assertion_with_delay(500).is_alive();
 
-    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    kill_process(
+        Pid::from_raw(i32::try_from(pid).unwrap()).unwrap(),
+        Signal::USR1,
+    )
+    .unwrap();
     let _ = dummy.wait();
 
     child

@@ -165,22 +165,18 @@ impl MultiWriter {
         let mut buffer = [0u8; BUF_SIZE];
         // fast-path for small input. needs 2+ read to catch end of file
         for _ in 0..2 {
-            match input.read(&mut buffer) {
-                Ok(0) => return Ok(()), // end of file
-                Ok(received) => self.write_flush(&buffer[..received])?,
-                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-                _ => {}
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
         }
         // buffer is too small optimize for large input
         //stack array makes code path for smaller file slower
         let mut buffer = vec![0u8; 4 * BUF_SIZE];
         loop {
-            match input.read(&mut buffer) {
-                Ok(0) => return Ok(()), // end of file
-                Ok(received) => self.write_flush(&buffer[..received])?,
-                Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e),
-                _ => {}
+            match input.read(&mut buffer)? {
+                0 => return Ok(()), // end of file
+                received => self.write_flush(&buffer[..received])?,
             }
         }
     }
@@ -210,17 +206,12 @@ impl MultiWriter {
                     false
                 }
             });
-        self.aborted.take().map_or(
-            if self.writers.is_empty() {
-                // This error kind will never be raised by the standard
-                // library, so we can use it for early termination of
-                // `copy`
-                Err(Error::from(ErrorKind::Other))
-            } else {
-                Ok(())
-            },
-            Err,
-        )
+        match self.aborted.take() {
+            Some(e) => Err(e),
+            // This error kind will never be raised by std, so we can use it for termination when all writers exited
+            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None => Ok(()),
+        }
     }
 }
 
@@ -284,12 +275,19 @@ struct NamedReader {
 
 impl Read for NamedReader {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        self.inner.read(buf).inspect_err(|e| {
-            let _ = writeln!(
-                stderr(),
-                "tee: {}",
-                translate!("tee-error-stdin", "error" => strip_errno(e))
-            );
-        })
+        loop {
+            match self.inner.read(buf) {
+                Ok(n) => return Ok(n),
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr(),
+                        "tee: {}",
+                        translate!("tee-error-stdin", "error" => strip_errno(&e))
+                    );
+                    return Err(e);
+                }
+            }
+        }
     }
 }

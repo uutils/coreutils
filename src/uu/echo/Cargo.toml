@@ -27,3 +27,11 @@ fluent = { workspace = true }
 [[bin]]
 name = "echo"
 path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "echo_bench"
+harness = false
