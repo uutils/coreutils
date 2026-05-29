@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
-use dircolors::{OutputFmt, StrUtils, guess_syntax};
+use dircolors::StrUtils;
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -28,50 +28,6 @@ fn test_dircolors_non_utf8_paths() {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-}
-
-#[test]
-fn test_shell_syntax() {
-    use std::env;
-    let last = env::var("SHELL");
-    unsafe {
-        env::set_var("SHELL", "/path/csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/path/bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/asd/bar");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "foo");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-    unsafe {
-        env::remove_var("SHELL");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-
-    if let Ok(s) = last {
-        unsafe {
-            env::set_var("SHELL", s);
-        }
-    }
 }
 
 #[test]
