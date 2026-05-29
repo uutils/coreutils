@@ -244,7 +244,7 @@ fn test_range_full_huge_no_head_count_memory_exhausted() {
     new_ucmd!()
         .arg(format!("-i1-{upper_bound}"))
         .fails_with_code(1)
-        .stderr_contains("memory exhausted");
+        .stderr_only("shuf: memory exhausted\n");
 }
 
 #[test]
@@ -256,7 +256,7 @@ fn test_range_huge_head_count_memory_exhausted() {
         .arg(format!("-n{upper_bound}"))
         .arg(format!("-i1-{upper_bound}"))
         .fails_with_code(1)
-        .stderr_contains("memory exhausted");
+        .stderr_only("shuf: memory exhausted\n");
 }
 
 #[test]
