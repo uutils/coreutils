@@ -122,9 +122,15 @@ export PATH=/usr/lib/cargo/bin/coreutils:$PATH
 
 ### AUR
 
-[AUR package](https://aur.archlinux.org/packages/uutils-coreutils-git)
+[Build main branch from source](https://aur.archlinux.org/packages/uutils-coreutils-git)
+or
+[Binaries from main branch](https://aur.archlinux.org/packages/uutils-coreutils-git-bin)
 
-Rust rewrite of the GNU coreutils (main branch).
+```shell
+git clone https://aur.archlinux.org/uutils-coreutils-git --depth=1
+cd uutils-coreutils-git
+makepkg -si
+```
 
 ## MacOS
 
