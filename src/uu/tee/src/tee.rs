@@ -153,7 +153,7 @@ struct MultiWriter {
 impl MultiWriter {
     /// Copies all bytes from the input buffer to the output buffer
     /// without buffering which is POSIX requirement.
-    pub fn copy_unbuffered<R: Read>(&mut self, mut input: R) -> Result<()> {
+    pub fn copy_unbuffered(&mut self, mut input: NamedReader) -> Result<()> {
         // todo: support splice() and tee() fast-path at here
         // The implementation for this function is adopted from the generic buffer copy implementation from
         // the standard library:
