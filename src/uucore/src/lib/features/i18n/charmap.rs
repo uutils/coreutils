@@ -9,6 +9,8 @@
 
 use std::sync::OnceLock;
 
+const CTYPE_LOCALE_VARS: [&str; 3] = ["LC_ALL", "LC_CTYPE", "LANG"];
+
 enum MbEncoding {
     Utf8,
     Gb18030,
@@ -27,12 +29,42 @@ fn encoding_from_name(enc: &str) -> MbEncoding {
     }
 }
 
+/// Return the effective `LC_CTYPE` locale value from the environment.
+///
+/// Empty values are ignored, matching the locale precedence used for character
+/// map detection.
+fn get_effective_ctype_locale() -> Option<String> {
+    CTYPE_LOCALE_VARS
+        .iter()
+        .find_map(|&key| std::env::var(key).ok().filter(|v| !v.is_empty()))
+}
+
+/// Return whether the effective `LC_CTYPE` locale is the byte-oriented C/POSIX locale.
+///
+/// WASI has no native locale environment, so it keeps the existing
+/// UTF-8-compatible behavior regardless of forwarded locale variables.
+#[cfg(target_os = "wasi")]
+pub fn is_effective_ctype_c_or_posix() -> bool {
+    false
+}
+
+/// Return whether the effective `LC_CTYPE` locale is the byte-oriented C/POSIX locale.
+///
+/// A missing effective locale defaults to POSIX behavior on platforms with a
+/// native locale environment.
+#[cfg(not(target_os = "wasi"))]
+pub fn is_effective_ctype_c_or_posix() -> bool {
+    match get_effective_ctype_locale().as_deref() {
+        Some("C" | "POSIX") => true,
+        Some(_) => false,
+        None => true,
+    }
+}
+
 fn get_encoding() -> &'static MbEncoding {
     static ENCODING: OnceLock<MbEncoding> = OnceLock::new();
     ENCODING.get_or_init(|| {
-        let val = ["LC_ALL", "LC_CTYPE", "LANG"]
-            .iter()
-            .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()));
+        let val = get_effective_ctype_locale();
         let s = match val.as_deref() {
             Some(s) if s != "C" && s != "POSIX" => s,
             _ => return MbEncoding::Utf8,

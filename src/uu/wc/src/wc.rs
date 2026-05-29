@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore ilog wc wc's
+// spell-checker:ignore ctype ilog wc wc's
 
 mod count_fast;
 mod countable;
@@ -26,7 +26,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use utf8::{BufReadDecoder, BufReadDecoderError};
-use uucore::{display::Quotable, translate};
+use uucore::{display::Quotable, i18n::charmap::is_effective_ctype_c_or_posix, translate};
 
 use uucore::{
     error::{FromIo, UError, UResult},
@@ -581,6 +581,7 @@ fn process_chunk<
     current_len: &mut usize,
     in_word: &mut bool,
     is_posixly_correct: bool,
+    chars_are_bytes: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
@@ -616,11 +617,16 @@ fn process_chunk<
         if SHOW_LINES && ch == '\n' {
             total.lines += 1;
         }
-        if SHOW_CHARS {
+        if SHOW_CHARS && !chars_are_bytes {
             total.chars += 1;
         }
     }
     total.bytes += text.len();
+
+    // In C/POSIX locale, chars count equals bytes count
+    if SHOW_CHARS && chars_are_bytes {
+        total.chars += text.len();
+    }
 
     total.max_line_length = max(*current_len, total.max_line_length);
 }
@@ -657,6 +663,7 @@ fn word_count_from_reader_specialized<
     let mut in_word = false;
     let mut current_len = 0;
     let is_posixly_correct = *IS_POSIXLY_CORRECT;
+    let chars_are_bytes = SHOW_CHARS && is_effective_ctype_c_or_posix();
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -666,6 +673,7 @@ fn word_count_from_reader_specialized<
                     &mut current_len,
                     &mut in_word,
                     is_posixly_correct,
+                    chars_are_bytes,
                 );
             }
             Err(e) => {

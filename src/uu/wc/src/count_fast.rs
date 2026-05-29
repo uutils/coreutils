@@ -3,9 +3,10 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore sysconf
+// spell-checker:ignore sysconf CTYPE
 use crate::{wc_simd_allowed, word_count::WordCount};
 use uucore::hardware::SimdPolicy;
+use uucore::i18n::charmap::is_effective_ctype_c_or_posix;
 
 use super::WordCountable;
 
@@ -212,6 +213,11 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
     let buf: &mut [u8] = &mut AlignedBuffer::default().data;
     let policy = SimdPolicy::detect();
     let simd_allowed = wc_simd_allowed(policy);
+
+    // In C/POSIX locale, characters are equivalent to bytes (MB_CUR_MAX == 1).
+    // This follows GNU coreutils behavior.
+    let chars_are_bytes = is_effective_ctype_c_or_posix();
+
     loop {
         match handle.read(buf) {
             Ok(0) => return (total, None),
@@ -220,11 +226,16 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     total.bytes += n;
                 }
                 if COUNT_CHARS {
-                    total.chars += if simd_allowed {
-                        bytecount::num_chars(&buf[..n])
+                    if chars_are_bytes {
+                        // In C/POSIX locale, count bytes instead of UTF-8 chars
+                        total.chars += n;
                     } else {
-                        bytecount::naive_num_chars(&buf[..n])
-                    };
+                        total.chars += if simd_allowed {
+                            bytecount::num_chars(&buf[..n])
+                        } else {
+                            bytecount::naive_num_chars(&buf[..n])
+                        };
+                    }
                 }
                 if COUNT_LINES {
                     total.lines += if simd_allowed {
