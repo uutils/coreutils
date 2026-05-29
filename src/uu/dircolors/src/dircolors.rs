@@ -527,7 +527,7 @@ fn generate_dircolors_config() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::escape;
+    use super::*;
 
     #[test]
     fn test_escape() {
@@ -535,5 +535,49 @@ mod tests {
         assert_eq!("'\\''", escape("'"));
         assert_eq!("\\:", escape(":"));
         assert_eq!("\\:", escape("\\:"));
+    }
+
+    #[test]
+    fn test_guess_syntax() {
+        use std::env;
+        let last = env::var("SHELL");
+        unsafe {
+            env::set_var("SHELL", "/path/csh");
+        }
+        assert_eq!(OutputFmt::CShell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "csh");
+        }
+        assert_eq!(OutputFmt::CShell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "/path/bash");
+        }
+        assert_eq!(OutputFmt::Shell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "bash");
+        }
+        assert_eq!(OutputFmt::Shell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "/asd/bar");
+        }
+        assert_eq!(OutputFmt::Shell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "foo");
+        }
+        assert_eq!(OutputFmt::Shell, guess_syntax());
+        unsafe {
+            env::set_var("SHELL", "");
+        }
+        assert_eq!(OutputFmt::Unknown, guess_syntax());
+        unsafe {
+            env::remove_var("SHELL");
+        }
+        assert_eq!(OutputFmt::Unknown, guess_syntax());
+
+        if let Ok(s) = last {
+            unsafe {
+                env::set_var("SHELL", s);
+            }
+        }
     }
 }
