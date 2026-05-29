@@ -73,7 +73,7 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
     (prefix, suffix)
 }
 
-pub fn generate_type_output(fmt: &OutputFmt) -> String {
+fn generate_type_output(fmt: &OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
@@ -473,7 +473,7 @@ fn escape(s: &str) -> String {
     result
 }
 
-pub fn generate_dircolors_config() -> String {
+fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
     config.push_str(
