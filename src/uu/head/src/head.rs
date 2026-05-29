@@ -399,7 +399,6 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn uu_head(options: &HeadOptions) -> UResult<()> {
     let mut stdout = io::stdout().lock();
     let mut first = true;
@@ -577,7 +576,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn all_args_test() {
         assert!(options("--silent").unwrap().quiet);
         assert!(options("--quiet").unwrap().quiet);

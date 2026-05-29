@@ -50,7 +50,6 @@ impl NumInfo {
     /// an empty range (idx..idx) is returned so that idx is the char after the last zero.
     /// If the input is not a number (which has to be treated as zero), the returned empty range
     /// will be 0..0.
-    #[allow(clippy::cognitive_complexity)]
     pub fn parse(num: &[u8], parse_settings: &NumInfoParseSettings) -> (Self, Range<usize>) {
         let mut exponent = -1;
         let mut had_decimal_pt = false;

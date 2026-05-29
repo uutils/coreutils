@@ -1019,7 +1019,6 @@ impl Attributes {
 }
 
 impl Options {
-    #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
         let not_implemented_opts = vec![
             #[cfg(not(any(windows, unix)))]

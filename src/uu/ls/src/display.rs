@@ -321,7 +321,6 @@ fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 pub fn display_items(
     items: &[PathData],
     config: &Config,
@@ -673,7 +672,6 @@ pub fn display_size(size: u64, config: &Config) -> String {
 ///
 /// Note that non-unicode sequences in symlink targets are dealt with using
 /// [`std::path::Path::to_string_lossy`].
-#[allow(clippy::cognitive_complexity)]
 fn display_item_name(
     path: &PathData,
     config: &Config,
@@ -875,7 +873,6 @@ fn display_item_name(
 /// ```
 /// that decide the maximum possible character count of each field.
 #[allow(clippy::write_literal)]
-#[allow(clippy::cognitive_complexity)]
 fn display_item_long(
     item: &PathData,
     padding: &PaddingCollection,

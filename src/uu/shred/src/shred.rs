@@ -611,7 +611,6 @@ fn create_compatible_sequence(
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::cognitive_complexity)]
 fn wipe_file(
     path_str: &OsString,
     n_passes: usize,
