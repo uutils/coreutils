@@ -1,0 +1,69 @@
+# spell-checker:ignore tzdb zoneinfo
+
+[package]
+name = "uu_ls"
+description = "ls ~ (uutils) display directory contents"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/ls.rs"
+doctest = false
+
+[dependencies]
+ansi-width = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+glob = { workspace = true }
+lscolors = { workspace = true }
+rustc-hash = { workspace = true }
+terminal_size = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = [
+  "colors",
+  "entries",
+  "format",
+  "fs",
+  "fsext",
+  "fsxattr",
+  "parser-size",
+  "parser-glob",
+  "quoting-style",
+  "time",
+  "version-cmp",
+] }
+uutils_term_grid = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
+
+# hostname crate does not support WASI (no OS-level hostname API)
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+hostname = { workspace = true }
+
+[[bin]]
+name = "ls"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "ls_bench"
+harness = false
+
+[features]
+feat_selinux = ["selinux", "uucore/selinux"]
+smack = ["uucore/smack"]

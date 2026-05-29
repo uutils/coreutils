@@ -1,0 +1,39 @@
+[package]
+name = "uu_csplit"
+description = "csplit ~ (uutils) Output pieces of FILE separated by PATTERN(s) to files 'xx00', 'xx01', ..., and output byte counts of each piece to standard output"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/ls"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/csplit.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "format"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "csplit"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "csplit_bench"
+harness = false

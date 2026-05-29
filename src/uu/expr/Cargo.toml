@@ -1,0 +1,32 @@
+[package]
+name = "uu_expr"
+description = "expr ~ (uutils) display the value of EXPRESSION"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/expr.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+num-bigint = { workspace = true }
+num-traits = { workspace = true }
+onig = { workspace = true }
+uucore = { workspace = true, features = ["i18n-collator"] }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "expr"
+path = "src/main.rs"

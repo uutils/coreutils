@@ -1,0 +1,30 @@
+[package]
+name = "uu_fmt"
+description = "fmt ~ (uutils) reformat each paragraph of input"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fmt"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/fmt.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+unicode-width = { workspace = true }
+uucore = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "fmt"
+path = "src/main.rs"

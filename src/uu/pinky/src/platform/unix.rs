@@ -1,0 +1,311 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (ToDO) BUFSIZE gecos fullname, mesg iobuf
+
+use crate::Capitalize;
+use crate::options;
+use crate::uu_app;
+
+use uucore::entries::{Locate, Passwd};
+use uucore::error::UResult;
+use uucore::libc::S_IWGRP;
+use uucore::translate;
+use uucore::utmpx::{self, Utmpx, UtmpxRecord, time};
+
+use std::fs::File;
+use std::io;
+use std::io::prelude::*;
+use std::os::unix::fs::MetadataExt;
+use std::path::PathBuf;
+
+fn get_long_usage() -> String {
+    format!(
+        "{}{}",
+        translate!("pinky-long-usage-description"),
+        utmpx::DEFAULT_FILE
+    )
+}
+
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app().after_help(get_long_usage()), args)?;
+
+    let users: Vec<String> = matches
+        .get_many::<String>(options::USER)
+        .map(|v| v.map(ToString::to_string).collect())
+        .unwrap_or_default();
+
+    // If true, display the hours:minutes since each user has touched
+    // the keyboard, or blank if within the last minute, or days followed
+    // by a 'd' if not within the last day.
+    let mut include_idle = true;
+
+    // If true, display a line at the top describing each field.
+    let include_heading = !matches.get_flag(options::OMIT_HEADINGS);
+
+    // if true, display the user's full name from pw_gecos.
+    let mut include_fullname = true;
+
+    // if true, display the user's ~/.project file when doing long format.
+    let include_project = !matches.get_flag(options::OMIT_PROJECT_FILE);
+
+    // if true, display the user's ~/.plan file when doing long format.
+    let include_plan = !matches.get_flag(options::OMIT_PLAN_FILE);
+
+    // if true, display the user's home directory and shell
+    // when doing long format.
+    let include_home_and_shell = !matches.get_flag(options::OMIT_HOME_DIR);
+
+    // if true, use the "short" output format.
+    let do_short_format = !matches.get_flag(options::LONG_FORMAT);
+
+    // If true, attempt to canonicalize hostname via a DNS lookup.
+    let do_lookup = matches.get_flag(options::LOOKUP);
+
+    /* if true, display the ut_host field. */
+    let mut include_where = true;
+
+    if matches.get_flag(options::OMIT_NAME) {
+        include_fullname = false;
+    }
+    if matches.get_flag(options::OMIT_NAME_HOST) {
+        include_fullname = false;
+        include_where = false;
+    }
+    if matches.get_flag(options::OMIT_NAME_HOST_TIME) {
+        include_fullname = false;
+        include_idle = false;
+        include_where = false;
+    }
+
+    let pk = Pinky {
+        do_lookup,
+        include_idle,
+        include_heading,
+        include_fullname,
+        include_project,
+        include_plan,
+        include_home_and_shell,
+        include_where,
+        names: users,
+    };
+
+    if do_short_format {
+        pk.write_short(&mut io::stdout().lock())?;
+    } else {
+        pk.write_long(&mut io::stdout().lock())?;
+    }
+    Ok(())
+}
+
+struct Pinky {
+    do_lookup: bool,
+    include_idle: bool,
+    include_heading: bool,
+    include_fullname: bool,
+    include_project: bool,
+    include_plan: bool,
+    include_where: bool,
+    include_home_and_shell: bool,
+    names: Vec<String>,
+}
+
+fn idle_string(when: i64) -> String {
+    thread_local! {
+        static NOW: time::OffsetDateTime = time::OffsetDateTime::now_local().unwrap_or_else(|_| time::OffsetDateTime::now_utc());
+    }
+    NOW.with(|n| {
+        let duration = n.unix_timestamp() - when;
+        if duration < 60 {
+            // less than 1min
+            "     ".to_owned()
+        } else if duration < 24 * 3600 {
+            // less than 1day
+            let hours = duration / (60 * 60);
+            let minutes = (duration % (60 * 60)) / 60;
+            format!("{hours:02}:{minutes:02}")
+        } else {
+            // more than 1day
+            let days = duration / (24 * 3600);
+            format!("{days}d")
+        }
+    })
+}
+
+fn time_string(ut: &UtmpxRecord) -> String {
+    let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
+        .into_iter()
+        .find_map(std::env::var_os)
+        .as_deref()
+        == Some(std::ffi::OsStr::new("C"))
+    {
+        // "%b %e %H:%M"
+        time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
+            .unwrap()
+    } else {
+        // "%Y-%m-%d %H:%M"
+        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+    };
+    ut.login_time().format(&time_format).unwrap()
+}
+
+fn gecos_to_fullname(pw: &Passwd) -> Option<String> {
+    let mut gecos = if let Some(gecos) = &pw.user_info {
+        gecos.clone()
+    } else {
+        return None;
+    };
+    if let Some(n) = gecos.find(',') {
+        gecos.truncate(n);
+    }
+    Some(gecos.replace('&', &pw.name.capitalize()))
+}
+
+impl Pinky {
+    fn write_entry(&self, writer: &mut impl Write, ut: &UtmpxRecord) -> io::Result<()> {
+        let mut pts_path = PathBuf::from("/dev");
+        pts_path.push(ut.tty_device().as_str());
+
+        let mesg;
+        let last_change;
+
+        #[allow(clippy::unnecessary_cast)]
+        if let Ok(meta) = pts_path.metadata() {
+            mesg = if (meta.mode() & (S_IWGRP as u32)) == 0 {
+                '*'
+            } else {
+                ' '
+            };
+            last_change = meta.atime();
+        } else {
+            mesg = '?';
+            last_change = 0;
+        }
+
+        write!(writer, "{1:<8.0$}", utmpx::UT_NAMESIZE, ut.user())?;
+
+        if self.include_fullname {
+            let fullname = if let Ok(pw) = Passwd::locate(ut.user().as_ref()) {
+                gecos_to_fullname(&pw)
+            } else {
+                None
+            };
+            if let Some(fullname) = fullname {
+                write!(writer, " {fullname:<19.19}")?;
+            } else {
+                write!(writer, " {:19}", "        ???")?;
+            }
+        }
+
+        write!(
+            writer,
+            " {mesg}{:<8.*}",
+            utmpx::UT_LINESIZE,
+            ut.tty_device()
+        )?;
+
+        if self.include_idle {
+            if last_change == 0 {
+                write!(writer, " {:<6}", "?????")?;
+            } else {
+                write!(writer, " {:<6}", idle_string(last_change))?;
+            }
+        }
+
+        write!(writer, " {}", time_string(ut))?;
+
+        if self.include_where {
+            let s: String = if self.do_lookup {
+                ut.canon_host().unwrap_or(ut.host())
+            } else {
+                ut.host()
+            };
+
+            if !s.is_empty() {
+                write!(writer, " {s}")?;
+            }
+        }
+
+        writeln!(writer)?;
+        Ok(())
+    }
+
+    fn write_heading(&self, writer: &mut impl Write) -> io::Result<()> {
+        write!(writer, "{:<8}", translate!("pinky-column-login"))?;
+        if self.include_fullname {
+            write!(writer, " {:<19}", translate!("pinky-column-name"))?;
+        }
+        write!(writer, " {:<9}", translate!("pinky-column-tty"))?;
+        if self.include_idle {
+            write!(writer, " {:<6}", translate!("pinky-column-idle"))?;
+        }
+        write!(writer, " {:<16}", translate!("pinky-column-when"))?;
+        if self.include_where {
+            write!(writer, " {}", translate!("pinky-column-where"))?;
+        }
+        writeln!(writer)?;
+        Ok(())
+    }
+
+    fn write_short(&self, writer: &mut impl Write) -> io::Result<()> {
+        if self.include_heading {
+            self.write_heading(writer)?;
+        }
+        for ut in Utmpx::iter_all_records() {
+            if ut.is_user_process()
+                && (self.names.is_empty() || self.names.iter().any(|n| n.as_str() == ut.user()))
+            {
+                self.write_entry(writer, &ut)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_long(&self, writer: &mut impl Write) -> io::Result<()> {
+        for u in &self.names {
+            write!(
+                writer,
+                "{} {u:<28}{} ",
+                translate!("pinky-login-name-label"),
+                translate!("pinky-real-life-label")
+            )?;
+            if let Ok(pw) = Passwd::locate(u.as_str()) {
+                let fullname = gecos_to_fullname(&pw).unwrap_or_default();
+                let user_dir = pw.user_dir.unwrap_or_default();
+                let user_shell = pw.user_shell.unwrap_or_default();
+                writeln!(writer, " {fullname}")?;
+                if self.include_home_and_shell {
+                    write!(
+                        writer,
+                        "{} {user_dir:<29}",
+                        translate!("pinky-directory-label")
+                    )?;
+                    writeln!(writer, "{}  {user_shell}", translate!("pinky-shell-label"))?;
+                }
+                if self.include_project {
+                    let mut p = PathBuf::from(&user_dir);
+                    p.push(".project");
+                    if let Ok(mut reader) = File::open(p) {
+                        write!(writer, "{} ", translate!("pinky-project-label"))?;
+                        io::copy(&mut reader, writer)?;
+                    }
+                }
+                if self.include_plan {
+                    let mut p = PathBuf::from(&user_dir);
+                    p.push(".plan");
+                    if let Ok(mut reader) = File::open(p) {
+                        writeln!(writer, "{}:", translate!("pinky-plan-label"))?;
+                        io::copy(&mut reader, writer)?;
+                    }
+                }
+                writeln!(writer)?;
+            } else {
+                writeln!(writer, " ???")?;
+            }
+        }
+        Ok(())
+    }
+}

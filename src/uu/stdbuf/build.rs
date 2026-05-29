@@ -1,0 +1,179 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+// spell-checker:ignore (ToDO) bindeps dylib libstdbuf deps liblibstdbuf
+
+use std::env;
+use std::fs;
+use std::path::Path;
+use std::process::Command;
+
+fn main() {
+    // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
+    if env::var("CARGO_CFG_UNIX").is_err() {
+        println!("cargo:rustc-cfg=feature=\"feat_external_libstdbuf\"");
+        return;
+    }
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
+
+    // Check for external stdbuf feature requirements
+    #[cfg(feature = "feat_external_libstdbuf")]
+    {
+        if env::var("LIBSTDBUF_DIR").is_err() {
+            eprintln!(
+                "\n\x1b[31mError:\x1b[0m The 'feat_external_libstdbuf' feature requires the LIBSTDBUF_DIR environment variable to be set."
+            );
+            eprintln!(
+                "\x1b[33mUsage:\x1b[0m LIBSTDBUF_DIR=/path/to/lib/directory cargo build --features feat_external_libstdbuf"
+            );
+            eprintln!(
+                "\x1b[33mExample:\x1b[0m LIBSTDBUF_DIR=/usr/lib cargo build --features feat_external_libstdbuf"
+            );
+            eprintln!(
+                "\nThis directory should point to where libstdbuf.so / libstdbuf.dylib will be installed on the target system."
+            );
+            std::process::exit(1);
+        }
+    }
+
+    let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
+    let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
+
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
+
+    let dylib_ext = if target_vendor == "apple" {
+        ".dylib"
+    } else if target_os == "cygwin" {
+        ".dll"
+    } else {
+        ".so"
+    };
+
+    // Check if we're building from the repository (where src/libstdbuf exists)
+    // or from crates.io (where it doesn't)
+    let libstdbuf_src = Path::new("src/libstdbuf");
+    if !libstdbuf_src.exists() {
+        // When building from crates.io, libstdbuf is already available as a dependency
+        // We can't build it here, so we'll need to handle this differently
+        // For now, we'll create a dummy library file to satisfy the include_bytes! macro
+        let lib_name = format!("libstdbuf{dylib_ext}");
+        let dest_path = Path::new(&out_dir).join(&lib_name);
+
+        // Create an empty file as a placeholder
+        // The actual library will be provided by the dependency
+        fs::write(&dest_path, []).expect("Failed to create placeholder libstdbuf");
+        return;
+    }
+
+    // Create a separate build directory for libstdbuf to avoid conflicts
+    let build_dir = Path::new(&out_dir).join("libstdbuf-build");
+    fs::create_dir_all(&build_dir).expect("Failed to create build directory");
+
+    // Get the cargo executable
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+
+    // This manual cargo call ensures that libstdbuf is built before stdbuf.rs is compiled, which is necessary
+    // for include_bytes!(..."/libstdbuf.so") to work.
+    // In the future, "bindeps" should be used to simplify the code and avoid the manual cargo call,
+    // however this is available only in cargo nightly at the moment.
+    // See the tracking issue: https://github.com/rust-lang/cargo/issues/9096
+    let mut cmd = Command::new(&cargo);
+    cmd.env_clear().envs(env::vars());
+    cmd.current_dir(libstdbuf_src)
+        .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
+
+    // Get the current profile
+    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+
+    // Pass the release flag if we're in release mode
+    if profile == "release" || profile == "bench" {
+        cmd.arg("--release");
+    }
+
+    // Pass the target architecture if we're cross-compiling
+    if !target.is_empty() && target != "unknown" {
+        cmd.arg("--target").arg(&target);
+    }
+
+    let status = cmd.status().expect("Failed to build libstdbuf");
+    assert!(status.success(), "Failed to build libstdbuf");
+
+    // Copy the built library to OUT_DIR for include_bytes! to find
+    let lib_name = if target_os == "cygwin" {
+        format!("stdbuf{dylib_ext}")
+    } else {
+        format!("libstdbuf{dylib_ext}")
+    };
+    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{dylib_ext}"));
+
+    // Check multiple possible locations for the built library
+    let possible_paths = if !target.is_empty() && target != "unknown" {
+        vec![
+            build_dir.join(&target).join(&profile).join(&lib_name),
+            build_dir
+                .join(&target)
+                .join(&profile)
+                .join("deps")
+                .join(&lib_name),
+        ]
+    } else {
+        vec![
+            build_dir.join(&profile).join(&lib_name),
+            build_dir.join(&profile).join("deps").join(&lib_name),
+        ]
+    };
+
+    // Try to find the library in any of the possible locations
+    let mut found = false;
+    for source_path in &possible_paths {
+        if source_path.exists() {
+            fs::copy(source_path, &dest_path).expect("Failed to copy libstdbuf library");
+            found = true;
+            break;
+        }
+    }
+
+    assert!(
+        found,
+        "Could not find built libstdbuf library. Searched in: {possible_paths:?}."
+    );
+
+    // Create a symlink to libstdbuf in the main target directory for development convenience
+    // This allows running stdbuf directly from the build directory (e.g., target/debug/coreutils)
+    // without needing to install the library to LIBSTDBUF_DIR. This is particularly useful for
+    // running tests and manual testing during development.
+    #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
+    {
+        use std::path::PathBuf;
+
+        // Get the main target directory (e.g., target/debug or target/release)
+        // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
+        let out_dir_path = PathBuf::from(&out_dir);
+        if let Some(target_dir) = out_dir_path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
+            let lib_filename = format!("libstdbuf{dylib_ext}");
+            let source = target_dir.join("deps").join(&lib_filename);
+            let dest = target_dir.join(&lib_filename);
+
+            // Remove old symlink if it exists (in case it points to the wrong place)
+            let _ = fs::remove_file(&dest);
+
+            // Create symlink if the source exists
+            if source.exists() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::symlink;
+                    if let Err(e) = symlink(&source, &dest) {
+                        eprintln!("Warning: Failed to create symlink for libstdbuf: {e}");
+                    }
+                }
+            }
+        }
+    }
+}

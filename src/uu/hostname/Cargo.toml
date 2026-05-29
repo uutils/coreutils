@@ -1,0 +1,51 @@
+[package]
+name = "uu_hostname"
+description = "hostname ~ (uutils) display or set the host name of the current host"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/hostname"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/hostname.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+hostname = { workspace = true, features = ["set"] }
+uucore = { workspace = true, features = ["wide"] }
+fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "freebsd", target_os = "openbsd"))'.dependencies]
+dns-lookup = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Networking_WinSock",
+  "Win32_Foundation",
+] }
+
+[[bin]]
+name = "hostname"
+path = "src/main.rs"
+
+[[bench]]
+name = "hostname_bench"
+harness = false
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }

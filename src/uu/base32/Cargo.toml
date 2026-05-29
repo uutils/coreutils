@@ -1,0 +1,28 @@
+[package]
+name = "uu_base32"
+description = "base32 ~ (uutils) decode/encode input (base32-encoding)"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/base32"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/base32.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["encoding"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "base32"
+path = "src/main.rs"

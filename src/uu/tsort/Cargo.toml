@@ -1,0 +1,44 @@
+#spell-checker:ignore (libs) interner
+[package]
+name = "uu_tsort"
+description = "tsort ~ (uutils) topologically sort input (partially ordered) pairs"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tsort"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/tsort.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+string-interner = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true }
+rustc-hash = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
+[[bin]]
+name = "tsort"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "tsort_bench"
+harness = false

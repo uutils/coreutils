@@ -1,0 +1,36 @@
+# spell-checker:ignore memmap
+
+[package]
+name = "uu_tac"
+description = "tac ~ (uutils) concatenate and display input lines in reverse order"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tac"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/tac.rs"
+doctest = false
+
+[dependencies]
+memchr = { workspace = true }
+memmap2 = { workspace = true }
+regex = { workspace = true }
+clap = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = ["signals"] }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+tempfile = { workspace = true }
+
+[[bin]]
+name = "tac"
+path = "src/main.rs"

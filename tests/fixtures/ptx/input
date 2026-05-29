@@ -1,0 +1,7 @@
+hello world!
+let's check special characters:
+"quotes", for roff
+{brackets} for tex
+and some other like %a, b#, c$c
+maybe also~or^
+oh, and back\slash

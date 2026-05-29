@@ -1,0 +1,122 @@
+# spell-checker:ignore SSLeay RUSTSEC
+
+# This section is considered when running `cargo deny check advisories`
+# More documentation for the advisories section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/advisories/cfg.html
+[advisories]
+db-path = "~/.cargo/advisory-db"
+db-urls = ["https://github.com/rustsec/advisory-db"]
+version = 2
+yanked = "warn"
+ignore = [
+  #"RUSTSEC-0000-0000",
+]
+
+# This section is considered when running `cargo deny check licenses`
+# More documentation for the licenses section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/licenses/cfg.html
+[licenses]
+version = 2
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "ISC",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "Zlib",
+  "MPL-2.0",
+]
+confidence-threshold = 0.8
+
+[[licenses.clarify]]
+name = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# This section is considered when running `cargo deny check bans`.
+# More documentation about the 'bans' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/bans/cfg.html
+[bans]
+multiple-versions = "deny"
+wildcards = "allow"
+highlight = "all"
+
+# For each duplicate dependency, indicate the name of the dependency which
+# introduces it.
+# spell-checker: disable
+skip = [
+  # various crates
+  { name = "windows-sys", version = "0.59.0" },
+  # various crates
+  { name = "windows-sys", version = "0.60.2" },
+  # parking_lot_core
+  { name = "windows-targets", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_aarch64_gnullvm", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_aarch64_msvc", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_i686_gnu", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_i686_gnullvm", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_i686_msvc", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_x86_64_gnu", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_x86_64_gnullvm", version = "0.52.6" },
+  # windows-targets
+  { name = "windows_x86_64_msvc", version = "0.52.6" },
+  # ansi-width
+  { name = "unicode-width", version = "0.1.13" },
+  # filedescriptor, utmp-classic
+  { name = "thiserror", version = "1.0.69" },
+  # thiserror
+  { name = "thiserror-impl", version = "1.0.69" },
+  # bindgen
+  { name = "itertools", version = "0.13.0" },
+  # ordered-multimap
+  { name = "hashbrown", version = "0.14.5" },
+  # cexpr (via bindgen)
+  { name = "nom", version = "7.1.3" },
+  # const-random-macro, rand_core
+  { name = "getrandom", version = "0.2.15" },
+  # num-bigint, num-prime, phf_generator
+  { name = "rand", version = "0.8.5" },
+  # rand
+  { name = "rand_chacha", version = "0.3.1" },
+  # rand
+  { name = "rand_core", version = "0.6.4" },
+  # utmp-classic
+  { name = "zerocopy", version = "0.7.35" },
+  # zerocopy
+  { name = "zerocopy-derive", version = "0.7.35" },
+  # hashbrown
+  { name = "foldhash", version = "0.1.5" },
+  # crc-fast
+  { name = "digest", version = "0.10.7" },
+  # digest
+  { name = "crypto-common", version = "0.1.7" },
+  # parse_datetime
+  { name = "winnow", version = "0.7.15" },
+]
+# spell-checker: enable
+
+# This section is considered when running `cargo deny check sources`.
+# More documentation about the 'sources' section can be found here:
+# https://embarkstudios.github.io/cargo-deny/checks/sources/cfg.html
+
+[sources]
+unknown-registry = "warn"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

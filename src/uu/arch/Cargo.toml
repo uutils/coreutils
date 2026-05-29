@@ -1,0 +1,30 @@
+[package]
+name = "uu_arch"
+description = "arch ~ (uutils) display machine architecture"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/arch"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/arch.rs"
+test = false
+doctest = false
+
+[dependencies]
+platform-info = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "arch"
+path = "src/main.rs"

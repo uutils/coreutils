@@ -1,0 +1,65 @@
+[package]
+name = "uu_mv"
+description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/mv.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+fs_extra = { workspace = true }
+indicatif = { workspace = true }
+libc = { workspace = true }
+nix = { workspace = true }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = [
+  "backup-control",
+  "fs",
+  "fsxattr",
+  "perms",
+  "safe-copy",
+  "update-control",
+] }
+fluent = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
+
+
+[features]
+selinux = ["uucore/selinux"]
+
+[[bin]]
+name = "mv"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "mv_bench"
+harness = false

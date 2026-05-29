@@ -1,0 +1,2 @@
+# Configure GitHub to not mark comments in configuration files as errors
+*.json linguist-language=jsonc

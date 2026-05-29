@@ -1,0 +1,7 @@
+.xx "" "" """quotes"", for roff" ""
+.xx "" "" "and some other like %a, b#, c$c" ""
+.xx "" "" "hello world!" ""
+.xx "" "" "let's check special characters:" ""
+.xx "" "" "maybe also~or^" ""
+.xx "" "" "oh, and back\slash" ""
+.xx "" "" "{brackets} for tex" ""

@@ -1,0 +1,46 @@
+# spell-checker:ignore datetime
+[package]
+name = "uu_touch"
+description = "touch ~ (uutils) change FILE timestamps"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/touch"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/touch.rs"
+doctest = false
+
+[dependencies]
+filetime = { workspace = true }
+clap = { workspace = true }
+jiff = { workspace = true }
+parse_datetime = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["libc", "parser"] }
+fluent = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
+
+[[bin]]
+name = "touch"
+path = "src/main.rs"

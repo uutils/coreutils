@@ -1,0 +1,39 @@
+[package]
+name = "uu_factor"
+description = "factor ~ (uutils) display the prime factors of each NUMBER"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true }
+memchr = { workspace = true }
+num-bigint = { workspace = true }
+num-prime = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "factor"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[lib]
+path = "src/factor.rs"
+doctest = false
+
+[[bench]]
+name = "factor_bench"
+harness = false

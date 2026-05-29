@@ -1,0 +1,37 @@
+[package]
+name = "uu_true"
+description = "true ~ (uutils) do nothing and succeed"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/true"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/true.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "true"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "true_bench"
+harness = false

@@ -1,0 +1,794 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore (vars/api) fcntl setrlimit setitimer rubout pollable sysconf pgrp GETFD pfds revents POLLRDBAND POLLERR
+// spell-checker:ignore (vars/signals) ABRT ALRM CHLD SEGV SIGABRT SIGALRM SIGBUS SIGCHLD SIGCONT SIGDANGER SIGEMT SIGFPE SIGHUP SIGILL SIGINFO SIGINT SIGIO SIGIOT SIGKILL SIGMIGRATE SIGMSG SIGPIPE SIGPRE SIGPROF SIGPWR SIGQUIT SIGSEGV SIGSTOP SIGSYS SIGTALRM SIGTERM SIGTRAP SIGTSTP SIGTHR SIGTTIN SIGTTOU SIGURG SIGUSR SIGVIRT SIGVTALRM SIGWINCH SIGXCPU SIGXFSZ STKFLT PWR THR TSTP TTIN TTOU VIRT VTALRM XCPU XFSZ SIGCLD SIGPOLL SIGWAITING SIGAIOCANCEL SIGLWP SIGFREEZE SIGTHAW SIGCANCEL SIGLOST SIGXRES SIGJVM SIGRTMIN SIGRT SIGRTMAX TALRM AIOCANCEL XRES RTMIN RTMAX LTOSTOP
+
+//! This module provides a way to handle signals in a platform-independent way.
+//! It provides a way to convert signal names to their corresponding values and vice versa.
+//! It also provides a way to ignore the SIGINT signal and enable pipe errors.
+
+#[cfg(unix)]
+use nix::errno::Errno;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use nix::libc;
+#[cfg(unix)]
+use nix::sys::signal::{
+    SaFlags, SigAction, SigHandler, SigHandler::SigDfl, SigHandler::SigIgn, SigSet, Signal,
+    Signal::SIGINT, Signal::SIGPIPE, sigaction, signal,
+};
+
+/// The default signal value.
+pub static DEFAULT_SIGNAL: usize = 15;
+
+/*
+
+Linux Programmer's Manual
+
+ 1 HUP      2 INT      3 QUIT     4 ILL      5 TRAP     6 ABRT     7 BUS
+ 8 FPE      9 KILL    10 USR1    11 SEGV    12 USR2    13 PIPE    14 ALRM
+15 TERM    16 STKFLT  17 CHLD    18 CONT    19 STOP    20 TSTP    21 TTIN
+22 TTOU    23 URG     24 XCPU    25 XFSZ    26 VTALRM  27 PROF    28 WINCH
+29 POLL    30 PWR     31 SYS
+
+
+*/
+
+/// The list of all signals.
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "redox"))]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
+    "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
+    "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
+];
+
+/*
+
+
+https://developer.apple.com/library/mac/documentation/Darwin/Reference/ManPages/man3/signal.3.html
+
+
+No    Name         Default Action       Description
+1     SIGHUP       terminate process    terminal line hangup
+2     SIGINT       terminate process    interrupt program
+3     SIGQUIT      create core image    quit program
+4     SIGILL       create core image    illegal instruction
+5     SIGTRAP      create core image    trace trap
+6     SIGABRT      create core image    abort program (formerly SIGIOT)
+7     SIGEMT       create core image    emulate instruction executed
+8     SIGFPE       create core image    floating-point exception
+9     SIGKILL      terminate process    kill program
+10    SIGBUS       create core image    bus error
+11    SIGSEGV      create core image    segmentation violation
+12    SIGSYS       create core image    non-existent system call invoked
+13    SIGPIPE      terminate process    write on a pipe with no reader
+14    SIGALRM      terminate process    real-time timer expired
+15    SIGTERM      terminate process    software termination signal
+16    SIGURG       discard signal       urgent condition present on socket
+17    SIGSTOP      stop process         stop (cannot be caught or ignored)
+18    SIGTSTP      stop process         stop signal generated from keyboard
+19    SIGCONT      discard signal       continue after stop
+20    SIGCHLD      discard signal       child status has changed
+21    SIGTTIN      stop process         background read attempted from control terminal
+22    SIGTTOU      stop process         background write attempted to control terminal
+23    SIGIO        discard signal       I/O is possible on a descriptor (see fcntl(2))
+24    SIGXCPU      terminate process    cpu time limit exceeded (see setrlimit(2))
+25    SIGXFSZ      terminate process    file size limit exceeded (see setrlimit(2))
+26    SIGVTALRM    terminate process    virtual time alarm (see setitimer(2))
+27    SIGPROF      terminate process    profiling timer alarm (see setitimer(2))
+28    SIGWINCH     discard signal       Window size change
+29    SIGINFO      discard signal       status request from keyboard
+30    SIGUSR1      terminate process    User defined signal 1
+31    SIGUSR2      terminate process    User defined signal 2
+
+*/
+
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
+];
+
+/*
+
+     The following signals are defined in NetBSD:
+
+     SIGHUP           1     Hangup
+     SIGINT           2     Interrupt
+     SIGQUIT          3     Quit
+     SIGILL           4     Illegal instruction
+     SIGTRAP          5     Trace/BPT trap
+     SIGABRT          6     Abort trap
+     SIGEMT           7     EMT trap
+     SIGFPE           8     Floating point exception
+     SIGKILL          9     Killed
+     SIGBUS           10    Bus error
+     SIGSEGV          11    Segmentation fault
+     SIGSYS           12    Bad system call
+     SIGPIPE          13    Broken pipe
+     SIGALRM          14    Alarm clock
+     SIGTERM          15    Terminated
+     SIGURG           16    Urgent I/O condition
+     SIGSTOP          17    Suspended (signal)
+     SIGTSTP          18    Suspended
+     SIGCONT          19    Continued
+     SIGCHLD          20    Child exited, stopped or continued
+     SIGTTIN          21    Stopped (tty input)
+     SIGTTOU          22    Stopped (tty output)
+     SIGIO            23    I/O possible
+     SIGXCPU          24    CPU time limit exceeded
+     SIGXFSZ          25    File size limit exceeded
+     SIGVTALRM        26    Virtual timer expired
+     SIGPROF          27    Profiling timer expired
+     SIGWINCH         28    Window size changed
+     SIGINFO          29    Information request
+     SIGUSR1          30    User defined signal 1
+     SIGUSR2          31    User defined signal 2
+     SIGPWR           32    Power fail/restart
+*/
+
+#[cfg(target_os = "netbsd")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "PWR",
+];
+
+/*
+
+     The following signals are defined in OpenBSD:
+
+     SIGHUP       terminate process    terminal line hangup
+     SIGINT       terminate process    interrupt program
+     SIGQUIT      create core image    quit program
+     SIGILL       create core image    illegal instruction
+     SIGTRAP      create core image    trace trap
+     SIGABRT      create core image    abort(3) call (formerly SIGIOT)
+     SIGEMT       create core image    emulate instruction executed
+     SIGFPE       create core image    floating-point exception
+     SIGKILL      terminate process    kill program (cannot be caught or
+                                       ignored)
+     SIGBUS       create core image    bus error
+     SIGSEGV      create core image    segmentation violation
+     SIGSYS       create core image    system call given invalid argument
+     SIGPIPE      terminate process    write on a pipe with no reader
+     SIGALRM      terminate process    real-time timer expired
+     SIGTERM      terminate process    software termination signal
+     SIGURG       discard signal       urgent condition present on socket
+     SIGSTOP      stop process         stop (cannot be caught or ignored)
+     SIGTSTP      stop process         stop signal generated from keyboard
+     SIGCONT      discard signal       continue after stop
+     SIGCHLD      discard signal       child status has changed
+     SIGTTIN      stop process         background read attempted from control
+                                       terminal
+     SIGTTOU      stop process         background write attempted to control
+                                       terminal
+     SIGIO        discard signal       I/O is possible on a descriptor (see
+                                       fcntl(2))
+     SIGXCPU      terminate process    CPU time limit exceeded (see
+                                       setrlimit(2))
+     SIGXFSZ      terminate process    file size limit exceeded (see
+                                       setrlimit(2))
+     SIGVTALRM    terminate process    virtual time alarm (see setitimer(2))
+     SIGPROF      terminate process    profiling timer alarm (see
+                                       setitimer(2))
+     SIGWINCH     discard signal       window size change
+     SIGINFO      discard signal       status request from keyboard
+     SIGUSR1      terminate process    user-defined signal 1
+     SIGUSR2      terminate process    user-defined signal 2
+     SIGTHR       discard signal       thread AST
+*/
+
+#[cfg(target_os = "openbsd")]
+pub static ALL_SIGNALS: [&str; 33] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2", "THR",
+];
+
+/*
+     The following signals are defined in Solaris and illumos;
+     (the signals for illumos are the same as Solaris, but illumos still has SIGLWP
+     as well as the alias for SIGLWP (SIGAIOCANCEL)):
+
+     SIGHUP       1       hangup
+     SIGINT       2       interrupt (rubout)
+     SIGQUIT      3       quit (ASCII FS)
+     SIGILL       4       illegal instruction (not reset when caught)
+     SIGTRAP      5       trace trap (not reset when caught)
+     SIGIOT       6       IOT instruction
+     SIGABRT      6       used by abort, replace SIGIOT in the future
+     SIGEMT       7       EMT instruction
+     SIGFPE       8       floating point exception
+     SIGKILL      9       kill (cannot be caught or ignored)
+     SIGBUS       10      bus error
+     SIGSEGV      11      segmentation violation
+     SIGSYS       12      bad argument to system call
+     SIGPIPE      13      write on a pipe with no one to read it
+     SIGALRM      14      alarm clock
+     SIGTERM      15      software termination signal from kill
+     SIGUSR1      16      user defined signal 1
+     SIGUSR2      17      user defined signal 2
+     SIGCLD       18      child status change
+     SIGCHLD      18      child status change alias (POSIX)
+     SIGPWR       19      power-fail restart
+     SIGWINCH     20      window size change
+     SIGURG       21      urgent socket condition
+     SIGPOLL      22      pollable event occurred
+     SIGIO        SIGPOLL socket I/O possible (SIGPOLL alias)
+     SIGSTOP      23      stop (cannot be caught or ignored)
+     SIGTSTP      24      user stop requested from tty
+     SIGCONT      25      stopped process has been continued
+     SIGTTIN      26      background tty read attempted
+     SIGTTOU      27      background tty write attempted
+     SIGVTALRM    28      virtual timer expired
+     SIGPROF      29      profiling timer expired
+     SIGXCPU      30      exceeded cpu limit
+     SIGXFSZ      31      exceeded file size limit
+     SIGWAITING   32      reserved signal no longer used by threading code
+     SIGAIOCANCEL 33      reserved signal no longer used by threading code (formerly SIGLWP)
+     SIGFREEZE    34      special signal used by CPR
+     SIGTHAW      35      special signal used by CPR
+     SIGCANCEL    36      reserved signal for thread cancellation
+     SIGLOST      37      resource lost (eg, record-lock lost)
+     SIGXRES      38      resource control exceeded
+     SIGJVM1      39      reserved signal for Java Virtual Machine
+     SIGJVM2      40      reserved signal for Java Virtual Machine
+     SIGINFO      41      information request
+     SIGRTMIN     ((int)_sysconf(_SC_SIGRT_MIN)) first realtime signal
+     SIGRTMAX     ((int)_sysconf(_SC_SIGRT_MAX)) last realtime signal
+*/
+
+#[cfg(target_os = "solaris")]
+const SIGNALS_SIZE: usize = 46;
+
+#[cfg(target_os = "illumos")]
+const SIGNALS_SIZE: usize = 47;
+
+#[cfg(any(target_os = "solaris", target_os = "illumos"))]
+static ALL_SIGNALS: [&str; SIGNALS_SIZE] = [
+    "HUP",
+    "INT",
+    "QUIT",
+    "ILL",
+    "TRAP",
+    "IOT",
+    "ABRT",
+    "EMT",
+    "FPE",
+    "KILL",
+    "BUS",
+    "SEGV",
+    "SYS",
+    "PIPE",
+    "ALRM",
+    "TERM",
+    "USR1",
+    "USR2",
+    "CLD",
+    "CHLD",
+    "PWR",
+    "WINCH",
+    "URG",
+    "POLL",
+    "IO",
+    "STOP",
+    "TSTP",
+    "CONT",
+    "TTIN",
+    "TTOU",
+    "VTALRM",
+    "PROF",
+    "XCPU",
+    "XFSZ",
+    "WAITING",
+    "AIOCANCEL",
+    #[cfg(target_os = "illumos")]
+    "LWP",
+    "FREEZE",
+    "THAW",
+    "CANCEL",
+    "LOST",
+    "XRES",
+    "JVM1",
+    "JVM2",
+    "INFO",
+    "RTMIN",
+    "RTMAX",
+];
+
+/*
+   The following signals are defined in AIX:
+
+   SIGHUP     hangup, generated when terminal disconnects
+   SIGINT     interrupt, generated from terminal special char
+   SIGQUIT    quit, generated from terminal special char
+   SIGILL     illegal instruction (not reset when caught)
+   SIGTRAP    trace trap (not reset when caught)
+   SIGABRT    abort process
+   SIGEMT     EMT instruction
+   SIGFPE     floating point exception
+   SIGKILL    kill (cannot be caught or ignored)
+   SIGBUS     bus error (specification exception)
+   SIGSEGV    segmentation violation
+   SIGSYS     bad argument to system call
+   SIGPIPE    write on a pipe with no one to read it
+   SIGALRM    alarm clock timeout
+   SIGTERM    software termination signal
+   SIGURG     urgent condition on I/O channel
+   SIGSTOP    stop (cannot be caught or ignored)
+   SIGTSTP    interactive stop
+   SIGCONT    continue (cannot be caught or ignored)
+   SIGCHLD    sent to parent on child stop or exit
+   SIGTTIN    background read attempted from control terminal
+   SIGTTOU    background write attempted to control terminal
+   SIGIO      I/O possible, or completed
+   SIGXCPU    cpu time limit exceeded (see setrlimit())
+   SIGXFSZ    file size limit exceeded (see setrlimit())
+   SIGMSG     input data is in the ring buffer
+   SIGWINCH   window size changed
+   SIGPWR     power-fail restart
+   SIGUSR1    user defined signal 1
+   SIGUSR2    user defined signal 2
+   SIGPROF    profiling time alarm (see setitimer)
+   SIGDANGER  system crash imminent; free up some page space
+   SIGVTALRM  virtual time alarm (see setitimer)
+   SIGMIGRATE migrate process
+   SIGPRE     programming exception
+   SIGVIRT    AIX virtual time alarm
+   SIGTALRM   per-thread alarm clock
+*/
+#[cfg(target_os = "aix")]
+pub static ALL_SIGNALS: [&str; 37] = [
+    "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV", "SYS",
+    "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO", "XCPU",
+    "XFSZ", "MSG", "WINCH", "PWR", "USR1", "USR2", "PROF", "DANGER", "VTALRM", "MIGRATE", "PRE",
+    "VIRT", "TALRM",
+];
+
+/*
+   The following signals are defined in Cygwin
+   https://cygwin.com/cgit/newlib-cygwin/tree/winsup/cygwin/include/cygwin/signal.h
+
+   SIGHUP     1   hangup
+   SIGINT     2   interrupt
+   SIGQUIT    3   quit
+   SIGILL     4   illegal instruction (not reset when caught)
+   SIGTRAP    5   trace trap (not reset when caught)
+   SIGABRT    6   used by abort
+   SIGEMT     7   EMT instruction
+   SIGFPE     8   floating point exception
+   SIGKILL    9   kill (cannot be caught or ignored)
+   SIGBUS     10  bus error
+   SIGSEGV    11  segmentation violation
+   SIGSYS     12  bad argument to system call
+   SIGPIPE    13  write on a pipe with no one to read it
+   SIGALRM    14  alarm clock
+   SIGTERM    15  software termination signal from kill
+   SIGURG     16  urgent condition on IO channel
+   SIGSTOP    17  sendable stop signal not from tty
+   SIGTSTP    18  stop signal from tty
+   SIGCONT    19  continue a stopped process
+   SIGCHLD    20  to parent on child stop or exit
+   SIGTTIN    21  to readers pgrp upon background tty read
+   SIGTTOU    22  like TTIN for output if (tp->t_local&LTOSTOP)
+   SIGIO      23  input/output possible signal
+   SIGXCPU    24  exceeded CPU time limit
+   SIGXFSZ    25  exceeded file size limit
+   SIGVTALRM  26  virtual time alarm
+   SIGPROF    27  profiling time alarm
+   SIGWINCH   28  window changed
+   SIGLOST    29  resource lost (eg, record-lock lost)
+   SIGUSR1    30  user defined signal 1
+   SIGUSR2    31  user defined signal 2
+*/
+#[cfg(target_os = "cygwin")]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS", "SEGV",
+    "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD", "TTIN", "TTOU", "IO",
+    "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
+];
+
+/// Returns the signal number for a given signal name or value.
+pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
+    let signal_name_upcase = signal_name_or_value.to_uppercase();
+    if let Ok(value) = signal_name_upcase.parse() {
+        if is_signal(value) {
+            return Some(value);
+        }
+        return realtime_signal_bounds()
+            .filter(|&(rtmin, rtmax)| value >= rtmin && value <= rtmax)
+            .map(|_| value);
+    }
+    let signal_name = signal_name_upcase.trim_start_matches("SIG");
+
+    if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
+        return Some(pos);
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
+}
+
+/// Returns true if the given number is a valid signal number.
+pub fn is_signal(num: usize) -> bool {
+    num < ALL_SIGNALS.len()
+}
+
+/// Returns the signal name for a given signal value.
+pub fn signal_name_by_value(signal_value: usize) -> Option<&'static str> {
+    ALL_SIGNALS.get(signal_value).copied()
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    let rtmin = libc::SIGRTMIN();
+    let rtmax = libc::SIGRTMAX();
+
+    (0 < rtmin && rtmin <= rtmax).then_some((rtmin as usize, rtmax as usize))
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn realtime_signal_bounds() -> Option<(usize, usize)> {
+    None
+}
+
+/// Returns the largest signal number that list-style interfaces should accept.
+pub fn signal_number_upper_bound() -> usize {
+    let base = ALL_SIGNALS.len() - 1;
+
+    realtime_signal_bounds().map_or(base, |(_, rtmax)| rtmax.max(base))
+}
+
+/// Returns the signal name for list-style interfaces.
+pub fn signal_list_name_by_value(signal_value: usize) -> Option<String> {
+    if let Some(signal_name) = signal_name_by_value(signal_value) {
+        return Some(signal_name.to_string());
+    }
+
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
+        if signal_value == rtmin {
+            Some("RTMIN".to_string())
+        } else if signal_value == rtmax {
+            Some("RTMAX".to_string())
+        } else {
+            None
+        }
+    })
+}
+
+/// Returns the signal value for list-style interfaces.
+pub fn signal_list_value_by_name_or_number(spec: &str) -> Option<usize> {
+    let spec_upcase = spec.to_uppercase();
+
+    if let Ok(value) = spec_upcase.parse::<usize>() {
+        return (value <= signal_number_upper_bound()).then_some(value);
+    }
+
+    if let Some(value) = signal_by_name_or_value(&spec_upcase) {
+        return Some(value);
+    }
+
+    let signal_name = spec_upcase.trim_start_matches("SIG");
+    realtime_signal_bounds().and_then(|(rtmin, rtmax)| match signal_name {
+        "RTMIN" => Some(rtmin),
+        "RTMAX" => Some(rtmax),
+        _ => None,
+    })
+}
+
+/// Restores SIGPIPE to default behavior (process terminates on broken pipe).
+#[cfg(unix)]
+pub fn enable_pipe_errors() -> Result<(), Errno> {
+    // We pass the error as is, the return value would just be Ok(SigDfl), so we can safely ignore it.
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigDfl) }.map(|_| ())
+}
+
+/// Ignores SIGPIPE signal (broken pipe errors are returned instead of terminating).
+/// Use this to override the default SIGPIPE handling when you need to handle
+/// broken pipe errors gracefully (e.g., tee with --output-error).
+#[cfg(unix)]
+pub fn disable_pipe_errors() -> Result<(), Errno> {
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGPIPE, SigIgn) }.map(|_| ())
+}
+
+/// Ignores the SIGINT signal.
+#[cfg(unix)]
+pub fn ignore_interrupts() -> Result<(), Errno> {
+    // We pass the error as is, the return value would just be Ok(SigIgn), so we can safely ignore it.
+    // SAFETY: this function is safe as long as we do not use a custom SigHandler -- we use the default one.
+    unsafe { signal(SIGINT, SigIgn) }.map(|_| ())
+}
+
+/// Installs a signal handler. The handler must be async-signal-safe.
+#[cfg(unix)]
+pub fn install_signal_handler(
+    sig: i32,
+    handler: extern "C" fn(std::os::raw::c_int),
+) -> Result<(), Errno> {
+    let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
+    let action = SigAction::new(
+        SigHandler::Handler(handler),
+        SaFlags::SA_RESTART,
+        SigSet::empty(),
+    );
+    unsafe { sigaction(signal, &action) }?;
+    Ok(())
+}
+
+// Detect closed stdin/stdout before Rust reopens them as /dev/null (see issue #2873)
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
+#[cfg(unix)]
+static STDIN_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDOUT_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+#[cfg(unix)]
+static STDERR_WAS_CLOSED: AtomicBool = AtomicBool::new(false);
+
+// SIGPIPE state capture - captures whether SIGPIPE was ignored at process startup
+#[cfg(unix)]
+static SIGPIPE_WAS_IGNORED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+static STARTUP_STATE_WAS_CAPTURED: AtomicBool = AtomicBool::new(false);
+
+/// Captures stdio and SIGPIPE state at process initialization, before main() runs.
+///
+/// # Safety
+/// Called from `.init_array` before main(). Only reads current state.
+#[cfg(unix)]
+#[allow(clippy::missing_safety_doc)]
+pub unsafe extern "C" fn capture_startup_state() {
+    use nix::libc;
+    use std::mem::MaybeUninit;
+    use std::ptr;
+
+    // No spinlock because we're single-threaded at this point
+    if STARTUP_STATE_WAS_CAPTURED.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    // Capture stdio state
+    unsafe {
+        STDIN_WAS_CLOSED.store(
+            libc::fcntl(libc::STDIN_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDOUT_WAS_CLOSED.store(
+            libc::fcntl(libc::STDOUT_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+        STDERR_WAS_CLOSED.store(
+            libc::fcntl(libc::STDERR_FILENO, libc::F_GETFD) == -1,
+            Ordering::Relaxed,
+        );
+    }
+
+    // Capture SIGPIPE state
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: sigaction with null new-action just queries current state
+    if unsafe { libc::sigaction(libc::SIGPIPE, ptr::null(), current.as_mut_ptr()) } == 0 {
+        // SAFETY: sigaction succeeded, so current is initialized
+        let ignored = unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN;
+        SIGPIPE_WAS_IGNORED.store(ignored, Ordering::Release);
+    }
+}
+
+/// Initializes startup state capture. Call once at crate root level.
+#[macro_export]
+#[cfg(unix)]
+macro_rules! init_startup_state_capture {
+    () => {
+        #[cfg(not(target_os = "macos"))]
+        #[used]
+        #[unsafe(link_section = ".init_array")]
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
+
+        #[cfg(target_os = "macos")]
+        #[used]
+        #[unsafe(link_section = "__DATA,__mod_init_func")]
+        static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
+            $crate::signals::capture_startup_state;
+    };
+}
+
+#[macro_export]
+#[cfg(not(unix))]
+macro_rules! init_startup_state_capture {
+    () => {};
+}
+
+#[cfg(unix)]
+pub fn stdin_was_closed() -> bool {
+    STDIN_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdin_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stdout_was_closed() -> bool {
+    STDOUT_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stdout_was_closed() -> bool {
+    false
+}
+
+#[cfg(unix)]
+pub fn stderr_was_closed() -> bool {
+    STDERR_WAS_CLOSED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+pub const fn stderr_was_closed() -> bool {
+    false
+}
+
+/// Returns whether SIGPIPE was ignored at process startup.
+#[cfg(unix)]
+pub fn sigpipe_was_ignored() -> bool {
+    SIGPIPE_WAS_IGNORED.load(Ordering::Acquire)
+}
+
+#[cfg(not(unix))]
+pub const fn sigpipe_was_ignored() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
+    use nix::{
+        poll::{PollFd, PollFlags, PollTimeout, poll},
+        sys::stat::{SFlag, fstat},
+    };
+    use std::io::stdout;
+    use std::os::fd::AsFd;
+
+    let out = stdout();
+
+    // First, check that stdout is a fifo and return true if it's not the case
+    let stat = fstat(out.as_fd())?;
+    if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
+        return Ok(true);
+    }
+
+    // POLLRDBAND is the flag used by GNU tee.
+    let mut pfds = [PollFd::new(out.as_fd(), PollFlags::POLLRDBAND)];
+
+    // Then, ensure that the pipe is not broken.
+    // Use ZERO timeout to return immediately - we just want to check the current state.
+    let res = poll(&mut pfds, PollTimeout::ZERO)?;
+
+    if res > 0 {
+        // poll returned with events ready - check if POLLERR is set (pipe broken)
+        let error = pfds.iter().any(|pfd| {
+            if let Some(revents) = pfd.revents() {
+                revents.contains(PollFlags::POLLERR)
+            } else {
+                true
+            }
+        });
+        return Ok(!error);
+    }
+
+    // res == 0 means no events ready (timeout reached immediately with ZERO timeout).
+    // This means the pipe is healthy (not broken).
+    // res < 0 would be an error, but nix returns Err in that case.
+    Ok(true)
+}
+
+#[test]
+fn signal_by_value() {
+    assert_eq!(signal_by_name_or_value("0"), Some(0));
+    for (value, _signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_by_name_or_value(&value.to_string()), Some(value));
+    }
+}
+
+#[test]
+fn signal_by_short_name() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_by_name_or_value(signal), Some(value));
+    }
+}
+
+#[test]
+fn signal_by_long_name() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(
+            signal_by_name_or_value(&format!("SIG{signal}")),
+            Some(value)
+        );
+    }
+}
+
+#[test]
+fn name() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_name_by_value(value), Some(*signal));
+    }
+}
+
+#[test]
+fn list_signal_names_match_static_signal_names() {
+    for (value, signal) in ALL_SIGNALS.iter().enumerate() {
+        assert_eq!(signal_list_name_by_value(value), Some(signal.to_string()));
+    }
+}
+
+#[test]
+fn list_signal_numbers_follow_upper_bound() {
+    assert_eq!(
+        signal_list_value_by_name_or_number(&signal_number_upper_bound().to_string()),
+        Some(signal_number_upper_bound())
+    );
+    assert_eq!(
+        signal_list_value_by_name_or_number(&(signal_number_upper_bound() + 1).to_string()),
+        None
+    );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_upper_bound_includes_rtmax() {
+    let (_, rtmax) = realtime_signal_bounds().unwrap();
+    assert!(signal_number_upper_bound() >= rtmax);
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_are_listed() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_name_by_value(rtmin), Some("RTMIN".to_string()));
+    assert_eq!(signal_list_name_by_value(rtmax), Some("RTMAX".to_string()));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signal_names_resolve_to_runtime_values() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    assert_eq!(signal_list_value_by_name_or_number("RTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("RTMAX"), Some(rtmax));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_list_value_by_name_or_number("SIGRTMAX"), Some(rtmax));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_unnamed_signal_numbers_are_valid_for_lists() {
+    assert_eq!(signal_list_value_by_name_or_number("32"), Some(32));
+    assert_eq!(signal_list_value_by_name_or_number("33"), Some(33));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_realtime_signals_resolve_by_name_or_value() {
+    let (rtmin, rtmax) = realtime_signal_bounds().unwrap();
+
+    // By name
+    assert_eq!(signal_by_name_or_value("RTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("RTMAX"), Some(rtmax));
+    assert_eq!(signal_by_name_or_value("SIGRTMIN"), Some(rtmin));
+    assert_eq!(signal_by_name_or_value("SIGRTMAX"), Some(rtmax));
+
+    // By numeric value
+    assert_eq!(signal_by_name_or_value(&rtmin.to_string()), Some(rtmin));
+    assert_eq!(signal_by_name_or_value(&rtmax.to_string()), Some(rtmax));
+}

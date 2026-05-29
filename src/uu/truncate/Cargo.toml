@@ -1,0 +1,28 @@
+[package]
+name = "uu_truncate"
+description = "truncate ~ (uutils) truncate (or extend) FILE to SIZE"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/truncate"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/truncate.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["parser-size"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "truncate"
+path = "src/main.rs"

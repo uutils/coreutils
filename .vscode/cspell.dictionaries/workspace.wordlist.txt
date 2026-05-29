@@ -1,0 +1,402 @@
+# * cargo
+cdylib
+doctest
+
+# * crates
+aho-corasick
+blake2b_simd
+rustix
+
+# * uutils project
+uutils
+coreutils
+uucore
+uutests
+ucmd
+uumain
+rlimit
+mkfifo
+urandom
+uchild
+ello
+bstr
+bytecount
+byteorder
+chacha
+chrono
+conv
+corasick
+crossterm
+exacl
+filetime
+formatteriteminfo
+fsext
+getopts
+getrandom
+globset
+indicatif
+itertools
+itoa
+iuse
+langid
+lscolors
+mdbook
+memchr
+multifilereader
+onig
+ouroboros
+peekreader
+quickcheck
+rand_chacha
+ringbuffer
+rlimit
+rstest
+smallvec
+tempdir
+tempfile
+termion
+termios
+termsize
+termwidth
+textwrap
+thiserror
+unic
+ureq
+walkdir
+winapi
+xattr
+
+# * rust/rustc
+RUSTDOCFLAGS
+RUSTFLAGS
+clippy
+rustc
+rustfmt
+rustup
+rustdoc
+#
+bitor # BitOr trait function
+bitxor # BitXor trait function
+concat
+fract
+powi
+println
+repr
+rfind
+struct
+structs
+substr
+splitn
+trunc
+uninit
+
+# * uutils
+basenc
+chcon
+chgrp
+chmod
+chown
+chroot
+cksum
+csplit
+dircolors
+hashsum
+hostid
+logname
+mkdir
+mkfifo
+mknod
+mktemp
+nohup
+nproc
+numfmt
+pathchk
+printenv
+printf
+readlink
+realpath
+relpath
+rmdir
+runcon
+shuf
+sprintf
+stdbuf
+stty
+tsort
+uname
+unexpand
+whoami
+
+# * vars/errno
+errno
+EACCES
+EBADF
+EBUSY
+EEXIST
+EINVAL
+ENODATA
+ENOENT
+ENOSPC
+ENOSYS
+ENOTEMPTY
+EOPNOTSUPP
+EPERM
+EPIPE
+EROFS
+
+# * vars/fcntl
+F_GETFL
+fcntl
+
+# * vars/libc
+COMFOLLOW
+EXDEV
+FILENO
+FTSENT
+HOSTSIZE
+IDSIZE
+IFBLK
+IFCHR
+IFDIR
+IFIFO
+IFLNK
+IFMT
+IFREG
+IFSOCK
+IRGRP
+IROTH
+IRUSR
+ISDIR
+ISGID
+ISUID
+ISVTX
+IWGRP
+IWOTH
+IWUSR
+IXGRP
+IXOTH
+IXUSR
+LINESIZE
+NAMESIZE
+RTLD_NEXT
+RTMAX
+RTMIN
+SIGABRT
+SIGINT
+SIGKILL
+SIGRTMAX
+SIGRTMIN
+SIGSTOP
+SIGTERM
+SYS_fdatasync
+SYS_syncfs
+USERSIZE
+accpath
+addrinfo
+addrlen
+blocksize
+canonname
+chroot
+dlsym
+execvp
+fdatasync
+freeaddrinfo
+getaddrinfo
+getegid
+geteuid
+getgid
+getgrgid
+getgrnam
+getgrouplist
+getgroups
+getpwent
+getpwnam
+getpwuid
+getuid
+inode
+inodes
+isatty
+lchown
+pathlen
+setgid
+setgroups
+settime
+setuid
+socketpair
+socktype
+statfs
+statp
+statvfs
+strcmp
+strerror
+strlen
+syncfs
+umask
+waitpid
+
+# * vars/nix
+unistd
+
+# * vars/rustix
+fcntl_getfl
+
+# * vars/signals
+SIGPIPE
+
+# * vars/std
+CString
+pathbuf
+
+# * vars/stat
+bavail
+bfree
+bsize
+ffree
+frsize
+fsid
+fstat
+fstype
+namelen
+# unix::fs::MetadataExt
+atime # access time
+blksize # blocksize for file system I/O
+blocks # number of blocks allocated to file
+ctime # creation time
+dev # ID of device containing the file
+gid # group ID of file owner
+ino # inode number
+mode # permissions
+mtime # modification time
+nlink # number of hard links to file
+rdev # device ID if file is a character/block special file
+size # total size of file in bytes
+uid # user ID of file owner
+nsec # nanosecond measurement scale
+# freebsd::MetadataExt
+iosize
+
+# * vars/time
+Timespec
+isdst
+nanos
+nsec
+nsecs
+strftime
+strptime
+subsec
+usec
+usecs
+utcoff
+
+# * vars/utmpx
+endutxent
+getutxent
+getutxid
+getutxline
+pututxline
+setutxent
+utmp
+utmpx
+utmpxname
+
+# * vars/winapi
+DWORD
+SYSTEMTIME
+LPVOID
+LPWSTR
+ULONG
+ULONGLONG
+UNLEN
+WCHAR
+WSADATA
+errhandlingapi
+fileapi
+handleapi
+lmcons
+minwinbase
+minwindef
+processthreadsapi
+synchapi
+sysinfoapi
+winbase
+winerror
+winnt
+winsock
+
+# * vars/selinux
+freecon
+getfilecon
+lgetfilecon
+lsetfilecon
+restorecon
+setfilecon
+
+# * vars/uucore
+optflag
+optflagmulti
+optflagopt
+optmulti
+optopt
+
+# * uutils
+ccmd
+coreopts
+coreutils
+keepenv
+libc
+libstdbuf
+musl
+tmpd
+uchild
+ucmd
+ucommand
+utmpx
+uucore
+uucore_procs
+uudoc
+uufuzz
+uumain
+uutil
+uutests
+uutils
+
+# * function names
+execfn
+fstatfs
+getcwd
+mkfifoat
+setpipe
+
+# * other
+auxv
+getlimits
+weblate
+algs
+wasm
+wasip
+
+# * stty terminal flags
+brkint
+cstopb
+decctlq
+echoctl
+echoe
+echoke
+ignbrk
+ignpar
+icrnl
+isig
+istrip
+litout
+opost
+parodd
+ENOTTY
+
+# translation tests
+CLICOLOR
+erreur
+Utilisation
+merror
+merreur
+verbo
+inattendu

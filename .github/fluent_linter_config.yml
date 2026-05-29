@@ -1,0 +1,28 @@
+---
+ID01:
+    enabled: true
+    exclusions:
+        messages: []
+        files: []
+ID02:
+    enabled: true
+    min_length: 7
+VC:
+    disabled: true
+# Disable: # TE01: single quote instead of apostrophe for genitive (foo's)
+TE01:
+    enabled: false
+# TE03: single quotes ('foo')
+TE03:
+    enabled: false
+# TE04: Double-quoted strings should use Unicode " instead of "foo".
+TE04:
+    enabled: false
+# Disable: TE05: 3 dots for ellipsis ("...")
+TE05:
+    enabled: false
+# Should be fixed
+VC01:
+    disabled: true
+ID03:
+  enabled: true

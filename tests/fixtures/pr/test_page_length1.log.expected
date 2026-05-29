@@ -1,0 +1,12 @@
+    6	Mon Dec 10 11:42:56.854 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+    7	Mon Dec 10 11:42:56.855 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+    8	Mon Dec 10 11:42:56.856 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+    9	Mon Dec 10 11:42:57.002 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   10	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+
+   11	Mon Dec 10 11:42:57.003 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   12	Mon Dec 10 11:42:57.152 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+   13	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: pppConnectionState 0
+   14	Mon Dec 10 11:42:57.154 Info: <Wi-Fi Menu Extra[335]> -[AirPortExtraImplementation processAirPortStateChanges]: old state=4 bars, new state=4 bars
+   15	Mon Dec 10 11:42:57.302 Info: <Wi-Fi Menu Extra[335]> 802.1X changed
+

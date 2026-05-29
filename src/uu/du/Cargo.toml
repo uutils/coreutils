@@ -1,0 +1,57 @@
+[package]
+name = "uu_du"
+description = "du ~ (uutils) display disk usage"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/du"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/du.rs"
+doctest = false
+
+[dependencies]
+# For the --exclude & --exclude-from options
+glob = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true, features = [
+  "format",
+  "fsext",
+  "i18n-decimal",
+  "parser-size",
+  "parser-glob",
+  "time",
+] }
+rustc-hash = { workspace = true }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
+uucore = { workspace = true, features = ["safe-traversal"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
+
+[[bin]]
+name = "du"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "du_bench"
+harness = false

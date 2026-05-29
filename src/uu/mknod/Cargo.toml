@@ -1,0 +1,35 @@
+[package]
+name = "uu_mknod"
+description = "mknod ~ (uutils) create special file NAME of TYPE"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mknod"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "uu_mknod"
+path = "src/mknod.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["mode", "fs"] }
+fluent = { workspace = true }
+nix = { workspace = true }
+
+[features]
+selinux = ["uucore/selinux"]
+smack = ["uucore/smack"]
+
+[[bin]]
+name = "mknod"
+path = "src/main.rs"

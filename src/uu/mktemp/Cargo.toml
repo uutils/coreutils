@@ -1,0 +1,31 @@
+[package]
+name = "uu_mktemp"
+description = "mktemp ~ (uutils) create and display a temporary file or directory from TEMPLATE"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mktemp"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/mktemp.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+rand = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "mktemp"
+path = "src/main.rs"

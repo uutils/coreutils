@@ -1,0 +1,93 @@
+# spell-checker:ignore bigdecimal foldhash
+
+[package]
+name = "uu_sort"
+description = "sort ~ (uutils) sort input lines"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/sort"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/sort.rs"
+doctest = false
+
+[features]
+default = ["i18n-collator"]
+i18n-collator = ["uucore/i18n-collator"]
+
+[dependencies]
+bigdecimal = { workspace = true }
+binary-heap-plus = { workspace = true }
+clap = { workspace = true }
+compare = { workspace = true }
+itertools = { workspace = true }
+memchr = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+self_cell = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = [
+  "fs",
+  "parser-size",
+  "version-cmp",
+  "i18n-decimal",
+  "i18n-collator",
+  "i18n-datetime",
+] }
+fluent = { workspace = true }
+foldhash = { workspace = true }
+
+[target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
+rustix = { workspace = true, features = ["system", "process"] }
+
+[target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
+ctrlc = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = [
+  "benchmark",
+  "fs",
+  "parser-size",
+  "version-cmp",
+  "i18n-collator",
+  "i18n-datetime",
+] }
+
+[[bin]]
+name = "sort"
+path = "src/main.rs"
+
+[[bench]]
+name = "sort_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_c_bench"
+harness = false
+
+[[bench]]
+name = "sort_locale_utf8_bench"
+harness = false
+
+[[bench]]
+name = "sort_bench_merge"
+harness = false
+
+[[bench]]
+name = "sort_locale_de_bench"
+harness = false

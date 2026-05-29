@@ -1,0 +1,486 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+//
+// spell-checker:ignore regfile parentdir
+
+use uutests::util::{TestScenario, get_root_path};
+use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
+
+static GIBBERISH: &str = "supercalifragilisticexpialidocious";
+
+#[cfg(not(windows))]
+static NOT_A_DIRECTORY: &str = "Not a directory";
+#[cfg(windows)]
+static NOT_A_DIRECTORY: &str = "The directory name is invalid.";
+
+#[test]
+fn test_no_args() {
+    new_ucmd!()
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("readlink: missing operand");
+}
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_resolve() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("foo");
+    at.symlink_file("foo", "bar");
+
+    ucmd.arg("bar").succeeds().stdout_contains("foo\n");
+}
+
+#[test]
+fn test_canonicalize() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let actual = ucmd.arg("-f").arg(".").succeeds().stdout_move_str();
+    let expect = at.root_dir_resolved() + "\n";
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+fn test_canonicalize_existing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let actual = ucmd.arg("-e").arg(".").succeeds().stdout_move_str();
+    let expect = at.root_dir_resolved() + "\n";
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+fn test_canonicalize_missing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let actual = ucmd.arg("-m").arg(GIBBERISH).succeeds().stdout_move_str();
+    let expect = path_concat!(at.root_dir_resolved(), GIBBERISH) + "\n";
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_canonicalize_symlink_before_parentdir() {
+    // GNU readlink follows the symlink first and only then evaluates `..`.
+    // Logical resolution would collapse `link/..` up front and return the current directory instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("real");
+    at.mkdir("real/sub");
+    at.relative_symlink_dir("real/sub", "link");
+
+    let actual = ucmd.args(&["-f", "link/.."]).succeeds().stdout_move_str();
+    let expect = format!("{}/real\n", at.root_dir_resolved());
+    assert_eq!(actual, expect);
+}
+
+#[test]
+fn test_long_redirection_to_current_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Create a 256-character path to current directory
+    let dir = path_concat!(".", ..128);
+    let actual = ucmd
+        .arg("-n")
+        .arg("-m")
+        .arg(dir)
+        .succeeds()
+        .stdout_move_str();
+    let expect = at.root_dir_resolved();
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+fn test_long_redirection_to_root() {
+    // Create a 255-character path to root
+    let dir = path_concat!("..", ..85);
+    let actual = new_ucmd!()
+        .arg("-n")
+        .arg("-m")
+        .arg(dir)
+        .succeeds()
+        .stdout_move_str();
+    let expect = get_root_path();
+    println!("actual: {actual:?}");
+    println!("expect: {expect:?}");
+    assert_eq!(actual, expect);
+}
+
+#[test]
+fn test_symlink_to_itself_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.relative_symlink_file("a", "a");
+    ucmd.args(&["-ev", "a"])
+        .fails_with_code(1)
+        .stderr_contains("Too many levels of symbolic links");
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_posixly_correct_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .arg("regfile")
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+
+    // GNU behavior is to ignore -s and -q when POSIXLY_CORRECT is set.
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-s", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+    scene
+        .ucmd()
+        .env("POSIXLY_CORRECT", "1")
+        .args(&["-q", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains("Invalid argument")
+        .no_stdout();
+}
+
+#[test]
+fn test_trailing_slash_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene
+        .ucmd()
+        .args(&["-ev", "./regfile/"])
+        .fails_with_code(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-e", "./regfile"])
+        .succeeds()
+        .stdout_contains("regfile");
+}
+
+#[test]
+fn test_trailing_slash_symlink_to_regular_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    at.relative_symlink_file("regfile", "link");
+    scene
+        .ucmd()
+        .args(&["-ev", "./link/"])
+        .fails_with_code(1)
+        .stderr_contains(NOT_A_DIRECTORY)
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-e", "./link"])
+        .succeeds()
+        .stdout_contains("regfile");
+    scene
+        .ucmd()
+        .args(&["-e", "./link/more"])
+        .fails_with_code(1)
+        .no_stdout();
+}
+
+#[test]
+fn test_trailing_slash_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("directory");
+    for query in ["./directory", "./directory/"] {
+        scene
+            .ucmd()
+            .args(&["-e", query])
+            .succeeds()
+            .stdout_contains("directory");
+    }
+}
+
+#[test]
+fn test_trailing_slash_symlink_to_directory() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("directory");
+    at.relative_symlink_dir("directory", "link");
+    for query in ["./link", "./link/"] {
+        scene
+            .ucmd()
+            .args(&["-e", query])
+            .succeeds()
+            .stdout_contains("directory");
+    }
+    scene
+        .ucmd()
+        .args(&["-ev", "./link/more"])
+        .fails_with_code(1)
+        .stderr_contains("No such file or directory")
+        .no_stdout();
+}
+
+#[test]
+fn test_trailing_slash_symlink_to_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("subdir");
+    at.relative_symlink_file("missing", "link");
+    at.relative_symlink_file("subdir/missing", "link2");
+    for query in [
+        "missing",
+        "./missing/",
+        "link",
+        "./link/",
+        "link/more",
+        "link2",
+        "./link2/",
+        "link2/more",
+    ] {
+        scene
+            .ucmd()
+            .args(&["-ev", query])
+            .fails_with_code(1)
+            .stderr_contains("No such file or directory")
+            .no_stdout();
+    }
+}
+
+#[test]
+fn test_canonicalize_trailing_slash_regfile() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    at.relative_symlink_file("regfile", "link1");
+    for name in ["regfile", "link1"] {
+        scene
+            .ucmd()
+            .args(&["-f", name])
+            .succeeds()
+            .stdout_contains("regfile");
+        scene
+            .ucmd()
+            .args(&["-fv", &format!("./{name}/")])
+            .fails_with_code(1)
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
+        scene
+            .ucmd()
+            .args(&["-fv", &format!("{name}/more")])
+            .fails_with_code(1)
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
+        scene
+            .ucmd()
+            .args(&["-fv", &format!("./{name}/more/")])
+            .fails_with_code(1)
+            .stderr_contains(NOT_A_DIRECTORY)
+            .no_stdout();
+    }
+}
+
+#[test]
+fn test_canonicalize_trailing_slash_subdir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("subdir");
+    at.relative_symlink_dir("subdir", "link2");
+    for name in ["subdir", "link2"] {
+        scene
+            .ucmd()
+            .args(&["-f", name])
+            .succeeds()
+            .stdout_contains("subdir");
+        scene
+            .ucmd()
+            .args(&["-f", &format!("./{name}/")])
+            .succeeds()
+            .stdout_contains("subdir");
+        scene
+            .ucmd()
+            .args(&["-f", &format!("{name}/more")])
+            .succeeds()
+            .stdout_contains(path_concat!("subdir", "more"));
+        scene
+            .ucmd()
+            .args(&["-f", &format!("./{name}/more/")])
+            .succeeds()
+            .stdout_contains(path_concat!("subdir", "more"));
+        scene
+            .ucmd()
+            .args(&["-f", &format!("{name}/more/more2")])
+            .fails_with_code(1)
+            .no_stdout();
+        scene
+            .ucmd()
+            .args(&["-f", &format!("./{name}/more/more2/")])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
+fn test_canonicalize_trailing_slash_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("missing", "link3");
+    for name in ["missing", "link3"] {
+        scene
+            .ucmd()
+            .args(&["-f", name])
+            .succeeds()
+            .stdout_contains("missing");
+        scene
+            .ucmd()
+            .args(&["-f", &format!("./{name}/")])
+            .succeeds()
+            .stdout_contains("missing");
+        scene
+            .ucmd()
+            .args(&["-f", &format!("{name}/more")])
+            .fails_with_code(1)
+            .no_stdout();
+        scene
+            .ucmd()
+            .args(&["-f", &format!("./{name}/more/")])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
+fn test_canonicalize_trailing_slash_subdir_missing() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("subdir");
+    at.relative_symlink_file("subdir/missing", "link4");
+    for query in ["link4", "./link4/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .succeeds()
+            .stdout_contains(path_concat!("subdir", "missing"));
+    }
+    for query in ["link4/more", "./link4/more/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
+fn test_canonicalize_trailing_slash_symlink_loop() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.relative_symlink_file("link5", "link5");
+    for query in ["link5", "./link5/", "link5/more", "./link5/more/"] {
+        scene
+            .ucmd()
+            .args(&["-f", query])
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_delimiters() {
+    new_ucmd!()
+        .args(&["--zero", "-n", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a");
+    new_ucmd!()
+        .args(&["-n", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a");
+    new_ucmd!()
+        .args(&["--zero", "-m", "/a"])
+        .succeeds()
+        .stdout_only("/a\0");
+    new_ucmd!()
+        .args(&["-m", "/a"])
+        .succeeds()
+        .stdout_only("/a\n");
+    new_ucmd!()
+        .args(&["--zero", "-n", "-m", "/a", "/a"])
+        .succeeds()
+        .stderr_contains("ignoring --no-newline with multiple arguments")
+        .stdout_is("/a\0/a\0");
+    new_ucmd!()
+        .args(&["-n", "-m", "/a", "/a"])
+        .succeeds()
+        .stderr_contains("ignoring --no-newline with multiple arguments")
+        .stdout_is("/a\n/a\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_readlink_non_utf8_paths() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file_name = "target_file";
+    at.touch(file_name);
+    let non_utf8_bytes = b"symlink_\xFF\xFE";
+    let non_utf8_name = OsStr::from_bytes(non_utf8_bytes);
+
+    std::os::unix::fs::symlink(at.plus_as_string(file_name), at.plus(non_utf8_name)).unwrap();
+
+    // Test that readlink handles non-UTF-8 symlink names without crashing
+    let result = scene.ucmd().arg(non_utf8_name).succeeds();
+
+    let output = result.stdout_str_lossy();
+    assert!(output.contains(file_name));
+}
+
+#[test]
+fn test_verbose_or_silent() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("regfile");
+    scene.ucmd().arg("regfile").fails_with_code(1).no_output();
+    scene
+        .ucmd()
+        .args(&["-v", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
+    scene
+        .ucmd()
+        .args(&["-vs", "regfile"])
+        .fails_with_code(1)
+        .no_output();
+    scene
+        .ucmd()
+        .args(&["-sv", "regfile"])
+        .fails_with_code(1)
+        .stderr_contains(
+            #[cfg(not(windows))]
+            "Invalid argument",
+            #[cfg(windows)]
+            "regfile: The file or directory is not a reparse point.",
+        )
+        .no_stdout();
+}

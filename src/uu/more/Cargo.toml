@@ -1,0 +1,38 @@
+[package]
+name = "uu_more"
+description = "more ~ (uutils) input perusal filter"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/more"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/more.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+crossterm = { workspace = true, features = ["events"] }
+uucore = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+crossterm = { workspace = true, features = ["windows"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+crossterm = { workspace = true, features = ["use-dev-tty"] }
+
+[[bin]]
+name = "more"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = { workspace = true }

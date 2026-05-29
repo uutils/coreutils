@@ -1,0 +1,29 @@
+[package]
+name = "uu_chgrp"
+description = "chgrp ~ (uutils) change the group ownership of FILE"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chgrp"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/chgrp.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "chgrp"
+path = "src/main.rs"

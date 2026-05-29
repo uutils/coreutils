@@ -1,0 +1,772 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+#![allow(clippy::borrow_as_ptr)]
+
+use uutests::{at_and_ucmd, new_ucmd};
+
+use regex::Regex;
+use std::process::Stdio;
+use std::time::Duration;
+
+// tests for basic tee functionality.
+// inspired by:
+// https://github.com/coreutils/coreutils/tests/misc/tee.sh
+
+// spell-checker:ignore nopipe
+
+#[test]
+#[cfg(unix)]
+fn test_error_stdin_directory() {
+    new_ucmd!()
+        .set_stdin(std::fs::File::open(".").unwrap())
+        .fails_with_code(1)
+        .stderr_is("tee: read error: Is a directory\n");
+}
+
+#[test]
+fn test_invalid_arg() {
+    new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_short_help_is_long_help() {
+    // I can't believe that this test is necessary.
+    let help_short = new_ucmd!()
+        .arg("-h")
+        .succeeds()
+        .no_stderr()
+        .stdout_str()
+        .to_owned();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(help_short);
+}
+
+#[test]
+fn test_tee_processing_multiple_operands() {
+    // POSIX says: "Processing of at least 13 file operands shall be supported."
+
+    let content = "tee_sample_content";
+    for n in [1, 2, 12, 13] {
+        let files = (1..=n).map(|x| x.to_string()).collect::<Vec<_>>();
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        ucmd.args(&files)
+            .pipe_in(content)
+            .succeeds()
+            .stdout_is(content);
+
+        for file in &files {
+            assert!(at.file_exists(file));
+            assert_eq!(at.read(file), content);
+        }
+    }
+}
+
+#[test]
+fn test_tee_treat_minus_as_filename() {
+    // Ensure tee treats '-' as the name of a file, as mandated by POSIX.
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = "tee_sample_content";
+    let file = "-";
+
+    ucmd.arg("-").pipe_in(content).succeeds().stdout_is(content);
+
+    assert!(at.file_exists(file));
+    assert_eq!(at.read(file), content);
+}
+
+#[test]
+fn test_tee_append() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = "tee_sample_content";
+    let file = "tee_out";
+
+    at.touch(file);
+    at.write(file, content);
+    assert_eq!(at.read(file), content);
+
+    ucmd.arg("-a")
+        .arg(file)
+        .pipe_in(content)
+        .succeeds()
+        .stdout_is(content);
+    assert!(at.file_exists(file));
+    assert_eq!(at.read(file), content.repeat(2));
+}
+
+#[test]
+fn test_tee_multiple_append_flags() {
+    // Test for bug: https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2134578
+    // The command should accept multiple -a flags for different files
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content = "don't fail me now rust";
+    let file1 = "log1";
+    let file2 = "log2";
+
+    // Pre-populate files with some content to verify append behavior
+    at.write(file1, "existing1\n");
+    at.write(file2, "existing2\n");
+
+    ucmd.args(&["-a", file1, "-a", file2])
+        .pipe_in(content)
+        .succeeds()
+        .stdout_is(content);
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+    assert_eq!(at.read(file1), format!("existing1\n{content}"));
+    assert_eq!(at.read(file2), format!("existing2\n{content}"));
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_readonly() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let content_tee = "hello";
+    let content_file = "world";
+    let file_out = "tee_file_out";
+    let writable_file = "tee_file_out2";
+    at.write(file_out, content_file);
+    at.set_readonly(file_out);
+    ucmd.arg(file_out)
+        .arg(writable_file)
+        .pipe_in(content_tee)
+        .ignore_stdin_write_error()
+        .fails()
+        .stdout_is(content_tee)
+        // Windows says "Access is denied" for some reason.
+        .stderr_matches(&Regex::new("(Permission|Access is) denied").unwrap());
+    assert_eq!(at.read(file_out), content_file);
+    assert_eq!(at.read(writable_file), content_tee);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
+fn test_tee_output_not_buffered() {
+    // POSIX says: The tee utility shall not buffer output
+
+    // If the output is buffered, the test will hang, so we run it in
+    // a separate thread to stop execution by timeout.
+    let handle = std::thread::spawn(move || {
+        let content = "a";
+        let file_out = "tee_file_out";
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // We write to the input pipe, but do not close it. If the output is
+        // buffered, reading from output pipe will hang indefinitely, as we
+        // will never write anything else to it.
+        child.write_in(content.as_bytes());
+
+        let out = String::from_utf8(child.stdout_exact_bytes(1)).unwrap();
+        assert_eq!(&out, content);
+
+        // Writing to a file may take a couple hundreds nanoseconds
+        child.delay(1);
+        assert_eq!(at.read(file_out), content);
+    });
+
+    // Give some time for the `tee` to create an output file. Some platforms
+    // take a lot of time to spin up the process and create the output file
+    for _ in 0..100 {
+        std::thread::sleep(Duration::from_millis(1));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(
+        handle.is_finished(),
+        "Nothing was received through output pipe"
+    );
+    handle.join().unwrap();
+}
+
+#[test]
+fn test_tee_continues_after_short_read() {
+    // Regression test: `tee` must keep reading until EOF even when the
+    // first `read(2)` returns fewer bytes than its internal buffer. This
+    // happens in any pipeline where the upstream writer pauses between
+    // writes (e.g. a slow producer, a `sleep` in a shell pipeline, or a
+    // service emitting log lines in bursts). Treating a short read as
+    // end-of-file caused tee to exit prematurely and downstream producers
+    // to die with SIGPIPE on their next write.
+    //
+    // Run in a separate thread so that the test fails via timeout rather
+    // than hanging if a regression reintroduces the bug in a form where
+    // tee blocks on read instead of exiting early.
+    let handle = std::thread::spawn(move || {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let file_out = "tee_short_read_out";
+
+        let mut child = ucmd
+            .arg(file_out)
+            .set_stdin(Stdio::piped())
+            .set_stdout(Stdio::piped())
+            .run_no_wait();
+
+        // First chunk — deliberately much smaller than tee's internal
+        // buffer so that `read(2)` returns a short count.
+        child.write_in(b"first\n");
+        assert_eq!(&child.stdout_exact_bytes(6), b"first\n");
+
+        // Give a buggy implementation time to exit before we try to
+        // write again.
+        child.delay(50);
+
+        // Second chunk. A correctly-implemented tee is still reading
+        // from stdin; a buggy one has already exited and this write
+        // will either fail with EPIPE or never reach the output file.
+        child.write_in(b"second\n");
+        assert_eq!(&child.stdout_exact_bytes(7), b"second\n");
+
+        // `wait` closes stdin for us before waiting on the child.
+        child.wait().unwrap().success();
+
+        assert_eq!(at.read(file_out), "first\nsecond\n");
+    });
+
+    for _ in 0..500 {
+        std::thread::sleep(Duration::from_millis(10));
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    assert!(
+        handle.is_finished(),
+        "tee did not complete within the timeout"
+    );
+    handle.join().unwrap();
+}
+
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+mod linux_only {
+    use uutests::util::{AtPath, CmdResult, UCommand};
+
+    use std::fmt::Write;
+    use std::process::Stdio;
+    use std::time::Duration;
+    use uutests::at_and_ucmd;
+    use uutests::new_ucmd;
+
+    fn make_broken_pipe() -> std::io::PipeWriter {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
+        // Drop the read end of the pipe
+        drop(read);
+        // Return the write end of the pipe
+        write
+    }
+
+    fn make_hanging_read() -> std::io::PipeReader {
+        let (read, write) = std::io::pipe().expect("Failed to create pipe");
+        // PURPOSELY leak the write end of the pipe, so the read end hangs.
+        std::mem::forget(write);
+        // Return the read end of the pipe
+        read
+    }
+
+    fn run_tee(proc: &mut UCommand) -> (String, CmdResult) {
+        let content = (1..=100_000).fold(String::new(), |mut output, x| {
+            let _ = writeln!(output, "{x}");
+            output
+        });
+
+        let result = proc
+            .ignore_stdin_write_error()
+            .set_stdin(Stdio::piped())
+            .run_no_wait()
+            .pipe_in_and_wait(content.as_bytes());
+
+        (content, result)
+    }
+
+    fn expect_success(result: &CmdResult) {
+        assert!(
+            result.succeeded(),
+            "Command was expected to succeed.\nstdout = {}\n stderr = {}",
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+        assert!(
+            result.stderr_str().is_empty(),
+            "Unexpected data on stderr.\n stderr = {}",
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+    }
+
+    fn expect_failure(result: &CmdResult, message: &str) {
+        assert!(
+            !result.succeeded(),
+            "Command was expected to fail.\nstdout = {}\n stderr = {}",
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+        assert!(
+            result.stderr_str().contains(message),
+            "Expected to see error message fragment {message} in stderr, but did not.\n stderr = {}",
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+    }
+
+    fn expect_silent_failure(result: &CmdResult) {
+        assert!(
+            !result.succeeded(),
+            "Command was expected to fail.\nstdout = {}\n stderr = {}",
+            std::str::from_utf8(result.stdout()).unwrap(),
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+        assert!(
+            result.stderr_str().is_empty(),
+            "Unexpected data on stderr.\n stderr = {}",
+            std::str::from_utf8(result.stderr()).unwrap(),
+        );
+    }
+
+    fn expect_correct(name: &str, at: &AtPath, contents: &str) {
+        assert!(at.file_exists(name));
+        let compare = at.read(name);
+        assert_eq!(compare, contents);
+    }
+
+    fn expect_short(name: &str, at: &AtPath, contents: &str) {
+        assert!(at.file_exists(name));
+        let compare = at.read(name);
+        assert!(
+            compare.len() < contents.len(),
+            "Too many bytes ({}) written to {name} (should be a short count from {})",
+            compare.len(),
+            contents.len()
+        );
+        assert!(
+            contents.starts_with(&compare),
+            "Expected truncated output to be a prefix of the correct output, but it isn't.\n Correct: {contents}\n Compare: {compare}"
+        );
+    }
+
+    #[test]
+    fn test_pipe_error_default() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd.arg(file_out_a).set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_silent_failure(&output);
+        expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_warn_nopipe_1() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("-p")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_warn_nopipe_2() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_warn_nopipe_3() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn-nopipe")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_warn_nopipe_3_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn-")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_warn() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "Broken pipe");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_exit() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "Broken pipe");
+        expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_exit_nopipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit-nopipe")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_error_exit_nopipe_shortcut() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit-nop")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_default() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd.arg(file_out_a).arg("/dev/full");
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_warn_nopipe_1() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("-p")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_warn_nopipe_2() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_warn_nopipe_3() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn-nopipe")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_warn() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=warn")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_exit() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_space_error_exit_nopipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("--output-error=exit-nopipe")
+            .arg(file_out_a)
+            .arg("/dev/full")
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_failure(&output, "No space left");
+        expect_short(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_only() {
+        new_ucmd!()
+            .timeout(Duration::from_secs(1))
+            .arg("-p")
+            .set_stdin(make_hanging_read())
+            .set_stdout(make_broken_pipe())
+            .succeeds();
+    }
+
+    #[test]
+    fn test_pipe_mode_broken_pipe_file() {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let file_out_a = "tee_file_out_a";
+
+        let proc = ucmd
+            .arg("-p")
+            .arg(file_out_a)
+            .set_stdout(make_broken_pipe());
+
+        let (content, output) = run_tee(proc);
+
+        expect_success(&output);
+        expect_correct(file_out_a, &at, content.as_str());
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_1() {
+        // equals to 'tee /dev/full out2 <multi_read' call
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            writeln!(output, "{x}").unwrap();
+            output
+        });
+        let file_out = "tee_file_out";
+
+        ucmd.arg("/dev/full")
+            .arg(file_out)
+            .pipe_in(&content[..])
+            .fails()
+            .stdout_contains(&content)
+            .stderr_contains("No space left on device");
+
+        assert_eq!(at.read(file_out), content);
+    }
+
+    #[test]
+    fn test_tee_no_more_writeable_2() {
+        use std::fs::File;
+        let (at, mut ucmd) = at_and_ucmd!();
+        let content = (1..=10).fold(String::new(), |mut output, x| {
+            let _ = writeln!(output, "{x}");
+            output
+        });
+        let file_out_a = "tee_file_out_a";
+        let file_out_b = "tee_file_out_b";
+        let dev_full = File::options().append(true).open("/dev/full").unwrap();
+
+        let result = ucmd
+            .arg(file_out_a)
+            .arg(file_out_b)
+            .set_stdout(dev_full)
+            .pipe_in(content.as_bytes())
+            .fails();
+
+        assert_eq!(at.read(file_out_a), content);
+        assert_eq!(at.read(file_out_b), content);
+        assert!(result.stderr_str().contains("No space left on device"));
+    }
+}
+
+// Additional cross-platform tee tests to cover GNU compatibility around --output-error
+#[test]
+fn test_output_error_flag_without_value_defaults_warn_nopipe() {
+    // When --output-error is present without an explicit value, it should default to warn-nopipe
+    // We can't easily simulate a broken pipe across all platforms here, but we can ensure
+    // the flag is accepted without error and basic tee functionality still works.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file_out = "tee_output_error_default.txt";
+    let content = "abc";
+
+    let result = ucmd
+        .arg("--output-error")
+        .arg(file_out)
+        .pipe_in(content)
+        .succeeds();
+
+    result.stdout_is(content);
+    assert!(at.file_exists(file_out));
+    assert_eq!(at.read(file_out), content);
+}
+// Unix-only: presence-only --output-error should not crash on broken pipe.
+// Current implementation may exit zero; we only assert the process exits to avoid flakiness.
+// TODO: When semantics are aligned with GNU warn-nopipe, strengthen assertions here.
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_output_error_presence_only_broken_pipe_unix() {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Close the read end to simulate a broken pipe on stdout
+    drop(read);
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let result = new_ucmd!()
+        .arg("--output-error") // presence-only flag
+        .set_stdout(write)
+        .pipe_in(content.as_bytes())
+        .run();
+
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
+}
+
+// Skip on FreeBSD due to repeated CI hangs in FreeBSD VM (see PR #8684)
+#[cfg(all(unix, not(target_os = "freebsd")))]
+#[test]
+fn test_broken_pipe_early_termination_stdout_only() {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Create a broken stdout
+    drop(read);
+    let content = (0..10_000).map(|_| "x").collect::<String>();
+    let mut proc = new_ucmd!();
+    let result = proc
+        .set_stdout(write)
+        .ignore_stdin_write_error()
+        .pipe_in(content.as_bytes())
+        .run();
+    // GNU tee exits nonzero on broken pipe unless configured otherwise; implementation
+    // details vary by mode, but we should not panic and should return an exit status.
+    // Assert that a status was produced (i.e., process exited) and no crash occurred.
+    assert!(result.try_exit_status().is_some(), "process did not exit");
+}
+
+#[test]
+fn test_write_failure_reports_error_and_nonzero_exit() {
+    // Simulate a file open failure which should be reported via show_error and cause a failure
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Create a directory and try to use it as an output file (open will fail)
+    at.mkdir("out_dir");
+
+    let result = ucmd.arg("out_dir").pipe_in("data").fails();
+
+    assert!(!result.stderr_str().is_empty());
+}

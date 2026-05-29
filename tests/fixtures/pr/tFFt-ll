@@ -1,0 +1,56 @@
+1<<<  -Test: FF's in Text                    >>>
+2<<<  -b -3 / -a -3 / ...  >>>
+3<<<  >>>
+4<<<  123456789 123456789 123456789 123456789 123456789 123456789 123456789  >>>
+
+6<<<  -Arangements: One Empty Page  >>>
+7<<<  \f\f\n; text\f\n\ftext; \f\ftext;  >>>
+8<<<  f\f\n; \f\n\f\n;  >>>
+9<<<  >>> 
+10<<<  >>>
+1<<<  >>>
+2<<<  >>>
+3<<<  truncation before FF; r_r_o_l-test:  >>>
+14<<<  123456789 123456789 123456789  >>>15<<<  xyzxyzxyz XYZXYZXYZ abcabcab  >>>
+16<<<  123456789 xyzxyzxyz XYZXYZXYZ  >>>
+7<<<  >>>
+8<<<  >>>
+9<<<  >>>
+20<<<  >>>
+1<<<  >>>
+
+
+4<<<  >>>
+5<<<  >>>
+6<<<  >>>
+27<<<  truncation before FF; (r_l-test):  >>>
+28<<<  trunc29<<<xyzxyzxyz XYZXYZXYZ abcabcab  >>>
+30<<<  123456789 xyzxyzxyz XYZXYZXYZ  >>>
+1<<<  >>>
+2<<<  abcdefghi  >>>
+3<<<  >>>
+4<<<  >>>
+5<<<  >>>
+6<<<  >>>
+7<<<  >>>
+8<<<  >>>
+9<<<  abcdefghi  >>>
+40<<<  123456789  >>>
+41<<<  XYZXYZXYZ abcabcab   >>>
+42<<<  123456789 abcdefghi ABCDEDFHI  >>>43<<<  xyzxyzxyz XYZXYZXYZ abcabcab  >>>
+44<<<  123456789 xyzxyzxyz XYZXYZXYZ  >>>
+5<<<  >>>
+6<<<  >>>
+7<<<  >>>
+8<<<  >>>
+9<<<  >>>
+50<<<  >>>
+1<<<  >>>
+2<<<  >>>
+3<<<  >>>
+4<<<  >>>
+55<<<  XYZXYZXYZ abcabcab  >>>
+56<<<  123456789 abcdefghi ABCDEDFHI  >>>57<<<  xyzxyzxyz XYZXYZXYZ abcabcab  >>>
+58<<<  123456789 xyzxyzxyz XYZXYZXYZ  >>>
+9<<<  >>>
+60<<<  123456789  >>>

@@ -1,0 +1,36 @@
+[package]
+name = "uu_whoami"
+description = "whoami ~ (uutils) display user name of current effective user ID"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/whoami"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/whoami.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "process"] }
+fluent = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_NetworkManagement_NetManagement",
+  "Win32_System_WindowsProgramming",
+  "Win32_Foundation",
+] }
+
+[[bin]]
+name = "whoami"
+path = "src/main.rs"

@@ -1,0 +1,241 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// cSpell:ignore sysconf
+use crate::{wc_simd_allowed, word_count::WordCount};
+use uucore::hardware::SimdPolicy;
+
+use super::WordCountable;
+
+use std::io::{self, ErrorKind, Read};
+
+#[cfg(unix)]
+use libc::S_IFREG;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom};
+#[cfg(unix)]
+use std::os::fd::{AsFd, AsRawFd};
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
+#[cfg(windows)]
+const FILE_ATTRIBUTE_NORMAL: u32 = 128;
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use libc::S_IFIFO;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
+
+const BUF_SIZE: usize = 64 * 1024;
+
+/// This is a Linux-specific function to count the number of bytes using the
+/// `splice` system call, which is faster than using `read`.
+///
+/// On error it returns the number of bytes it did manage to read, since the
+/// caller will fall back to a simpler method.
+#[inline]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
+    let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
+    let mut byte_count = 0;
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck of our wc -c
+    loop {
+        match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(byte_count),
+            Ok(res) => byte_count += res,
+            Err(_) => break, // input is not pipe. needs additional pipe...
+        }
+    }
+    let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)?;
+    while let s @ 1.. = splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
+        byte_count += s;
+        // pipe to null is not blocked. So this returns the same length at most cases
+        // next splice does not hang if we discarded 1+ pages
+        splice(&pipe_rd, &null_file, s).map_err(|_| byte_count)?;
+    }
+    Ok(byte_count)
+}
+
+/// In the special case where we only need to count the number of bytes. There
+/// are several optimizations we can do:
+///   1. On Unix,  we can simply `stat` the file if it is regular.
+///   2. On Linux -- if the above did not work -- we can use splice to count
+///      the number of bytes if the file is a FIFO.
+///   3. On Windows we can use `std::os::windows::fs::MetadataExt` to get file size
+///      for regular files
+///   3. Otherwise, we just read normally, but without the overhead of counting
+///      other things such as lines and words.
+#[inline]
+pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Option<io::Error>) {
+    let mut byte_count = 0;
+
+    #[cfg(unix)]
+    {
+        let fd = handle.as_fd();
+        if let Ok(stat) = rustix::fs::fstat(fd) {
+            // If the file is regular, then the `st_size` should hold
+            // the file's size in bytes.
+            // If stat.st_size = 0 then
+            //  - either the size is 0
+            //  - or the size is unknown.
+            // The second case happens for files in pseudo-filesystems.
+            // For example with /proc/version.
+            // So, if it is 0 we don't report that and instead do a full read.
+            //
+            // Another thing to consider for files in pseudo-filesystems like /proc, /sys
+            // and similar is that they could report `st_size` greater than actual content.
+            // For example /sys/kernel/profiling could report `st_size` equal to
+            // system page size (typically 4096 on 64bit system), while it's file content
+            // would count up only to a couple of bytes.
+            // This condition usually occurs for files in pseudo-filesystems like /proc, /sys
+            // that report `st_size` in the multiples of system page size.
+            // In such cases - attempt `seek()` almost to the end of the file
+            // and then fall back on read to count the rest.
+            //
+            // And finally a special case of input redirection in *nix shell:
+            // `( wc -c ; wc -c ) < file` should return
+            // ```
+            // size_of_file
+            // 0
+            // ```
+            // Similarly
+            // `( head -c1 ; wc -c ) < file` should return
+            // ```
+            // first_byte_of_file
+            // size_of_file - 1
+            // ```
+            // Since the input stream from file is treated as continuous across both commands inside ().
+            // In cases like this, due to `<` redirect, the `stat.st_mode` would report input as a regular file
+            // and `stat.st_size` would report the size of file on disk
+            // and NOT the remaining number of bytes in the input stream.
+            // However, the raw file descriptor in this situation would be equal to `0`
+            // for STDIN in both invocations.
+            // Therefore we cannot rely of `st_size` here and should fall back on full read.
+            if fd.as_raw_fd() > 0
+                && (stat.st_mode as libc::mode_t & S_IFREG) != 0
+                && stat.st_size > 0
+            {
+                let sys_page_size = rustix::param::page_size();
+                if !(stat.st_size as usize).is_multiple_of(sys_page_size) {
+                    // regular file or file from /proc, /sys and similar pseudo-filesystems
+                    // with size that is NOT a multiple of system page size
+                    return (stat.st_size as usize, None);
+                } else if let Some(file) = handle.inner_file() {
+                    // On some platforms `stat.st_blksize` and `stat.st_size`
+                    // are of different types: i64 vs i32
+                    // i.e. MacOS on Apple Silicon (aarch64-apple-darwin),
+                    // Debian Linux on ARM (aarch64-unknown-linux-gnu),
+                    // 32bit i686 targets, etc.
+                    // While on the others they are of the same type.
+                    #[allow(clippy::unnecessary_cast)]
+                    let offset =
+                        stat.st_size as i64 - stat.st_size as i64 % (stat.st_blksize as i64 + 1);
+
+                    if let Ok(n) = file.seek(SeekFrom::Start(offset as u64)) {
+                        byte_count = n as usize;
+                    }
+                }
+            }
+            // Else, if we're on Linux and our file is a FIFO pipe
+            // (or stdin), we use splice to count the number of bytes.
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
+                match count_bytes_using_splice(handle) {
+                    Ok(n) => return (n, None),
+                    Err(n) => byte_count = n,
+                }
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    if let Some(file) = handle.inner_file()
+        && let Ok(metadata) = file.metadata()
+    {
+        let attributes = metadata.file_attributes();
+        if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0 || (attributes & FILE_ATTRIBUTE_NORMAL) != 0 {
+            return (metadata.file_size() as usize, None);
+        }
+    }
+
+    // Fall back on `read`, but without the overhead of counting words and lines.
+
+    let mut buf = [0_u8; BUF_SIZE];
+    loop {
+        match handle.read(&mut buf) {
+            Ok(0) => return (byte_count, None),
+            Ok(n) => byte_count += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) => return (byte_count, Some(e)),
+        }
+    }
+}
+
+/// A simple structure used to align a [`BUF_SIZE`] buffer to 32-byte boundary.
+///
+/// This is useful as bytecount uses 256-bit wide vector operations that run much
+/// faster on aligned data (at least on x86 with AVX2 support).
+#[repr(align(32))]
+struct AlignedBuffer {
+    data: [u8; BUF_SIZE],
+}
+
+impl Default for AlignedBuffer {
+    fn default() -> Self {
+        Self {
+            data: [0; BUF_SIZE],
+        }
+    }
+}
+
+/// Returns a [`WordCount`] that counts the number of bytes, lines, and/or the number of Unicode characters encoded in UTF-8 read via a Reader.
+///
+/// This corresponds to the `-c`, `-l` and `-m` command line flags to wc.
+///
+/// # Arguments
+///
+/// * `R` - A Reader from which the UTF-8 stream will be read.
+pub(crate) fn count_bytes_chars_and_lines_fast<
+    R: Read,
+    const COUNT_BYTES: bool,
+    const COUNT_CHARS: bool,
+    const COUNT_LINES: bool,
+>(
+    handle: &mut R,
+) -> (WordCount, Option<io::Error>) {
+    let mut total = WordCount::default();
+    let buf: &mut [u8] = &mut AlignedBuffer::default().data;
+    let policy = SimdPolicy::detect();
+    let simd_allowed = wc_simd_allowed(policy);
+    loop {
+        match handle.read(buf) {
+            Ok(0) => return (total, None),
+            Ok(n) => {
+                if COUNT_BYTES {
+                    total.bytes += n;
+                }
+                if COUNT_CHARS {
+                    total.chars += if simd_allowed {
+                        bytecount::num_chars(&buf[..n])
+                    } else {
+                        bytecount::naive_num_chars(&buf[..n])
+                    };
+                }
+                if COUNT_LINES {
+                    total.lines += if simd_allowed {
+                        bytecount::count(&buf[..n], b'\n')
+                    } else {
+                        bytecount::naive_count(&buf[..n], b'\n')
+                    };
+                }
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) => return (total, Some(e)),
+        }
+    }
+}

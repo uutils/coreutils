@@ -1,0 +1,39 @@
+[package]
+name = "uu_nl"
+description = "nl ~ (uutils) display input with added line numbers"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/nl"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/nl.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+itoa = { workspace = true }
+regex = { workspace = true }
+uucore = { workspace = true }
+fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "nl"
+path = "src/main.rs"
+
+[[bench]]
+name = "nl_bench"
+harness = false

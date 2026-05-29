@@ -1,0 +1,16 @@
+[package]
+name = "uufuzz"
+description = "uutils ~ 'core' uutils fuzzing library"
+repository = "https://github.com/uutils/coreutils/tree/main/fuzz/uufuzz"
+version = "0.9.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+console = "0.16.0"
+rand = { version = "0.10.1", features = ["std_rng"] }
+similar = "3.0.0"
+uucore = { version = "0.9.0", path = "../../src/uucore", features = ["parser"] }
+tempfile = "3.15.0"
+rustix = { version = "1.1.4", features = ["stdio", "pipe"] }

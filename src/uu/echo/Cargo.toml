@@ -1,0 +1,37 @@
+[package]
+name = "uu_echo"
+description = "echo ~ (uutils) display TEXT"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/echo"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/echo.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["format"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "echo"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "echo_bench"
+harness = false

@@ -1,0 +1,34 @@
+[package]
+name = "uu_stty"
+description = "stty ~ (uutils) print or change terminal characteristics"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stty"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/stty.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["parser"] }
+fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["ioctl", "term"] }
+
+[[bin]]
+name = "stty"
+path = "src/main.rs"
+
+[build-dependencies]
+cfg_aliases = "0.2.1"

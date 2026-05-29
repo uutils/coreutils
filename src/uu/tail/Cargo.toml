@@ -1,0 +1,50 @@
+# spell-checker:ignore (libs) kqueue
+[package]
+name = "uu_tail"
+description = "tail ~ (uutils) display the last lines of input"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tail"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/tail.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+memchr = { workspace = true }
+uucore = { workspace = true, features = ["fs", "parser-size", "signals"] }
+same-file = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+libc = { workspace = true }
+notify = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["fs", "process"] }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+uucore = { workspace = true, features = ["pipes"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_System_Threading",
+  "Win32_Foundation",
+] }
+
+[dev-dependencies]
+rstest = { workspace = true }
+
+[[bin]]
+name = "tail"
+path = "src/main.rs"

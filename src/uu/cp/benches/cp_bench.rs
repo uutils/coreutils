@@ -1,0 +1,108 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+use divan::{Bencher, black_box};
+use std::fs;
+use std::path::Path;
+use tempfile::TempDir;
+use uu_cp::uumain;
+use uucore::benchmark::{binary_data, fs_tree, fs_utils, run_util_function};
+
+fn bench_cp_directory<F>(bencher: Bencher, args: &[&str], setup_source: F)
+where
+    F: Fn(&Path),
+{
+    let temp_dir = TempDir::new().unwrap();
+    let source = temp_dir.path().join("source");
+    let dest = temp_dir.path().join("dest");
+
+    fs::create_dir(&source).unwrap();
+    setup_source(&source);
+
+    let source_str = source.to_str().unwrap();
+    let dest_str = dest.to_str().unwrap();
+
+    bencher.bench(|| {
+        fs_utils::remove_path(&dest);
+
+        let mut full_args = Vec::with_capacity(args.len() + 2);
+        full_args.extend_from_slice(args);
+        full_args.push(source_str);
+        full_args.push(dest_str);
+
+        black_box(run_util_function(uumain, &full_args));
+    });
+}
+
+#[divan::bench(args = [(5, 4, 10)])]
+fn cp_recursive_balanced_tree(
+    bencher: Bencher,
+    (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
+) {
+    bench_cp_directory(bencher, &["-R"], |source| {
+        fs_tree::create_balanced_tree(source, depth, dirs_per_level, files_per_dir);
+    });
+}
+
+#[divan::bench(args = [(5, 4, 10)])]
+fn cp_archive_balanced_tree(
+    bencher: Bencher,
+    (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
+) {
+    bench_cp_directory(bencher, &["-a"], |source| {
+        fs_tree::create_balanced_tree(source, depth, dirs_per_level, files_per_dir);
+    });
+}
+
+#[divan::bench(args = [(6000, 800)])]
+fn cp_recursive_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
+    bench_cp_directory(bencher, &["-R"], |source| {
+        fs_tree::create_wide_tree(source, total_files, total_dirs);
+    });
+}
+
+#[divan::bench(args = [(120, 4)])]
+fn cp_recursive_deep_tree(bencher: Bencher, (depth, files_per_level): (usize, usize)) {
+    bench_cp_directory(bencher, &["-R"], |source| {
+        fs_tree::create_deep_tree(source, depth, files_per_level);
+    });
+}
+
+#[divan::bench(args = [(5, 4, 10)])]
+fn cp_preserve_metadata(
+    bencher: Bencher,
+    (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
+) {
+    bench_cp_directory(bencher, &["-R", "--preserve=mode,timestamps"], |source| {
+        fs_tree::create_balanced_tree(source, depth, dirs_per_level, files_per_dir);
+    });
+}
+
+#[divan::bench(args = [16])]
+fn cp_large_file(bencher: Bencher, size_mb: usize) {
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            let source = temp_dir.path().join("source.bin");
+            binary_data::create_file(&source, size_mb, b'x');
+            (temp_dir, source)
+        })
+        .counter(divan::counter::BytesCount::new(size_mb * 1024 * 1024))
+        .bench_values(|(temp_dir, source)| {
+            // Use unique destination name to avoid filesystem allocation variance
+            let dest = temp_dir.path().join(format!(
+                "dest_{}.bin",
+                std::ptr::addr_of!(temp_dir) as usize
+            ));
+            let source_str = source.to_str().unwrap();
+            let dest_str = dest.to_str().unwrap();
+
+            black_box(run_util_function(uumain, &[source_str, dest_str]));
+        });
+}
+
+fn main() {
+    divan::main();
+}

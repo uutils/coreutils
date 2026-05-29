@@ -1,0 +1,7 @@
+\xx {Rust is}{}{Hello}{ world}{}
+\xx {}{Hello world}{Rust}{ is a}{}
+\xx {}{Rust is}{a}{ fun}{}
+\xx {}{Rust is a}{fun}{ language}{}
+\xx {}{world Rust}{is}{ a fun}{}
+\xx {}{is a fun}{language}{}{}
+\xx {is}{Hello}{world}{ Rust}{}

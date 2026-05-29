@@ -1,0 +1,11 @@
+uno
+dos
+tres
+quattro
+cinco
+seis
+siette
+ocho
+nueve
+diez
+once

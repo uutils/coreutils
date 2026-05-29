@@ -1,0 +1,66 @@
+# spell-checker:ignore datetime tzdb zoneinfo
+[package]
+name = "uu_date"
+description = "date ~ (uutils) display or set the current time"
+repository = "https://github.com/uutils/coreutils/tree/main/src/date"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/date.rs"
+doctest = false
+
+[features]
+default = ["i18n-datetime"]
+i18n-datetime = [
+  "uucore/i18n-datetime",
+  "dep:icu_calendar",
+  "dep:icu_locale",
+  "dep:jiff-icu",
+]
+
+[dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+icu_calendar = { workspace = true, optional = true }
+icu_locale = { workspace = true, optional = true }
+jiff-icu = { workspace = true, optional = true }
+jiff = { workspace = true, features = [
+  "tzdb-bundle-platform",
+  "tzdb-zoneinfo",
+  "tzdb-concatenated",
+] }
+parse_datetime = { workspace = true }
+uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+rustix = { workspace = true, features = ["time"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_System_SystemInformation",
+] }
+
+[[bin]]
+name = "date"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "date_bench"
+harness = false

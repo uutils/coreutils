@@ -1,0 +1,13 @@
+comment: false
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    changes:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true

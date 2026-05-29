@@ -1,0 +1,29 @@
+[package]
+name = "uu_paste"
+description = "paste ~ (uutils) merge lines from inputs"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/paste"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/paste.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["i18n-charmap"] }
+fluent = { workspace = true }
+
+[[bin]]
+name = "paste"
+path = "src/main.rs"

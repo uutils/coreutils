@@ -1,0 +1,735 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// spell-checker:ignore bitlen
+
+use std::ffi::OsStr;
+use std::io::{self, Read};
+use std::num::IntErrorKind;
+
+use os_display::Quotable;
+use thiserror::Error;
+
+use crate::error::{UError, UResult, strip_errno};
+use crate::sum::{
+    Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
+    Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
+};
+use crate::{show_error, translate};
+
+pub mod compute;
+pub mod validate;
+
+pub const ALGORITHM_OPTIONS_SYSV: &str = "sysv";
+pub const ALGORITHM_OPTIONS_BSD: &str = "bsd";
+pub const ALGORITHM_OPTIONS_CRC: &str = "crc";
+pub const ALGORITHM_OPTIONS_CRC32B: &str = "crc32b";
+pub const ALGORITHM_OPTIONS_MD5: &str = "md5";
+pub const ALGORITHM_OPTIONS_SHA1: &str = "sha1";
+pub const ALGORITHM_OPTIONS_SHA2: &str = "sha2";
+pub const ALGORITHM_OPTIONS_SHA3: &str = "sha3";
+
+pub const ALGORITHM_OPTIONS_SHA224: &str = "sha224";
+pub const ALGORITHM_OPTIONS_SHA256: &str = "sha256";
+pub const ALGORITHM_OPTIONS_SHA384: &str = "sha384";
+pub const ALGORITHM_OPTIONS_SHA512: &str = "sha512";
+pub const ALGORITHM_OPTIONS_BLAKE2B: &str = "blake2b";
+pub const ALGORITHM_OPTIONS_BLAKE3: &str = "blake3";
+pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
+pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
+pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
+
+pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
+    ALGORITHM_OPTIONS_SYSV,
+    ALGORITHM_OPTIONS_BSD,
+    ALGORITHM_OPTIONS_CRC,
+    ALGORITHM_OPTIONS_CRC32B,
+    ALGORITHM_OPTIONS_MD5,
+    ALGORITHM_OPTIONS_SHA1,
+    ALGORITHM_OPTIONS_SHA2,
+    ALGORITHM_OPTIONS_SHA3,
+    ALGORITHM_OPTIONS_BLAKE2B,
+    ALGORITHM_OPTIONS_SM3,
+    // Legacy aliases for -a sha2 -l xxx
+    ALGORITHM_OPTIONS_SHA224,
+    ALGORITHM_OPTIONS_SHA256,
+    ALGORITHM_OPTIONS_SHA384,
+    ALGORITHM_OPTIONS_SHA512,
+    // Extra algorithms that are not valid `cksum --algorithm` as per GNU.
+    // TODO: Should we keep them or drop them to align our support with GNU ?
+    ALGORITHM_OPTIONS_BLAKE3,
+    ALGORITHM_OPTIONS_SHAKE128,
+    ALGORITHM_OPTIONS_SHAKE256,
+];
+
+/// Represents an algorithm kind. In some cases, it is not sufficient by itself
+/// to know which algorithm to use exactly, because it lacks a digest length,
+/// which is why [`SizedAlgoKind`] exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlgoKind {
+    Sysv,
+    Bsd,
+    Crc,
+    Crc32b,
+    Md5,
+    Sm3,
+    Sha1,
+    Sha2,
+    Sha3,
+    Blake2b,
+
+    // Available in cksum for backward compatibility
+    Sha224,
+    Sha256,
+    Sha384,
+    Sha512,
+
+    // Not available in cksum
+    Shake128,
+    Shake256,
+    Blake3,
+}
+
+impl AlgoKind {
+    /// Parses an [`AlgoKind`] from a string, only accepting valid cksum
+    /// `--algorithm` values.
+    pub fn from_cksum(algo: impl AsRef<str>) -> UResult<Self> {
+        use AlgoKind::*;
+        Ok(match algo.as_ref() {
+            ALGORITHM_OPTIONS_SYSV => Sysv,
+            ALGORITHM_OPTIONS_BSD => Bsd,
+            ALGORITHM_OPTIONS_CRC => Crc,
+            ALGORITHM_OPTIONS_CRC32B => Crc32b,
+            ALGORITHM_OPTIONS_MD5 => Md5,
+            ALGORITHM_OPTIONS_SHA1 => Sha1,
+            ALGORITHM_OPTIONS_SHA2 => Sha2,
+            ALGORITHM_OPTIONS_SHA3 => Sha3,
+            ALGORITHM_OPTIONS_BLAKE2B => Blake2b,
+            ALGORITHM_OPTIONS_SM3 => Sm3,
+
+            // For backward compatibility
+            ALGORITHM_OPTIONS_SHA224 => Sha224,
+            ALGORITHM_OPTIONS_SHA256 => Sha256,
+            ALGORITHM_OPTIONS_SHA384 => Sha384,
+            ALGORITHM_OPTIONS_SHA512 => Sha512,
+
+            // Extensions not in GNU as of version 9.10
+            ALGORITHM_OPTIONS_BLAKE3 => Blake3,
+            ALGORITHM_OPTIONS_SHAKE128 => Shake128,
+            ALGORITHM_OPTIONS_SHAKE256 => Shake256,
+            _ => return Err(ChecksumError::UnknownAlgorithm(algo.as_ref().to_string()).into()),
+        })
+    }
+
+    /// Parses an algo kind from a string, accepting standalone binary names.
+    pub fn from_bin_name(algo: impl AsRef<str>) -> UResult<Self> {
+        use AlgoKind::*;
+        Ok(match algo.as_ref() {
+            "md5sum" => Md5,
+            "sha1sum" => Sha1,
+            "sha224sum" => Sha224,
+            "sha256sum" => Sha256,
+            "sha384sum" => Sha384,
+            "sha512sum" => Sha512,
+            "sha3sum" => Sha3,
+            "b2sum" => Blake2b,
+
+            _ => return Err(ChecksumError::UnknownAlgorithm(algo.as_ref().to_string()).into()),
+        })
+    }
+
+    /// Returns a string corresponding to the algorithm kind.
+    pub fn to_uppercase(self) -> &'static str {
+        use AlgoKind::*;
+        match self {
+            // Legacy algorithms
+            Sysv => "SYSV",
+            Bsd => "BSD",
+            Crc => "CRC",
+            Crc32b => "CRC32B",
+
+            Md5 => "MD5",
+            Sm3 => "SM3",
+            Sha1 => "SHA1",
+            Sha2 => "SHA2",
+            Sha3 => "SHA3",
+            Blake2b => "BLAKE2b", // Note the lowercase b in the end here.
+
+            // For backward compatibility
+            Sha224 => "SHA224",
+            Sha256 => "SHA256",
+            Sha384 => "SHA384",
+            Sha512 => "SHA512",
+
+            Shake128 => "SHAKE128",
+            Shake256 => "SHAKE256",
+            Blake3 => "BLAKE3",
+        }
+    }
+
+    /// Returns a string corresponding to the algorithm option in cksum `-a`
+    pub fn to_lowercase(self) -> &'static str {
+        use AlgoKind::*;
+        match self {
+            Sysv => "sysv",
+            Bsd => "bsd",
+            Crc => "crc",
+            Crc32b => "crc32b",
+            Md5 => "md5",
+            Sm3 => "sm3",
+            Sha1 => "sha1",
+            Sha2 => "sha2",
+            Sha3 => "sha3",
+            Blake2b => "blake2b",
+
+            // For backward compatibility
+            Sha224 => "sha224",
+            Sha256 => "sha256",
+            Sha384 => "sha384",
+            Sha512 => "sha512",
+
+            Shake128 => "shake128",
+            Shake256 => "shake256",
+            Blake3 => "blake3",
+        }
+    }
+
+    pub fn is_legacy(self) -> bool {
+        use AlgoKind::*;
+        matches!(self, Sysv | Bsd | Crc | Crc32b)
+    }
+
+    /// When checking untagged format lines, non-XOF non-legacy algorithms
+    /// should report "improperly formatted lines" if the digest length isn't
+    /// equivalent to this.
+    pub fn expected_digest_bit_len(self) -> Option<HashLength> {
+        match self {
+            Self::Md5 => Some(HashLength::from_bits(Md5::BIT_SIZE)),
+            Self::Sm3 => Some(HashLength::from_bits(Sm3::BIT_SIZE)),
+            Self::Sha1 => Some(HashLength::from_bits(Sha1::BIT_SIZE)),
+            Self::Sha224 => Some(HashLength::from_bits(Sha224::BIT_SIZE)),
+            Self::Sha256 => Some(HashLength::from_bits(Sha256::BIT_SIZE)),
+            Self::Sha384 => Some(HashLength::from_bits(Sha384::BIT_SIZE)),
+            Self::Sha512 => Some(HashLength::from_bits(Sha512::BIT_SIZE)),
+            _ => None,
+        }
+    }
+}
+
+/// Holds a length for a SHA2 of SHA3 algorithm kind.
+#[derive(Debug, Clone, Copy)]
+pub enum ShaLength {
+    Len224,
+    Len256,
+    Len384,
+    Len512,
+}
+
+impl ShaLength {
+    pub fn as_usize(self) -> usize {
+        match self {
+            Self::Len224 => 224,
+            Self::Len256 => 256,
+            Self::Len384 => 384,
+            Self::Len512 => 512,
+        }
+    }
+}
+
+impl TryFrom<usize> for ShaLength {
+    type Error = ChecksumError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        use ShaLength::*;
+        match value {
+            224 => Ok(Len224),
+            256 => Ok(Len256),
+            384 => Ok(Len384),
+            512 => Ok(Len512),
+            _ => Err(ChecksumError::InvalidLengthForSha(value.to_string())),
+        }
+    }
+}
+
+/// Stores a hash length in bits.
+#[derive(Debug, Clone, Copy)]
+pub struct HashLength {
+    bit_len: usize,
+}
+
+impl HashLength {
+    #[must_use]
+    #[inline]
+    pub(crate) fn from_bytes(n: usize) -> Self {
+        Self { bit_len: n * 8 }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn from_bits(n: usize) -> Self {
+        Self { bit_len: n }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn as_bits(self) -> usize {
+        self.bit_len
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn as_bytes(self) -> usize {
+        self.bit_len.div_ceil(8)
+    }
+}
+
+impl From<ShaLength> for HashLength {
+    fn from(value: ShaLength) -> Self {
+        Self {
+            bit_len: value.as_usize(),
+        }
+    }
+}
+
+/// Represents an actual determined algorithm.
+#[derive(Debug, Clone, Copy)]
+pub enum SizedAlgoKind {
+    Sysv,
+    Bsd,
+    Crc,
+    Crc32b,
+    Md5,
+    Sm3,
+    Sha1,
+    Sha2(ShaLength),
+    Sha3(ShaLength),
+    Blake2b(HashLength),
+    Blake3(HashLength),
+    Shake128(Option<HashLength>),
+    Shake256(Option<HashLength>),
+}
+
+impl SizedAlgoKind {
+    pub fn from_unsized(kind: AlgoKind, output_length: Option<HashLength>) -> UResult<Self> {
+        use AlgoKind as ak;
+        match (kind, output_length) {
+            (
+                ak::Sysv
+                | ak::Bsd
+                | ak::Crc
+                | ak::Crc32b
+                | ak::Md5
+                | ak::Sm3
+                | ak::Sha1
+                | ak::Sha224
+                | ak::Sha256
+                | ak::Sha384
+                | ak::Sha512,
+                Some(_),
+            ) => Err(ChecksumError::LengthOnlyForBlake2bSha2Sha3.into()),
+
+            (ak::Sysv, _) => Ok(Self::Sysv),
+            (ak::Bsd, _) => Ok(Self::Bsd),
+            (ak::Crc, _) => Ok(Self::Crc),
+            (ak::Crc32b, _) => Ok(Self::Crc32b),
+            (ak::Md5, _) => Ok(Self::Md5),
+            (ak::Sm3, _) => Ok(Self::Sm3),
+            (ak::Sha1, _) => Ok(Self::Sha1),
+
+            (ak::Blake2b, l) => Ok(Self::Blake2b(
+                l.unwrap_or(HashLength::from_bits(Blake2b::DEFAULT_BIT_SIZE)),
+            )),
+            (ak::Blake3, l) => Ok(Self::Blake3(
+                l.unwrap_or(HashLength::from_bits(Blake3::DEFAULT_BIT_SIZE)),
+            )),
+            (ak::Shake128, l) => Ok(Self::Shake128(l)),
+            (ak::Shake256, l) => Ok(Self::Shake256(l)),
+            (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l.as_bits())?)),
+            (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l.as_bits())?)),
+            (algo @ (ak::Sha2 | ak::Sha3), None) => {
+                Err(ChecksumError::LengthRequiredForSha(algo.to_lowercase().into()).into())
+            }
+            (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
+            (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
+            (ak::Sha384, None) => Ok(Self::Sha2(ShaLength::Len384)),
+            (ak::Sha512, None) => Ok(Self::Sha2(ShaLength::Len512)),
+        }
+    }
+
+    pub fn to_tag(self) -> String {
+        match self {
+            Self::Md5 => "MD5".into(),
+            Self::Sm3 => "SM3".into(),
+            Self::Sha1 => "SHA1".into(),
+            Self::Sha2(len) => format!("SHA{}", len.as_usize()),
+            Self::Sha3(len) => format!("SHA3-{}", len.as_usize()),
+            Self::Blake2b(len) if len.as_bits() == Blake2b::DEFAULT_BIT_SIZE => "BLAKE2b".into(),
+            Self::Blake2b(len) => format!("BLAKE2b-{}", len.as_bits()),
+            Self::Blake3(len) => format!("BLAKE3-{}", len.as_bits()),
+            Self::Shake128(opt_len) => format!(
+                "SHAKE128-{}",
+                opt_len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits)
+            ),
+            Self::Shake256(opt_len) => format!(
+                "SHAKE256-{}",
+                opt_len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits)
+            ),
+            Self::Sysv | Self::Bsd | Self::Crc | Self::Crc32b => {
+                panic!("Should not be used for tagging")
+            }
+        }
+    }
+
+    pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
+        use ShaLength::*;
+        match self {
+            Self::Sysv => Box::new(SysV::default()),
+            Self::Bsd => Box::new(Bsd::default()),
+            Self::Crc => Box::new(Crc::default()),
+            Self::Crc32b => Box::new(CRC32B::default()),
+            Self::Md5 => Box::new(Md5::default()),
+            Self::Sm3 => Box::new(Sm3::default()),
+            Self::Sha1 => Box::new(Sha1::default()),
+            Self::Sha2(Len224) => Box::new(Sha224::default()),
+            Self::Sha2(Len256) => Box::new(Sha256::default()),
+            Self::Sha2(Len384) => Box::new(Sha384::default()),
+            Self::Sha2(Len512) => Box::new(Sha512::default()),
+            Self::Sha3(Len224) => Box::new(Sha3_224::default()),
+            Self::Sha3(Len256) => Box::new(Sha3_256::default()),
+            Self::Sha3(Len384) => Box::new(Sha3_384::default()),
+            Self::Sha3(Len512) => Box::new(Sha3_512::default()),
+            Self::Blake2b(len) => Box::new(Blake2b::with_output_bytes(len.as_bytes())),
+            Self::Blake3(len) => Box::new(Blake3::with_output_bytes(len.as_bytes())),
+            Self::Shake128(len_opt) => Box::new(
+                len_opt
+                    .map(HashLength::as_bits)
+                    .map(Shake128::with_output_bits)
+                    .unwrap_or_default(),
+            ),
+            Self::Shake256(len_opt) => Box::new(
+                len_opt
+                    .map(HashLength::as_bits)
+                    .map(Shake256::with_output_bits)
+                    .unwrap_or_default(),
+            ),
+        }
+    }
+
+    pub fn bitlen(&self) -> usize {
+        match self {
+            Self::Sysv => 512,
+            Self::Bsd => 1024,
+            Self::Crc => 256,
+            Self::Crc32b => 32,
+            Self::Md5 => 128,
+            Self::Sm3 => 512,
+            Self::Sha1 => 160,
+            Self::Sha2(len) => len.as_usize(),
+            Self::Sha3(len) => len.as_usize(),
+            Self::Blake2b(len) => len.as_bits(),
+            Self::Blake3(len) => len.as_bits(),
+            Self::Shake128(len) => len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits),
+            Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
+        }
+    }
+    pub fn is_legacy(&self) -> bool {
+        use SizedAlgoKind::*;
+        matches!(self, Sysv | Bsd | Crc | Crc32b)
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ChecksumError {
+    #[error("the --raw option is not supported with multiple files")]
+    RawMultipleFiles,
+
+    #[error("the --{0} option is meaningful only when verifying checksums")]
+    CheckOnlyFlag(String),
+
+    // --length sanitization errors
+    #[error("--length required for {}", .0.quote())]
+    LengthRequired(String),
+    #[error("invalid length: {}", .0.quote())]
+    InvalidLength(String),
+    #[error("maximum digest length for {} is 512 bits", .0.quote())]
+    LengthTooBigForBlake(String),
+    #[error("length is not a multiple of 8")]
+    LengthNotMultipleOf8,
+    #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
+    InvalidLengthForSha(String),
+    #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
+    LengthRequiredForSha(String),
+    #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
+    LengthOnlyForBlake2bSha2Sha3,
+
+    #[error("the --binary and --text options are meaningless when verifying checksums")]
+    BinaryTextConflict,
+    #[error("--text mode is only supported with --untagged")]
+    TextWithoutUntagged,
+    #[error("the --tag option is meaningless when verifying checksums")]
+    TagCheck,
+    #[error("--tag does not support --text mode")]
+    TextAfterTag,
+    #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
+    AlgorithmNotSupportedWithCheck,
+    #[error("You cannot combine multiple hash algorithms!")]
+    CombineMultipleAlgorithms,
+    #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
+    NeedAlgorithmToHash,
+    #[error("unknown algorithm: {0}: clap should have prevented this case")]
+    UnknownAlgorithm(String),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
+}
+
+impl UError for ChecksumError {
+    fn code(&self) -> i32 {
+        1
+    }
+}
+
+/// Reading mode used to compute digest.
+///
+/// On most linux systems, this is irrelevant, as there is no distinction
+/// between text and binary files. Refer to GNU's cksum documentation for more
+/// information.
+///
+/// As discussed in #9168, we decide to ignore the reading mode to compute the
+/// digest, both on Windows and UNIX. The reason for that is that this is a
+/// legacy feature that is poorly documented and used. This enum is kept
+/// nonetheless to still take into account the flags passed to cksum when
+/// generating untagged lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadingMode {
+    Binary,
+    Text,
+}
+
+impl ReadingMode {
+    #[inline]
+    fn as_char(self) -> char {
+        match self {
+            Self::Binary => '*',
+            Self::Text => ' ',
+        }
+    }
+}
+
+pub fn digest_reader<T: Read>(
+    digest: &mut Box<dyn Digest>,
+    reader: &mut T,
+    mode: ReadingMode,
+) -> io::Result<(DigestOutput, usize)> {
+    digest.reset();
+
+    // Read bytes from `reader` and write those bytes to `digest`.
+    //
+    // If `binary` is `false` and the operating system is Windows, then
+    // `DigestWriter` replaces "\r\n" with "\n" before it writes the
+    // bytes into `digest`. Otherwise, it just inserts the bytes as-is.
+    //
+    // In order to support replacing "\r\n", we must call `finalize()`
+    // in order to support the possibility that the last character read
+    // from the reader was "\r". (This character gets buffered by
+    // `DigestWriter` and only written if the following character is
+    // "\n". But when "\r" is the last character read, we need to force
+    // it to be written.)
+    let mut digest_writer = DigestWriter::new(digest, mode == ReadingMode::Binary);
+    let output_size = io::copy(reader, &mut digest_writer)? as usize;
+    digest_writer.finalize();
+
+    Ok((digest.result(), output_size))
+}
+
+pub enum BlakeLength<'s> {
+    Int(usize),
+    String(&'s str),
+}
+
+/// Expects a size in BITS, either as a string or int, and returns it as a BYTE
+/// length.
+///
+/// Note: when the input is a string, validation may print error messages.
+/// Note: when the algo is Blake2b, values that are above 512
+/// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<HashLength> {
+    debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
+
+    let print_error = || {
+        if let BlakeLength::String(s) = bit_length {
+            show_error!("{}", ChecksumError::InvalidLength(s.to_string()));
+        }
+    };
+
+    let n = match bit_length {
+        BlakeLength::Int(i) => i,
+        BlakeLength::String(s) => s.parse::<usize>().map_err(|e| {
+            if *e.kind() == IntErrorKind::PosOverflow {
+                print_error();
+                ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into())
+            } else {
+                ChecksumError::InvalidLength(s.to_string())
+            }
+        })?,
+    };
+
+    if n == 0 {
+        return Ok(match algo {
+            AlgoKind::Blake2b => HashLength::from_bits(Blake2b::DEFAULT_BIT_SIZE),
+            AlgoKind::Blake3 => HashLength::from_bits(Blake3::DEFAULT_BIT_SIZE),
+            _ => unreachable!(),
+        });
+    }
+
+    if algo == AlgoKind::Blake2b && n > Blake2b::DEFAULT_BIT_SIZE {
+        print_error();
+        return Err(ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into()).into());
+    }
+
+    if n % 8 != 0 {
+        print_error();
+        return Err(ChecksumError::LengthNotMultipleOf8.into());
+    }
+
+    Ok(HashLength::from_bits(n))
+}
+
+pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> UResult<ShaLength> {
+    match length {
+        Some(224) => Ok(ShaLength::Len224),
+        Some(256) => Ok(ShaLength::Len256),
+        Some(384) => Ok(ShaLength::Len384),
+        Some(512) => Ok(ShaLength::Len512),
+        Some(len) => {
+            show_error!("{}", ChecksumError::InvalidLength(len.to_string()));
+            Err(ChecksumError::InvalidLengthForSha(algo_name.to_uppercase().into()).into())
+        }
+        None => Err(ChecksumError::LengthRequiredForSha(algo_name.to_lowercase().into()).into()),
+    }
+}
+
+pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResult<HashLength> {
+    // There is a difference in the errors sent when the length is not a number
+    // vs. its an invalid number.
+    //
+    // When inputting an invalid number, an extra error message it printed to
+    // remind of the accepted inputs.
+    let len = match length.parse::<usize>() {
+        Ok(l) => l,
+        // Note: Positive overflow while parsing counts as an invalid number,
+        // but a number still.
+        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
+            show_error!("{}", ChecksumError::InvalidLength(length.into()));
+            return Err(ChecksumError::InvalidLengthForSha(algo_kind.to_uppercase().into()).into());
+        }
+        Err(_) => return Err(ChecksumError::InvalidLength(length.into()).into()),
+    };
+
+    if [224, 256, 384, 512].contains(&len) {
+        Ok(HashLength::from_bits(len))
+    } else {
+        show_error!("{}", ChecksumError::InvalidLength(length.into()));
+        Err(ChecksumError::InvalidLengthForSha(algo_kind.to_uppercase().into()).into())
+    }
+}
+
+pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
+    let mut unescaped = Vec::with_capacity(filename.len());
+    let mut byte_iter = filename.iter().peekable();
+    while let Some(byte) = byte_iter.next() {
+        if *byte == b'\\' {
+            match byte_iter.next() {
+                Some(b'\\') => unescaped.push(b'\\'),
+                Some(b'n') => unescaped.push(b'\n'),
+                Some(b'r') => unescaped.push(b'\r'),
+                Some(x) => {
+                    unescaped.push(b'\\');
+                    unescaped.push(*x);
+                }
+                _ => {}
+            }
+        } else {
+            unescaped.push(*byte);
+        }
+    }
+    let prefix = if unescaped == filename { "" } else { "\\" };
+    (unescaped, prefix)
+}
+
+pub fn escape_filename(filename: &OsStr) -> (String, &'static str) {
+    let original = filename.to_string_lossy();
+    let escaped = original
+        .replace('\\', "\\\\")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r");
+    let prefix = if escaped == original { "" } else { "\\" };
+    (escaped, prefix)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unescape_filename() {
+        let (unescaped, prefix) = unescape_filename(b"test\\nfile.txt");
+        assert_eq!(unescaped, b"test\nfile.txt");
+        assert_eq!(prefix, "\\");
+        let (unescaped, prefix) = unescape_filename(b"test\\nfile.txt");
+        assert_eq!(unescaped, b"test\nfile.txt");
+        assert_eq!(prefix, "\\");
+
+        let (unescaped, prefix) = unescape_filename(b"test\\rfile.txt");
+        assert_eq!(unescaped, b"test\rfile.txt");
+        assert_eq!(prefix, "\\");
+
+        let (unescaped, prefix) = unescape_filename(b"test\\\\file.txt");
+        assert_eq!(unescaped, b"test\\file.txt");
+        assert_eq!(prefix, "\\");
+    }
+
+    #[test]
+    fn test_escape_filename() {
+        let (escaped, prefix) = escape_filename(OsStr::new("testfile.txt"));
+        assert_eq!(escaped, "testfile.txt");
+        assert_eq!(prefix, "");
+
+        let (escaped, prefix) = escape_filename(OsStr::new("test\nfile.txt"));
+        assert_eq!(escaped, "test\\nfile.txt");
+        assert_eq!(prefix, "\\");
+
+        let (escaped, prefix) = escape_filename(OsStr::new("test\rfile.txt"));
+        assert_eq!(escaped, "test\\rfile.txt");
+        assert_eq!(prefix, "\\");
+
+        let (escaped, prefix) = escape_filename(OsStr::new("test\\file.txt"));
+        assert_eq!(escaped, "test\\\\file.txt");
+        assert_eq!(prefix, "\\");
+    }
+
+    #[test]
+    fn test_calculate_blake2b_length() {
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("0"))
+                .unwrap()
+                .as_bytes(),
+            Blake2b::DEFAULT_BYTE_SIZE
+        );
+        assert!(parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("10")).is_err());
+        assert!(parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("520")).is_err());
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("512"))
+                .unwrap()
+                .as_bytes(),
+            Blake2b::DEFAULT_BYTE_SIZE
+        );
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("256"))
+                .unwrap()
+                .as_bytes(),
+            32
+        );
+    }
+}

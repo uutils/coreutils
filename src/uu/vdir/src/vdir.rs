@@ -1,0 +1,68 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+use clap::Command;
+use std::ffi::OsString;
+use std::path::Path;
+use uu_ls::{Config, Format, options};
+use uucore::error::UResult;
+use uucore::quoting_style::QuotingStyle;
+use uucore::{format_usage, translate};
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let command = uu_app();
+    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(command, args, 2)?;
+
+    let mut default_quoting_style = false;
+    let mut default_format_style = false;
+
+    // We check if any options on formatting or quoting style have been given.
+    // If not, we will use dir default formatting and quoting style options
+
+    if !matches.contains_id(options::QUOTING_STYLE)
+        && !matches.get_flag(options::quoting::C)
+        && !matches.get_flag(options::quoting::ESCAPE)
+        && !matches.get_flag(options::quoting::LITERAL)
+    {
+        default_quoting_style = true;
+    }
+    if !matches.contains_id(options::FORMAT)
+        && !matches.get_flag(options::format::ACROSS)
+        && !matches.get_flag(options::format::COLUMNS)
+        && !matches.get_flag(options::format::COMMAS)
+        && !matches.get_flag(options::format::LONG)
+        && !matches.get_flag(options::format::LONG_NO_GROUP)
+        && !matches.get_flag(options::format::LONG_NO_OWNER)
+        && !matches.get_flag(options::format::LONG_NUMERIC_UID_GID)
+        && !matches.get_flag(options::format::ONE_LINE)
+    {
+        default_format_style = true;
+    }
+
+    let mut config = Config::from(&matches)?;
+
+    if default_quoting_style {
+        config.quoting_style = QuotingStyle::C_NO_QUOTES;
+    }
+    if default_format_style {
+        config.format = Format::Long;
+    }
+
+    let locs = matches
+        .get_many::<OsString>(options::PATHS)
+        .map_or_else(|| vec![Path::new(".")], |v| v.map(Path::new).collect());
+    uu_ls::list(locs, &config)
+}
+
+// To avoid code duplication, we reuse ls uu_app function which has the same
+// arguments. However, coreutils won't compile if one of the utils is missing
+// an uu_app function, so we need this dummy one.
+pub fn uu_app() -> Command {
+    uu_ls::uu_app()
+        .name("vdir")
+        .override_usage(format_usage(&translate!("vdir-usage")))
+        .about(translate!("vdir-about"))
+}

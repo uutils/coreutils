@@ -1,0 +1,49 @@
+[package]
+name = "uu_dd"
+description = "dd ~ (uutils) copy and convert files"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/dd"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/dd.rs"
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+gcd = { workspace = true }
+libc = { workspace = true }
+uucore = { workspace = true, features = [
+  "format",
+  "parser-size",
+  "quoting-style",
+  "fs",
+  "signals",
+] }
+thiserror = { workspace = true }
+fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+nix = { workspace = true, features = ["fs", "signal"] }
+
+[[bin]]
+name = "dd"
+path = "src/main.rs"
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bench]]
+name = "dd_bench"
+harness = false

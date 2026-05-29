@@ -1,0 +1,31 @@
+[package]
+name = "uu_tr"
+description = "tr ~ (uutils) translate characters within input and display"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tr"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/tr.rs"
+test = false
+doctest = false
+
+[dependencies]
+nom = { workspace = true }
+clap = { workspace = true }
+uucore = { workspace = true, features = ["fs", "signals"] }
+fluent = { workspace = true }
+bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
+
+[[bin]]
+name = "tr"
+path = "src/main.rs"

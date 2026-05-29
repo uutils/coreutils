@@ -1,0 +1,24 @@
+[package]
+name = "uu_stdbuf_libstdbuf"
+description = "stdbuf/libstdbuf ~ (uutils); dynamic library required for stdbuf"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+name = "stdbuf"
+path = "src/libstdbuf.rs"
+crate-type = ["cdylib"]
+test = false
+
+[dependencies]
+ctor = { workspace = true }
+libc = { workspace = true }

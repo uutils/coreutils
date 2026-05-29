@@ -1,0 +1,39 @@
+[package]
+name = "uu_fold"
+description = "fold ~ (uutils) wrap each line of input"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/fold"
+version.workspace = true
+license.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/fold.rs"
+test = false
+doctest = false
+
+[dependencies]
+clap = { workspace = true }
+uucore = { workspace = true }
+fluent = { workspace = true }
+unicode-width = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+tempfile = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
+[[bin]]
+name = "fold"
+path = "src/main.rs"
+
+[[bench]]
+name = "fold_bench"
+harness = false

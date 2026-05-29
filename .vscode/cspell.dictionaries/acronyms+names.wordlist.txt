@@ -1,0 +1,78 @@
+# * abbreviations / acronyms
+aarch
+AIX
+ASLR # address space layout randomization
+AST # abstract syntax tree
+CATN # busybox cat -n feature flag
+CATV # busybox cat -v feature flag
+CICD # continuous integration/deployment
+CPU
+CPUs
+DevOps
+Ext3
+FIFO
+FIFOs
+flac
+FQDN # fully qualified domain name
+GID # group ID
+GIDs
+GNU
+GNUEABI
+GNUEABIhf
+impls
+JFS
+loongarch
+lzma
+MSRV # minimum supported rust version
+MSVC
+NixOS
+POSIX
+POSIXLY
+ReiserFS
+RISC
+RISCV
+RNG # random number generator
+RNGs
+Solaris
+TOCTOU # time-of-check time-of-use
+UID # user ID
+UIDs
+UUID # universally unique identifier
+WASI
+WASM
+XFS
+
+# * names
+BusyBox
+BusyTest
+Codacy
+Cygwin
+Deno
+EditorConfig
+EPEL
+FreeBSD
+genric
+Gmail
+Illumos
+Irix
+libfuzzer
+MacOS
+MinGW
+Minix
+MS-DOS
+MSDOS
+msys
+NetBSD
+Novell
+Nushell
+OpenBSD
+PowerPC
+SELinux
+SkyPack
+SysV
+Xenix
+Yargs
+
+# Product
+codspeed
+wasmtime

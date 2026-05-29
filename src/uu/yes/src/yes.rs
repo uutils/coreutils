@@ -1,0 +1,204 @@
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
+
+// cSpell:ignore strs
+
+use clap::{Arg, ArgAction, Command, builder::ValueParser};
+use std::ffi::OsString;
+use std::io::{self, Write};
+use uucore::error::{UResult, USimpleError, strip_errno};
+#[cfg(any(target_os = "linux", target_os = "android"))]
+use uucore::pipes::MAX_ROOTLESS_PIPE_SIZE;
+use uucore::{format_usage, translate};
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const BUF_SIZE: usize = MAX_ROOTLESS_PIPE_SIZE;
+// it's possible that using a smaller or larger buffer might provide better performance
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+const BUF_SIZE: usize = 16 * 1024;
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
+    let buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
+
+    match exec(buffer) {
+        Ok(()) => Ok(()),
+        // On Windows, silently handle broken pipe since there's no SIGPIPE
+        #[cfg(windows)]
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) => Err(USimpleError::new(
+            1,
+            translate!("yes-error-standard-output", "error" => strip_errno(&err)),
+        )),
+    }
+}
+
+pub fn uu_app() -> Command {
+    Command::new("yes")
+        .version(uucore::crate_version!())
+        .help_template(uucore::localized_help_template("yes"))
+        .about(translate!("yes-about"))
+        .override_usage(format_usage(&translate!("yes-usage")))
+        .arg(
+            Arg::new("STRING")
+                .default_value("y")
+                .value_parser(ValueParser::os_string())
+                .action(ArgAction::Append),
+        )
+        .infer_long_args(true)
+}
+
+/// create a buffer filled by words `i` separated by spaces.
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
+fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
+    let mut buf = Vec::with_capacity(BUF_SIZE);
+    // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
+    #[cfg(any(unix, target_os = "wasi"))]
+    for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
+        buf.extend_from_slice(part);
+    }
+    // But, on Windows, we must hop through a String.
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
+        let bytes = part
+            .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+            .as_bytes();
+        buf.extend_from_slice(bytes);
+    }
+
+    buf.push(b'\n');
+
+    Ok(buf)
+}
+
+/// Assumes buf holds a single output line forged from the command line arguments, copies it
+/// repeatedly until the buffer holds as many copies as it can
+fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
+    let line_len = buf.len();
+    debug_assert!(line_len > 0, "buffer is not empty since we have newline");
+    let target_size = line_len * (buf.capacity() / line_len); // 0 if line_len is already large enough
+
+    while buf.len() < target_size {
+        let to_copy = std::cmp::min(target_size - buf.len(), buf.len());
+        debug_assert_eq!(to_copy % line_len, 0);
+        buf.extend_from_within(..to_copy);
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    repeat_content_to_capacity(&mut bytes);
+    let bytes = bytes.as_slice();
+    let mut stdout = io::stdout().lock();
+    loop {
+        stdout.write_all(bytes)?;
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    use uucore::io::RawWriter;
+    use uucore::pipes::{pipe, splice, tee};
+
+    let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
+    repeat_content_to_capacity(&mut bytes);
+    let bytes = bytes.as_slice();
+    let stdout = rustix::stdio::stdout();
+    // improve throughput
+    let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
+    // don't show any error from fast-path and fallback to write for proper message
+    if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
+        && p_write.write_all(bytes).is_ok()
+    {
+        // tee() cannot control offset. But omit splice if it is possible
+        if safe_partial_send {
+            // fails if stdout is not a pipe
+            while tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {}
+        }
+        if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
+            'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+            {
+                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
+                while remain > 0 {
+                    if let Ok(s) = splice(&broker_read, &stdout, remain) {
+                        remain -= s;
+                    } else {
+                        // avoid output breakage with reduced remain even if it would not happen
+                        RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
+                        break 'splice;
+                    }
+                }
+            }
+        }
+    }
+    // fallback
+    let mut stdout = RawWriter(stdout);
+    loop {
+        stdout.write_all(bytes)?;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))] // Linux uses different buffer size
+    fn test_prepare_buffer() {
+        let tests = [
+            (150, 16350),
+            (1000, 16000),
+            (4093, 16372),
+            (4099, 12297),
+            (4111, 12333),
+            (2, 16384),
+            (3, 16383),
+            (4, 16384),
+            (5, 16380),
+            (8192, 16384),
+            (8191, 16382),
+            (8193, 8193),
+            (10000, 10000),
+            (15000, 15000),
+            (25000, 25000),
+        ];
+
+        for (line, final_len) in tests {
+            let mut v = Vec::with_capacity(BUF_SIZE);
+            v.extend(std::iter::repeat_n(b'a', line));
+            repeat_content_to_capacity(&mut v);
+            assert_eq!(v.len(), final_len);
+        }
+    }
+
+    #[test]
+    fn test_args_into_buf() {
+        {
+            let default_args = ["y".into()];
+            let v = args_into_buffer(default_args.iter()).unwrap();
+            assert_eq!(String::from_utf8(v).unwrap(), "y\n");
+        }
+
+        {
+            let args = ["foo".into()];
+            let v = args_into_buffer(args.iter()).unwrap();
+            assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
+        }
+
+        {
+            let args = ["foo".into(), "bar    baz".into(), "qux".into()];
+            let v = args_into_buffer(args.iter()).unwrap();
+            assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
+        }
+    }
+}

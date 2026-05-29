@@ -1,0 +1,33 @@
+[package]
+name = "uu_runcon"
+description = "runcon ~ (uutils) run command with specified security context"
+repository = "https://github.com/uutils/coreutils/tree/main/src/uu/runcon"
+keywords = ["coreutils", "uutils", "cli", "utility"]
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+license.workspace = true
+version.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/runcon.rs"
+test = false
+doctest = false
+
+# TODO: block fetching crates without feat_selinux
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+clap = { workspace = true }
+uucore = { workspace = true, features = ["entries", "fs", "perms", "selinux"] }
+selinux = { workspace = true }
+thiserror = { workspace = true }
+libc = { workspace = true }
+fluent = { workspace = true }
+
+[[bin]]
+name = "runcon"
+path = "src/main.rs"

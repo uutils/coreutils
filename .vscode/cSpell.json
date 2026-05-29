@@ -1,0 +1,47 @@
+// `cspell` settings
+// spell-checker:ignore oranda
+{
+  // version of the setting file
+  "version": "0.2",
+
+  // spelling language
+  "language": "en",
+
+  // custom dictionaries
+  "dictionaries": ["acronyms+names", "jargon", "people", "shell", "workspace"],
+  "dictionaryDefinitions": [
+    { "name": "acronyms+names", "path": "./cspell.dictionaries/acronyms+names.wordlist.txt" },
+    { "name": "jargon", "path": "./cspell.dictionaries/jargon.wordlist.txt" },
+    { "name": "people", "path": "./cspell.dictionaries/people.wordlist.txt" },
+    { "name": "shell", "path": "./cspell.dictionaries/shell.wordlist.txt" },
+    { "name": "workspace", "path": "./cspell.dictionaries/workspace.wordlist.txt" }
+  ],
+
+  // files to ignore (globs supported)
+  "ignorePaths": [
+    ".git/**",
+    "Cargo.lock",
+    "oranda.json",
+    "target/**",
+    "tests/**/fixtures/**",
+    "src/uu/dd/test-resources/**",
+    "vendor/**",
+    "**/*.svg",
+    "src/uu/*/locales/*.ftl",
+    "src/uucore/locales/*.ftl",
+    ".devcontainer/**",
+    "util/gnu-patches/**",
+    "docs/src/release-notes/**",
+    "src/uu/*/benches/*.rs",
+    "src/uucore/src/lib/features/benchmark.rs",
+    "util/check-safe-traversal.sh",
+  ],
+
+  "enableGlobDot": true,
+
+  // words to ignore (even if they are in the flagWords)
+  "ignoreWords": [],
+
+  // words to always consider correct
+  "words": []
+}
