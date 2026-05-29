@@ -52,17 +52,13 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
         }
     }
     let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)?;
-    loop {
-        match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
-            0 => return Ok(byte_count),
-            res => {
-                byte_count += res;
-                // pipe to null is not blocked. So this returns res at most cases
-                // next splice does not hang if we discarded 1+ pages
-                splice(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
-            }
-        }
+    while let s @ 1.. = splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
+        byte_count += s;
+        // pipe to null is not blocked. So this returns the same length at most cases
+        // next splice does not hang if we discarded 1+ pages
+        splice(&pipe_rd, &null_file, s).map_err(|_| byte_count)?;
     }
+    Ok(byte_count)
 }
 
 /// In the special case where we only need to count the number of bytes. There
