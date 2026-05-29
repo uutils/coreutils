@@ -30,14 +30,14 @@ mod options {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum OutputFmt {
+enum OutputFmt {
     Shell,
     CShell,
     Display,
     Unknown,
 }
 
-pub fn guess_syntax() -> OutputFmt {
+fn guess_syntax() -> OutputFmt {
     match env::var("SHELL") {
         Ok(ref s) if !s.is_empty() => {
             let shell_path: &Path = s.as_ref();
