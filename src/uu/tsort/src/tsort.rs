@@ -13,7 +13,6 @@ use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
@@ -131,7 +130,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum TsortError {
     /// The input file is actually a directory.
     #[error("{input}: {message}", input = .0.maybe_quote(), message = translate!("tsort-error-is-dir"))]
@@ -154,7 +153,7 @@ enum TsortError {
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("{0}")]
 struct LoopNode<'a>(&'a str);
 

@@ -59,7 +59,7 @@ impl From<bool> for SymlinkBehavior {
 }
 
 // Custom error types for better error reporting
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum SafeTraversalError {
     #[error("{}", translate!("safe-traversal-error-path-contains-null"))]
     PathContainsNull,

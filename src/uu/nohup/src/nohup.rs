@@ -11,13 +11,12 @@ use clap::{Arg, ArgAction, Command};
 use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
 use std::env;
 use std::fs::{File, OpenOptions};
-use std::io::{Error, ErrorKind, IsTerminal};
+use std::io::{ErrorKind, IsTerminal};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, set_exit_code};
 use uucore::translate;
@@ -34,20 +33,20 @@ mod options {
     pub const CMD: &str = "cmd";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum NohupError {
     #[cfg(target_vendor = "apple")]
     #[error("{}", translate!("nohup-error-cannot-detach"))]
     CannotDetach,
 
     #[error("{}", translate!("nohup-error-cannot-replace", "name" => (*_0), "err" => _1))]
-    CannotReplace(&'static str, #[source] Error),
+    CannotReplace(&'static str, #[source] std::io::Error),
 
     #[error("{}", translate!("nohup-error-open-failed", "path" => NOHUP_OUT.quote(), "err" => _1))]
-    OpenFailed(i32, #[source] Error),
+    OpenFailed(i32, #[source] std::io::Error),
 
     #[error("{}", translate!("nohup-error-open-failed-both", "first_path" => NOHUP_OUT.quote(), "first_err" => _1, "second_path" => _2.quote(), "second_err" => _3))]
-    OpenFailed2(i32, #[source] Error, String, Error),
+    OpenFailed2(i32, #[source] std::io::Error, String, std::io::Error),
 }
 
 impl UError for NohupError {
@@ -121,18 +120,20 @@ fn replace_fds() -> UResult<()> {
     if std::io::stdin().is_terminal() {
         let new_stdin = File::open(Path::new("/dev/null"))
             .map_err(|e| NohupError::CannotReplace("STDIN", e))?;
-        dup2_stdin(&new_stdin).map_err(|e| NohupError::CannotReplace("STDIN", Error::from(e)))?;
+        dup2_stdin(&new_stdin)
+            .map_err(|e| NohupError::CannotReplace("STDIN", std::io::Error::from(e)))?;
     }
 
     if std::io::stdout().is_terminal() {
         let new_stdout = find_stdout()?;
 
         dup2_stdout(&new_stdout)
-            .map_err(|e| NohupError::CannotReplace("STDOUT", Error::from(e)))?;
+            .map_err(|e| NohupError::CannotReplace("STDOUT", std::io::Error::from(e)))?;
     }
 
     if std::io::stderr().is_terminal() {
-        dup2_stderr(stdout()).map_err(|e| NohupError::CannotReplace("STDERR", Error::from(e)))?;
+        dup2_stderr(stdout())
+            .map_err(|e| NohupError::CannotReplace("STDERR", std::io::Error::from(e)))?;
     }
     Ok(())
 }

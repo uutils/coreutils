@@ -17,7 +17,6 @@ use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
 use regex::Regex;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -195,7 +194,7 @@ struct WordRef {
     filename: OsString,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 enum PtxError {
     #[error("{0}")]
     ParseError(ParseIntError),

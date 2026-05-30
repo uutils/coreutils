@@ -4,13 +4,12 @@
 // file that was distributed with this source code.
 
 use std::io;
-use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::translate;
 
 /// Errors thrown by the csplit command
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
     IoError(#[from] io::Error),

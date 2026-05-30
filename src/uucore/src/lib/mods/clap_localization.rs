@@ -17,7 +17,7 @@ use crate::locale::translate;
 use clap::error::{ContextKind, ErrorKind};
 use clap::{ArgMatches, Command, Error};
 
-use std::error::Error as StdError;
+use core::error::Error as _;
 use std::ffi::OsString;
 
 use std::io::Write as _;

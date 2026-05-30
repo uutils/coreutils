@@ -13,7 +13,6 @@ use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]
 use std::ffi::OsString;
 use std::io::{self, Write, stdout};
-use thiserror::Error;
 use uucore::error::{UError, UResult};
 use uucore::format_usage;
 use uucore::libc::time_t;
@@ -33,7 +32,7 @@ pub mod options {
     pub static PRETTY: &str = "pretty";
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum UptimeError {
     // io::Error wrapper
     #[error("{}", translate!("uptime-error-io", "error" => format!("{}", .0)))]

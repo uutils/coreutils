@@ -16,10 +16,9 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use os_display::Quotable;
-use thiserror::Error;
 use unic_langid::LanguageIdentifier;
 
-#[derive(Error, Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum LocalizationError {
     #[error("I/O error loading '{path}': {source}")]
     Io {

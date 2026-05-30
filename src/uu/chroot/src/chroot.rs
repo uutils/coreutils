@@ -9,7 +9,7 @@ mod error;
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsStr;
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
@@ -317,7 +317,7 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -327,7 +327,7 @@ fn set_gid(gid: libc::gid_t) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 
@@ -337,7 +337,7 @@ fn set_uid(uid: libc::uid_t) -> std::io::Result<()> {
     if err == 0 {
         Ok(())
     } else {
-        Err(Error::last_os_error())
+        Err(std::io::Error::last_os_error())
     }
 }
 

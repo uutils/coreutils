@@ -45,7 +45,6 @@ use self::{escape::parse_escape_code, num_format::Formatter};
 use crate::{NonUtf8OsStrError, error::UError};
 pub use spec::Spec;
 use std::{
-    error::Error,
     fmt::Display,
     io::{Write, stdout},
     marker::PhantomData,
@@ -74,7 +73,7 @@ pub enum FormatError {
     InvalidEncoding(NonUtf8OsStrError),
 }
 
-impl Error for FormatError {}
+impl core::error::Error for FormatError {}
 impl UError for FormatError {}
 
 impl From<std::io::Error> for FormatError {
