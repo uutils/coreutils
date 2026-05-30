@@ -148,7 +148,9 @@ fn test_overridable_args() {
 #[test]
 fn test_no_env() {
     // no SHELL and TERM
-    new_ucmd!().fails();
+    new_ucmd!()
+        .fails()
+        .stderr_only("dircolors: no SHELL environment variable, and no shell type option given\n");
 }
 
 #[test]
