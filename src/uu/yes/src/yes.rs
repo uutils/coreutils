@@ -117,7 +117,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     // improve throughput
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
     // don't show any error from fast-path and fallback to write for proper message
-    if let Ok((p_read, mut p_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE)
+    if let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
     {
         // tee() cannot control offset. But omit splice if it is possible
@@ -125,7 +125,7 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
             // fails if stdout is not a pipe
             while tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {}
         }
-        if let Ok((broker_read, broker_write)) = pipe::<true>(MAX_ROOTLESS_PIPE_SIZE) {
+        if let Ok((broker_read, broker_write)) = pipe::<true>() {
             'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
             {
                 debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
