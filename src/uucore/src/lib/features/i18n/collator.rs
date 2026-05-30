@@ -61,9 +61,9 @@ pub fn should_use_locale_collation() -> bool {
 pub fn init_locale_collation() -> bool {
     use crate::i18n::{UEncoding, get_locale_encoding};
 
-    // Check if we need locale-aware collation
-    if get_locale_encoding() != UEncoding::Utf8 {
-        // C/POSIX locale - no collator needed
+    // Use ICU collation only for UTF-8 locales that are NOT C/POSIX
+    // (e.g. en_US.UTF-8, but not C.UTF-8 — C still uses byte comparison)
+    if get_locale_encoding() != UEncoding::Utf8 || !should_use_locale_collation() {
         return false;
     }
 
