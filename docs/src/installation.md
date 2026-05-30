@@ -112,7 +112,7 @@ export PATH=/usr/libexec/uutils-coreutils:$PATH
 
 ### Ubuntu
 
-[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_25_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/rust-coreutils)
+[![Ubuntu package](https://repology.org/badge/version-for-repo/ubuntu_26_04/uutils-coreutils.svg)](https://packages.ubuntu.com/source/rust-coreutils)
 
 ```shell
 apt install rust-coreutils

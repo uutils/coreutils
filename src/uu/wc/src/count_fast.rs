@@ -51,7 +51,7 @@ fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
             Err(_) => break, // input is not pipe. needs additional pipe...
         }
     }
-    let (pipe_rd, pipe_wr) = pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)?;
+    let (pipe_rd, pipe_wr) = pipe::<false>().map_err(|_| byte_count)?;
     while let s @ 1.. = splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
         byte_count += s;
         // pipe to null is not blocked. So this returns the same length at most cases
