@@ -309,7 +309,8 @@ impl ChownExecutor {
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(target_os = "linux")]
-            let chown_result = if path.is_dir() {
+            // We cannot check path.is_dir() here, as this would resolve symlinks
+            let chown_result = if meta.is_dir() {
                 // For directories on Linux, use safe traversal from the start
                 match DirFd::open(path, SymlinkBehavior::Follow) {
                     Ok(dir_fd) => self

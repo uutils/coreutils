@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
 
+use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
 use uutests::{at_and_ucmd, new_ucmd};
@@ -896,4 +897,43 @@ fn test_chown_reference_file() {
         .succeeds()
         .stderr_contains("ownership of 'b' retained as")
         .no_stdout();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_chown_no_dereference_symlink_to_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    at.mkdir("dir");
+    at.symlink_dir("dir", "link_to_dir");
+
+    let link_meta_before = std::fs::symlink_metadata(at.plus("link_to_dir")).unwrap();
+    let link_ctime_before = (link_meta_before.ctime(), link_meta_before.ctime_nsec());
+
+    let dir_meta_before = std::fs::metadata(at.plus("dir")).unwrap();
+    let dir_ctime_before = (dir_meta_before.ctime(), dir_meta_before.ctime_nsec());
+
+    scene
+        .ucmd()
+        .arg("--no-dereference")
+        .arg(&user_name)
+        .arg("link_to_dir")
+        .succeeds();
+
+    let link_meta_after = std::fs::symlink_metadata(at.plus("link_to_dir")).unwrap();
+    let link_ctime_after = (link_meta_after.ctime(), link_meta_after.ctime_nsec());
+
+    let dir_meta_after = std::fs::metadata(at.plus("dir")).unwrap();
+    let dir_ctime_after = (dir_meta_after.ctime(), dir_meta_after.ctime_nsec());
+
+    assert_ne!(link_ctime_before, link_ctime_after, "link's ctime should have advanced");
+    assert_eq!(dir_ctime_before, dir_ctime_after, "dir's ctime should not have changed");
 }
