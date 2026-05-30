@@ -51,7 +51,8 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
             let locale = Locale::try_from_str(&bcp47).unwrap_or(DEFAULT_LOCALE);
 
             // Determine encoding from the locale suffix (e.g. en_US.UTF-8, C.UTF-8).
-            let encoding = split.next()
+            let encoding = split
+                .next()
                 .filter(|enc| {
                     let lower = enc.to_lowercase();
                     lower == "utf-8" || lower == "utf8"
