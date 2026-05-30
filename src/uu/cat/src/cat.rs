@@ -476,12 +476,9 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
 /// Writes handle to stdout with no configuration. This allows a
 /// simple memory copy.
 fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
-    let stdout = io::stdout();
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    let mut stdout = stdout;
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok()
+    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut *uucore::stdio::stdout_raw())?.is_ok()
         && !uucore::pipes::might_fuse(&handle.reader)
     {
         return Ok(());
@@ -489,18 +486,15 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
 
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
-    print_unbuffered(handle, stdout)
+    print_unbuffered(handle)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-fn print_unbuffered<R: FdReadable>(
-    handle: &mut InputHandle<R>,
-    stdout: io::Stdout,
-) -> CatResult<()> {
+fn print_unbuffered<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     #[cfg(any(unix, target_os = "wasi"))]
-    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    let mut stdout = uucore::stdio::stdout_raw();
     #[cfg(not(any(unix, target_os = "wasi")))]
-    let mut stdout = stdout.lock();
+    let mut stdout = io::stdout().lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
