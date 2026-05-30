@@ -38,7 +38,7 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
 
-const MAX_FORMAT_WIDTH: usize = i32::MAX as usize;
+const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
 
 /// Error type for format modifier operations
 #[derive(Debug)]
@@ -885,6 +885,17 @@ mod tests {
             err,
             FormatError::FieldWidthTooLarge { width, specifier }
             if width == MAX_FORMAT_WIDTH + 1 && specifier == "s"
+        ));
+    }
+
+    #[test]
+    fn test_apply_modifiers_rejects_width_above_review_cap() {
+        let width = u16::MAX as usize + 1;
+        let err = apply_modifiers("00", &spec("", Some(width), "S")).unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width: rejected, specifier }
+            if rejected == width && specifier == "S"
         ));
     }
 

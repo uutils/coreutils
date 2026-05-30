@@ -2575,7 +2575,7 @@ fn test_date_format_modifier_parseable_huge_width_fails_without_hanging() {
 #[test]
 fn test_date_format_large_width_no_oom() {
     // Regression: very large width like %8888888888r caused OOM.
-    // GNU caps width to i32::MAX; verify we don't crash.
+    // Cap supported widths well below that so we don't crash.
     // Use a moderate width with a fixed date to check the code path works.
     new_ucmd!()
         .arg("-d")
