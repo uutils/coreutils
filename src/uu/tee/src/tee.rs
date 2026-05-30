@@ -3,11 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore espidf nopipe
+// spell-checker:ignore nopipe
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin};
+use std::io::{Error, ErrorKind, Result, Write, stderr};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -88,7 +88,6 @@ fn tee(options: &Options) -> Result<()> {
     );
 
     let mut output = MultiWriter::new(writers, options.output_error);
-    let input = NamedReader { inner: stdin() };
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
@@ -96,7 +95,7 @@ fn tee(options: &Options) -> Result<()> {
     }
 
     // We cannot use std::io::copy here as it doesn't flush the output buffer
-    let res = match output.copy_unbuffered(input) {
+    let res = match output.copy_unbuffered() {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
         // success of this part (if there was an error that should
@@ -153,30 +152,39 @@ struct MultiWriter {
 impl MultiWriter {
     /// Copies all bytes from the input buffer to the output buffer
     /// without buffering which is POSIX requirement.
-    pub fn copy_unbuffered(&mut self, mut input: NamedReader) -> Result<()> {
+    pub fn copy_unbuffered(&mut self) -> Result<()> {
         // todo: support splice() and tee() fast-path at here
-        // The implementation for this function is adopted from the generic buffer copy implementation from
-        // the standard library:
-        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        use std::io::Read as _;
+        const BUF_SIZE: usize = 32 * 1024;
+        #[cfg(any(unix, target_os = "wasi"))]
+        let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); BUF_SIZE];
+        // todo: avoid cost by 0-fill keeping throughput
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let mut buf = [0u8; BUF_SIZE];
 
-        // Use buffer size from std implementation
-        // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-        const BUF_SIZE: usize = 8 * 1024;
-        let mut buffer = [0u8; BUF_SIZE];
-        // fast-path for small input. needs 2+ read to catch end of file
-        for _ in 0..2 {
-            match input.read(&mut buffer)? {
-                0 => return Ok(()), // end of file
-                received => self.write_flush(&buffer[..received])?,
-            }
-        }
-        // buffer is too small optimize for large input
-        //stack array makes code path for smaller file slower
-        let mut buffer = vec![0u8; 4 * BUF_SIZE];
+        let input = std::io::stdin();
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let mut input = input;
         loop {
-            match input.read(&mut buffer)? {
-                0 => return Ok(()), // end of file
-                received => self.write_flush(&buffer[..received])?,
+            #[cfg(any(unix, target_os = "wasi"))]
+            let res = rustix::io::read(&input, &mut buf)
+                .map(|f| f.0)
+                .map_err(Error::from);
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            let res = input.read(&mut buf).map(|n| &buf[..n]);
+            match res {
+                Ok([]) => return Ok(()), // end of file
+                Ok(slice) => self.write_flush(slice)?,
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr(),
+                        "tee: {}",
+                        translate!("tee-error-stdin", "error" => strip_errno(&e))
+                    );
+                    return Err(e);
+                }
             }
         }
     }
@@ -267,27 +275,4 @@ impl Writer {
 struct NamedWriter {
     inner: Writer,
     pub name: OsString,
-}
-
-struct NamedReader {
-    inner: std::io::Stdin,
-}
-
-impl Read for NamedReader {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        loop {
-            match self.inner.read(buf) {
-                Ok(n) => return Ok(n),
-                Err(e) if e.kind() == ErrorKind::Interrupted => {}
-                Err(e) => {
-                    let _ = writeln!(
-                        stderr(),
-                        "tee: {}",
-                        translate!("tee-error-stdin", "error" => strip_errno(&e))
-                    );
-                    return Err(e);
-                }
-            }
-        }
-    }
 }
