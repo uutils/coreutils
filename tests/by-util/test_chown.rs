@@ -934,6 +934,12 @@ fn test_chown_no_dereference_symlink_to_dir() {
     let dir_meta_after = std::fs::metadata(at.plus("dir")).unwrap();
     let dir_ctime_after = (dir_meta_after.ctime(), dir_meta_after.ctime_nsec());
 
-    assert_ne!(link_ctime_before, link_ctime_after, "link's ctime should have advanced");
-    assert_eq!(dir_ctime_before, dir_ctime_after, "dir's ctime should not have changed");
+    assert_ne!(
+        link_ctime_before, link_ctime_after,
+        "link's ctime should have advanced"
+    );
+    assert_eq!(
+        dir_ctime_before, dir_ctime_after,
+        "dir's ctime should not have changed"
+    );
 }
