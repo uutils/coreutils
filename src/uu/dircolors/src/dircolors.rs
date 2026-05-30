@@ -37,21 +37,21 @@ enum OutputFmt {
     Unknown,
 }
 
-fn guess_syntax() -> OutputFmt {
-    match env::var("SHELL") {
-        Ok(ref s) if !s.is_empty() => {
-            let shell_path: &Path = s.as_ref();
-            if let Some(name) = shell_path.file_name() {
-                if name == "csh" || name == "tcsh" {
-                    OutputFmt::CShell
-                } else {
-                    OutputFmt::Shell
-                }
-            } else {
-                OutputFmt::Shell
-            }
+fn guess_syntax<T: AsRef<Path>>(path: T) -> OutputFmt {
+    let shell_path = path.as_ref();
+
+    if shell_path.as_os_str().is_empty() {
+        return OutputFmt::Unknown;
+    }
+
+    if let Some(name) = shell_path.file_name() {
+        if name == "csh" || name == "tcsh" {
+            OutputFmt::CShell
+        } else {
+            OutputFmt::Shell
         }
-        _ => OutputFmt::Unknown,
+    } else {
+        OutputFmt::Shell
     }
 }
 
@@ -154,27 +154,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = if matches.get_flag(options::C_SHELL) {
+    let out_format = if matches.get_flag(options::C_SHELL) {
         OutputFmt::CShell
     } else if matches.get_flag(options::BOURNE_SHELL) {
         OutputFmt::Shell
     } else if matches.get_flag(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
-        OutputFmt::Unknown
-    };
+        let guessed_fmt = env::var_os("SHELL").map(|path| guess_syntax(&path));
 
-    if out_format == OutputFmt::Unknown {
-        match guess_syntax() {
-            OutputFmt::Unknown => {
+        match guessed_fmt {
+            Some(OutputFmt::Unknown) | None => {
                 return Err(USimpleError::new(
                     1,
                     translate!("dircolors-error-no-shell-environment"),
                 ));
             }
-            fmt => out_format = fmt,
+            Some(fmt) => fmt,
         }
-    }
+    };
 
     let result;
     if files.is_empty() {
@@ -539,45 +537,12 @@ mod tests {
 
     #[test]
     fn test_guess_syntax() {
-        use std::env;
-        let last = env::var("SHELL");
-        unsafe {
-            env::set_var("SHELL", "/path/csh");
-        }
-        assert_eq!(OutputFmt::CShell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "csh");
-        }
-        assert_eq!(OutputFmt::CShell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "/path/bash");
-        }
-        assert_eq!(OutputFmt::Shell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "bash");
-        }
-        assert_eq!(OutputFmt::Shell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "/asd/bar");
-        }
-        assert_eq!(OutputFmt::Shell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "foo");
-        }
-        assert_eq!(OutputFmt::Shell, guess_syntax());
-        unsafe {
-            env::set_var("SHELL", "");
-        }
-        assert_eq!(OutputFmt::Unknown, guess_syntax());
-        unsafe {
-            env::remove_var("SHELL");
-        }
-        assert_eq!(OutputFmt::Unknown, guess_syntax());
-
-        if let Ok(s) = last {
-            unsafe {
-                env::set_var("SHELL", s);
-            }
-        }
+        assert_eq!(OutputFmt::CShell, guess_syntax("/path/csh"));
+        assert_eq!(OutputFmt::CShell, guess_syntax("csh"));
+        assert_eq!(OutputFmt::Shell, guess_syntax("/path/bash"));
+        assert_eq!(OutputFmt::Shell, guess_syntax("bash"));
+        assert_eq!(OutputFmt::Shell, guess_syntax("/asd/bar"));
+        assert_eq!(OutputFmt::Shell, guess_syntax("foo"));
+        assert_eq!(OutputFmt::Unknown, guess_syntax(""));
     }
 }
