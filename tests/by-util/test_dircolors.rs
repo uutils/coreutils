@@ -183,8 +183,7 @@ fn test_stdin() {
         .pipe_in("owt 40;33\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='tw=40;33:';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='tw=40;33:';\nexport LS_COLORS\n");
 }
 
 #[test]
@@ -193,8 +192,7 @@ fn test_quoting() {
         .pipe_in("exec 'echo Hello;:'\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n");
 }
 
 /*
@@ -234,8 +232,7 @@ TERM {term_pattern}
             .pipe_in(theme)
             .args(&["-b", "-"])
             .succeeds()
-            .stdout_is(expectation)
-            .no_stderr();
+            .stdout_only(expectation);
     }
 
     let expectation_if_match = r"
@@ -299,6 +296,5 @@ fn test_colorterm_empty_with_wildcard() {
         .pipe_in("COLORTERM ?*\nowt 40;33\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
 }
