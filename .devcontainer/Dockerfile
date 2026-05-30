@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/devcontainers/base:ubuntu-24.04
+# Revert this to legacy Ubuntu version after GitHub added 26.04. Then we can cover 2 glibc versions
+FROM mcr.microsoft.com/devcontainers/base:ubuntu-26.04
 
 # install gnu coreutils test dependencies
 RUN apt-get update \
