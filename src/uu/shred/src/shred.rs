@@ -253,17 +253,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let iterations = match matches.get_one::<String>(options::ITERATIONS) {
-        Some(s) => match s.parse::<usize>() {
-            Ok(u) => u,
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
-                ));
-            }
-        },
-        None => unreachable!(),
+    let iterations = {
+        let s = matches.get_one::<String>(options::ITERATIONS).unwrap(); // safe to unwrap, has default value
+        s.parse::<usize>().map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
+            )
+        })?
     };
 
     let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
