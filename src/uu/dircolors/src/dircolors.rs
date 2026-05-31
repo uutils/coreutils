@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
+// spell-checker:ignore (ToDO) dircolors eightbit fnmatch setenv colorterm disp cshell
 
 use std::borrow::Borrow;
 use std::env;
@@ -43,12 +43,10 @@ fn guess_syntax<T: AsRef<Path>>(path: T) -> Option<OutputFmt> {
         return None;
     }
 
-    if let Some(name) = shell_path.file_name() {
-        if name == "csh" || name == "tcsh" {
-            Some(OutputFmt::CShell)
-        } else {
-            Some(OutputFmt::Shell)
-        }
+    let is_cshell = |name| name == "csh" || name == "tcsh";
+
+    if shell_path.file_name().is_some_and(is_cshell) {
+        Some(OutputFmt::CShell)
     } else {
         Some(OutputFmt::Shell)
     }
