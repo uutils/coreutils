@@ -34,24 +34,23 @@ enum OutputFmt {
     Shell,
     CShell,
     Display,
-    Unknown,
 }
 
-fn guess_syntax<T: AsRef<Path>>(path: T) -> OutputFmt {
+fn guess_syntax<T: AsRef<Path>>(path: T) -> Option<OutputFmt> {
     let shell_path = path.as_ref();
 
     if shell_path.as_os_str().is_empty() {
-        return OutputFmt::Unknown;
+        return None;
     }
 
     if let Some(name) = shell_path.file_name() {
         if name == "csh" || name == "tcsh" {
-            OutputFmt::CShell
+            Some(OutputFmt::CShell)
         } else {
-            OutputFmt::Shell
+            Some(OutputFmt::Shell)
         }
     } else {
-        OutputFmt::Shell
+        Some(OutputFmt::Shell)
     }
 }
 
@@ -60,14 +59,12 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
         OutputFmt::Shell => "LS_COLORS='".to_string(),
         OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     let suffix = match fmt {
         OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
         OutputFmt::CShell => "'".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     (prefix, suffix)
@@ -161,17 +158,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else if matches.get_flag(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
-        let guessed_fmt = env::var_os("SHELL").map(|path| guess_syntax(&path));
-
-        match guessed_fmt {
-            Some(OutputFmt::Unknown) | None => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dircolors-error-no-shell-environment"),
-                ));
-            }
-            Some(fmt) => fmt,
-        }
+        env::var_os("SHELL")
+            .and_then(|path| guess_syntax(&path))
+            .ok_or_else(|| {
+                USimpleError::new(1, translate!("dircolors-error-no-shell-environment"))
+            })?
     };
 
     let result;
@@ -537,12 +528,12 @@ mod tests {
 
     #[test]
     fn test_guess_syntax() {
-        assert_eq!(OutputFmt::CShell, guess_syntax("/path/csh"));
-        assert_eq!(OutputFmt::CShell, guess_syntax("csh"));
-        assert_eq!(OutputFmt::Shell, guess_syntax("/path/bash"));
-        assert_eq!(OutputFmt::Shell, guess_syntax("bash"));
-        assert_eq!(OutputFmt::Shell, guess_syntax("/asd/bar"));
-        assert_eq!(OutputFmt::Shell, guess_syntax("foo"));
-        assert_eq!(OutputFmt::Unknown, guess_syntax(""));
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("/path/csh"));
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("csh"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/path/bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/asd/bar"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("foo"));
+        assert_eq!(None, guess_syntax(""));
     }
 }
