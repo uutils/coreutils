@@ -1475,3 +1475,32 @@ fn test_chmod_symlink_cycles() {
         // cSpell:enable
     }
 }
+
+#[test]
+fn test_chmod_symlink_two_links_same_dir() {
+    // Two symlinks pointing at the same directory is NOT a cycle: neither link is
+    // an ancestor of the other, so the target's contents must be visited through
+    // *both* links (and through the real directory). This guards the backtracking
+    // in the cycle-detection logic against false positives.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // cSpell:disable
+    at.mkdir_all("base/realdir");
+    at.touch("base/realdir/file");
+    at.symlink_dir("base/realdir", "base/link1");
+    at.symlink_dir("base/realdir", "base/link2");
+
+    // Assert on the path only (not the mode bits), so the test is robust to the
+    // file's umask-dependent permissions across platforms.
+    scene
+        .ucmd()
+        .arg("-vRL")
+        .arg("+r")
+        .arg("base")
+        .run()
+        .stdout_contains("mode of 'base/realdir/file'")
+        .stdout_contains("mode of 'base/link1/file'")
+        .stdout_contains("mode of 'base/link2/file'");
+    // cSpell:enable
+}

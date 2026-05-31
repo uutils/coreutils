@@ -439,13 +439,15 @@ impl Chmoder {
 
         // If the path is a directory (or we should follow symlinks), recurse into it
         if (!file_path.is_symlink() || should_follow_symlink) && file_path.is_dir() {
-            // Cycle detection: check if this directory (resolved) is an ancestor.
-            // Use dereference=true so a symlink-to-dir is identified by its target's inode.
-            if let Ok(info) = FileInformation::from_path(file_path, true) {
-                if ancestors.contains(&info) {
+            // Cycle detection: identify this directory by its target's inode (resolved
+            // via dereference=true) once, and reuse it for the backtrack below so we
+            // don't stat the same directory twice. If it's already on the current path,
+            // it's a cycle.
+            let dir_info = FileInformation::from_path(file_path, true).ok();
+            if let Some(info) = &dir_info {
+                if !ancestors.insert(info.clone()) {
                     return r;
                 }
-                ancestors.insert(info);
             }
 
             // We buffer all paths in this dir to not keep too many fd's open during recursion
@@ -483,7 +485,7 @@ impl Chmoder {
 
             // Backtrack: remove this directory from ancestors so sibling subtrees
             // are not falsely treated as cycles.
-            if let Ok(info) = FileInformation::from_path(file_path, true) {
+            if let Some(info) = dir_info {
                 ancestors.remove(&info);
             }
         }
@@ -534,12 +536,14 @@ impl Chmoder {
     ) -> UResult<()> {
         let mut r = Ok(());
 
-        // Cycle detection: check if this directory (resolved through any symlink) is an ancestor.
-        if let Ok(info) = FileInformation::from_path(dir_path, true) {
-            if ancestors.contains(&info) {
-                return r;
+        // Cycle detection: identify this directory by (dev, ino) via the already-open
+        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
+        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
+        let dir_info = FileInformation::from_file(dir_fd).ok();
+        if let Some(info) = &dir_info {
+            if !ancestors.insert(info.clone()) {
+                return r; // cycle: this directory is already an ancestor
             }
-            ancestors.insert(info);
         }
 
         let entries = dir_fd.read_dir()?;
@@ -608,8 +612,9 @@ impl Chmoder {
             }
         }
 
-        // Backtrack: remove this directory so sibling subtrees are not falsely flagged.
-        if let Ok(info) = FileInformation::from_path(dir_path, true) {
+        // Backtrack so sibling subtrees that legitimately reach the same directory
+        // (e.g. two symlinks to one dir) are not mistaken for cycles.
+        if let Some(info) = dir_info {
             ancestors.remove(&info);
         }
 

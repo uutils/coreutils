@@ -468,12 +468,14 @@ impl ChownExecutor {
         ret: &mut i32,
         ancestors: &mut HashSet<FileInformation>,
     ) {
-        // Cycle detection: resolve through symlinks so a symlink-to-ancestor is caught.
-        if let Ok(info) = FileInformation::from_path(dir_path, true) {
-            if ancestors.contains(&info) {
+        // Cycle detection: identify this directory by (dev, ino) via the already-open
+        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
+        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
+        let dir_info = FileInformation::from_file(dir_fd).ok();
+        if let Some(info) = &dir_info {
+            if !ancestors.insert(info.clone()) {
                 return; // cycle detected, stop silently
             }
-            ancestors.insert(info);
         }
 
         // Read directory entries
@@ -575,8 +577,9 @@ impl ChownExecutor {
             }
         }
 
-        // Backtrack: remove this directory so sibling subtrees are not falsely flagged.
-        if let Ok(info) = FileInformation::from_path(dir_path, true) {
+        // Backtrack so sibling subtrees that legitimately reach the same directory
+        // (e.g. two symlinks to one dir) are not mistaken for cycles.
+        if let Some(info) = dir_info {
             ancestors.remove(&info);
         }
     }

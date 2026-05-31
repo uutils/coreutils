@@ -987,3 +987,45 @@ fn test_chown_symlink_cycles() {
             ));
     }
 }
+
+#[test]
+fn test_chown_symlink_two_links_same_dir() {
+    // Two symlinks pointing at the same directory is NOT a cycle: neither link is
+    // an ancestor of the other, so the target's contents must be visited through
+    // *both* links. This guards the backtracking in the linux safe-traversal
+    // cycle detection against false positives.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    // cSpell:disable
+    at.mkdir_all("base/realdir");
+    at.touch("base/realdir/file");
+    at.symlink_dir("base/realdir", "base/link1");
+    at.symlink_dir("base/realdir", "base/link2");
+
+    let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
+
+    // Only linux uses the safe-traversal cycle detection that this test exercises;
+    // other platforms fall back to walkdir with its own loop handling.
+    if cfg!(target_os = "linux") {
+        result
+            .success()
+            .stderr_contains(format!(
+                "ownership of 'base/realdir/file' retained as {user_name}"
+            ))
+            .stderr_contains(format!(
+                "ownership of 'base/link1/file' retained as {user_name}"
+            ))
+            .stderr_contains(format!(
+                "ownership of 'base/link2/file' retained as {user_name}"
+            ));
+    }
+    // cSpell:enable
+}
