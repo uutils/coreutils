@@ -23,7 +23,7 @@ use crate::{STDIN_FILE, SortError};
 
 /// An inner enum representing the actual source of a sort input.
 #[derive(Debug)]
-enum SortInputInner {
+pub enum SortInputInner {
     /// An already-opened regular file.
     File(File),
     /// A memory-mapped file shared across duplicate paths, with an
@@ -40,51 +40,11 @@ enum SortInputInner {
 /// Handle to a single sort input (file, memory-map, or stdin).
 #[derive(Debug)]
 pub struct SortInput {
-    inner: SortInputInner,
+    pub inner: SortInputInner,
 }
 
 impl SortInput {
-    /// Open a path directly (stdin if `"-"`).
-    pub fn new(path: &OsStr) -> UResult<Self> {
-        if path == STDIN_FILE {
-            return Ok(Self {
-                inner: SortInputInner::Stdin,
-            });
-        }
-
-        let path = Path::new(path);
-        match File::open(path) {
-            Ok(f) => Ok(Self {
-                inner: SortInputInner::File(f),
-            }),
-            Err(error) => Err(SortError::ReadFailed {
-                path: path.to_owned(),
-                error,
-            }
-            .into()),
-        }
-    }
-
-    fn from_memory_map(data: Arc<MemoryMap>) -> Self {
-        Self {
-            inner: SortInputInner::FileRead { data, offset: 0 },
-        }
-    }
-
-    /// Returns true if this input is stdin.
-    pub fn is_stdin(&self) -> bool {
-        matches!(self.inner, SortInputInner::Stdin)
-    }
-}
-
-impl Read for SortInput {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        // Open LazyFile on first read (fallback if iterator didn't do it).
-        if let SortInputInner::LazyFile(path) = &self.inner {
-            let file = File::open(path)?;
-            self.inner = SortInputInner::File(file);
-        }
-
+    fn read_inner(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match &mut self.inner {
             SortInputInner::File(file) => file.read(buf),
             SortInputInner::FileRead { data, offset } => {
@@ -101,14 +61,34 @@ impl Read for SortInput {
                 let mut stdin = io::stdin();
                 stdin.read(buf)
             }
+            //All lazyFile are already opened in the SortInputsIntoIter next() method
             SortInputInner::LazyFile(_) => unreachable!(),
+        }
+    }
+
+    fn from_memory_map(data: Arc<MemoryMap>) -> Self {
+        Self {
+            inner: SortInputInner::FileRead { data, offset: 0 },
+        }
+    }
+
+    fn stdin() -> Self {
+        Self {
+            inner: SortInputInner::Stdin,
+        }
+    }
+
+    fn from_path(file: &OsStr) -> Self {
+        let path = Path::new(file);
+        Self {
+            inner: SortInputInner::LazyFile(path.to_path_buf()),
         }
     }
 }
 
-impl From<SortInput> for Box<dyn Read + Send> {
-    fn from(input: SortInput) -> Self {
-        Box::new(input) as Box<dyn Read + Send>
+impl Read for SortInput {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read_inner(buf)
     }
 }
 
@@ -119,16 +99,10 @@ impl From<SortInput> for Box<dyn Read + Send> {
 /// merge batch size limits active FDs.
 #[derive(Debug)]
 pub struct SortInputs {
-    inputs: Vec<SortInput>,
+    pub inputs: Vec<SortInput>,
 }
 
 impl SortInputs {
-    #[allow(dead_code)]
-    // Used only in unit tests.
-    pub fn from_files(files: &[std::ffi::OsString]) -> UResult<Self> {
-        Self::from_files_with_output(files, None)
-    }
-
     /// Build a `SortInputs` from paths.
     ///
     /// - Duplicate paths → one memory-map shared across all instances.
@@ -159,149 +133,52 @@ impl SortInputs {
 
         for file in files {
             if file == STDIN_FILE {
-                inputs.push(SortInput {
-                    inner: SortInputInner::Stdin,
-                });
+                inputs.push(SortInput::stdin());
+                continue;
+            }
+
+            let path = Path::new(file);
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            // Check if this is the output file used as input
+            // Then use already opened fd for output
+            if let Some((ref output_path, ref output_memory_map)) = output_as_input {
+                if canonical == *output_path {
+                    inputs.push(SortInput::from_memory_map(output_memory_map.clone()));
+                    continue;
+                }
+            }
+
+            // Unique file as input
+            if *path_counts.get(&canonical).unwrap_or(&0) <= 1 {
+                inputs.push(SortInput::from_path(file));
+                continue;
+            }
+
+            // Duplicate file: use memory-map
+            let memory_map = if let Some(memory_map) = opened_files.get(&canonical) {
+                memory_map.clone()
             } else {
-                let path = Path::new(file);
-                let canonical = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
-
-                // Check if this is the output file used as input
-                if let Some((ref output_path, ref output_memory_map)) = output_as_input {
-                    if canonical == *output_path {
-                        inputs.push(SortInput::from_memory_map(output_memory_map.clone()));
-                        continue;
-                    }
-                }
-
-                if *path_counts.get(&canonical).unwrap_or(&0) > 1 {
-                    // Duplicate file: use memory-map
-                    let memory_map = if let Some(memory_map) = opened_files.get(&canonical) {
-                        memory_map.clone()
-                    } else {
-                        let f = File::open(path).map_err(|error| SortError::ReadFailed {
-                            path: path.to_owned(),
-                            error,
-                        })?;
-                        // SAFETY: We keep the file open for the lifetime of the memory-map,
-                        // and we only read from it. The file is not modified.
-                        let memory_map =
-                            Arc::new(unsafe { MemoryMap::map(&f) }.map_err(|error| {
-                                SortError::ReadFailed {
-                                    path: path.to_owned(),
-                                    error,
-                                }
-                            })?);
-                        opened_files.insert(canonical, memory_map.clone());
-                        memory_map
-                    };
-                    inputs.push(SortInput::from_memory_map(memory_map));
-                } else {
-                    // Unique file: defer opening until iteration so that
-                    // merge_with_file_limit can respect its batch_size and
-                    // avoid exceeding the file-descriptor soft limit.
-                    inputs.push(SortInput {
-                        inner: SortInputInner::LazyFile(path.to_path_buf()),
-                    });
-                }
-            }
-        }
-
-        Ok(Self { inputs })
-    }
-
-    /// Returns the total number of inputs (including duplicates).
-    #[allow(dead_code)]
-    pub fn len(&self) -> usize {
-        self.inputs.len()
-    }
-
-    /// Returns true if there are no inputs.
-    #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
-        self.inputs.is_empty()
-    }
-
-    /// Returns the number of unique sources (stdin + unique files + memory-map groups).
-    #[allow(dead_code)]
-    pub fn unique_count(&self) -> usize {
-        let mut file_count = 0;
-        let mut stdin_present = false;
-
-        // Count unique memory-map instances by Arc pointer
-        let mut seen_memory_maps = std::collections::HashSet::new();
-
-        for input in &self.inputs {
-            match &input.inner {
-                SortInputInner::Stdin => {
-                    stdin_present = true;
-                }
-                SortInputInner::File(_) | SortInputInner::LazyFile(_) => {
-                    file_count += 1;
-                }
-                SortInputInner::FileRead { data, .. } => {
-                    seen_memory_maps.insert(Arc::as_ptr(data));
-                }
-            }
-        }
-
-        file_count + seen_memory_maps.len() + usize::from(stdin_present)
-    }
-
-    /// Iterate over the inputs without consuming them.
-    #[allow(dead_code)]
-    pub fn iter(&self) -> impl Iterator<Item = &SortInput> {
-        self.inputs.iter()
-    }
-}
-
-/// Iterator that opens LazyFile entries as they are yielded.
-#[derive(Debug)]
-pub struct SortInputsIntoIter {
-    inner: std::vec::IntoIter<SortInput>,
-}
-
-impl Iterator for SortInputsIntoIter {
-    type Item = UResult<SortInput>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut input = self.inner.next()?;
-
-        // Convert LazyFile to File so errors surface during iteration.
-        if let SortInputInner::LazyFile(path) = &input.inner {
-            match File::open(path) {
-                Ok(file) => input.inner = SortInputInner::File(file),
-                Err(error) => {
-                    return Some(Err(SortError::ReadFailed {
-                        path: path.clone(),
+                let f = File::open(path).map_err(|error| SortError::ReadFailed {
+                    path: path.to_owned(),
+                    error,
+                })?;
+                // SAFETY: We keep the file open for the lifetime of the memory-map,
+                // and we only read from it. The file is not modified.
+                let memory_map = Arc::new(unsafe { MemoryMap::map(&f) }.map_err(|error| {
+                    SortError::ReadFailed {
+                        path: path.to_owned(),
                         error,
                     }
-                    .into()));
-                }
-            }
+                })?);
+                opened_files.insert(canonical, memory_map.clone());
+                memory_map
+            };
+            inputs.push(SortInput::from_memory_map(memory_map));
         }
-        Some(Ok(input))
-    }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.inner.size_hint()
-    }
-}
-
-impl ExactSizeIterator for SortInputsIntoIter {
-    fn len(&self) -> usize {
-        self.inner.len()
-    }
-}
-
-impl IntoIterator for SortInputs {
-    type Item = UResult<SortInput>;
-    type IntoIter = SortInputsIntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-        SortInputsIntoIter {
-            inner: self.inputs.into_iter(),
-        }
+        Ok(Self {
+            inputs: inputs.into_iter().collect(),
+        })
     }
 }
 
@@ -314,6 +191,53 @@ mod tests {
     #[cfg(not(target_os = "wasi"))]
     use tempfile::NamedTempFile;
 
+    // Util method for SortInputs in test
+    impl SortInputs {
+        pub fn from_files(files: &[OsString]) -> UResult<Self> {
+            Self::from_files_with_output(files, None)
+        }
+
+        /// Returns the total number of inputs (including duplicates).
+        pub fn len(&self) -> usize {
+            self.inputs.len()
+        }
+
+        /// Returns true if there are no inputs.
+        fn is_empty(&self) -> bool {
+            self.inputs.is_empty()
+        }
+
+        /// Returns the number of unique sources (stdin + unique files + memory-map groups).
+        pub fn unique_count(&self) -> usize {
+            let mut file_count = 0;
+            let mut stdin_present = false;
+
+            // Count unique memory-map instances by Arc pointer
+            let mut seen_memory_maps = std::collections::HashSet::new();
+
+            for input in &self.inputs {
+                match &input.inner {
+                    SortInputInner::Stdin => {
+                        stdin_present = true;
+                    }
+                    SortInputInner::File(_) | SortInputInner::LazyFile(_) => {
+                        file_count += 1;
+                    }
+                    SortInputInner::FileRead { data, .. } => {
+                        seen_memory_maps.insert(Arc::as_ptr(data));
+                    }
+                }
+            }
+
+            file_count + seen_memory_maps.len() + usize::from(stdin_present)
+        }
+
+        /// Iterate over the inputs without consuming them.
+        fn iter(&self) -> impl Iterator<Item = &SortInput> {
+            self.inputs.iter()
+        }
+    }
+
     #[test]
     #[cfg(not(target_os = "wasi"))]
     fn test_sort_input_new_file() {
@@ -323,20 +247,21 @@ mod tests {
             .expect("should write to temp file");
         tmpfile.flush().expect("should flush temp file");
 
-        let input = SortInput::new(tmpfile.path().as_os_str()).expect("should create sort input");
-        assert!(!input.is_stdin());
+        let input = SortInput::from_path(tmpfile.path().as_os_str());
+        assert!(!matches!(input.inner, SortInputInner::Stdin));
     }
 
     #[test]
     fn test_sort_input_new_stdin() {
-        let input = SortInput::new(OsStr::new("-")).expect("should create sort input for stdin");
-        assert!(input.is_stdin());
+        let input = SortInput::stdin();
+        assert!(matches!(input.inner, SortInputInner::Stdin));
     }
 
     #[test]
     fn test_sort_input_new_missing_file() {
-        let result = SortInput::new(OsStr::new("/nonexistent/path/file.txt"));
-        assert!(result.is_err());
+        let file = OsStr::new("/nonexistent/path/file.txt");
+        let lazy_input = SortInput::from_path(&file);
+        assert!(matches!(lazy_input.inner, SortInputInner::LazyFile(_)));
     }
 
     #[test]
@@ -371,7 +296,7 @@ mod tests {
         let file = File::open(tmpfile.path()).expect("should open temp file");
         let mmap = Arc::new(unsafe { MemoryMap::map(&file).expect("should mmap temp file") });
         let input = SortInput::from_memory_map(mmap);
-        let mut reader: Box<dyn Read + Send> = input.into();
+        let mut reader: Box<dyn Read + Send> = Box::new(input);
         let mut buf = [0u8; 9];
         let n = reader
             .read(&mut buf)
@@ -531,14 +456,9 @@ mod tests {
     fn test_sort_inputs_stdin_only() {
         let files = vec![OsString::from("-")];
         let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let input = inputs.iter().next().expect("should get first input");
         assert_eq!(inputs.len(), 1);
-        assert!(
-            inputs
-                .iter()
-                .next()
-                .expect("should get first input")
-                .is_stdin()
-        );
+        assert!(matches!(input.inner, SortInputInner::Stdin));
     }
 
     #[test]
@@ -603,19 +523,5 @@ mod tests {
         let mut iter = inputs.into_iter();
         assert!(iter.next().expect("should get first input").is_ok()); // first file opens successfully
         assert!(iter.next().expect("should get second input").is_err()); // second file fails to open
-    }
-
-    #[test]
-    #[cfg(not(target_os = "wasi"))]
-    fn test_sort_inputs_into_iter() {
-        let mut tmpfile = NamedTempFile::new().expect("should create temp file");
-        tmpfile
-            .write_all(b"data")
-            .expect("should write to temp file");
-
-        let files = vec![tmpfile.path().as_os_str().to_os_string()];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
-        let count = inputs.into_iter().count();
-        assert_eq!(count, 1);
     }
 }

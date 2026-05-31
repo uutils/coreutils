@@ -35,7 +35,7 @@ use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
     compare_by, current_open_fd_count, fd_soft_limit,
-    sort_input::{SortInput, SortInputs},
+    sort_inputs::{SortInput, SortInputs},
     tmp_dir::TmpDirWrapper,
 };
 
