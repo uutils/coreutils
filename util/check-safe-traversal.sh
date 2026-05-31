@@ -168,6 +168,24 @@ check_utility() {
     fi
 }
 
+# Recursive descent must open every subdirectory relative to the parent dirfd
+# WITH O_NOFOLLOW. Otherwise an attacker who swaps the just-stat'd directory for
+# a symlink between the stat and the open redirects the descent off-tree (the
+# chown/chgrp/chmod/rm recursive-descent TOCTOU). The top-level command-line
+# argument is opened via AT_FDCWD and is allowed to follow, so it is excluded by
+# matching only numeric-dirfd openat calls.
+assert_descent_nofollow() {
+    local util="$1"
+    local log="$2"
+    local offenders
+    offenders=$(grep -E 'openat\([0-9]+, "[^"]*",[^)]*O_DIRECTORY' "$log" | grep -v 'O_NOFOLLOW' || true)
+    if [ -n "$offenders" ]; then
+        echo "$offenders"
+        fail_immediately "$util descends into subdirectories without O_NOFOLLOW (TOCTOU symlink-swap risk)"
+    fi
+    echo "✓ $util descent opens use O_NOFOLLOW"
+}
+
 # Get list of available utilities
 if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
@@ -192,6 +210,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "rm"; then
     if grep -qE 'statx\(AT_FDCWD, "[^"]*/' strace_rm_recursive_remove.log; then
         fail_immediately "rm is using path-based statx (multi-component relative path); expected dirfd-relative newfstatat"
     fi
+    assert_descent_nofollow "rm" strace_rm_recursive_remove.log
 fi
 
 # Test chmod - should use openat, fchmodat, newfstatat
@@ -203,6 +222,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
     if grep -q 'openat(AT_FDCWD, "test_chmod/' strace_chmod_recursive_chmod.log; then
         fail_immediately "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     fi
+    assert_descent_nofollow "chmod" strace_chmod_recursive_chmod.log
 fi
 
 # Test chown - should use openat, fchownat, newfstatat
@@ -211,12 +231,14 @@ if echo "$AVAILABLE_UTILS" | grep -q "chown"; then
     USER_ID=$(id -u)
     GROUP_ID=$(id -g)
     check_utility "chown" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $USER_ID:$GROUP_ID test_chown" "recursive_chown"
+    assert_descent_nofollow "chown" strace_chown_recursive_chown.log
 fi
 
 # Test chgrp - should use openat, fchownat, newfstatat
 if echo "$AVAILABLE_UTILS" | grep -q "chgrp"; then
     cp -r test_dir test_chgrp
     check_utility "chgrp" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $GROUP_ID test_chgrp" "recursive_chgrp"
+    assert_descent_nofollow "chgrp" strace_chgrp_recursive_chgrp.log
 fi
 
 # Test du - should use openat, newfstatat

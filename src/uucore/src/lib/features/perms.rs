@@ -535,9 +535,13 @@ impl ChownExecutor {
                 );
             }
 
-            // Recurse into subdirectories
+            // Recurse into subdirectories. Open with the same symlink behavior
+            // used for the stat above: with NoFollow (the default, `-P`/`-H`) an
+            // attacker that swaps the just-stat'd directory for a symlink between
+            // the stat and this open cannot redirect the descent off-tree
+            // (O_NOFOLLOW makes openat fail). Only follow when `-L` was requested.
             if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
+                match dir_fd.open_subdir(&entry_name, follow.into()) {
                     Ok(subdir_fd) => {
                         self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
                     }
