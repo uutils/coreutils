@@ -134,6 +134,12 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
+    - name: Avoid no space left on device # shared with guest?
+      shell: bash
+      run: |
+        mkdir /tmp/empty
+        sudo rsync -a --delete /tmp/empty/ /usr/share/dotnet/ &
+        sudo rsync -a --delete /tmp/empty/ /usr/local/lib/android &
     - name: Prepare, build and test
       uses: vmactions/openbsd-vm@v1
       with:
@@ -203,7 +209,7 @@ jobs:
           export RUST_BACKTRACE=1
           export CARGO_TERM_COLOR=always
           # Avoid filling disk space
-          export RUSTFLAGS="-C strip=symbols"
+          export RUSTFLAGS="-C strip=symbols -C debuginfo=0"
           # Use cargo test since nextest might not support OpenBSD
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (workspace)"

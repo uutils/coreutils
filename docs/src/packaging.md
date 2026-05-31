@@ -1,6 +1,6 @@
 # Packaging coreutils
 
-<!-- spell-checker:ignore debuginfo manpages backtraces -->
+<!-- spell-checker:ignore manpages backtraces -->
 
 > **Note**: This page is intended as a guide for packaging the uutils coreutils
 > for package maintainers. Normal users probably do not need to read this. If you
