@@ -633,7 +633,7 @@ pub fn infos_refer_to_same_file(
     info1: IOResult<FileInformation>,
     info2: IOResult<FileInformation>,
 ) -> bool {
-    info1.is_ok_and(|i1| info2.is_ok_and(|i2| i1 == i2))
+    info1.is_ok() && info1.ok() == info2.ok()
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
