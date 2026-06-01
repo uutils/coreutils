@@ -124,7 +124,7 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     // pre-generate page caches for splice
     let is_file_in = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential).is_ok();
     if (is_file_in && !is_pipe_out) || splice_unbounded(source, dest).is_err() {
-        // input or output is not pipe
+        // both of in/output are not pipe
         return splice_unbounded_broker(source, dest);
     }
     Ok(Ok(()))
