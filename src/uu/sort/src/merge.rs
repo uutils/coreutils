@@ -113,7 +113,7 @@ pub fn merge(
 ) -> UResult<()> {
     let output_as_input = load_output_as_input(&output, files)?;
 
-    let sort_inputs = SortInputs::from_files_with_output(files, output_as_input)?;
+    let sort_inputs = SortInputs::from_files_with_output(files, output_as_input);
     let files = sort_inputs
         .into_iter()
         .map(|result| result.map(|input| PlainMergeInput::<OpenedInput> { inner: input }));
@@ -651,8 +651,7 @@ mod tests {
         let output_as_input = Arc::new(unsafe { MemoryMap::map(&read_fd).unwrap() });
 
         let sort_inputs =
-            SortInputs::from_files_with_output(&files, Some((output_canon, output_as_input)))
-                .unwrap();
+            SortInputs::from_files_with_output(&files, Some((output_canon, output_as_input)));
 
         assert_eq!(sort_inputs.len(), 7);
         assert_eq!(sort_inputs.unique_count(), 6);

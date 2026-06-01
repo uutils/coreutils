@@ -16,10 +16,8 @@ use std::{
     sync::Arc,
 };
 
-use memmap2::Mmap as MemoryMap;
-use uucore::error::UResult;
-
 use crate::STDIN_FILE;
+use memmap2::Mmap as MemoryMap;
 
 /// Deferred representation of a sort input before any file descriptor is opened.
 #[derive(Debug)]
@@ -30,7 +28,6 @@ pub enum DeferredInput {
         path: PathBuf,
         access: InputAccess,
     },
-    /// Snapshot of the output file captured before it is opened for writing.
     OutputSnapshot(Arc<MemoryMap>),
 }
 
@@ -52,8 +49,8 @@ pub enum OpenedInput {
 impl Read for OpenedInput {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
-            OpenedInput::File(file) => file.read(buf),
-            OpenedInput::SharedMemoryMap { data, offset } => {
+            Self::File(file) => file.read(buf),
+            Self::SharedMemoryMap { data, offset } => {
                 let pos = *offset;
                 let available = data.len().saturating_sub(pos);
                 let to_read = buf.len().min(available);
@@ -65,7 +62,7 @@ impl Read for OpenedInput {
 
                 Ok(to_read)
             }
-            OpenedInput::Stdin => {
+            Self::Stdin => {
                 let mut stdin = io::stdin();
                 stdin.read(buf)
             }
@@ -118,7 +115,7 @@ impl SortInputs {
     pub fn from_files_with_output(
         files: &[OsString],
         output_as_input: Option<(PathBuf, Arc<MemoryMap>)>,
-    ) -> UResult<Self> {
+    ) -> Self {
         let mut inputs = Vec::with_capacity(files.len());
 
         // First pass: count occurrences of each path to identify duplicates
@@ -159,7 +156,6 @@ impl SortInputs {
                     PathBuf::from(file),
                     InputAccess::OpenFile,
                 ));
-                continue;
             // Duplicate input
             } else {
                 inputs.push(SortInput::to_args_path(
@@ -169,9 +165,9 @@ impl SortInputs {
             }
         }
 
-        Ok(Self {
+        Self {
             inputs: inputs.into_iter().collect(),
-        })
+        }
     }
 }
 
@@ -186,7 +182,7 @@ mod tests {
 
     // Util method for SortInputs in test
     impl SortInputs {
-        pub fn from_files(files: &[OsString]) -> UResult<Self> {
+        pub fn from_files(files: &[OsString]) -> Self {
             Self::from_files_with_output(files, None)
         }
 
@@ -353,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_sort_inputs_empty() {
-        let inputs = SortInputs::from_files(&[]).expect("should build empty sort inputs");
+        let inputs = SortInputs::from_files(&[]);
         assert_eq!(inputs.len(), 0);
         assert!(inputs.is_empty());
     }
@@ -368,7 +364,7 @@ mod tests {
         tmpfile.flush().expect("should flush temp file");
 
         let files = vec![tmpfile.path().as_os_str().to_os_string()];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         assert_eq!(inputs.len(), 1);
         assert_eq!(inputs.unique_count(), 1);
     }
@@ -394,7 +390,7 @@ mod tests {
             tmpfile2.path().as_os_str().to_os_string(),
             tmpfile3.path().as_os_str().to_os_string(),
         ];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         assert_eq!(inputs.len(), 3);
         assert_eq!(inputs.unique_count(), 3);
     }
@@ -416,7 +412,7 @@ mod tests {
             tmpfile1.path().as_os_str().to_os_string(),
             tmpfile2.path().as_os_str().to_os_string(),
         ];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         assert_eq!(inputs.len(), 3);
         // 2 unique: file1 (mmap) and file2 (direct)
         assert_eq!(inputs.unique_count(), 2);
@@ -435,7 +431,7 @@ mod tests {
             tmpfile.path().as_os_str().to_os_string(),
             tmpfile.path().as_os_str().to_os_string(),
         ];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
 
         assert_eq!(inputs.len(), 2);
 
@@ -453,7 +449,7 @@ mod tests {
     #[test]
     fn test_sort_inputs_stdin_only() {
         let files = vec![OsString::from("-")];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         let input = inputs.iter().next().expect("should get first input");
         assert_eq!(inputs.len(), 1);
         assert!(matches!(input.inner, DeferredInput::Stdin));
@@ -463,8 +459,8 @@ mod tests {
     fn test_sort_inputs_duplicate_stdin_allowed() {
         // Verify that duplicate stdin is allowed (GNU Coreutils compatible)
         let files = vec![OsString::from("-"), OsString::from("-")];
-        let result = SortInputs::from_files(&files);
-        assert!(result.is_ok());
+        let inputs = SortInputs::from_files(&files);
+        assert_eq!(inputs.len(), files.len());
     }
 
     #[test]
@@ -480,8 +476,8 @@ mod tests {
             OsString::from("-"),
             tmpfile.path().as_os_str().to_os_string(),
         ];
-        let result = SortInputs::from_files(&files);
-        assert!(result.is_ok());
+        let inputs = SortInputs::from_files(&files);
+        assert_eq!(inputs.len(), files.len());
     }
 
     #[test]
@@ -500,7 +496,7 @@ mod tests {
             tmpfile2.path().as_os_str().to_os_string(),
             tmpfile1.path().as_os_str().to_os_string(),
         ];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         let collected: Vec<_> = inputs.iter().collect();
         assert_eq!(collected.len(), 2);
     }
@@ -517,7 +513,7 @@ mod tests {
             tmpfile.path().as_os_str().to_os_string(),
             OsString::from("/nonexistent/path/file.txt"),
         ];
-        let inputs = SortInputs::from_files(&files).expect("should build sort inputs");
+        let inputs = SortInputs::from_files(&files);
         let mut iter = inputs.into_iter();
         assert!(iter.next().expect("should get first input").is_ok()); // first file opens successfully
         assert!(iter.next().expect("should get second input").is_err()); // second file fails to open
