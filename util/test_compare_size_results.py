@@ -138,8 +138,8 @@ class TestCompareSizeResults(unittest.TestCase):
         cur = _write_json({"d": {"sha": "n", "sizes": {"ls": 1100}}})
         ref = _write_json({"d": {"sha": "o", "sizes": {"ls": 1000}}})
         same = _write_json({"d": {"sha": "n", "sizes": {"ls": 1000}}})
-        out_sig = tempfile.mktemp(suffix=".txt")
-        out_none = tempfile.mktemp(suffix=".txt")
+        out_sig = tempfile.mkstemp(suffix=".txt")
+        out_none = tempfile.mkstemp(suffix=".txt")
         try:
             self.assertEqual(self._run_main(["x", cur, ref, "--output", out_sig]), 0)
             self.assertTrue(os.path.exists(out_sig))
