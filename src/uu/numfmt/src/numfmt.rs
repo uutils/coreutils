@@ -5,7 +5,10 @@
 // spell-checker:ignore behavior
 
 use crate::errors::NumfmtError;
-use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted_with_whitespace};
+use crate::format::{
+    WriteFormattedError, escape_line, write_formatted_with_delimiter,
+    write_formatted_with_whitespace,
+};
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
     FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
@@ -19,7 +22,7 @@ use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{FromIo, UResult};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -44,6 +47,12 @@ fn is_scientific(input: &[u8]) -> bool {
     }
 
     false
+}
+
+fn write_output<W: std::io::Write + ?Sized>(writer: &mut W, buf: &[u8]) -> UResult<()> {
+    writer
+        .write_all(buf)
+        .map_err_context(|| "write error".into())
 }
 
 /// Format a single line and write it, handling `--invalid` error modes.
@@ -74,22 +83,28 @@ fn format_and_write<W: std::io::Write>(
         match std::str::from_utf8(line) {
             Ok(s) => {
                 if is_scientific(s.as_bytes()) {
-                    Err(format!(
+                    Err(WriteFormattedError::Format(format!(
                         "invalid suffix in input: '{}'",
                         String::from_utf8_lossy(line)
-                    ))
+                    )))
                 } else {
                     write_formatted_with_whitespace(dest, s, options, eol)
                 }
             }
-            Err(_) => Err(translate!(
+            Err(_) => Err(WriteFormattedError::Format(translate!(
                 "numfmt-error-invalid-number",
                 "input" => escape_line(line).quote()
-            )),
+            ))),
         }
     };
 
-    if let Err(msg) = result {
+    if let Err(error) = result {
+        let msg = match error {
+            WriteFormattedError::Format(msg) => msg,
+            WriteFormattedError::Io(error) => {
+                return Err(error.map_err_context(|| "write error".into()));
+            }
+        };
         match options.invalid {
             InvalidModes::Abort => {
                 return Err(Box::new(NumfmtError::FormattingError(msg)));
@@ -103,15 +118,15 @@ fn format_and_write<W: std::io::Write>(
             InvalidModes::Ignore => {}
         }
         // On error, echo the original line unchanged.
-        writer.write_all(input_line)?;
+        write_output(writer, input_line)?;
         if let Some(eol) = eol {
-            writer.write_all(&[eol])?;
+            write_output(writer, &[eol])?;
         }
         return Ok(true);
     }
 
     if buffer_output {
-        writer.write_all(&buf)?;
+        write_output(writer, &buf)?;
     }
     Ok(false)
 }
@@ -160,9 +175,9 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
 
         if line_idx < options.header {
             // Pass header lines through unchanged.
-            stdout.write_all(line)?;
+            write_output(&mut stdout, line)?;
             if let Some(t) = eol {
-                stdout.write_all(&[t])?;
+                write_output(&mut stdout, &[t])?;
             }
         } else {
             saw_invalid |= format_and_write(&mut stdout, line, options, eol)?;
