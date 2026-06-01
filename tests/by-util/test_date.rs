@@ -317,6 +317,21 @@ fn test_date_utc_vs_local() {
 }
 
 #[test]
+fn test_date_utc_keyword_plus_relative_seconds_across_dst() {
+    // Regression test for #12555. The "UTC" keyword fixes the offset and must
+    // anchor the instant before the relative "N seconds" is applied. In a
+    // DST-observing zone, the epoch base is in winter (CET, +1) while the result
+    // lands in summer (CEST, +2); a naive implementation drifts by one hour.
+    // "1970-01-01 UTC + N seconds" must always be exactly N seconds past the epoch.
+    let seconds = 1_780_318_971; // lands in summer 2026
+    new_ucmd!()
+        .env("TZ", "Europe/Berlin")
+        .args(&["-d", &format!("1970/01/01 UTC {seconds} seconds"), "+%s"])
+        .succeeds()
+        .stdout_only(format!("{seconds}\n"));
+}
+
+#[test]
 fn test_date_utc_output_formats() {
     let cases = [
         ("-I", "2024-06-15"),
