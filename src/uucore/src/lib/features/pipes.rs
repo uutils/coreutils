@@ -85,17 +85,7 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 /// splice all of source to dest
 /// returns Ok(()) at end of file
 #[inline]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
-    // avoid fcntl overhead for small input. splice twice to catch end of file.
-    if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-        || splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-    {
-        return Ok(());
-    }
-    // fcntl for input would not improve throughput since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
     while splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? > 0 {}
     Ok(())
 }
@@ -104,16 +94,11 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
 ///
 /// This should not be used if one of them are pipe to save resources
 #[inline]
-pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
+fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
         return Ok(Err(()));
     };
-    // improve throughput
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
@@ -129,9 +114,16 @@ pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> Pipe
 }
 
 /// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
+/// This includes read ahead and optimization for stdout's pipe size
 #[inline]
 pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
-    if splice_unbounded(source, dest).is_err() {
+    // fcntl for input would not improve throughput since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let is_pipe_out = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE).is_ok();
+    // pre-generate page caches for splice
+    let is_file_in = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential).is_ok();
+    if (is_file_in && !is_pipe_out) || splice_unbounded(source, dest).is_err() {
         // input or output is not pipe
         return splice_unbounded_broker(source, dest);
     }

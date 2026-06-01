@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree fadvise FADV
+//spell-checker:ignore TAOCP indegree FADV
 //spell-checker:ignore (libs) interner uclibc
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
