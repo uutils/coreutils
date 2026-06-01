@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore sysconf
 use crate::{wc_simd_allowed, word_count::WordCount};
 use uucore::hardware::SimdPolicy;
 
@@ -11,8 +10,6 @@ use super::WordCountable;
 
 use std::io::{self, ErrorKind, Read};
 
-#[cfg(unix)]
-use libc::S_IFREG;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
@@ -24,11 +21,6 @@ const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
 #[cfg(windows)]
 const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::S_IFIFO;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
-
 const BUF_SIZE: usize = 64 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
@@ -39,6 +31,7 @@ const BUF_SIZE: usize = 64 * 1024;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
+    use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
     let mut byte_count = 0;
     // no need to increase pipe size of input fd since
@@ -117,7 +110,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // for STDIN in both invocations.
             // Therefore we cannot rely of `st_size` here and should fall back on full read.
             if fd.as_raw_fd() > 0
-                && (stat.st_mode as libc::mode_t & S_IFREG) != 0
+                && (stat.st_mode as libc::mode_t & libc::S_IFREG) != 0
                 && stat.st_size > 0
             {
                 let sys_page_size = rustix::param::page_size();
@@ -144,7 +137,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // Else, if we're on Linux and our file is a FIFO pipe
             // (or stdin), we use splice to count the number of bytes.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
+            if (stat.st_mode as libc::mode_t & libc::S_IFIFO) != 0 {
                 match count_bytes_using_splice(handle) {
                     Ok(n) => return (n, None),
                     Err(n) => byte_count = n,
