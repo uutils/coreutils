@@ -48,7 +48,6 @@ jobs:
           # Clean up disk space before installing packages
           df -h
           pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm-- python3
-          # Run cleanup synchronously (no '&'): backgrounding races into the build phase
           rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/*
           # Clean up package cache after installation
           pkg_delete -a
