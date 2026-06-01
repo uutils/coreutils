@@ -1449,31 +1449,27 @@ fn test_chmod_symlink_cycles() {
     at.mkdir_all("a/b/c");
     at.symlink_dir("a", "a/b/c/d");
 
-    let result = scene.ucmd().arg("-vRL").arg("+r").arg("a").run();
+    // Pin the directory modes so the assertions below don't depend on the ambient
+    // umask (a fresh mkdir under umask 077/027 would not be 0755).
+    at.set_mode("a", 0o755);
+    at.set_mode("a/b", 0o755);
+    at.set_mode("a/b/c", 0o755);
 
-    if cfg!(target_os = "android") {
-        result
-            // cSpell:disable
-            .stdout_contains_line("mode of 'a' retained as 0700 (rwx------)")
-            .stdout_contains_line("mode of 'a/b' retained as 0700 (rwx------)")
-            .stdout_contains_line("mode of 'a/b/c' retained as 0700 (rwx------)")
-            .stdout_contains_line("mode of 'a/b/c/d' retained as 0700 (rwx------)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0700 (rwx------)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0700 (rwx------)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0700 (rwx------)");
-        // cSpell:enable
-    } else {
-        result
-            // cSpell:disable
-            .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
-            .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
-            .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
-            .stdout_contains_line("mode of 'a/b/c/d' retained as 0755 (rwxr-xr-x)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
-            .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
-        // cSpell:enable
-    }
+    scene
+        .ucmd()
+        .arg("-vRL")
+        .arg("+r")
+        .arg("a")
+        .run()
+        // cSpell:disable
+        .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c/d' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
+    // cSpell:enable
 }
 
 #[test]
