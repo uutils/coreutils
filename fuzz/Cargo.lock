@@ -2059,11 +2059,7 @@ dependencies = [
  "itertools",
  "libc",
  "memchr",
-<<<<<<< HEAD
-=======
  "memmap2",
- "nix",
->>>>>>> 7d0a0137f (chore: Update fuz cargo.lock)
  "rand",
  "rayon",
  "rustix",
