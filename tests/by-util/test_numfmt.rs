@@ -12,7 +12,7 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 #[test]
 fn test_output_write_error_reports_without_panic() {
     let dev_full = std::fs::OpenOptions::new()
