@@ -468,7 +468,7 @@ impl LineInfo {
     /// to populate the fields of the struct.
     /// However, there is a catch to handle regarding the handling of `cached_line_format`.
     /// In case of non-algo-based format, if `cached_line_format` is Some, it must take the priority
-    /// over the detected format. Otherwise, we must set it the the detected format.
+    /// over the detected format. Otherwise, we must set it to the detected format.
     /// This specific behavior is emphasized by the test
     /// `test_md5sum::test_check_md5sum_only_one_space`.
     fn parse(s: impl AsRef<OsStr>, cached_line_format: &mut Option<LineFormat>) -> Option<Self> {

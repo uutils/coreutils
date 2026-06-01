@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree fadvise FADV
+//spell-checker:ignore TAOCP indegree FADV
 //spell-checker:ignore (libs) interner uclibc
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
@@ -76,28 +76,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(windows))]
         {
             file = File::open(input)?;
-
-            // advise the OS we will access the data sequentially if available.
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "fuchsia",
-                target_env = "uclibc",
-                target_os = "freebsd",
-            ))]
-            {
-                use rustix::fs::{Advice, fadvise};
-                use std::os::unix::io::AsFd;
-
-                fadvise(
-                    file.as_fd(),
-                    0,    // offset 0 => from the start of the file
-                    None, // None => for the whole file
-                    Advice::Sequential,
-                )
-                .ok();
-            }
         }
+        // advise the OS we will access the data sequentially if available.
+        // offset 0 => from the start of the file. None => for the whole file.
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+
         let reader = BufReader::new(file);
         process_input(reader, &mut g)?;
     }

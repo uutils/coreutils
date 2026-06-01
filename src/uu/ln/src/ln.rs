@@ -524,9 +524,6 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 }
 
 #[cfg(target_os = "wasi")]
-fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(_src: P1, _dst: P2) -> io::Result<()> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "symlinks not supported on this platform",
-    ))
+pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
+    rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }

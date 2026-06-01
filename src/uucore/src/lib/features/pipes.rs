@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-//! Thin zero-copy-related wrappers around functions.
+//! Zero-copy-related functions.
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 
@@ -17,20 +17,27 @@ use std::{
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
-/// return pipe larger than given size
+/// A type allows to
+/// - check that zero-copy succeed by ?.is_ok()
+/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
+/// - catch the read/write fallback's error by ? or let Err(e)
+///
+/// use rustix::io::Result for functions without read/write fallback
+type PipeRes = std::io::Result<Result<(), ()>>;
+
+/// return pipe and try to extend its size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
 /// e.g. writing size to pipe should not hang
+/// SIZE_REQUIRED=false allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
 ///
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
-pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader, PipeWriter)> {
+pub fn pipe<const SIZE_REQUIRED: bool>() -> std::io::Result<(PipeReader, PipeWriter)> {
     let pair = std::io::pipe()?;
-    // guard unnecessary syscall
-    if s > KERNEL_DEFAULT_PIPE_SIZE {
-        let r = fcntl_setpipe_size(&pair.0, s);
-        if SIZE_REQUIRED {
-            r?;
-        }
+    // pipe size is not RAM consumed by pipe with zero-copy. So we never use other size
+    let r = fcntl_setpipe_size(&pair.0, MAX_ROOTLESS_PIPE_SIZE);
+    if SIZE_REQUIRED {
+        r?;
     }
 
     Ok(pair)
@@ -41,29 +48,31 @@ pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader,
 /// Up to `len` bytes are moved from `source` to `target`. Returns the number
 /// of successfully moved bytes.
 ///
-/// At least one of `source` and `target` must be some sort of pipe.
-/// To get around this requirement, consider splicing from your source into
-/// a [`pipe`] and then from the pipe into your target (with `splice_exact`):
-/// this is still very efficient.
+/// splice fails if both of `source` and `target` are not pipe. Consider using
+/// splice_unbounded_broker or splice_unbounded_auto in the case.
 #[inline]
 pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<usize> {
     rustix::pipe::splice(source, None, target, None, len, SpliceFlags::empty())
 }
 
-/// Try to splice `len` bytes from `source` into `target`.
-///
-/// Note that this splice_exact does not provide bytes sent when it failed.
-/// In the case failed relaying splice via pipe, all content of the pipe
-/// should be drained by `read` to keep bytes sent accurate.
+/// splice `len` bytes from `pipe` into `dest`.
 #[inline]
-pub fn splice_exact(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io::Result<()> {
-    let mut left = len;
-    while left > 0 {
-        let written = splice(source, target, left)?;
-        debug_assert_ne!(written, 0, "unexpected end of data");
-        left -= written;
+pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
+    debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
+    let mut remaining = len;
+    while remaining > 0 {
+        if let Ok(s) = splice(pipe, dest, remaining) {
+            remaining -= s;
+        } else {
+            // read/write fallback
+            // use read_to_end to make pipe empty for the case write failed
+            let mut drain = Vec::with_capacity(remaining);
+            pipe.take(remaining as u64).read_to_end(&mut drain)?;
+            RawWriter(&dest).write_all(&drain)?;
+            return Ok(Err(()));
+        }
     }
-    Ok(())
+    Ok(Ok(()))
 }
 
 /// check that source is FUSE
@@ -76,60 +85,26 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 /// splice all of source to dest
 /// returns Ok(()) at end of file
 #[inline]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
-    // avoid fcntl overhead for small input. splice twice to catch end of file.
-    if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-        || splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-    {
-        return Ok(());
-    }
-    // fcntl for input would not improve throughput since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
     while splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? > 0 {}
     Ok(())
 }
 
 /// force-splice source to dest even both of them are not pipe via broker pipe
-/// returns Ok(Ok(())) if splice succeeds
-/// returns Ok(Err()) if splice failed, but you can fallback to read/write
-/// returns std::io::Result if splice from broker failed and read/write fallback from broker failed
 ///
-/// Thus, ?.is_err() returns serious error at early stage and checks that you can fallback
 /// This should not be used if one of them are pipe to save resources
 #[inline]
-pub fn splice_unbounded_broker(
-    source: &impl AsFd,
-    dest: &mut impl AsFd,
-) -> std::io::Result<Result<(), ()>> {
+fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) =
-        PIPE_CACHE.get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
-    else {
+    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
         return Ok(Err(()));
     };
-    // improve throughput
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
             Ok(0) => return Ok(Ok(())),
             Ok(n) => {
-                if splice_exact(&pipe_rd, dest, n).is_err() {
-                    // If the first splice manages to copy to the intermediate
-                    // pipe, but the second splice to stdout fails for some reason
-                    // we can recover by copying the data that we have from the
-                    // intermediate pipe to stdout using unbuffered read/write. Then
-                    // we tell the caller to fall back.
-                    // use read_to_end to drain pipe for the case write failed
-                    debug_assert!(n <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
-                    let mut drain = Vec::with_capacity(n);
-                    pipe_rd.take(n as u64).read_to_end(&mut drain)?;
-                    RawWriter(&dest).write_all(&drain)?;
+                if drain_pipe(pipe_rd, dest, n)?.is_err() {
                     return Ok(Err(()));
                 }
             }
@@ -139,90 +114,88 @@ pub fn splice_unbounded_broker(
 }
 
 /// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
-///
-/// return true if write fallback is needed
-/// (the fallback will be embedded to this function in the future)
+/// This includes read ahead and optimization for stdout's pipe size
 #[inline]
-pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<bool> {
-    // use splice to check that input or output is pipe which is efficient
-    let fallback = match splice(&source, dest, MAX_ROOTLESS_PIPE_SIZE) {
-        Ok(_) => splice_unbounded(source, dest).is_err(),
-        _ => splice_unbounded_broker(source, dest)?.is_err(),
-    };
-    Ok(fallback)
+pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
+    // fcntl for input would not improve throughput since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let is_pipe_out = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE).is_ok();
+    // pre-generate page caches for splice
+    let is_file_in = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential).is_ok();
+    if (is_file_in && !is_pipe_out) || splice_unbounded(source, dest).is_err() {
+        // both of in/output are not pipe
+        return splice_unbounded_broker(source, dest);
+    }
+    Ok(Ok(()))
 }
 
-/// splice `n` bytes with safe read/write fallback
+/// splice `n` bytes with read/write fallback
 /// return actually sent bytes
 #[inline]
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
+    // improve throughput if output is pipe
+    // expected that input is already extended if it is coming from splice
+    if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+        let _ = fcntl_setpipe_size(&target, pipe_size);
+    }
     let mut n = n;
     let mut bytes_written: u64 = 0;
-    // do not always fallback to write as it needs 2 Ctrl+D to exit process on tty
-    let fallback = if let Ok(b) = splice(&input, &target, n as usize) {
-        bytes_written = b as u64;
-        n -= bytes_written;
+    let succeed_or_fuse = loop {
         if n == 0 {
-            // avoid unnecessary syscalls
+            // avoid unnecessary syscall
             return Ok(bytes_written);
         }
-
-        // improve throughput or save RAM usage
-        // expected that input is already extended if it is coming from splice
-        // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
-        if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
-            let _ = fcntl_setpipe_size(&target, pipe_size);
-        }
-
-        loop {
-            match splice(&input, &target, n as usize) {
-                Ok(0) => break might_fuse(&input),
-                Ok(s) => {
-                    n -= s as u64;
-                    bytes_written += s as u64;
-                }
-                _ => break true,
+        match splice(&input, &target, n as usize) {
+            Ok(0) => break true,
+            Ok(s) => {
+                n -= s as u64;
+                bytes_written += s as u64;
             }
+            _ => break false, // input or output is not pipe
         }
-    } else if let Some((broker_r, broker_w)) = PIPE_CACHE
-        .get_or_init(|| pipe::<false>(pipe_size).ok())
-        .as_ref()
-    {
-        // todo: create fn splice_bounded_broker
-        loop {
-            match splice(&input, &broker_w, n as usize) {
-                Ok(0) => break might_fuse(&input),
-                Ok(s) => {
-                    n -= s as u64;
-                    bytes_written += s as u64;
-                    if splice_exact(&broker_r, &target, s).is_ok() {
-                        if n == 0 {
-                            // avoid unnecessary splice for small input
+    };
+    let succeed_or_fuse = succeed_or_fuse
+        || if let Some((broker_r, broker_w)) = PIPE_CACHE
+            .get_or_init(|| {
+                // use std::io::pipe to avoid unnecessary fcntl
+                let pair = std::io::pipe().ok()?;
+                if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+                    let _ = fcntl_setpipe_size(&pair.0, pipe_size);
+                }
+                Some(pair)
+            })
+            .as_ref()
+        {
+            // todo: create fn splice_bounded_broker
+            loop {
+                if n == 0 {
+                    return Ok(bytes_written);
+                }
+                match splice(&input, &broker_w, n as usize) {
+                    Ok(0) => break true,
+                    Ok(s) => {
+                        n -= s as u64;
+                        bytes_written += s as u64;
+                        if drain_pipe(broker_r, &target, s)?.is_err() {
                             break false;
                         }
-                    } else {
-                        debug_assert!(s <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
-                        // use read_to_end to drain pipe at this fallback for the case write failed
-                        let mut drain = Vec::with_capacity(s);
-                        broker_r.take(s as u64).read_to_end(&mut drain)?;
-                        RawWriter(&target).write_all(&drain)?;
-                        break true;
                     }
+                    _ => break false,
                 }
-                _ => break true,
             }
-        }
-    } else {
-        true
-    };
-
-    if !fallback {
-        return Ok(bytes_written);
+        } else {
+            false
+        };
+    // do not always fallback to write for fuse, or 2 Ctrl+D is required to exit on tty
+    // todo: move fuse patch to callers
+    if !succeed_or_fuse || might_fuse(&input) {
+        // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
+        bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
     }
-    // do not buffer at this fallback, or order of output would be wrong with multiple input
-    bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+
     Ok(bytes_written)
 }
 
