@@ -797,7 +797,10 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         }
     }
 
-    if let Ok(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
+    if let Some(zoned) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
+        .ok()
+        .and_then(|parsed| parsed.into_zoned())
+    {
         return Ok(timestamp_to_filetime(zoned.timestamp()));
     }
 
