@@ -75,6 +75,20 @@ fn test_shred_remove_unlink() {
 }
 
 #[test]
+fn test_shred_remove_unlink_relative_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("dir1/dir2");
+    at.write("dir1/dir2/file1", "test data");
+
+    ucmd.arg("--remove=unlink")
+        .arg("dir1/dir2/file1")
+        .succeeds();
+
+    assert!(!at.file_exists("dir1/dir2/file1"));
+}
+
+#[test]
 fn test_shred_remove_wipe() {
     let (at, mut ucmd) = at_and_ucmd!();
 

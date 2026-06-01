@@ -450,6 +450,39 @@ fn test_quoting_style_locale() {
 }
 
 #[test]
+fn test_quoting_newline_in_filename() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // example from issue #9925
+    at.touch("test\nnewline");
+    ts.ucmd()
+        .args(&["-c", r#"{"name":"%N"}"#, "test\nnewline"])
+        .succeeds()
+        .stdout_only("{\"name\":\"'test'$'\\n''newline'\"}\n");
+
+    // with stat, contiguous escape characters are clumped into one escape sequence
+    at.touch("contiguous\n\nescape_characters");
+    ts.ucmd()
+        .args(&["-c", "%N", "contiguous\n\nescape_characters"])
+        .succeeds()
+        .stdout_only("'contiguous'$'\\n\\n''escape_characters'\n");
+
+    at.touch("multiple\nescape\ncharacters");
+    ts.ucmd()
+        .args(&["-c", "%N", "multiple\nescape\ncharacters"])
+        .succeeds()
+        .stdout_only("'multiple'$'\\n''escape'$'\\n''characters'\n");
+
+    // testing other escape characters
+    at.touch("\t \n \r \x01");
+    ts.ucmd()
+        .args(&["-c", "%N", "\t \n \r \x01"])
+        .succeeds()
+        .stdout_only("''$'\\t'' '$'\\n'' '$'\\r'' '$'\\001'\n");
+}
+
+#[test]
 fn test_quoting_style_invalid_env() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

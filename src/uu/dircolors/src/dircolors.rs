@@ -73,7 +73,7 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
     (prefix, suffix)
 }
 
-pub fn generate_type_output(fmt: &OutputFmt) -> String {
+fn generate_type_output(fmt: &OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
@@ -180,18 +180,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if files.is_empty() {
         writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
         return Ok(());
-        /*
-        // Check if data is being piped into the program
-        if std::io::stdin().is_terminal() {
-            // No data piped, use default behavior
-            writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
-            return Ok(());
-        } else {
-            // Data is piped, process the input from stdin
-            let fin = BufReader::new(std::io::stdin());
-            result = parse(fin.lines().map_while(Result::ok), &out_format, "-");
-        }
-         */
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
@@ -485,7 +473,7 @@ fn escape(s: &str) -> String {
     result
 }
 
-pub fn generate_dircolors_config() -> String {
+fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
     config.push_str(
