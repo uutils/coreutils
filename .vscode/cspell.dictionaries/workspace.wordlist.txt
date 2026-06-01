@@ -362,6 +362,7 @@ uutils
 
 # * function names
 execfn
+fadvise
 fstatfs
 getcwd
 mkfifoat

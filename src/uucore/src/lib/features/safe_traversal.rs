@@ -949,6 +949,35 @@ mod tests {
     }
 
     #[test]
+    fn test_dirfd_open_subdir_nofollow_refuses_symlink() {
+        // A symlink to a directory must NOT be opened as a subdir when NoFollow
+        // is requested. Recursive chown/chgrp/chmod/rm rely on this to refuse a
+        // directory that was swapped for a symlink mid-traversal (TOCTOU),
+        // instead of following it off-tree.
+        let temp_dir = TempDir::new().unwrap();
+        let real_dir = temp_dir.path().join("real");
+        fs::create_dir(&real_dir).unwrap();
+        symlink(&real_dir, temp_dir.path().join("link")).unwrap();
+
+        let parent_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        // NoFollow must reject the symlink (ELOOP).
+        let nofollow = parent_fd.open_subdir(OsStr::new("link"), SymlinkBehavior::NoFollow);
+        assert!(nofollow.is_err());
+
+        // Follow still resolves it (the explicit `-L` opt-in).
+        let follow = parent_fd.open_subdir(OsStr::new("link"), SymlinkBehavior::Follow);
+        assert!(follow.is_ok());
+
+        // A real directory is opened fine either way.
+        assert!(
+            parent_fd
+                .open_subdir(OsStr::new("real"), SymlinkBehavior::NoFollow)
+                .is_ok()
+        );
+    }
+
+    #[test]
     fn test_dirfd_open_nonexistent_subdir() {
         let temp_dir = TempDir::new().unwrap();
         let parent_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();

@@ -533,9 +533,12 @@ impl Chmoder {
                     )
                     .and(r);
 
-                // Recurse into subdirectories using the existing directory fd
+                // Recurse into subdirectories using the existing directory fd.
+                // Open with NoFollow unless `-L` was requested: this prevents a
+                // TOCTOU where an attacker swaps the just-stat'd directory for a
+                // symlink before the open and redirects the descent off-tree.
                 if meta.is_dir() {
-                    match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
+                    match dir_fd.open_subdir(&entry_name, should_follow_symlink.into()) {
                         Ok(child_dir_fd) => {
                             r = self.safe_traverse_dir(&child_dir_fd, &entry_path).and(r);
                         }
