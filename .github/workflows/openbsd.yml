@@ -48,9 +48,10 @@ jobs:
           # Clean up disk space before installing packages
           df -h
           pkg_add curl sudo-- jq coreutils bash rust rust-clippy rust-rustfmt llvm-- python3
-          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
+          # Run cleanup synchronously (no '&'): backgrounding races into the build phase
+          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/*
           # Clean up package cache after installation
-          pkg_delete -a &
+          pkg_delete -a
           df -h
         run: |
           ## Prepare, build, and test
@@ -140,15 +141,16 @@ jobs:
         usesh: true
         sync: rsync
         copyback: false
-        mem: 6144
+        mem: 8192
         # Install rust and build dependencies from OpenBSD packages (llvm provides libclang for bindgen)
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
+          # Run cleanup synchronously (no '&'): backgrounding races into the build phase
+          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/*
           pkg_add curl gmake sudo-- jq rust llvm--
           # Clean up package cache after installation
-          pkg_delete -a &
+          pkg_delete -a
           df -h
         run: |
           ## Prepare, build, and test
