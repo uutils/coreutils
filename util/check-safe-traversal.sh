@@ -274,6 +274,13 @@ if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
         echo "$path_based_xattr"
         fail_immediately "chcon -R is using path-based SELinux xattr (TOCTOU; expected fd-anchored access, issue #11402)"
     fi
+    # The relabel must actually reach SELinux through the anchored fd. Without
+    # this positive check, a chcon that aborts before the get/set (e.g. EBADF
+    # from f*filecon on an O_PATH fd) would still pass the assertions above.
+    if ! grep -qE '(get|set)xattr\("/proc/self/fd/|f(get|set)xattr\([0-9]+,' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R never reached an fd-anchored SELinux xattr op (relabel aborted before get/set?, issue #11402)"
+    fi
     echo "✓ chcon -R anchors relabel to the traversal dirfd (O_NOFOLLOW, fd-based access)"
     rm -rf chcon_tree
 fi

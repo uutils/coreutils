@@ -19,7 +19,7 @@ use selinux::{OpaqueSecurityContext, SecurityContext};
 
 use std::borrow::Cow;
 use std::ffi::{CStr, CString, OsStr, OsString};
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
@@ -646,11 +646,16 @@ fn open_target_fd(
     affect_symlink_referent: bool,
     display_path: &Path,
 ) -> Result<OwnedFd> {
-    let flags = if affect_symlink_referent {
-        OFlags::RDONLY | OFlags::CLOEXEC
-    } else {
-        OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC
-    };
+    // Anchor the open to the traversal directory fd so a concurrent rename or
+    // symlink swap cannot redirect the relabel off-tree. O_PATH hands back the
+    // entry itself without opening it for I/O: it never blocks on a FIFO and
+    // does not require read permission, yet the SELinux get/set still work
+    // through /proc/self/fd (see change_file_context). O_NOFOLLOW keeps us on
+    // the symlink itself unless we were asked to act on its referent.
+    let mut flags = OFlags::PATH | OFlags::CLOEXEC;
+    if !affect_symlink_referent {
+        flags |= OFlags::NOFOLLOW;
+    }
 
     openat(traversal_dir_fd, target_path, flags, Mode::empty())
         .map_err(io::Error::from)
@@ -673,6 +678,13 @@ fn change_file_context(
         display_path,
     )?;
 
+    // The fd is O_PATH, so fgetfilecon/fsetfilecon would fail with EBADF. Reach
+    // the same inode through its /proc/self/fd entry and always dereference it:
+    // the open above already encoded the follow/no-follow choice, so this magic
+    // symlink resolves to exactly the inode we anchored. `target_fd` must stay
+    // alive for as long as this path is used.
+    let target = PathBuf::from(format!("/proc/self/fd/{}", target_fd.as_raw_fd()));
+
     match &options.mode {
         CommandLineMode::Custom {
             user,
@@ -688,7 +700,7 @@ fn change_file_context(
                 Err(Error::from_io1(op, display_path, err))
             };
 
-            let file_context = match SecurityContext::of_file(&target_fd, false) {
+            let file_context = match SecurityContext::of_path(&target, true, false) {
                 Ok(Some(context)) => context,
 
                 Ok(None) => return err0(),
@@ -754,7 +766,7 @@ fn change_file_context(
                 Ok(()) // Nothing to change.
             } else {
                 SecurityContext::from_c_str(&context_string, false)
-                    .set_for_file(&target_fd)
+                    .set_for_path(&target, true, false)
                     .map_err(|r| {
                         Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
@@ -764,7 +776,7 @@ fn change_file_context(
         CommandLineMode::ReferenceBased { .. } | CommandLineMode::ContextBased { .. } => {
             if let Some(c_context) = context.to_c_string()? {
                 SecurityContext::from_c_str(c_context.as_ref(), false)
-                    .set_for_file(&target_fd)
+                    .set_for_path(&target, true, false)
                     .map_err(|r| {
                         Error::from_selinux(translate!("chcon-op-setting-security-context"), r)
                     })
