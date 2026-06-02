@@ -397,6 +397,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
 
+    // A `--padding` whose buffer cannot be allocated must fail up front (before
+    // reading any input), matching GNU's "memory exhausted" (exit 1) rather than
+    // aborting mid-stream when `pad_string` calls `String::with_capacity`.
+    let max_padding = options
+        .padding
+        .unsigned_abs()
+        .max(options.format.padding.map_or(0, isize::unsigned_abs));
+    if max_padding != 0 {
+        String::new()
+            .try_reserve_exact(max_padding)
+            .map_err(|_| NumfmtError::IoError(translate!("numfmt-error-memory-exhausted")))?;
+    }
+
     if options.debug {
         print_debug_warnings(&options, &matches);
     }
