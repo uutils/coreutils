@@ -601,7 +601,7 @@ macro_rules! prompt_yes(
 
 /// Represent either a character or a byte.
 /// Used to iterate on partially valid UTF-8 data
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CharByte {
     Char(char),
     Byte(u8),
