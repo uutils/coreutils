@@ -75,12 +75,6 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         Ok(Box::new(stdin()) as Box<dyn Read>)
     } else {
         let path = Path::new(name);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-            ));
-        }
         // Silent the warning as we want to the error message
         if path.metadata().is_err() {
             return Err(USimpleError::new(
@@ -125,7 +119,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }?;
+        }
+        .map_err(|e| {
+            if e.kind() == ErrorKind::IsADirectory {
+                USimpleError::new(
+                    2,
+                    translate!("sum-error-is-directory", "name" => file.maybe_quote()),
+                )
+            } else {
+                e.into()
+            }
+        })?;
 
         let mut stdout = stdout().lock();
         if print_names {
