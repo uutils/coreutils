@@ -3521,6 +3521,7 @@ name = "uu_expr"
 version = "0.9.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "num-bigint",
  "num-traits",
