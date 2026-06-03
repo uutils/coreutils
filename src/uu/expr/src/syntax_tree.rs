@@ -9,7 +9,7 @@ use std::{cell::Cell, collections::BTreeMap};
 
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
-use onig::{Regex, RegexOptions, Syntax};
+use onig::{MatchParam, Regex, RegexOptions, SearchOptions, Syntax};
 
 use crate::{
     ExprError, ExprResult,
@@ -56,11 +56,7 @@ pub enum StringOp {
 }
 
 impl BinOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         match self {
             Self::Relation(op) => op.eval(left, right),
             Self::Numeric(op) => op.eval(left, right),
@@ -70,7 +66,7 @@ impl BinOp {
 }
 
 impl RelationOp {
-    fn eval(&self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
+    fn eval(self, a: ExprResult<NumOrStr>, b: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         // Make sure that the given comparison validates the relational operator.
         let check_cmp = |cmp| {
             use RelationOp::{Eq, Geq, Gt, Leq, Lt, Neq};
@@ -98,11 +94,7 @@ impl RelationOp {
 }
 
 impl NumericOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         let a = left?.eval_as_bigint()?;
         let b = right?.eval_as_bigint()?;
         Ok(NumOrStr::Num(match self {
@@ -124,11 +116,7 @@ impl NumericOp {
 }
 
 impl StringOp {
-    fn eval(
-        &self,
-        left: ExprResult<NumOrStr>,
-        right: ExprResult<NumOrStr>,
-    ) -> ExprResult<NumOrStr> {
+    fn eval(self, left: ExprResult<NumOrStr>, right: ExprResult<NumOrStr>) -> ExprResult<NumOrStr> {
         match self {
             Self::Or => {
                 let left = left?;
@@ -280,9 +268,9 @@ fn check_posix_regex_errors(pattern: &str) -> ExprResult<()> {
 /// Build a regex from a pattern string with locale-aware encoding
 fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
     use onig::EncodedBytes;
-    use uucore::i18n::{UEncoding, get_locale_encoding};
+    use uucore::i18n::UEncoding;
 
-    let encoding = get_locale_encoding();
+    let encoding = uucore::i18n::get_locale_encoding();
 
     // For pattern processing, we need to handle it based on locale
     let pattern_str = String::from_utf8(pattern_bytes.clone())
@@ -378,27 +366,40 @@ fn build_regex(pattern_bytes: Vec<u8>) -> ExprResult<(Regex, String)> {
     Ok((re, re_string))
 }
 
-/// Find matches in the input using the compiled regex
-fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResult<String> {
-    use onig::EncodedBytes;
-    use uucore::i18n::{UEncoding, get_locale_encoding};
+/// Run a regex search, treating runtime match errors as no match.
+fn regex_search<T: onig::EncodedChars>(
+    regex: &Regex,
+    chars: T,
+    to: usize,
+    region: &mut onig::Region,
+) -> Option<usize> {
+    regex
+        .search_with_param(
+            chars,
+            0,
+            to,
+            SearchOptions::SEARCH_OPTION_NONE,
+            Some(region),
+            MatchParam::default(),
+        )
+        .unwrap_or(None)
+}
 
-    let encoding = get_locale_encoding();
+/// Find matches in the input using the compiled regex
+fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> String {
+    use onig::EncodedBytes;
+    use uucore::i18n::UEncoding;
+
+    let encoding = uucore::i18n::get_locale_encoding();
 
     // Match against the input using the appropriate encoding
     let mut region = onig::Region::new();
-    let result = match encoding {
+    match encoding {
         UEncoding::Utf8 => {
             // In UTF-8 locale, check if input is valid UTF-8
             if let Ok(left_str) = std::str::from_utf8(&left_bytes) {
                 // Valid UTF-8, match as UTF-8
-                let pos = regex.search_with_encoding(
-                    left_str,
-                    0,
-                    left_str.len(),
-                    onig::SearchOptions::SEARCH_OPTION_NONE,
-                    Some(&mut region),
-                );
+                let pos = regex_search(&regex, left_str, left_str.len(), &mut region);
 
                 if pos.is_some() {
                     if regex.captures_len() > 0 {
@@ -433,13 +434,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                 .ok();
 
                 if let Some(re_ascii) = re_ascii {
-                    let pos = re_ascii.search_with_encoding(
-                        left_encoded,
-                        0,
-                        left_bytes.len(),
-                        onig::SearchOptions::SEARCH_OPTION_NONE,
-                        Some(&mut region),
-                    );
+                    let pos = regex_search(&re_ascii, left_encoded, left_bytes.len(), &mut region);
 
                     if pos.is_some() {
                         if re_ascii.captures_len() > 0 {
@@ -481,13 +476,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
         UEncoding::Ascii => {
             // In ASCII/C locale, work with bytes directly
             let left_encoded = EncodedBytes::ascii(&left_bytes);
-            let pos = regex.search_with_encoding(
-                left_encoded,
-                0,
-                left_bytes.len(),
-                onig::SearchOptions::SEARCH_OPTION_NONE,
-                Some(&mut region),
-            );
+            let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
 
             if pos.is_some() {
                 if regex.captures_len() > 0 {
@@ -495,7 +484,7 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                     if let Some((start, end)) = region.pos(1) {
                         let capture_bytes = &left_bytes[start..end];
                         // Return raw bytes as String for consistency with other cases
-                        return Ok(String::from_utf8_lossy(capture_bytes).into_owned());
+                        return String::from_utf8_lossy(capture_bytes).into_owned();
                     }
                     String::new()
                 } else {
@@ -512,30 +501,23 @@ fn find_match(regex: Regex, re_string: String, left_bytes: Vec<u8>) -> ExprResul
                 }
             }
         }
-    };
-
-    Ok(result)
+    }
 }
 
 /// Evaluate a match expression with locale-aware regex matching
 fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprResult<NumOrStr> {
+    use uucore::i18n::UEncoding;
+
     let (regex, re_string) = build_regex(right_bytes)?;
 
     // Special case for ASCII locale with capture groups that need to return raw bytes
-    use uucore::i18n::{UEncoding, get_locale_encoding};
-    let encoding = get_locale_encoding();
+    let encoding = uucore::i18n::get_locale_encoding();
 
     if matches!(encoding, UEncoding::Ascii) && regex.captures_len() > 0 {
         // Try to find the actual capture bytes for ASCII locale
         let mut region = onig::Region::new();
         let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
-        let pos = regex.search_with_encoding(
-            left_encoded,
-            0,
-            left_bytes.len(),
-            onig::SearchOptions::SEARCH_OPTION_NONE,
-            Some(&mut region),
-        );
+        let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
 
         if pos.is_some() {
             if let Some((start, end)) = region.pos(1) {
@@ -545,8 +527,7 @@ fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprR
         }
     }
 
-    let result = find_match(regex, re_string, left_bytes)?;
-    Ok(result.into())
+    Ok(find_match(regex, re_string, left_bytes).into())
 }
 
 /// Precedence for infix binary operators
@@ -639,9 +620,6 @@ pub struct AstNode {
 #[derive(Debug, Clone)]
 #[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
-    Evaluated {
-        value: NumOrStr,
-    },
     Leaf {
         value: MaybeNonUtf8String,
     },
@@ -665,15 +643,6 @@ impl AstNode {
         Parser::new(input).parse()
     }
 
-    pub fn evaluated(self) -> ExprResult<Self> {
-        Ok(Self {
-            id: get_next_id(),
-            inner: AstNodeInner::Evaluated {
-                value: self.eval()?,
-            },
-        })
-    }
-
     pub fn eval(&self) -> ExprResult<NumOrStr> {
         // This function implements a recursive tree-walking algorithm, but uses an explicit
         // stack approach instead of native recursion to avoid potential stack overflow
@@ -684,9 +653,6 @@ impl AstNode {
 
         while let Some(node) = stack.pop() {
             match &node.inner {
-                AstNodeInner::Evaluated { value, .. } => {
-                    result_stack.insert(node.id, Ok(value.clone()));
-                }
                 AstNodeInner::Leaf { value, .. } => {
                     result_stack.insert(node.id, Ok(value.to_owned().into()));
                 }
@@ -911,9 +877,7 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                 value: self.next()?.into(),
             },
             b"(" => {
-                // Evaluate the node just after parsing to we detect arithmetic
-                // errors before checking for the closing parenthesis.
-                let s = self.parse_expression()?.evaluated()?;
+                let s = self.parse_expression()?;
 
                 match self.next() {
                     Ok(b")") => {}
@@ -1085,9 +1049,7 @@ mod test {
             AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
-                op(BinOp::Numeric(NumericOp::Add), "1", "2")
-                    .evaluated()
-                    .unwrap(),
+                op(BinOp::Numeric(NumericOp::Add), "1", "2"),
                 "3"
             ))
         );

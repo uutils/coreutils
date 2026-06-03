@@ -55,17 +55,10 @@ view the full documentation in the
 We provide three release profiles out of the box, though you may want to tweak
 them:
 
-- `release`: This is the standard Rust release profile, but with link-time
-  optimization enabled. It is a balance between compile time, performance and a
-  reasonable amount of debug info. The main drawback of this profile is that the
-  binary is quite large (roughly 2x the GNU coreutils).
-- `release-fast`: Every setting is tuned for the best performance, at the cost
-  of compile time. This binary is still quite large.
-- `release-small`: Generates the smallest binary possible. This strips _all_
-  debug info from the binary, resulting in less informative backtraces. The performance of
-  this profile is also really good as it is close to the `release-fast` profile,
-  but with all debuginfo stripped.
+- `release`: The profile with all performance optimization enabled.
+- `release-small`: Optimize binary size.
 
+They include panic abort which removes stack traces on old rust [https://blog.rust-lang.org/2025/12/11/Rust-1.92.0/].
 For the precise definition of these profiles, you can look at the root
 [`Cargo.toml`](https://github.com/uutils/coreutils/blob/main/Cargo.toml).
 

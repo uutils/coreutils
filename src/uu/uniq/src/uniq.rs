@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore badoption
+// spell-checker:ignore badoption CTYPE
 use clap::{
     Arg, ArgAction, ArgMatches, Command, builder::ValueParser, error::ContextKind, error::Error,
     error::ErrorKind,
@@ -186,6 +186,14 @@ impl Uniq {
         }
     }
 
+    fn is_c_locale() -> bool {
+        ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|&key| std::env::var_os(key))
+            .filter(|v| !v.is_empty())
+            .is_none_or(|v| v == "C" || v == "POSIX")
+    }
+
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {
         let remainder = &line[key_start..];
         match self.slice_stop {
@@ -194,10 +202,15 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if let Ok(valid) = std::str::from_utf8(remainder) {
+                if Self::is_c_locale() {
+                    // for C or POSIX we count bytes
+                    key_start + remainder.len().min(limit)
+                } else if let Ok(valid) = std::str::from_utf8(remainder) {
+                    // for UTF-8 we count characters
                     let prefix_len = Self::char_prefix_len(valid, limit);
                     key_start + prefix_len
                 } else {
+                    // for invalid UTF-8 we count bytes
                     key_start + remainder.len().min(limit)
                 }
             }
@@ -231,9 +244,7 @@ impl Uniq {
         if bytes_read == 0 {
             return Ok(false);
         }
-        if buffer.last().is_some_and(|last| *last == line_terminator) {
-            buffer.pop();
-        }
+        let _ = buffer.pop_if(|last| *last == line_terminator);
         Ok(true)
     }
 
@@ -387,16 +398,16 @@ fn filter_args(
     if let Some(slice) = os_slice.to_str() {
         if should_extract_obs_skip_fields(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // start of the short option string
             // that can have obsolete skip fields option value in it
             filter = handle_extract_obs_skip_fields(slice, skip_fields_old);
         } else if should_extract_obs_skip_chars(
             slice,
-            preceding_long_opt_req_value,
-            preceding_short_opt_req_value,
+            *preceding_long_opt_req_value,
+            *preceding_short_opt_req_value,
         ) {
             // the obsolete skip chars option
             filter = handle_extract_obs_skip_chars(slice, skip_chars_old);
@@ -436,8 +447,8 @@ fn filter_args(
 /// and if so, a short option that can contain obsolete skip fields value
 fn should_extract_obs_skip_fields(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('-')
         && !slice.starts_with("--")
@@ -452,8 +463,8 @@ fn should_extract_obs_skip_fields(
 /// Checks if the slice is a true obsolete skip chars short option
 fn should_extract_obs_skip_chars(
     slice: &str,
-    preceding_long_opt_req_value: &bool,
-    preceding_short_opt_req_value: &bool,
+    preceding_long_opt_req_value: bool,
+    preceding_short_opt_req_value: bool,
 ) -> bool {
     slice.starts_with('+')
         && posix_version().is_some_and(|v| v <= OBSOLETE)
@@ -641,7 +652,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(map_clap_errors(clap_error));
             }
             // Use ErrorFormatter directly to handle error
-            let formatter = uucore::clap_localization::ErrorFormatter::new(uucore::util_name());
+            let formatter = uucore::clap_localization::ErrorFormatter::new("uniq");
             formatter.print_error_and_exit_with_callback(&clap_error, 1, || {});
         }
     };
@@ -685,7 +696,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("uniq")
         .version(uucore::crate_version!())
         .about(translate!("uniq-about"))
         .override_usage(format_usage(&translate!("uniq-usage")))

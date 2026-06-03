@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run GNU SMACK/ROOTFS tests in QEMU with SMACK-enabled kernel
 # Usage: run-gnu-tests-smack-ci.sh [GNU_DIR] [OUTPUT_DIR]
-# spell-checker:ignore rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
+# spell-checker:ignore commoncap rootfs zstd unzstd cpio newc nographic smackfs devtmpfs tmpfs poweroff libm libgcc libpthread libdl librt sysfs rwxat setuidgid
 set -e
 
 : ${PROFILE:=release-small}
@@ -15,24 +15,16 @@ echo "Setting up SMACK/ROOTFS test environment..."
 rm -rf "$QEMU_DIR"
 mkdir -p "$QEMU_DIR"/{rootfs/{bin,lib64,proc,sys,dev,tmp,etc,gnu},kernel}
 
-# Download Arch Linux kernel (has SMACK built-in)
-if [ ! -f /tmp/arch-vmlinuz ]; then
-    echo "Downloading Arch Linux kernel..."
-    curl -sL -o /tmp/arch-kernel.pkg.tar.zst "https://archlinux.org/packages/core/x86_64/linux/download/"
-    zstd -d /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar 2>/dev/null || unzstd /tmp/arch-kernel.pkg.tar.zst -o /tmp/arch-kernel.pkg.tar
-    VMLINUZ_PATH=$(tar -tf /tmp/arch-kernel.pkg.tar | grep 'vmlinuz$' | head -1)
-    tar -xf /tmp/arch-kernel.pkg.tar -C /tmp "$VMLINUZ_PATH"
-    mv "/tmp/$VMLINUZ_PATH" /tmp/arch-vmlinuz
-    rm -rf /tmp/usr /tmp/arch-kernel.pkg.tar /tmp/arch-kernel.pkg.tar.zst
-fi
-cp /tmp/arch-vmlinuz "$QEMU_DIR/kernel/vmlinuz"
+# Copy Ubuntu kernel (runner's kernel does not work)
+sudo apt-get update || :
+sudo apt-get install -y --no-install-recommends linux-image-generic
+sudo install -Dvm644 "$(ls -1 /boot/vmlinuz-*-generic | head -n 1)" "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
-BUSYBOX=/tmp/busybox
-[ -f "$BUSYBOX" ] || curl -sL -o "$BUSYBOX" https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
-chmod +x "$BUSYBOX"
-cp "$BUSYBOX" "$QEMU_DIR/rootfs/bin/"
-(cd "$QEMU_DIR/rootfs/bin" && "$BUSYBOX" --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
+curl -L -o b.tar.gz https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/busybox-static-1.37.0-r30.apk
+tar -xf b.tar.gz
+install -Dvm755 bin/busybox.static "$QEMU_DIR/rootfs/bin/busybox"
+(cd "$QEMU_DIR/rootfs/bin" && ./busybox --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
 
 # Copy required libraries
 for lib in ld-linux-x86-64.so.2 libc.so.6 libm.so.6 libgcc_s.so.1 libpthread.so.0 libdl.so.2 librt.so.1; do
@@ -111,7 +103,7 @@ for TEST_PATH in $QEMU_TESTS; do
 
     # Hardlink utilities for SMACK/ROOTFS tests
     for U in $("$REPO_DIR/target/${PROFILE}/coreutils" --list); do
-        ln -vf "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
+        ln -f "$REPO_DIR/target/${PROFILE}/coreutils" "$WORK/bin/$U"
     done
 
     # Set test script path and user
@@ -128,7 +120,7 @@ for TEST_PATH in $QEMU_TESTS; do
     OUTPUT=$(timeout 120 qemu-system-x86_64 \
         -kernel "$QEMU_DIR/kernel/vmlinuz" \
         -initrd "$WORK.gz" \
-        -append "console=ttyS0 quiet panic=-1 security=smack lsm=smack" \
+        -append "console=ttyS0 quiet panic=-1 lsm=capability,smack,commoncap security=smack apparmor=0" \
         -nographic -m 256M -no-reboot 2>&1) || true
 
     # Determine result

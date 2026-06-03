@@ -3,12 +3,12 @@ name = "uu_stat"
 description = "stat ~ (uutils) display FILE status"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stat"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -16,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/stat.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
@@ -25,6 +26,8 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "time",
+  "quoting-style",
+  "i18n-common",
 ] }
 thiserror = { workspace = true }
 fluent = { workspace = true }

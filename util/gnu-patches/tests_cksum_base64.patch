@@ -4,7 +4,7 @@ Index: gnu/tests/cksum/cksum-base64.pl
 +++ gnu/tests/cksum/cksum-base64.pl
 @@ -92,8 +92,8 @@ my $prog = 'cksum';
  my $fail = run_tests ($program_name, $prog, \@Tests, $save_temps, $verbose);
- 
+
  # Ensure hash names from cksum --help match those in @pairs above.
 -my $help_algs = join ' ', map { m{^  ([[:alpha:]]\S+)} }
 -  grep { m{^  ([[:alpha:]]\S+)} } split ('\n', `cksum --help`);
@@ -12,4 +12,3 @@ Index: gnu/tests/cksum/cksum-base64.pl
 +   grep { m{^\s*-\s*([[:alpha:]]\S+):} } split ('\n', `cksum --help`);
  my $test_algs = join ' ', map {$_->[0]} @pairs;
  $help_algs eq $test_algs or die "$help_algs not equal to\n$test_algs";
- 

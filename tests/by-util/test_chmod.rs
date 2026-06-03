@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) dirfd subdirs openat FDCWD
+// spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -233,20 +233,22 @@ fn test_chmod_ugoa() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos", target_os = "android"))]
+#[cfg(unix)]
 #[allow(clippy::cast_lossless)]
 fn test_chmod_umask_expected() {
-    // Get the actual system umask using libc
-    let system_umask = unsafe {
-        let mask = libc::umask(0);
-        libc::umask(mask);
+    // Get the actual system umask
+    let system_umask = {
+        use rustix::process::umask;
+        let mask = umask(rustix::fs::Mode::empty());
+        umask(mask);
         mask
     };
 
     // Now verify that get_umask() returns the same value
     let current_umask = uucore::mode::get_umask();
     assert_eq!(
-        current_umask, system_umask as u32,
+        current_umask,
+        system_umask.bits() as u32,
         "get_umask() returned {current_umask:03o}, but system umask is {system_umask:03o}",
     );
 }
@@ -613,8 +615,7 @@ fn test_chmod_symlink_non_existing_file_recursive() {
         .arg("755")
         .arg(test_directory)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let expected_stdout = &format!(
         // spell-checker:disable-next-line
@@ -1438,4 +1439,64 @@ fn test_chmod_colored_output() {
         .code_is(1)
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
         .stderr_contains("\x1b[33m--invalid-option\x1b[0m"); // Yellow invalid option
+}
+
+#[test]
+fn test_chmod_symlink_cycles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir_all("a/b/c");
+    at.symlink_dir("a", "a/b/c/d");
+
+    // Pin the directory modes so the assertions below don't depend on the ambient
+    // umask (a fresh mkdir under umask 077/027 would not be 0755).
+    at.set_mode("a", 0o755);
+    at.set_mode("a/b", 0o755);
+    at.set_mode("a/b/c", 0o755);
+
+    scene
+        .ucmd()
+        .arg("-vRL")
+        .arg("+r")
+        .arg("a")
+        .run()
+        // cSpell:disable
+        .stdout_contains_line("mode of 'a' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_contains_line("mode of 'a/b/c/d' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c' retained as 0755 (rwxr-xr-x)")
+        .stdout_does_not_contain("mode of 'a/b/c/d/b/c/d' retained as 0755 (rwxr-xr-x)");
+    // cSpell:enable
+}
+
+#[test]
+fn test_chmod_symlink_two_links_same_dir() {
+    // Two symlinks pointing at the same directory is NOT a cycle: neither link is
+    // an ancestor of the other, so the target's contents must be visited through
+    // *both* links (and through the real directory). This guards the backtracking
+    // in the cycle-detection logic against false positives.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // cSpell:disable
+    at.mkdir_all("base/realdir");
+    at.touch("base/realdir/file");
+    at.symlink_dir("base/realdir", "base/link1");
+    at.symlink_dir("base/realdir", "base/link2");
+
+    // Assert on the path only (not the mode bits), so the test is robust to the
+    // file's umask-dependent permissions across platforms.
+    scene
+        .ucmd()
+        .arg("-vRL")
+        .arg("+r")
+        .arg("base")
+        .run()
+        .stdout_contains("mode of 'base/realdir/file'")
+        .stdout_contains("mode of 'base/link1/file'")
+        .stdout_contains("mode of 'base/link2/file'");
+    // cSpell:enable
 }

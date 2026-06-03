@@ -7,10 +7,10 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{self, StdoutLock, Write};
+use std::io::{StdoutLock, Write, stdout};
 use uucore::error::UResult;
 use uucore::format::{FormatChar, OctalParsing, parse_escape_only};
-use uucore::{format_usage, os_str_as_bytes};
+use uucore::{crate_version, format_usage, os_str_as_bytes};
 
 use uucore::translate;
 
@@ -166,7 +166,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             uu_app().print_help()?;
             return Ok(());
         } else if first_arg == "--version" && args.peek().is_none() {
-            print!("{}", uu_app().render_version());
+            writeln!(stdout(), "echo {}", crate_version!())?;
             return Ok(());
         }
 
@@ -177,7 +177,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (Box::new(args), Options::default())
     };
 
-    execute(&mut io::stdout().lock(), args, options)?;
+    execute(&mut stdout().lock(), args, options)?;
 
     Ok(())
 }
@@ -186,17 +186,17 @@ pub fn uu_app() -> Command {
     // Note: echo is different from the other utils in that it should **not**
     // have `infer_long_args(true)`, because, for example, `--ver` should be
     // printed as `--ver` and not show the version text.
-    Command::new(uucore::util_name())
+    Command::new("echo")
         // TrailingVarArg specifies the final positional argument is a VarArg
         // and it doesn't attempts the parse any further args.
         // Final argument must have multiple(true) or the usage string equivalent.
         .trailing_var_arg(true)
         .allow_hyphen_values(true)
-        .version(uucore::crate_version!())
+        .version(crate_version!())
         .about(translate!("echo-about"))
         .after_help(translate!("echo-after-help"))
         .override_usage(format_usage(&translate!("echo-usage")))
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("echo"))
         .arg(
             Arg::new(options::NO_NEWLINE)
                 .short('n')

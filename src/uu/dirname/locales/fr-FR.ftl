@@ -4,4 +4,3 @@ dirname-after-help = Afficher chaque NOM avec son dernier composant non-slash et
   supprimés ; si NOM ne contient pas de '/', afficher '.' (signifiant le répertoire courant).
 dirname-missing-operand = opérande manquant
 dirname-zero-help = séparer la sortie avec NUL plutôt qu'avec un saut de ligne
-

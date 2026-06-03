@@ -11,7 +11,10 @@
 use libc::mode_t;
 #[cfg(not(windows))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 use uucore::selinux::get_getfattr_output;
 #[cfg(not(windows))]
 use uutests::at_and_ucmd;
@@ -156,8 +159,7 @@ fn test_mkdir_parent_mode() {
         .arg("a/b")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert!(at.dir_exists("a"));
     // parents created by -p have permissions set to "=rwx,u+wx"
@@ -187,8 +189,7 @@ fn test_mkdir_parent_mode_check_existing_parent() {
         .arg("a/b/c")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert!(at.dir_exists("a"));
     // parent dirs that already exist do not get their permissions modified
@@ -220,8 +221,7 @@ fn test_mkdir_parent_mode_skip_existing_last_component_chmod() {
         .arg("a/b")
         .umask(default_umask)
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.metadata("a/b").permissions().mode() as mode_t, 0o40000);
 }
@@ -310,13 +310,14 @@ fn test_recursive_reporting() {
 // TODO Enable and modify this for freebsd when xattr processing for freebsd is enabled.
 #[cfg(target_os = "linux")]
 fn test_mkdir_acl() {
-    use std::{collections::HashMap, ffi::OsString};
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
 
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.mkdir("a");
 
-    let mut map: HashMap<OsString, Vec<u8>> = HashMap::new();
+    let mut map: FxHashMap<OsString, Vec<u8>> = FxHashMap::default();
     // posix_acl entries are in the form of
     // struct posix_acl_entry{
     //  tag: u16,
@@ -357,6 +358,92 @@ fn test_mkdir_acl() {
 
     // 0x770 would be user:rwx,group:rwx permissions
     assert_eq!(perms, 16893);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mkdir_acl_inheritance_with_restrictive_mask() {
+    use rustc_hash::FxHashMap;
+    use std::ffi::OsString;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("parent");
+
+    let mut map: FxHashMap<OsString, Vec<u8>> = FxHashMap::default();
+
+    // Default ACL with mask::r-x (0o5) — more restrictive than a umask of 0o022 would allow.
+    // With umask 0o022, group bits would be r-x already, but the mask enforces this
+    // regardless of what umask would permit. With umask 0o000, without ACL mask the
+    // child would get rwx for group, but mask caps it to r-x.
+    //
+    // Encoding: header(0x0002) + entries:
+    //   ACL_USER_OBJ  (0x0001) perm=7 (rwx)
+    //   ACL_GROUP_OBJ (0x0004) perm=7 (rwx) — would be rwx without mask
+    //   ACL_MASK      (0x0010) perm=5 (r-x) — restricts group effective to r-x
+    //   ACL_OTHER     (0x0020) perm=0 (---)
+    let xattr_val: Vec<u8> = vec![
+        2, 0, 0, 0, // header
+        1, 0, 7, 0, 255, 255, 255, 255, // ACL_USER_OBJ  rwx
+        4, 0, 7, 0, 255, 255, 255, 255, // ACL_GROUP_OBJ rwx (masked to r-x)
+        16, 0, 5, 0, 255, 255, 255, 255, // ACL_MASK      r-x
+        32, 0, 0, 0, 255, 255, 255, 255, // ACL_OTHER     ---
+    ];
+
+    map.insert(OsString::from("system.posix_acl_default"), xattr_val);
+    uucore::fsxattr::apply_xattrs(at.plus("parent"), map).unwrap();
+
+    // umask 0o000 — without correct ACL inheritance, group would get rwx (7)
+    // With correct inheritance the mask restricts group to r-x (5)
+    ucmd.arg("-p").arg("parent/child").umask(0o000).succeeds();
+
+    let perms = at.metadata("parent/child").permissions().mode();
+    // Expected: user=rwx(7), group=r-x(5 from mask), other=---(0)
+    // mode bits: 0o750 = 0o40750 with directory bit
+    assert_eq!(
+        perms & 0o777,
+        0o750,
+        "Expected group bits capped to r-x by ACL mask, got {:o}",
+        perms & 0o777
+    );
+
+    // Verify the child itself has an ACL (indicated by presence of xattr)
+    assert!(
+        uucore::fsxattr::has_acl(at.plus("parent/child")),
+        "Child directory should have inherited ACL entries"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mkdir_p_respects_umask_without_acl() {
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-p").arg("a/b/c").umask(0o022).succeeds();
+    let perms = at.metadata("a/b/c").permissions().mode();
+    assert_eq!(perms & 0o777, 0o755);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mkdir_explicit_mode_zero() {
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-m").arg("0").arg("d").umask(0o022).succeeds();
+    let perms = at.metadata("d").permissions().mode();
+    assert_eq!(perms & 0o777, 0o000);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mkdir_explicit_mode_with_umask() {
+    // -m must win over umask: requesting 0o777 with a restrictive umask must
+    // still yield 0o777, since the umask is shaped to not block requested bits.
+    use std::os::unix::fs::PermissionsExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-m").arg("777").arg("d").umask(0o077).succeeds();
+    let perms = at.metadata("d").permissions().mode();
+    assert_eq!(perms & 0o777, 0o777);
 }
 
 #[test]
@@ -451,7 +538,10 @@ fn test_empty_argument() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -468,16 +558,17 @@ fn test_selinux() {
         let context_value = get_getfattr_output(&at.plus_as_string(dest));
         assert!(
             context_value.contains("unconfined_u"),
-            "Expected '{}' not found in getfattr output:\n{}",
-            "unconfined_u",
-            context_value
+            "Expected 'unconfined_u' not found in getfattr output:\n{context_value}",
         );
         at.rmdir(dest);
     }
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -920,8 +1011,7 @@ fn test_mkdir_parent_inherits_setgid() {
     ucmd.arg("-p")
         .arg("parent/child/grandchild")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     // All descendants should inherit the setgid bit (0o2000)
     assert_eq!(at.metadata("parent").permissions().mode() & 0o2000, 0o2000);

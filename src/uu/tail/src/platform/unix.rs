@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) stdlib, ISCHR, GETFD
-// spell-checker:ignore (options) EPERM, ENOSYS
+// spell-checker:ignore (options) EPERM, ENOSYS, NOSYS
 
-use std::io::Error;
+use rustix::process::{Pid as RustixPid, test_kill_process};
 
-pub type Pid = libc::pid_t;
+pub type Pid = i32;
 
 pub struct ProcessChecker {
     pid: Pid,
@@ -19,10 +19,15 @@ impl ProcessChecker {
         Self { pid: process_id }
     }
 
-    // Borrowing mutably to be aligned with Windows implementation
-    #[allow(clippy::wrong_self_convention)]
-    pub fn is_dead(&mut self) -> bool {
-        unsafe { libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM }
+    pub fn is_dead(&self) -> bool {
+        let Some(pid) = RustixPid::from_raw(self.pid) else {
+            return true;
+        };
+        match test_kill_process(pid) {
+            Ok(()) => false,
+            Err(rustix::io::Errno::PERM) => false,
+            Err(_) => true,
+        }
     }
 }
 
@@ -31,12 +36,14 @@ impl Drop for ProcessChecker {
 }
 
 pub fn supports_pid_checks(pid: Pid) -> bool {
-    unsafe { !(libc::kill(pid, 0) != 0 && get_errno() == libc::ENOSYS) }
-}
-
-#[inline]
-fn get_errno() -> i32 {
-    Error::last_os_error().raw_os_error().unwrap()
+    let Some(pid) = RustixPid::from_raw(pid) else {
+        return false;
+    };
+    match test_kill_process(pid) {
+        Ok(()) => true,
+        Err(rustix::io::Errno::NOSYS) => false,
+        Err(_) => true,
+    }
 }
 
 //pub fn stdin_is_bad_fd() -> bool {

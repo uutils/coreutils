@@ -74,15 +74,26 @@ pub fn init_locale_collation() -> bool {
     try_init_collator(opts)
 }
 
+/// Compute the ICU collation sort key for the given input bytes and append it to `buf`.
+/// This allows pre-computing sort keys once per line, then comparing them with simple
+/// byte comparison during sorting (much faster than calling `compare_utf8` per comparison).
+pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
+    let c = COLLATOR
+        .get()
+        .expect("compute_sort_key_utf8 called before collator initialization");
+    c.write_sort_key_utf8_to(input, buf)
+        .expect("ICU write_sort_key_utf8_to failed");
+}
+
 /// Compare both strings with regard to the current locale.
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
     // If the detected locale is 'C', just do byte-wise comparison
     if get_collating_locale().0 == DEFAULT_LOCALE {
         left.cmp(right)
     } else {
+        // Fall back to byte comparison if collator is not available
         COLLATOR
             .get()
-            .expect("Collator was not initialized")
-            .compare_utf8(left, right)
+            .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
     }
 }

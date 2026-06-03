@@ -36,7 +36,7 @@ fn get_runlevel_help() -> String {
     return translate!("who-help-runlevel-non-linux");
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 use platform::uumain;
 
 pub fn uu_app() -> Command {
@@ -45,7 +45,7 @@ pub fn uu_app() -> Command {
     #[cfg(target_env = "musl")]
     let about = translate!("who-about") + &translate!("who-about-musl-warning");
 
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("who")
         .version(uucore::crate_version!())
         .about(about)
         .override_usage(format_usage(&translate!("who-usage")))

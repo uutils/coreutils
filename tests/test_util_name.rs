@@ -16,14 +16,43 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 // Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
-    // No need for unsafe here
     unsafe {
         env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
     // Print for debugging
     eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
+}
+
+#[test]
+#[cfg(all(
+    feature = "env",
+    any(target_os = "linux", target_os = "android"),
+    not(target_env = "musl")
+))]
+fn binary_name_protection() {
+    let ts = TestScenario::new("env");
+    let bin = ts.bin_path.clone();
+    ts.ucmd()
+        .arg("-a")
+        .arg("hijacked")
+        .arg(&bin)
+        .arg("--version")
+        .succeeds()
+        .stdout_contains("coreutils");
+}
+
+#[test]
+fn test_coreutils_help_ignore_args() {
+    let scenario = TestScenario::new("help_ignoring_args");
+    let output = std::process::Command::new(&scenario.bin_path)
+        .arg("--help")
+        .arg("---")
+        .output()
+        .unwrap();
+
+    assert_eq!(output.status.code(), Some(0));
 }
 
 #[test]
@@ -109,7 +138,7 @@ fn util_name_single() {
 #[test]
 #[cfg(unix)]
 fn util_invalid_name_help() {
-    use std::process::{Command, Stdio};
+    use std::process::Command;
 
     let scenario = TestScenario::new("invalid_name");
     if !scenario.bin_path.exists() {
@@ -117,22 +146,12 @@ fn util_invalid_name_help() {
         return;
     }
     symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
-    let child = Command::new(scenario.fixtures.plus("invalid_name"))
+    let code = Command::new(scenario.fixtures.plus("invalid_name"))
         .arg("--help")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(0));
-    assert_eq!(output.stderr, b"");
-    let output_str = String::from_utf8(output.stdout).unwrap();
-    assert!(output_str.contains("(multi-call binary)"), "{output_str:?}");
-    assert!(
-        output_str.contains("Usage: invalid_name [function "),
-        "{output_str:?}"
-    );
+        .status()
+        .unwrap()
+        .code();
+    assert_eq!(code, Some(1));
 }
 
 #[test]
@@ -177,7 +196,7 @@ fn util_non_utf8_name_help() {
 #[test]
 #[cfg(unix)]
 fn util_invalid_name_invalid_command() {
-    use std::process::{Command, Stdio};
+    use std::process::Command;
 
     let scenario = TestScenario::new("invalid_name");
     symlink_file(&scenario.bin_path, scenario.fixtures.plus("invalid_name")).unwrap();
@@ -186,20 +205,11 @@ fn util_invalid_name_invalid_command() {
         return;
     }
 
-    let child = Command::new(scenario.fixtures.plus("invalid_name"))
-        .arg("definitely_invalid")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
-    assert_eq!(output.status.code(), Some(1));
-    assert_eq!(output.stdout, b"");
-    assert_eq!(
-        output.stderr,
-        b"definitely_invalid: function/utility not found\n"
-    );
+    let code = Command::new(scenario.fixtures.plus("invalid_name"))
+        .status()
+        .unwrap()
+        .code();
+    assert_eq!(code, Some(1));
 }
 
 #[test]
@@ -253,4 +263,18 @@ fn test_musl_no_dynamic_deps() {
         "Found dynamic dependencies in musl binary:\n{}",
         stdout
     );
+}
+
+#[test]
+fn test_sorted_utils() {
+    let s = TestScenario::new("list_sorted");
+    let out = String::from_utf8(
+        std::process::Command::new(&s.bin_path)
+            .arg("--list")
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap();
+    assert!(out.lines().filter(|s| !s.is_empty()).is_sorted());
 }

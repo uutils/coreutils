@@ -5,12 +5,12 @@ name = "uu_pinky"
 description = "pinky ~ (uutils) display user information"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pinky"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -21,6 +21,7 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/pinky.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

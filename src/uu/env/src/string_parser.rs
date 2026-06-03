@@ -153,7 +153,7 @@ impl<'a> StringParser<'a> {
     }
 
     pub fn skip_until_char_or_end(&mut self, c: char) {
-        let native_rep = get_single_native_int_value(&c).unwrap();
+        let native_rep = get_single_native_int_value(c).unwrap();
         let pos = self.remaining.iter().position(|x| *x == native_rep);
 
         if let Some(pos) = pos {

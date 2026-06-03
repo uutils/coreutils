@@ -4,9 +4,9 @@
 name = "uutests"
 description = "uutils ~ 'core' uutils test library (cross-platform)"
 repository = "https://github.com/uutils/coreutils/tree/main/tests/uutests"
-authors.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 license.workspace = true
@@ -15,13 +15,16 @@ version.workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
+[lints]
+workspace = true
+
 [lib]
 path = "src/lib/lib.rs"
 
 [dependencies]
 ctor = { workspace = true }
 libc = { workspace = true }
-pretty_assertions = "1.4.0"
+pretty_assertions = { workspace = true }
 rand = { workspace = true }
 regex = { workspace = true }
 tempfile = { workspace = true }

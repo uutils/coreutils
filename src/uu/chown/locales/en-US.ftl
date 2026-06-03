@@ -21,3 +21,6 @@ chown-error-failed-to-get-attributes = failed to get attributes of { $file }
 chown-error-invalid-user = invalid user: { $user }
 chown-error-invalid-group = invalid group: { $group }
 chown-error-invalid-spec = invalid spec: { $spec }
+
+# Warning messages
+chown-warning-dot-separator = '.' should be ':': { $spec }

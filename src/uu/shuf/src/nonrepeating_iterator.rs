@@ -1,9 +1,13 @@
-// hijack HashMap for performance
-type HashMap<K, V> = std::collections::HashMap<K, V, rustc_hash::FxBuildHasher>;
+// This file is part of the uutils coreutils package.
+//
+// For the full copyright and license information, please view the LICENSE
+// file that was distributed with this source code.
 
+use rustc_hash::FxHashMap;
 use std::ops::RangeInclusive;
 
-use uucore::error::UResult;
+use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 
 use crate::WrappedRng;
 
@@ -42,13 +46,36 @@ pub(crate) struct NonrepeatingIterator<'a> {
 
 enum Values {
     Full(Vec<u64>),
-    Sparse(RangeInclusive<u64>, HashMap<u64, u64>),
+    Sparse(RangeInclusive<u64>, FxHashMap<u64, u64>),
 }
 
 impl<'a> NonrepeatingIterator<'a> {
-    pub(crate) fn new(range: RangeInclusive<u64>, rng: &'a mut WrappedRng) -> Self {
-        let values = Values::Sparse(range, HashMap::default());
-        NonrepeatingIterator { rng, values }
+    pub(crate) fn new(
+        range: RangeInclusive<u64>,
+        rng: &'a mut WrappedRng,
+        head_count: Option<usize>,
+    ) -> UResult<Self> {
+        // Save RAM usage with shuf -i 1-huge_number -n small_number
+        const TOO_LARGE_VEC_SIZE: usize = 16_777_216;
+        let range_len = range.size_hint().0;
+        let mut items = Vec::new();
+        let values = if range_len < TOO_LARGE_VEC_SIZE && items.try_reserve(range_len).is_ok() {
+            items.extend(range.rev());
+            Values::Full(items)
+        } else {
+            const MAX_CAPACITY: usize = 128; // todo: optimize this
+            // `capacity` is the requested output count; with no --head-count it
+            // defaults to the whole range, which can be up to usize::MAX.
+            // Reserve fallibly so an unsatisfiable request errors cleanly
+            // instead of panicking in hashbrown (capacity overflow) or aborting
+            // in the allocator — mirroring the `try_reserve` on the Vec branch.
+            let capacity = head_count.unwrap_or(MAX_CAPACITY).min(range_len);
+            let mut map = FxHashMap::with_hasher(rustc_hash::FxBuildHasher);
+            map.try_reserve(capacity)
+                .map_err(|_| USimpleError::new(1, translate!("shuf-error-memory-exhausted")))?;
+            Values::Sparse(range, map)
+        };
+        Ok(NonrepeatingIterator { rng, values })
     }
 
     fn produce(&mut self) -> UResult<u64> {
@@ -96,8 +123,7 @@ impl Iterator for NonrepeatingIterator<'_> {
             Values::Full(_) => (),
             Values::Sparse(range, _) if range.is_empty() => return None,
             Values::Sparse(range, items) => {
-                let range_len = range.size_hint().0 as u64;
-                if items.len() as u64 >= range_len / 8 {
+                if items.len() >= items.capacity() {
                     self.values = Values::Full(hashmap_to_vec(range.clone(), items));
                 }
             }
@@ -107,7 +133,7 @@ impl Iterator for NonrepeatingIterator<'_> {
     }
 }
 
-fn hashmap_to_vec(range: RangeInclusive<u64>, map: &HashMap<u64, u64>) -> Vec<u64> {
+fn hashmap_to_vec(range: RangeInclusive<u64>, map: &FxHashMap<u64, u64>) -> Vec<u64> {
     let lookup = |idx| *map.get(&idx).unwrap_or(&idx);
     range.rev().map(lookup).collect()
 }

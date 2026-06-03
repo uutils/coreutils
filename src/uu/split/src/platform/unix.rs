@@ -3,11 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use uucore::display::Quotable;
 use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
@@ -45,12 +46,12 @@ struct WithEnvVarSet {
     /// Env var key
     previous_var_key: String,
     /// Previous value set to this key
-    previous_var_value: std::result::Result<String, env::VarError>,
+    previous_var_value: Option<OsString>,
 }
 impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
-    fn new(key: &str, value: &str) -> Self {
-        let previous_env_value = env::var(key);
+    fn new(key: &str, value: &OsStr) -> Self {
+        let previous_env_value = env::var_os(key);
         unsafe {
             env::set_var(key, value);
         }
@@ -64,7 +65,7 @@ impl WithEnvVarSet {
 impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
-        if let Ok(ref prev_value) = self.previous_var_value {
+        if let Some(prev_value) = &self.previous_var_value {
             unsafe {
                 env::set_var(&self.previous_var_key, prev_value);
             }
@@ -82,7 +83,7 @@ impl FilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &str, filepath: &str) -> Result<Self> {
+    fn new(command: &str, filepath: &OsStr) -> Result<Self> {
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", filepath);
 
@@ -127,7 +128,7 @@ impl Drop for FilterWriter {
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
     filter: Option<&str>,
-    filename: &str,
+    filename: &OsStr,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
     match filter {
@@ -138,24 +139,25 @@ pub fn instantiate_current_writer(
                     .write(true)
                     .create(true)
                     .truncate(true)
-                    .open(Path::new(&filename))
+                    .open(Path::new(filename))
                     .map_err(|e| match e.kind() {
                         ErrorKind::IsADirectory => Error::other(
-                            translate!("split-error-is-a-directory", "dir" => filename),
+                            translate!("split-error-is-a-directory", "dir" => filename.quote()),
                         ),
                         _ => Error::other(
-                            translate!("split-error-unable-to-open-file", "file" => filename),
+                            translate!("split-error-unable-to-open-file", "file" => filename.quote()),
                         ),
                     })?
             } else {
                 // re-open file that we previously created to append to it
                 std::fs::OpenOptions::new()
                     .append(true)
-                    .open(Path::new(&filename))
+                    .open(Path::new(filename))
                     .map_err(|_| {
-                        Error::other(
-                            translate!("split-error-unable-to-reopen-file", "file" => filename),
-                        )
+                        Error::other(translate!(
+                            "split-error-unable-to-reopen-file",
+                            "file" => filename.quote()
+                        ))
                     })?
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))

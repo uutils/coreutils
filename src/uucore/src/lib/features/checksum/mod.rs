@@ -12,12 +12,12 @@ use std::num::IntErrorKind;
 use os_display::Quotable;
 use thiserror::Error;
 
-use crate::error::{UError, UResult};
-use crate::show_error;
+use crate::error::{UError, UResult, strip_errno};
 use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
+use crate::{show_error, translate};
 
 pub mod compute;
 pub mod validate;
@@ -114,6 +114,11 @@ impl AlgoKind {
             ALGORITHM_OPTIONS_SHA256 => Sha256,
             ALGORITHM_OPTIONS_SHA384 => Sha384,
             ALGORITHM_OPTIONS_SHA512 => Sha512,
+
+            // Extensions not in GNU as of version 9.10
+            ALGORITHM_OPTIONS_BLAKE3 => Blake3,
+            ALGORITHM_OPTIONS_SHAKE128 => Shake128,
+            ALGORITHM_OPTIONS_SHAKE256 => Shake256,
             _ => return Err(ChecksumError::UnknownAlgorithm(algo.as_ref().to_string()).into()),
         })
     }
@@ -195,6 +200,22 @@ impl AlgoKind {
         use AlgoKind::*;
         matches!(self, Sysv | Bsd | Crc | Crc32b)
     }
+
+    /// When checking untagged format lines, non-XOF non-legacy algorithms
+    /// should report "improperly formatted lines" if the digest length isn't
+    /// equivalent to this.
+    pub fn expected_digest_bit_len(self) -> Option<HashLength> {
+        match self {
+            Self::Md5 => Some(HashLength::from_bits(Md5::BIT_SIZE)),
+            Self::Sm3 => Some(HashLength::from_bits(Sm3::BIT_SIZE)),
+            Self::Sha1 => Some(HashLength::from_bits(Sha1::BIT_SIZE)),
+            Self::Sha224 => Some(HashLength::from_bits(Sha224::BIT_SIZE)),
+            Self::Sha256 => Some(HashLength::from_bits(Sha256::BIT_SIZE)),
+            Self::Sha384 => Some(HashLength::from_bits(Sha384::BIT_SIZE)),
+            Self::Sha512 => Some(HashLength::from_bits(Sha512::BIT_SIZE)),
+            _ => None,
+        }
+    }
 }
 
 /// Holds a length for a SHA2 of SHA3 algorithm kind.
@@ -232,6 +253,46 @@ impl TryFrom<usize> for ShaLength {
     }
 }
 
+/// Stores a hash length in bits.
+#[derive(Debug, Clone, Copy)]
+pub struct HashLength {
+    bit_len: usize,
+}
+
+impl HashLength {
+    #[must_use]
+    #[inline]
+    pub(crate) fn from_bytes(n: usize) -> Self {
+        Self { bit_len: n * 8 }
+    }
+
+    #[must_use]
+    #[inline]
+    pub fn from_bits(n: usize) -> Self {
+        Self { bit_len: n }
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn as_bits(self) -> usize {
+        self.bit_len
+    }
+
+    #[must_use]
+    #[inline]
+    pub(crate) fn as_bytes(self) -> usize {
+        self.bit_len.div_ceil(8)
+    }
+}
+
+impl From<ShaLength> for HashLength {
+    fn from(value: ShaLength) -> Self {
+        Self {
+            bit_len: value.as_usize(),
+        }
+    }
+}
+
 /// Represents an actual determined algorithm.
 #[derive(Debug, Clone, Copy)]
 pub enum SizedAlgoKind {
@@ -242,19 +303,18 @@ pub enum SizedAlgoKind {
     Md5,
     Sm3,
     Sha1,
-    Blake3,
     Sha2(ShaLength),
     Sha3(ShaLength),
-    // Note: we store Blake2b's length as BYTES.
-    Blake2b(Option<usize>),
-    Shake128(usize),
-    Shake256(usize),
+    Blake2b(HashLength),
+    Blake3(HashLength),
+    Shake128(Option<HashLength>),
+    Shake256(Option<HashLength>),
 }
 
 impl SizedAlgoKind {
-    pub fn from_unsized(kind: AlgoKind, byte_length: Option<usize>) -> UResult<Self> {
+    pub fn from_unsized(kind: AlgoKind, output_length: Option<HashLength>) -> UResult<Self> {
         use AlgoKind as ak;
-        match (kind, byte_length) {
+        match (kind, output_length) {
             (
                 ak::Sysv
                 | ak::Bsd
@@ -263,7 +323,6 @@ impl SizedAlgoKind {
                 | ak::Md5
                 | ak::Sm3
                 | ak::Sha1
-                | ak::Blake3
                 | ak::Sha224
                 | ak::Sha256
                 | ak::Sha384
@@ -278,89 +337,101 @@ impl SizedAlgoKind {
             (ak::Md5, _) => Ok(Self::Md5),
             (ak::Sm3, _) => Ok(Self::Sm3),
             (ak::Sha1, _) => Ok(Self::Sha1),
-            (ak::Blake3, _) => Ok(Self::Blake3),
 
-            (ak::Shake128, Some(l)) => Ok(Self::Shake128(l)),
-            (ak::Shake256, Some(l)) => Ok(Self::Shake256(l)),
-            (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l)?)),
-            (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l)?)),
+            (ak::Blake2b, l) => Ok(Self::Blake2b(
+                l.unwrap_or(HashLength::from_bits(Blake2b::DEFAULT_BIT_SIZE)),
+            )),
+            (ak::Blake3, l) => Ok(Self::Blake3(
+                l.unwrap_or(HashLength::from_bits(Blake3::DEFAULT_BIT_SIZE)),
+            )),
+            (ak::Shake128, l) => Ok(Self::Shake128(l)),
+            (ak::Shake256, l) => Ok(Self::Shake256(l)),
+            (ak::Sha2, Some(l)) => Ok(Self::Sha2(ShaLength::try_from(l.as_bits())?)),
+            (ak::Sha3, Some(l)) => Ok(Self::Sha3(ShaLength::try_from(l.as_bits())?)),
             (algo @ (ak::Sha2 | ak::Sha3), None) => {
                 Err(ChecksumError::LengthRequiredForSha(algo.to_lowercase().into()).into())
             }
-            // [`calculate_blake2b_length`] expects a length in bits but we
-            // have a length in bytes.
-            (ak::Blake2b, Some(l)) => Ok(Self::Blake2b(calculate_blake2b_length_str(
-                &(8 * l).to_string(),
-            )?)),
-            (ak::Blake2b, None) => Ok(Self::Blake2b(None)),
-
             (ak::Sha224, None) => Ok(Self::Sha2(ShaLength::Len224)),
             (ak::Sha256, None) => Ok(Self::Sha2(ShaLength::Len256)),
             (ak::Sha384, None) => Ok(Self::Sha2(ShaLength::Len384)),
             (ak::Sha512, None) => Ok(Self::Sha2(ShaLength::Len512)),
-            (_, None) => Err(ChecksumError::LengthRequired(kind.to_uppercase().into()).into()),
         }
     }
 
     pub fn to_tag(self) -> String {
-        use SizedAlgoKind::*;
         match self {
-            Md5 => "MD5".into(),
-            Sm3 => "SM3".into(),
-            Sha1 => "SHA1".into(),
-            Blake3 => "BLAKE3".into(),
-            Sha2(len) => format!("SHA{}", len.as_usize()),
-            Sha3(len) => format!("SHA3-{}", len.as_usize()),
-            Blake2b(Some(byte_len)) => format!("BLAKE2b-{}", byte_len * 8),
-            Blake2b(None) => "BLAKE2b".into(),
-            Shake128(_) => "SHAKE128".into(),
-            Shake256(_) => "SHAKE256".into(),
-            Sysv | Bsd | Crc | Crc32b => panic!("Should not be used for tagging"),
+            Self::Md5 => "MD5".into(),
+            Self::Sm3 => "SM3".into(),
+            Self::Sha1 => "SHA1".into(),
+            Self::Sha2(len) => format!("SHA{}", len.as_usize()),
+            Self::Sha3(len) => format!("SHA3-{}", len.as_usize()),
+            Self::Blake2b(len) if len.as_bits() == Blake2b::DEFAULT_BIT_SIZE => "BLAKE2b".into(),
+            Self::Blake2b(len) => format!("BLAKE2b-{}", len.as_bits()),
+            Self::Blake3(len) => format!("BLAKE3-{}", len.as_bits()),
+            Self::Shake128(opt_len) => format!(
+                "SHAKE128-{}",
+                opt_len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits)
+            ),
+            Self::Shake256(opt_len) => format!(
+                "SHAKE256-{}",
+                opt_len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits)
+            ),
+            Self::Sysv | Self::Bsd | Self::Crc | Self::Crc32b => {
+                panic!("Should not be used for tagging")
+            }
         }
     }
 
     pub fn create_digest(&self) -> Box<dyn Digest + 'static> {
         use ShaLength::*;
         match self {
-            Self::Sysv => Box::new(SysV::new()),
-            Self::Bsd => Box::new(Bsd::new()),
-            Self::Crc => Box::new(Crc::new()),
-            Self::Crc32b => Box::new(CRC32B::new()),
-            Self::Md5 => Box::new(Md5::new()),
-            Self::Sm3 => Box::new(Sm3::new()),
-            Self::Sha1 => Box::new(Sha1::new()),
-            Self::Blake3 => Box::new(Blake3::new()),
-            Self::Sha2(Len224) => Box::new(Sha224::new()),
-            Self::Sha2(Len256) => Box::new(Sha256::new()),
-            Self::Sha2(Len384) => Box::new(Sha384::new()),
-            Self::Sha2(Len512) => Box::new(Sha512::new()),
-            Self::Sha3(Len224) => Box::new(Sha3_224::new()),
-            Self::Sha3(Len256) => Box::new(Sha3_256::new()),
-            Self::Sha3(Len384) => Box::new(Sha3_384::new()),
-            Self::Sha3(Len512) => Box::new(Sha3_512::new()),
-            Self::Blake2b(Some(byte_len)) => Box::new(Blake2b::with_output_bytes(*byte_len)),
-            Self::Blake2b(None) => Box::new(Blake2b::new()),
-            Self::Shake128(_) => Box::new(Shake128::new()),
-            Self::Shake256(_) => Box::new(Shake256::new()),
+            Self::Sysv => Box::new(SysV::default()),
+            Self::Bsd => Box::new(Bsd::default()),
+            Self::Crc => Box::new(Crc::default()),
+            Self::Crc32b => Box::new(CRC32B::default()),
+            Self::Md5 => Box::new(Md5::default()),
+            Self::Sm3 => Box::new(Sm3::default()),
+            Self::Sha1 => Box::new(Sha1::default()),
+            Self::Sha2(Len224) => Box::new(Sha224::default()),
+            Self::Sha2(Len256) => Box::new(Sha256::default()),
+            Self::Sha2(Len384) => Box::new(Sha384::default()),
+            Self::Sha2(Len512) => Box::new(Sha512::default()),
+            Self::Sha3(Len224) => Box::new(Sha3_224::default()),
+            Self::Sha3(Len256) => Box::new(Sha3_256::default()),
+            Self::Sha3(Len384) => Box::new(Sha3_384::default()),
+            Self::Sha3(Len512) => Box::new(Sha3_512::default()),
+            Self::Blake2b(len) => Box::new(Blake2b::with_output_bytes(len.as_bytes())),
+            Self::Blake3(len) => Box::new(Blake3::with_output_bytes(len.as_bytes())),
+            Self::Shake128(len_opt) => Box::new(
+                len_opt
+                    .map(HashLength::as_bits)
+                    .map(Shake128::with_output_bits)
+                    .unwrap_or_default(),
+            ),
+            Self::Shake256(len_opt) => Box::new(
+                len_opt
+                    .map(HashLength::as_bits)
+                    .map(Shake256::with_output_bits)
+                    .unwrap_or_default(),
+            ),
         }
     }
 
     pub fn bitlen(&self) -> usize {
-        use SizedAlgoKind::*;
         match self {
-            Sysv => 512,
-            Bsd => 1024,
-            Crc => 256,
-            Crc32b => 32,
-            Md5 => 128,
-            Sm3 => 512,
-            Sha1 => 160,
-            Blake3 => 256,
-            Sha2(len) => len.as_usize(),
-            Sha3(len) => len.as_usize(),
-            Blake2b(len) => len.unwrap_or(512),
-            Shake128(len) => *len,
-            Shake256(len) => *len,
+            Self::Sysv => 512,
+            Self::Bsd => 1024,
+            Self::Crc => 256,
+            Self::Crc32b => 32,
+            Self::Md5 => 128,
+            Self::Sm3 => 512,
+            Self::Sha1 => 160,
+            Self::Sha2(len) => len.as_usize(),
+            Self::Sha3(len) => len.as_usize(),
+            Self::Blake2b(len) => len.as_bits(),
+            Self::Blake3(len) => len.as_bits(),
+            Self::Shake128(len) => len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits),
+            Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
         }
     }
     pub fn is_legacy(&self) -> bool {
@@ -397,6 +468,8 @@ pub enum ChecksumError {
     BinaryTextConflict,
     #[error("--text mode is only supported with --untagged")]
     TextWithoutUntagged,
+    #[error("the --tag option is meaningless when verifying checksums")]
+    TagCheck,
     #[error("--tag does not support --text mode")]
     TextAfterTag,
     #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
@@ -407,8 +480,8 @@ pub enum ChecksumError {
     NeedAlgorithmToHash,
     #[error("unknown algorithm: {0}: clap should have prevented this case")]
     UnknownAlgorithm(String),
-    #[error("")]
-    Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
 }
 
 impl UError for ChecksumError {
@@ -417,10 +490,37 @@ impl UError for ChecksumError {
     }
 }
 
+/// Reading mode used to compute digest.
+///
+/// On most linux systems, this is irrelevant, as there is no distinction
+/// between text and binary files. Refer to GNU's cksum documentation for more
+/// information.
+///
+/// As discussed in #9168, we decide to ignore the reading mode to compute the
+/// digest, both on Windows and UNIX. The reason for that is that this is a
+/// legacy feature that is poorly documented and used. This enum is kept
+/// nonetheless to still take into account the flags passed to cksum when
+/// generating untagged lines.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadingMode {
+    Binary,
+    Text,
+}
+
+impl ReadingMode {
+    #[inline]
+    fn as_char(self) -> char {
+        match self {
+            Self::Binary => '*',
+            Self::Text => ' ',
+        }
+    }
+}
+
 pub fn digest_reader<T: Read>(
     digest: &mut Box<dyn Digest>,
     reader: &mut T,
-    binary: bool,
+    mode: ReadingMode,
 ) -> io::Result<(DigestOutput, usize)> {
     digest.reset();
 
@@ -436,42 +536,64 @@ pub fn digest_reader<T: Read>(
     // `DigestWriter` and only written if the following character is
     // "\n". But when "\r" is the last character read, we need to force
     // it to be written.)
-    let mut digest_writer = DigestWriter::new(digest, binary);
+    let mut digest_writer = DigestWriter::new(digest, mode == ReadingMode::Binary);
     let output_size = io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
     Ok((digest.result(), output_size))
 }
 
-/// Calculates the length of the digest.
-pub fn calculate_blake2b_length_str(bit_length: &str) -> UResult<Option<usize>> {
-    // Blake2b's length is parsed in an u64.
-    match bit_length.parse::<usize>() {
-        Ok(0) => Ok(None),
+pub enum BlakeLength<'s> {
+    Int(usize),
+    String(&'s str),
+}
 
-        // Error cases
-        Ok(n) if n > 512 => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
-            Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
+/// Expects a size in BITS, either as a string or int, and returns it as a BYTE
+/// length.
+///
+/// Note: when the input is a string, validation may print error messages.
+/// Note: when the algo is Blake2b, values that are above 512
+/// (Blake2b::DEFAULT_BIT_SIZE) are errors.
+pub fn parse_blake_length(algo: AlgoKind, bit_length: BlakeLength<'_>) -> UResult<HashLength> {
+    debug_assert!(matches!(algo, AlgoKind::Blake2b | AlgoKind::Blake3));
+
+    let print_error = || {
+        if let BlakeLength::String(s) = bit_length {
+            show_error!("{}", ChecksumError::InvalidLength(s.to_string()));
         }
-        Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
-            Err(ChecksumError::LengthTooBigForBlake("BLAKE2b".into()).into())
-        }
-        Err(_) => Err(ChecksumError::InvalidLength(bit_length.into()).into()),
+    };
 
-        Ok(n) if n % 8 != 0 => {
-            show_error!("{}", ChecksumError::InvalidLength(bit_length.into()));
-            Err(ChecksumError::LengthNotMultipleOf8.into())
-        }
+    let n = match bit_length {
+        BlakeLength::Int(i) => i,
+        BlakeLength::String(s) => s.parse::<usize>().map_err(|e| {
+            if *e.kind() == IntErrorKind::PosOverflow {
+                print_error();
+                ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into())
+            } else {
+                ChecksumError::InvalidLength(s.to_string())
+            }
+        })?,
+    };
 
-        // Valid cases
-
-        // When length is 512, it is blake2b's default. So, don't show it
-        Ok(512) => Ok(None),
-        // Divide by 8, as our blake2b implementation expects bytes instead of bits.
-        Ok(n) => Ok(Some(n / 8)),
+    if n == 0 {
+        return Ok(match algo {
+            AlgoKind::Blake2b => HashLength::from_bits(Blake2b::DEFAULT_BIT_SIZE),
+            AlgoKind::Blake3 => HashLength::from_bits(Blake3::DEFAULT_BIT_SIZE),
+            _ => unreachable!(),
+        });
     }
+
+    if algo == AlgoKind::Blake2b && n > Blake2b::DEFAULT_BIT_SIZE {
+        print_error();
+        return Err(ChecksumError::LengthTooBigForBlake(algo.to_uppercase().into()).into());
+    }
+
+    if n % 8 != 0 {
+        print_error();
+        return Err(ChecksumError::LengthNotMultipleOf8.into());
+    }
+
+    Ok(HashLength::from_bits(n))
 }
 
 pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> UResult<ShaLength> {
@@ -488,7 +610,7 @@ pub fn validate_sha2_sha3_length(algo_name: AlgoKind, length: Option<usize>) -> 
     }
 }
 
-pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResult<usize> {
+pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResult<HashLength> {
     // There is a difference in the errors sent when the length is not a number
     // vs. its an invalid number.
     //
@@ -506,7 +628,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
     };
 
     if [224, 256, 384, 512].contains(&len) {
-        Ok(len)
+        Ok(HashLength::from_bits(len))
     } else {
         show_error!("{}", ChecksumError::InvalidLength(length.into()));
         Err(ChecksumError::InvalidLengthForSha(algo_kind.to_uppercase().into()).into())
@@ -516,10 +638,7 @@ pub fn sanitize_sha2_sha3_length_str(algo_kind: AlgoKind, length: &str) -> UResu
 pub fn unescape_filename(filename: &[u8]) -> (Vec<u8>, &'static str) {
     let mut unescaped = Vec::with_capacity(filename.len());
     let mut byte_iter = filename.iter().peekable();
-    loop {
-        let Some(byte) = byte_iter.next() else {
-            break;
-        };
+    while let Some(byte) = byte_iter.next() {
         if *byte == b'\\' {
             match byte_iter.next() {
                 Some(b'\\') => unescaped.push(b'\\'),
@@ -592,10 +711,25 @@ mod tests {
 
     #[test]
     fn test_calculate_blake2b_length() {
-        assert_eq!(calculate_blake2b_length_str("0").unwrap(), None);
-        assert!(calculate_blake2b_length_str("10").is_err());
-        assert!(calculate_blake2b_length_str("520").is_err());
-        assert_eq!(calculate_blake2b_length_str("512").unwrap(), None);
-        assert_eq!(calculate_blake2b_length_str("256").unwrap(), Some(32));
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("0"))
+                .unwrap()
+                .as_bytes(),
+            Blake2b::DEFAULT_BYTE_SIZE
+        );
+        assert!(parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("10")).is_err());
+        assert!(parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("520")).is_err());
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("512"))
+                .unwrap()
+                .as_bytes(),
+            Blake2b::DEFAULT_BYTE_SIZE
+        );
+        assert_eq!(
+            parse_blake_length(AlgoKind::Blake2b, BlakeLength::String("256"))
+                .unwrap()
+                .as_bytes(),
+            32
+        );
     }
 }

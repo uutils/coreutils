@@ -75,6 +75,20 @@ fn test_shred_remove_unlink() {
 }
 
 #[test]
+fn test_shred_remove_unlink_relative_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("dir1/dir2");
+    at.write("dir1/dir2/file1", "test data");
+
+    ucmd.arg("--remove=unlink")
+        .arg("dir1/dir2/file1")
+        .succeeds();
+
+    assert!(!at.file_exists("dir1/dir2/file1"));
+}
+
+#[test]
 fn test_shred_remove_wipe() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -339,7 +353,7 @@ fn test_shred_non_utf8_paths() {
 fn test_gnu_shred_passes_20() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let us_data = vec![0x55; 102400]; // 100K of 'U' bytes
+    let us_data = vec![0x55; 102_400]; // 100K of 'U' bytes
     at.write_bytes("Us", &us_data);
 
     let file = "f";
@@ -397,7 +411,7 @@ fn test_gnu_shred_passes_20() {
 fn test_gnu_shred_passes_different_counts() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    let us_data = vec![0x55; 102400];
+    let us_data = vec![0x55; 102_400];
     at.write_bytes("Us", &us_data);
 
     let file = "f";

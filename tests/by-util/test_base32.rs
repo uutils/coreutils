@@ -7,6 +7,15 @@
 use uutests::new_ucmd;
 
 #[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("base32 {}\n", uucore::crate_version!()));
+}
+
+#[test]
 fn test_encode() {
     let input = "Hello, World!";
     new_ucmd!()

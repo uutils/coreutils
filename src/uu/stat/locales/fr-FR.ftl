@@ -92,6 +92,7 @@ stat-word-birth = Créé
 ## Messages d'erreur
 
 stat-error-invalid-quoting-style = Style de guillemets invalide : {$style}
+stat-warning-invalid-env-quoting-style = valeur invalide de la variable d'environnement QUOTING_STYLE ignorée : '{$style}'
 stat-error-missing-operand = opérande manquant
   Essayez 'stat --help' pour plus d'informations.
 stat-error-invalid-directive = {$directive} : directive invalide

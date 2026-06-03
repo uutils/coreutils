@@ -5,6 +5,7 @@
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
@@ -111,7 +112,7 @@ impl<T: BufRead> Iterator for LinesWithNewlines<T> {
 /// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
 /// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Result<(), CsplitError>
+pub fn csplit<T>(options: &CsplitOptions, patterns: &[&str], input: T) -> Result<(), CsplitError>
 where
     T: BufRead,
 {
@@ -291,13 +292,12 @@ impl SplitWriter<'_> {
     /// Some [`io::Error`] may occur when attempting to write the line.
     fn writeln(&mut self, line: &str) -> io::Result<()> {
         if !self.dev_null {
-            match self.current_writer {
-                Some(ref mut current_writer) => {
-                    let bytes = line.as_bytes();
-                    current_writer.write_all(bytes)?;
-                    self.size += bytes.len();
-                }
-                None => panic!("{}", translate!("csplit-write-split-not-created")),
+            if let Some(ref mut current_writer) = self.current_writer {
+                let bytes = line.as_bytes();
+                current_writer.write_all(bytes)?;
+                self.size += bytes.len();
+            } else {
+                panic!("{}", translate!("csplit-write-split-not-created"))
             }
         }
         Ok(())
@@ -454,16 +454,11 @@ impl SplitWriter<'_> {
 
                     // write the extra lines required by the offset
                     while offset > 0 {
-                        match input_iter.next() {
-                            Some((_, line)) => {
-                                self.writeln(&line?)?;
-                            }
-                            None => {
-                                self.finish_split()?;
-                                return Err(CsplitError::LineOutOfRange(
-                                    pattern_as_str.to_string(),
-                                ));
-                            }
+                        if let Some((_, line)) = input_iter.next() {
+                            self.writeln(&line?)?;
+                        } else {
+                            self.finish_split()?;
+                            return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
                         }
                         offset -= 1;
                     }
@@ -633,10 +628,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
 
     // get the patterns to split on
-    let patterns: Vec<String> = matches
+    let patterns: Vec<_> = matches
         .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(ToOwned::to_owned)
+        .map(Borrow::borrow)
         .collect();
     let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {
@@ -650,7 +645,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("csplit")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("csplit-about"))

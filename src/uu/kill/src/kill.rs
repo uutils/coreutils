@@ -13,7 +13,10 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
-use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
+use uucore::signals::{
+    signal_by_name_or_value, signal_list_name_by_value, signal_list_value_by_name_or_number,
+    signal_name_by_value, signal_number_upper_bound,
+};
 use uucore::{format_usage, show};
 
 // When the -l option is selected, the program displays the type of signal related to a certain
@@ -97,9 +100,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("kill")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("kill"))
         .about(translate!("kill-about"))
         .override_usage(format_usage(&translate!("kill-usage")))
         .infer_long_args(true)
@@ -143,7 +146,7 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
             // With '-', a signal name must start with an uppercase char
-            if signal.chars().next().is_some_and(|c| c.is_lowercase()) {
+            if signal.chars().next().is_some_and(char::is_lowercase) {
                 return None;
             }
             // Check if it is a valid signal
@@ -159,34 +162,44 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        println!("{idx: >#2} {signal}");
+    for signal_value in 0..=signal_number_upper_bound() {
+        if let Some(signal_name) = signal_list_name_by_value(signal_value) {
+            println!("{signal_value: >#2} {signal_name}");
+        }
     }
 }
 
-fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    // Closure used to track the last 8 bits of the signal value
-    // when the -l option is passed only the lower 8 bits are important
-    // or the value is in range [128, 159]
-    // Example: kill -l 143 => TERM because 143 = 15 + 128
-    // Example: kill -l 2304 => EXIT
-    let lower_8_bits = |x: usize| x & 0xff;
-    let option_num_parse = signal_name_or_value.parse::<usize>().ok();
+fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
+    // `kill -l` also accepts wait-status-like values and decodes the signal
+    // number from the low 8 bits.
+    let lower_8_bits = signal_value & 0xff;
+    if lower_8_bits <= signal_number_upper_bound() {
+        return Some(lower_8_bits);
+    }
 
-    for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal.eq_ignore_ascii_case(signal_name_or_value)
-            || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
-        {
-            println!("{value}");
-            return Ok(());
-        } else if signal_name_or_value == value.to_string()
-            || option_num_parse.is_some_and(|signal_value| lower_8_bits(signal_value) == value)
-            || option_num_parse.is_some_and(|signal_value| signal_value == value + OFFSET)
-        {
-            println!("{signal}");
+    signal_value
+        .checked_sub(OFFSET)
+        .filter(|value| *value <= signal_number_upper_bound())
+}
+
+fn print_signal(signal_name_or_value: &str) -> UResult<()> {
+    if let Ok(signal_value) = signal_name_or_value.parse::<usize>() {
+        // GNU kill accepts plain signal numbers, values masked to the low 8 bits,
+        // and exit statuses that encode `128 + signal`.
+        if let Some(signal_value) = normalize_list_signal_value(signal_value) {
+            println!(
+                "{}",
+                signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
+            );
             return Ok(());
         }
     }
+
+    if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
+        println!("{signal_value}");
+        return Ok(());
+    }
+
     Err(USimpleError::new(
         1,
         translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
@@ -194,8 +207,10 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for signal in ALL_SIGNALS {
-        println!("{signal}");
+    for signal_value in 0..=signal_number_upper_bound() {
+        if let Some(signal_name) = signal_list_name_by_value(signal_value) {
+            println!("{signal_name}");
+        }
     }
 }
 

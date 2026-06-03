@@ -7,13 +7,14 @@ use clap::{Arg, ArgAction, Command};
 use std::cell::{OnceCell, RefCell};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Stdin, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, Read, Stdin, Write, stdin, stdout};
 use std::iter::Cycle;
 use std::path::Path;
 use std::rc::Rc;
 use std::slice::Iter;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
+use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -29,7 +30,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
-    let delimiters = matches.get_one::<String>(options::DELIMITER).unwrap();
+    let delimiters = matches.get_one::<OsString>(options::DELIMITER).unwrap();
     let files = matches
         .get_many::<OsString>(options::FILE)
         .unwrap()
@@ -41,9 +42,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("paste")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("paste"))
         .about(translate!("paste-about"))
         .override_usage(format_usage(&translate!("paste-usage")))
         .infer_long_args(true)
@@ -61,7 +62,8 @@ pub fn uu_app() -> Command {
                 .help(translate!("paste-help-delimiter"))
                 .value_name("LIST")
                 .default_value("\t")
-                .hide_default_value(true),
+                .hide_default_value(true)
+                .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
             Arg::new(options::FILE)
@@ -84,7 +86,7 @@ pub fn uu_app() -> Command {
 fn paste(
     filenames: Vec<OsString>,
     serial: bool,
-    delimiters: &str,
+    delimiters: &OsString,
     line_ending: LineEnding,
 ) -> UResult<()> {
     let unescaped_and_encoded_delimiters = parse_delimiters(delimiters)?;
@@ -109,12 +111,24 @@ fn paste(
         input_source_vec.push(input_source);
     }
 
+    let line_ending_byte = u8::from(line_ending);
+    let input_source_vec_len = input_source_vec.len();
     let mut stdout = stdout().lock();
 
-    let line_ending_byte = u8::from(line_ending);
-    let line_ending_byte_array_ref = &[line_ending_byte];
+    if !serial && input_source_vec_len == 1 {
+        // With a single input source (no -s), `paste` output is identical to input,
+        // except that a missing final line ending must be added.
+        // Stream directly to avoid unbounded line buffering on inputs like /dev/zero.
+        return write_single_input_source(
+            &mut stdout,
+            input_source_vec
+                .pop()
+                .expect("input_source_vec_len was checked to be exactly one"),
+            line_ending_byte,
+        );
+    }
 
-    let input_source_vec_len = input_source_vec.len();
+    let line_ending_byte_array_ref = &[line_ending_byte];
 
     let mut delimiter_state = DelimiterState::new(&unescaped_and_encoded_delimiters);
 
@@ -125,14 +139,12 @@ fn paste(
             output.clear();
 
             loop {
-                match input_source.read_until(line_ending_byte, &mut output)? {
-                    0 => break,
-                    _ => {
-                        remove_trailing_line_ending_byte(line_ending_byte, &mut output);
-
-                        delimiter_state.write_delimiter(&mut output);
-                    }
+                if input_source.read_until(line_ending_byte, &mut output)? == 0 {
+                    break;
                 }
+                remove_trailing_line_ending_byte(line_ending_byte, &mut output);
+
+                delimiter_state.write_delimiter(&mut output);
             }
 
             delimiter_state.remove_trailing_delimiter(&mut output);
@@ -187,65 +199,73 @@ fn paste(
     Ok(())
 }
 
-fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
-    /// A single backslash char
-    const BACKSLASH: char = '\\';
+fn write_single_input_source(
+    writer: &mut impl Write,
+    mut input_source: InputSource,
+    line_ending_byte: u8,
+) -> UResult<()> {
+    let mut buffer = [0_u8; 8 * 1024];
+    let mut has_data = false;
+    let mut last_byte = line_ending_byte;
 
-    fn add_one_byte_single_char_delimiter(vec: &mut Vec<Box<[u8]>>, byte: u8) {
-        vec.push(Box::new([byte]));
+    loop {
+        let bytes_read = input_source.read(&mut buffer)?;
+
+        if bytes_read == 0 {
+            break;
+        }
+
+        has_data = true;
+        last_byte = buffer[bytes_read - 1];
+
+        writer.write_all(&buffer[..bytes_read])?;
     }
 
-    // a buffer of length four is large enough to encode any char
-    let mut buffer = [0; 4];
+    if has_data && last_byte != line_ending_byte {
+        writer.write_all(&[line_ending_byte])?;
+    }
 
-    let mut add_single_char_delimiter = |vec: &mut Vec<Box<[u8]>>, ch: char| {
-        let delimiter_encoded = ch.encode_utf8(&mut buffer);
+    Ok(())
+}
 
-        vec.push(Box::<[u8]>::from(delimiter_encoded.as_bytes()));
-    };
+fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
+    let bytes = uucore::os_str_as_bytes(delimiters)?;
+    let mut vec = Vec::<Box<[u8]>>::with_capacity(bytes.len());
+    let mut i = 0;
 
-    let mut vec = Vec::<Box<[u8]>>::with_capacity(delimiters.len());
-
-    let mut chars = delimiters.chars();
-
-    // Unescape all special characters
-    while let Some(char) = chars.next() {
-        match char {
-            BACKSLASH => match chars.next() {
-                // "Empty string (not a null character)"
-                // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
-                Some('0') => {
-                    vec.push(Box::<[u8; 0]>::new([]));
-                }
-                // "\\" to "\" (U+005C)
-                Some(BACKSLASH) => {
-                    add_one_byte_single_char_delimiter(&mut vec, b'\\');
-                }
-                // "\n" to U+000A
-                Some('n') => {
-                    add_one_byte_single_char_delimiter(&mut vec, b'\n');
-                }
-                // "\t" to U+0009
-                Some('t') => {
-                    add_one_byte_single_char_delimiter(&mut vec, b'\t');
-                }
-                Some(other_char) => {
-                    // "If any other characters follow the <backslash>, the results are unspecified."
-                    // https://pubs.opengroup.org/onlinepubs/9799919799/utilities/paste.html
-                    // However, other implementations remove the backslash
-                    // See "test_posix_unspecified_delimiter"
-                    add_single_char_delimiter(&mut vec, other_char);
-                }
-                None => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("paste-error-delimiter-unescaped-backslash", "delimiters" => delimiters),
-                    ));
-                }
-            },
-            non_backslash_char => {
-                add_single_char_delimiter(&mut vec, non_backslash_char);
+    while i < bytes.len() {
+        if bytes[i] == b'\\' {
+            i += 1;
+            if i >= bytes.len() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("paste-error-delimiter-unescaped-backslash", "delimiters" => delimiters.to_string_lossy()),
+                ));
             }
+            match bytes[i] {
+                b'0' => vec.push(Box::new([])),
+                b'\\' => vec.push(Box::new([b'\\'])),
+                b'n' => vec.push(Box::new([b'\n'])),
+                b't' => vec.push(Box::new([b'\t'])),
+                b'b' => vec.push(Box::new([b'\x08'])),
+                b'f' => vec.push(Box::new([b'\x0C'])),
+                b'r' => vec.push(Box::new([b'\r'])),
+                b'v' => vec.push(Box::new([b'\x0B'])),
+                _ => {
+                    // Unknown escape: strip backslash, use the following character(s)
+                    let remaining = &bytes[i..];
+                    let len = mb_char_len(remaining).min(remaining.len());
+                    vec.push(Box::from(&bytes[i..i + len]));
+                    i += len;
+                    continue;
+                }
+            }
+            i += 1;
+        } else {
+            let remaining = &bytes[i..];
+            let len = mb_char_len(remaining).min(remaining.len());
+            vec.push(Box::from(&bytes[i..i + len]));
+            i += len;
         }
     }
 
@@ -253,11 +273,7 @@ fn parse_delimiters(delimiters: &str) -> UResult<Box<[Box<[u8]>]>> {
 }
 
 fn remove_trailing_line_ending_byte(line_ending_byte: u8, output: &mut Vec<u8>) {
-    if let Some(&byte) = output.last() {
-        if byte == line_ending_byte {
-            assert_eq!(output.pop(), Some(line_ending_byte));
-        }
-    }
+    let _ = output.pop_if(|byte| *byte == line_ending_byte);
 }
 
 enum DelimiterState<'a> {
@@ -362,6 +378,21 @@ enum InputSource {
 }
 
 impl InputSource {
+    fn read(&mut self, buf: &mut [u8]) -> UResult<usize> {
+        let us = match self {
+            Self::File(bu) => bu.read(buf)?,
+            Self::StandardInput(rc) => rc
+                .try_borrow()
+                .map_err(|bo| {
+                    USimpleError::new(1, translate!("paste-error-stdin-borrow", "error" => bo))
+                })?
+                .lock()
+                .read(buf)?,
+        };
+
+        Ok(us)
+    }
+
     fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> UResult<usize> {
         let us = match self {
             Self::File(bu) => bu.read_until(byte, buf)?,

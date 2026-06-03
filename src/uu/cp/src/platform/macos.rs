@@ -28,6 +28,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_stream: bool,
+    _nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported")
@@ -69,8 +70,19 @@ pub(crate) fn copy_on_write(
             {
                 // clonefile(2) fails if the destination exists.  Remove it and try again.  Do not
                 // bother to check if removal worked because we're going to try to clone again.
-                // first lets make sure the dest file is not read only
-                if fs::metadata(dest).is_ok_and(|md| !md.permissions().readonly()) {
+                // first lets make sure the dest file is not read only.
+                //
+                // If dest is a symlink, GNU cp follows it and writes through to
+                // the target rather than replacing the link itself. Removing
+                // dest here would unlink the symlink and the retry would
+                // clonefile a regular file in its place. Skip the retry — the
+                // AlreadyExists error stays in `error` and we fall through to
+                // fs::copy below, which follows the symlink via O_TRUNC.
+                let dest_is_symlink =
+                    fs::symlink_metadata(dest).is_ok_and(|md| md.file_type().is_symlink());
+                if !dest_is_symlink
+                    && fs::metadata(dest).is_ok_and(|md| !md.permissions().readonly())
+                {
                     // remove and copy again
                     // TODO: rewrite this to better match linux behavior
                     // linux first opens the source file and destination file then uses the file
@@ -85,37 +97,32 @@ pub(crate) fn copy_on_write(
     if raw_pfn.is_null() || error != 0 {
         // clonefile(2) is either not supported or it errored out (possibly because the FS does not
         // support COW).
-        match reflink_mode {
-            ReflinkMode::Always => {
-                return Err(translate!("cp-error-failed-to-clone", "source" => source.quote(), "dest" => dest.quote(), "error" => error)
+        if reflink_mode == ReflinkMode::Always {
+            return Err(translate!("cp-error-failed-to-clone", "source" => source.quote(), "dest" => dest.quote(), "error" => error)
                 .into());
-            }
-            _ => {
-                copy_debug.reflink = OffloadReflinkDebug::Yes;
-                if source_is_stream {
-                    let mut src_file = File::open(source)?;
-                    let mode = 0o622 & !get_umask();
-                    let mut dst_file = OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .mode(mode)
-                        .open(dest)?;
+        }
+        copy_debug.reflink = OffloadReflinkDebug::Yes;
+        if source_is_stream {
+            let mut src_file = File::open(source)?;
+            let mode = 0o622 & !get_umask();
+            let mut dst_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .mode(mode)
+                .open(dest)?;
 
-                    let dest_is_stream = is_stream(&dst_file.metadata()?);
-                    if !dest_is_stream {
-                        // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-                        dst_file.set_len(0)?;
-                    }
-
-                    buf_copy::copy_stream(&mut src_file, &mut dst_file)
-                        .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-                        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-                } else {
-                    fs::copy(source, dest)
-                        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?
-                }
+            let dest_is_stream = is_stream(&dst_file.metadata()?);
+            if !dest_is_stream {
+                // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
+                dst_file.set_len(0)?;
             }
-        };
+
+            buf_copy::copy_stream(&mut src_file, &mut dst_file)
+                .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        } else {
+            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        }
     }
 
     Ok(copy_debug)

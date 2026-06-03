@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) delim sourcefiles
+// spell-checker:ignore (ToDO) delim sourcefiles undelimited
 
 use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
@@ -153,27 +153,24 @@ fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
                     print_delim = true;
                 }
 
-                match delim_search.next() {
+                if let Some((first, last)) = delim_search.next() {
                     // print the current field up to the next field delim
-                    Some((first, last)) => {
-                        let segment = &line[low_idx..first];
+                    let segment = &line[low_idx..first];
 
-                        out.write_all(segment)?;
+                    out.write_all(segment)?;
 
-                        low_idx = last;
-                        fields_pos = high + 1;
+                    low_idx = last;
+                    fields_pos = high + 1;
+                } else {
+                    // this is the last field in the line, so print the rest
+                    let segment = &line[low_idx..];
+
+                    out.write_all(segment)?;
+
+                    if line[line.len() - 1] == newline_char {
+                        return Ok(true);
                     }
-                    None => {
-                        // this is the last field in the line, so print the rest
-                        let segment = &line[low_idx..];
-
-                        out.write_all(segment)?;
-
-                        if line[line.len() - 1] == newline_char {
-                            return Ok(true);
-                        }
-                        break;
-                    }
+                    break;
                 }
             }
         }
@@ -227,26 +224,23 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
                 }
             }
 
-            match delim_search.nth(high - low) {
-                Some((first, _)) => {
-                    let segment = &line[low_idx..first];
+            if let Some((first, _)) = delim_search.nth(high - low) {
+                let segment = &line[low_idx..first];
 
-                    out.write_all(segment)?;
+                out.write_all(segment)?;
 
-                    print_delim = true;
-                    low_idx = first;
-                    fields_pos = high + 1;
+                print_delim = true;
+                low_idx = first;
+                fields_pos = high + 1;
+            } else {
+                let segment = &line[low_idx..line.len()];
+
+                out.write_all(segment)?;
+
+                if line[line.len() - 1] == newline_char {
+                    return Ok(true);
                 }
-                None => {
-                    let segment = &line[low_idx..line.len()];
-
-                    out.write_all(segment)?;
-
-                    if line[line.len() - 1] == newline_char {
-                        return Ok(true);
-                    }
-                    break;
-                }
+                break;
             }
         }
         out.write_all(&[newline_char])?;
@@ -260,35 +254,132 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
     Ok(())
 }
 
-/// The input delimiter is identical to `newline_char`
+/// Streams and filters fields where the record terminator and
+/// field delimiter are the same character (specified by `newline_char`)
 fn cut_fields_newline_char_delim<R: Read, W: Write>(
     reader: R,
     out: &mut W,
     ranges: &[Range],
     newline_char: u8,
     out_delim: &[u8],
+    only_delimited: bool,
 ) -> UResult<()> {
-    let buf_in = BufReader::new(reader);
+    let mut reader = BufReader::new(reader);
+    let mut line = Vec::new();
 
-    let segments: Vec<_> = buf_in.split(newline_char).filter_map(|x| x.ok()).collect();
-    let mut print_delim = false;
+    // We start at 1 because 'cut' field indexing is 1-based
+    let mut current_field_idx = 1;
+    let mut first_field_printed = false;
+    let mut has_data = false;
+    let mut suppressed = false;
 
-    for &Range { low, high } in ranges {
-        for i in low..=high {
-            // "- 1" is necessary because fields start from 1 whereas a Vec starts from 0
-            if let Some(segment) = segments.get(i - 1) {
-                if print_delim {
-                    out.write_all(out_delim)?;
-                } else {
-                    print_delim = true;
+    let mut range_idx = 0;
+
+    loop {
+        line.clear();
+
+        let is_selected = range_idx < ranges.len() && current_field_idx >= ranges[range_idx].low;
+        let needs_data = is_selected || current_field_idx == 1;
+
+        let mut has_processed_data = false;
+
+        if needs_data {
+            // Standard read: copies bytes into `line`
+            loop {
+                let buf = reader.fill_buf()?;
+                if buf.is_empty() {
+                    break;
                 }
-                out.write_all(segment.as_slice())?;
-            } else {
+
+                has_processed_data = true;
+
+                if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    let amt = pos + 1;
+                    line.extend_from_slice(&buf[..amt]);
+                    reader.consume(amt);
+
+                    break;
+                }
+                let len = buf.len();
+                line.extend_from_slice(buf);
+                reader.consume(len);
+            }
+        } else {
+            // Zero-allocation skip: scans the buffer and advances the cursor without copying
+            loop {
+                let buf = reader.fill_buf()?;
+                if buf.is_empty() {
+                    break; // EOF
+                }
+
+                has_processed_data = true;
+
+                if let Some(pos) = memchr::memchr(newline_char, buf) {
+                    let bytes_to_consume = pos + 1;
+                    reader.consume(bytes_to_consume);
+                    break;
+                }
+
+                let len = buf.len();
+                reader.consume(len);
+            }
+        }
+
+        if !has_processed_data {
+            break;
+        }
+        has_data = true;
+
+        // To comply with -s when the stream consists of only a single field.
+        if current_field_idx == 1 {
+            let is_eof_next = reader.fill_buf()?.is_empty();
+
+            if is_eof_next && line.last() != Some(&newline_char) {
+                if only_delimited {
+                    suppressed = true;
+                } else {
+                    // GNU cut prints the whole line if no delimiter is found.
+                    out.write_all(&line)?;
+                }
                 break;
             }
         }
+
+        if range_idx < ranges.len() && current_field_idx > ranges[range_idx].high {
+            range_idx += 1;
+
+            // EARLY EXIT: If we've exhausted all ranges, stop reading the stream entirely.
+            if range_idx == ranges.len() {
+                break;
+            }
+        }
+
+        // Check if the current field falls inside the current active range
+        let is_selected = range_idx < ranges.len() && current_field_idx >= ranges[range_idx].low;
+
+        if is_selected {
+            if first_field_printed {
+                out.write_all(out_delim)?;
+            }
+
+            let has_newline = line.last() == Some(&newline_char);
+            let content = if has_newline {
+                &line[..line.len() - 1]
+            } else {
+                &line[..]
+            };
+
+            out.write_all(content)?;
+            first_field_printed = true;
+        }
+
+        current_field_idx += 1;
     }
-    out.write_all(&[newline_char])?;
+
+    if has_data && !suppressed {
+        out.write_all(&[newline_char])?;
+    }
+
     Ok(())
 }
 
@@ -303,7 +394,14 @@ fn cut_fields<R: Read, W: Write>(
     match field_opts.delimiter {
         Delimiter::Slice(delim) if delim == [newline_char] => {
             let out_delim = opts.out_delimiter.unwrap_or(delim);
-            cut_fields_newline_char_delim(reader, out, ranges, newline_char, out_delim)
+            cut_fields_newline_char_delim(
+                reader,
+                out,
+                ranges,
+                newline_char,
+                out_delim,
+                field_opts.only_delimited,
+            )
         }
         Delimiter::Slice(delim) => {
             let matcher = ExactMatcher::new(delim);
@@ -342,20 +440,18 @@ fn cut_fields<R: Read, W: Write>(
     }
 }
 
-fn cut_files(mut filenames: Vec<OsString>, mode: &Mode) {
+fn cut_files<'a, I>(filenames: I, mode: &Mode)
+where
+    I: IntoIterator<Item = &'a OsString>,
+{
     let mut stdin_read = false;
-
-    if filenames.is_empty() {
-        filenames.push(OsString::from("-"));
-    }
-
     let mut out: Box<dyn Write> = if stdout().is_terminal() {
         Box::new(stdout())
     } else {
         Box::new(BufWriter::new(stdout())) as Box<dyn Write>
     };
 
-    for filename in &filenames {
+    for filename in filenames {
         if filename == "-" {
             if stdin_read {
                 continue;
@@ -415,8 +511,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             ));
         }
         Some(os_string) => {
-            if os_string == "''" || os_string.is_empty() {
-                // treat `''` as empty delimiter
+            if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
                 // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
@@ -444,7 +539,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
     let out_delim = matches
         .get_one::<OsString>(options::OUTPUT_DELIMITER)
         .map(|os_string| {
-            if os_string.is_empty() || os_string == "''" {
+            if os_string.is_empty() {
                 b"\0"
             } else {
                 os_str_as_bytes(os_string).unwrap()
@@ -470,19 +565,16 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    // GNU's `cut` supports `-d=` to set the delimiter to `=`.
+    // GNU `cut` supports `-d=` to set the delimiter to `=`.
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
-    let args: Vec<OsString> = args
-        .into_iter()
-        .map(|x| {
-            if x == "-d=" {
-                "--delimiter==".into()
-            } else {
-                x
-            }
-        })
-        .collect();
+    let args = args.into_iter().map(|x| {
+        if x == "-d=" {
+            "--delimiter==".into()
+        } else {
+            x
+        }
+    });
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -578,23 +670,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let files: Vec<OsString> = matches
-        .get_many::<OsString>(options::FILE)
-        .unwrap_or_default()
-        .cloned()
-        .collect();
+    let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
+    #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+    let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
-    match mode_parse {
-        Ok(mode) => {
-            cut_files(files, &mode);
-            Ok(())
-        }
-        Err(e) => Err(USimpleError::new(1, e)),
-    }
+    cut_files(files, &mode);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("cut")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("cut-usage")))
@@ -683,6 +769,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(

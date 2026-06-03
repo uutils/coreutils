@@ -27,8 +27,6 @@ use pretty_assertions::assert_eq;
 use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
-#[cfg(not(windows))]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -97,7 +95,19 @@ const DEFAULT_ENV: [(&str, &str); 2] = [("LC_ALL", "C"), ("TZ", "UTC")];
 
 /// Test if the program is running under CI
 pub fn is_ci() -> bool {
-    std::env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
+    env::var("CI").is_ok_and(|s| s.eq_ignore_ascii_case("true"))
+}
+
+/// Check if a locale is available on the system by verifying that
+/// `locale charmap` returns `"UTF-8"` when `LC_ALL` is set to the given locale.
+#[cfg(unix)]
+pub fn is_locale_available(locale: &str) -> bool {
+    use std::process::Command;
+    Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("charmap")
+        .output()
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
 }
 
 /// Read a test scenario fixture, returning its bytes
@@ -723,10 +733,20 @@ impl CmdResult {
     /// 2.  the command resulted in empty (zero-length) stdout stream output
     #[track_caller]
     pub fn usage_error<T: AsRef<str>>(&self, msg: T) -> &Self {
+        // When testing via a WASM runner, the binary sees only its filename
+        // (via --argv0), not the full host path.
+        let bin_display: Cow<'_, str> = if env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            self.bin_path
+                .file_name()
+                .unwrap_or(self.bin_path.as_os_str())
+                .to_string_lossy()
+        } else {
+            Cow::Owned(self.bin_path.display().to_string())
+        };
         self.stderr_only(format!(
             "{0}: {2}\nTry '{1} {0} --help' for more information.\n",
             self.util_name.as_ref().unwrap(), // This shouldn't be called using a normal command
-            self.bin_path.display(),
+            bin_display,
             msg.as_ref()
         ))
     }
@@ -942,7 +962,7 @@ pub fn get_root_path() -> &'static str {
 ///
 /// `true` if both paths have the same set of extended attributes, `false` otherwise.
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
-pub fn compare_xattrs<P: AsRef<std::path::Path>>(path1: P, path2: P) -> bool {
+pub fn compare_xattrs<P: AsRef<Path>>(path1: P, path2: P) -> bool {
     let get_sorted_xattrs = |path: P| {
         xattr::list(path)
             .map(|attrs| {
@@ -1031,13 +1051,13 @@ impl AtPath {
 
     pub fn write(&self, name: &str, contents: &str) {
         log_info("write(default)", self.plus_as_string(name));
-        std::fs::write(self.plus(name), contents)
+        fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
     pub fn write_bytes(&self, name: &str, contents: &[u8]) {
         log_info("write(default)", self.plus_as_string(name));
-        std::fs::write(self.plus(name), contents)
+        fs::write(self.plus(name), contents)
             .unwrap_or_else(|e| panic!("Couldn't write {name}: {e}"));
     }
 
@@ -1079,23 +1099,37 @@ impl AtPath {
     pub fn rename(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("rename", format!("{source:?} {target:?}"));
-        std::fs::rename(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't rename {source:?} -> {target:?}: {e}"));
+        log_info(
+            "rename",
+            format!("{} {}", source.display(), target.display()),
+        );
+        fs::rename(&source, &target).unwrap_or_else(|e| {
+            panic!(
+                "Couldn't rename {} -> {}: {e}",
+                source.display(),
+                target.display()
+            )
+        });
     }
 
     pub fn remove(&self, source: &str) {
         let source = self.plus(source);
-        log_info("remove", format!("{source:?}"));
-        std::fs::remove_file(&source).unwrap_or_else(|e| panic!("Couldn't remove {source:?}: {e}"));
+        log_info("remove", format!("{}", source.display()));
+        remove_file(&source)
+            .unwrap_or_else(|e| panic!("Couldn't remove {}: {e}", source.display()));
     }
 
     pub fn copy(&self, source: &str, target: &str) {
         let source = self.plus(source);
         let target = self.plus(target);
-        log_info("copy", format!("{source:?} {target:?}"));
-        std::fs::copy(&source, &target)
-            .unwrap_or_else(|e| panic!("Couldn't copy {source:?} -> {target:?}: {e}"));
+        log_info("copy", format!("{} {}", source.display(), target.display()));
+        fs::copy(&source, &target).unwrap_or_else(|e| {
+            panic!(
+                "Couldn't copy {} -> {}: {e}",
+                source.display(),
+                target.display()
+            )
+        });
     }
 
     pub fn rmdir(&self, dir: &str) {
@@ -1129,12 +1163,13 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn mkfifo(&self, fifo: &str) {
+        // rustix::fs::mkfifoat is linux only
+        use nix::sys::stat::Mode;
         let full_path = self.plus_as_string(fifo);
         log_info("mkfifo", &full_path);
-        unsafe {
-            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
-            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
-        }
+
+        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
@@ -1308,9 +1343,9 @@ impl AtPath {
     #[cfg(not(windows))]
     pub fn set_mode(&self, filename: &str, mode: u32) {
         let path = self.plus(filename);
-        let mut perms = std::fs::metadata(&path).unwrap().permissions();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_mode(mode);
-        std::fs::set_permissions(&path, perms).unwrap();
+        fs::set_permissions(&path, perms).unwrap();
     }
 }
 
@@ -1691,11 +1726,11 @@ impl UCommand {
     }
 
     #[cfg(unix)]
-    fn read_from_pty(pty_fd: std::os::fd::OwnedFd, out: File) {
-        let read_file = std::fs::File::from(pty_fd);
-        let mut reader = std::io::BufReader::new(read_file);
-        let mut writer = std::io::BufWriter::new(out);
-        let result = std::io::copy(&mut reader, &mut writer);
+    fn read_from_pty(pty_fd: OwnedFd, out: File) {
+        let read_file = File::from(pty_fd);
+        let mut reader = io::BufReader::new(read_file);
+        let mut writer = BufWriter::new(out);
+        let result = io::copy(&mut reader, &mut writer);
         match result {
             Ok(_) => {}
             // Input/output error (os error 5) is returned due to pipe closes. Buffer gets content anyway.
@@ -1716,7 +1751,7 @@ impl UCommand {
         if let Some(mut captured_output_i) = captured_output {
             let fd = captured_output_i.try_clone().unwrap();
 
-            let handle = std::thread::Builder::new()
+            let handle = thread::Builder::new()
                 .name(name)
                 .spawn(move || {
                     Self::read_from_pty(pty_fd_master, fd);
@@ -1788,51 +1823,83 @@ impl UCommand {
             {
                 self.args.push_front(c_arg);
             }
-        };
-
-        // unwrap is safe here because we have set `self.bin_path` before
-        let mut command = Command::new(self.bin_path.as_ref().unwrap());
-        command.args(&self.args);
-
-        // We use a temporary directory as working directory if not specified otherwise with
-        // `current_dir()`. If neither `current_dir` nor a temporary directory is available, then we
-        // create our own.
-        if let Some(current_dir) = &self.current_dir {
-            command.current_dir(current_dir);
-        } else if let Some(temp_dir) = &self.tmpd {
-            command.current_dir(temp_dir.path());
-        } else {
-            let temp_dir = tempfile::tempdir().unwrap();
-            self.current_dir = Some(temp_dir.path().into());
-            command.current_dir(temp_dir.path());
-            self.tmpd = Some(Rc::new(temp_dir));
         }
 
-        command.env_clear();
+        // Resolve the working directory before building the command, since WASM
+        // runners need it as an absolute --dir argument.
+        let work_dir = if let Some(current_dir) = &self.current_dir {
+            std::path::absolute(current_dir).unwrap_or_else(|_| current_dir.clone())
+        } else if let Some(temp_dir) = &self.tmpd {
+            temp_dir.path().to_path_buf()
+        } else {
+            let temp_dir = tempfile::tempdir().unwrap();
+            let path = temp_dir.path().to_path_buf();
+            self.current_dir = Some(path.clone());
+            self.tmpd = Some(Rc::new(temp_dir));
+            path
+        };
+
+        // If UUTESTS_WASM_RUNNER is set (e.g. "wasmtime"), run the binary through
+        // that runner so host-compiled tests can exercise a WASI binary. Only
+        // apply to the coreutils binary under test, not to helper commands like
+        // sh or seq that should run natively on the host.
+        let wasm_runner = env::var("UUTESTS_WASM_RUNNER").ok().filter(|_| {
+            self.bin_path.as_deref()
+                == env::var("UUTESTS_BINARY_PATH")
+                    .ok()
+                    .map(PathBuf::from)
+                    .as_deref()
+        });
+
+        // Collect environment variables for the command.
+        let mut cmd_env: Vec<(OsString, OsString)> = Vec::new();
+        cmd_env.extend(
+            DEFAULT_ENV
+                .iter()
+                .map(|(k, v)| (OsString::from(k), OsString::from(v))),
+        );
+        if let Some(path) = env::var_os("PATH") {
+            cmd_env.push(("PATH".into(), path));
+        }
         if cfg!(windows) {
             // spell-checker:ignore (dll) rsaenh
             // %SYSTEMROOT% is required on Windows to initialize crypto provider
-            // ... and crypto provider is required for std::rand
-            // From `procmon`: RegQueryValue HKLM\SOFTWARE\Microsoft\Cryptography\Defaults\Provider\Microsoft Strong Cryptographic Provider\Image Path
-            // SUCCESS  Type: REG_SZ, Length: 66, Data: %SystemRoot%\system32\rsaenh.dll"
             if let Some(systemroot) = env::var_os("SYSTEMROOT") {
-                command.env("SYSTEMROOT", systemroot);
+                cmd_env.push(("SYSTEMROOT".into(), systemroot));
             }
+        } else if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
+            cmd_env.push(("LD_PRELOAD".into(), ld_preload));
+        }
+        if let Some(llvm_profile) = env::var_os("LLVM_PROFILE_FILE") {
+            cmd_env.push(("LLVM_PROFILE_FILE".into(), llvm_profile));
+        }
+        cmd_env.extend(self.env_vars.iter().cloned());
+
+        let mut command = if let Some(ref runner) = wasm_runner {
+            let bin = self.bin_path.as_ref().unwrap();
+            let mut cmd = Command::new(runner);
+            // Map the working directory as the WASI guest's root. Only files
+            // under this directory are visible to the guest; tests using
+            // absolute host paths outside it must be skipped.
+            cmd.arg(format!("--dir={}::/", work_dir.display()));
+            cmd.arg("--argv0");
+            cmd.arg(bin.file_name().unwrap_or(bin.as_os_str()));
+            // Forward env vars to the WASI guest via --env flags
+            for (key, val) in &cmd_env {
+                if let (Some(k), Some(v)) = (key.to_str(), val.to_str()) {
+                    cmd.arg("--env");
+                    cmd.arg(format!("{k}={v}"));
+                }
+            }
+            cmd.arg(bin);
+            cmd
         } else {
-            // if someone is setting LD_PRELOAD, there's probably a good reason for it
-            if let Some(ld_preload) = env::var_os("LD_PRELOAD") {
-                command.env("LD_PRELOAD", ld_preload);
-            }
-        }
-
-        // Forward the LLVM_PROFILE_FILE variable to the call, for coverage purposes.
-        if let Some(ld_preload) = env::var_os("LLVM_PROFILE_FILE") {
-            command.env("LLVM_PROFILE_FILE", ld_preload);
-        }
-
-        command
-            .envs(DEFAULT_ENV)
-            .envs(self.env_vars.iter().cloned());
+            Command::new(self.bin_path.as_ref().unwrap())
+        };
+        command.args(&self.args);
+        command.current_dir(&work_dir);
+        command.env_clear();
+        command.envs(cmd_env);
 
         if self.timeout.is_none() {
             self.timeout = Some(Duration::from_secs(30));
@@ -1875,7 +1942,7 @@ impl UCommand {
                 .stdin(self.stdin.take().unwrap_or_else(Stdio::null))
                 .stdout(stdout)
                 .stderr(stderr);
-        };
+        }
 
         #[cfg(unix)]
         if let Some(simulated_terminal) = &self.terminal_simulation {
@@ -2050,7 +2117,7 @@ impl std::fmt::Display for UCommand {
 struct CapturedOutput {
     current_file: File,
     output: tempfile::NamedTempFile, // drop last
-    reader_thread_handle: Option<thread::JoinHandle<()>>,
+    reader_thread_handle: Option<JoinHandle<()>>,
 }
 
 impl CapturedOutput {
@@ -2064,7 +2131,7 @@ impl CapturedOutput {
     }
 
     /// Try to clone the file pointer.
-    fn try_clone(&mut self) -> io::Result<File> {
+    fn try_clone(&mut self) -> Result<File> {
         self.output.as_file().try_clone()
     }
 
@@ -2265,7 +2332,7 @@ pub struct UChild {
     stdin_pty: Option<File>,
     ignore_stdin_write_error: bool,
     stderr_to_stdout: bool,
-    join_handle: Option<JoinHandle<io::Result<()>>>,
+    join_handle: Option<JoinHandle<Result<()>>>,
     timeout: Option<Duration>,
     tmpd: Option<Rc<TempDir>>, // drop last
 }
@@ -2341,7 +2408,7 @@ impl UChild {
     ///
     /// If [`Child::kill`] returned an error or if the child process could not be terminated within
     /// `self.timeout` or the default of 60s.
-    pub fn try_kill(&mut self) -> io::Result<()> {
+    pub fn try_kill(&mut self) -> Result<()> {
         let start = Instant::now();
         self.raw.kill()?;
 
@@ -2402,10 +2469,7 @@ impl UChild {
     /// If [`Child::kill`] returned an error or if the child process could not be terminated within
     /// `self.timeout` or the default of 60s.
     #[cfg(unix)]
-    pub fn try_kill_with_custom_signal(
-        &mut self,
-        signal_name: sys::signal::Signal,
-    ) -> io::Result<()> {
+    pub fn try_kill_with_custom_signal(&mut self, signal_name: sys::signal::Signal) -> Result<()> {
         let start = Instant::now();
         sys::signal::kill(
             nix::unistd::Pid::from_raw(self.raw.id().try_into().unwrap()),
@@ -2462,7 +2526,7 @@ impl UChild {
     /// # Errors
     ///
     /// Returns the error from the call to `wait_with_output` if any
-    pub fn wait(self) -> io::Result<CmdResult> {
+    pub fn wait(self) -> Result<CmdResult> {
         let (bin_path, util_name, tmpd) = (
             self.bin_path.clone(),
             self.util_name.clone(),
@@ -2491,7 +2555,7 @@ impl UChild {
     ///
     /// If `self.timeout` is reached while waiting or [`Child::wait_with_output`] returned an
     /// error.
-    fn wait_with_output(mut self) -> io::Result<Output> {
+    fn wait_with_output(mut self) -> Result<Output> {
         // some apps do not stop execution until their stdin gets closed.
         // to prevent a endless waiting here, we close the stdin.
         self.join(); // ensure that all pending async input is piped in
@@ -2533,7 +2597,7 @@ impl UChild {
                 .join()
                 .expect("Error joining with the piping stdin thread")
                 .unwrap();
-        };
+        }
 
         if let Some(stdout) = self.captured_stdout.as_mut() {
             if let Some(handle) = stdout.reader_thread_handle.take() {
@@ -2754,7 +2818,7 @@ impl UChild {
         }
         let mut writer = self.take_stdin_as_writer();
 
-        let join_handle = std::thread::Builder::new()
+        let join_handle = thread::Builder::new()
             .name("pipe_in".to_string())
             .spawn(
                 move || match writer.write_all(&content).and_then(|()| writer.flush()) {
@@ -2797,7 +2861,7 @@ impl UChild {
     ///
     /// # Errors
     /// If [`std::process::ChildStdin::write_all`] or [`std::process::ChildStdin::flush`] returned an error
-    pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> io::Result<()> {
+    pub fn try_write_in<T: Into<Vec<u8>>>(&mut self, data: T) -> Result<()> {
         let ignore_stdin_write_error = self.ignore_stdin_write_error;
         let mut writer = self.access_stdin_as_writer();
 
@@ -2867,8 +2931,8 @@ pub fn whoami() -> String {
 
     // Use environment variable to get current user instead of
     // invoking `whoami` and fall back to user "nobody" on error.
-    std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
+    env::var("USER")
+        .or_else(|_| env::var("USERNAME"))
         .unwrap_or_else(|e| {
             println!("{UUTILS_WARNING}: {e}, using \"nobody\" instead");
             "nobody".to_string()
@@ -2877,12 +2941,12 @@ pub fn whoami() -> String {
 
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
-/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
-/// - controller_fd: The controller file descriptor
-/// - replica_fd: The replica file descriptor
+/// - controller: The controller file
+/// - replica: The replica file
 #[cfg(unix)]
-pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
     let pty = openpty(None, None).expect("Failed to create PTY");
@@ -2890,7 +2954,7 @@ pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
         .expect("Failed to get PTY path")
         .to_string_lossy()
         .to_string();
-    (path, pty.master, pty.slave)
+    (path, pty.master.into(), pty.slave.into())
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
@@ -3179,10 +3243,10 @@ mod tests {
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
-    #[ctor::ctor]
+    #[ctor::ctor(unsafe)]
     fn init() {
         unsafe {
-            std::env::set_var("UUTESTS_BINARY_PATH", "");
+            env::set_var("UUTESTS_BINARY_PATH", "");
         }
     }
 
@@ -3429,7 +3493,7 @@ mod tests {
         match check_coreutil_version("id", VERSION_MIN) {
             Ok(s) => assert!(s.starts_with("uutils-tests-")),
             Err(s) => assert!(s.starts_with("uutils-tests-warning")),
-        };
+        }
         #[cfg(target_os = "linux")]
         std::assert_eq!(
             check_coreutil_version("no test name", VERSION_MIN),

@@ -6,12 +6,12 @@ name = "uu_who"
 description = "who ~ (uutils) display information about currently logged-in users"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/who"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -22,9 +22,12 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
 [lib]
 path = "src/who.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
+rustix = { workspace = true }
 uucore = { workspace = true, features = ["utmpx"] }
 fluent = { workspace = true }
 

@@ -586,6 +586,7 @@ fn multibyte_escape_unicode() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_hex_round_trip() {
     new_ucmd!()
         .args(&["-e", r"\xFF"])
@@ -610,6 +611,7 @@ fn nine_bit_octal() {
 
 #[test]
 #[cfg(target_family = "unix")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -664,6 +666,7 @@ fn test_cmd_result_stdout_check_and_stdout_str_check() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_cmd_result_stderr_check_and_stderr_str_check() {
     let ts = TestScenario::new("echo");
 
@@ -797,7 +800,7 @@ fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
     child.kill();
 
     // we should be able to call wait without panics and apply some assertions
-    child.wait().unwrap().code_is(0).no_stdout().no_stderr();
+    child.wait().unwrap().code_is(0).no_output();
 }
 
 #[test]
@@ -825,4 +828,14 @@ fn test_emoji_output() {
         .args(&["🦀", "loves", "🚀", "and", "🌟"])
         .succeeds()
         .stdout_only("🦀 loves 🚀 and 🌟\n");
+
+    new_ucmd!()
+        .arg("🍎,🍌,🍒,🥝")
+        .succeeds()
+        .stdout_only("🍎,🍌,🍒,🥝\n");
+
+    new_ucmd!()
+        .arg("こんにちは世界")
+        .succeeds()
+        .stdout_only("こんにちは世界\n");
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore bytestream
-use super::*;
+use super::{Incomplete, str};
 use std::io::{self, BufRead};
 use thiserror::Error;
 use uucore::translate;
@@ -67,8 +67,7 @@ impl<B: BufRead> BufReadDecoder<B> {
             let buf = try_io!(self.buf_read.fill_buf());
 
             // Force loop iteration to go through an explicit `continue`
-            enum Unreachable {}
-            let _: Unreachable = if self.incomplete.is_empty() {
+            let _: std::convert::Infallible = if self.incomplete.is_empty() {
                 if buf.is_empty() {
                     return None; // EOF
                 }
@@ -79,17 +78,13 @@ impl<B: BufRead> BufReadDecoder<B> {
                         if valid_up_to > 0 {
                             break (BytesSource::BufRead(valid_up_to), Ok(()));
                         }
-                        match error.error_len() {
-                            Some(invalid_sequence_length) => {
-                                break (BytesSource::BufRead(invalid_sequence_length), Err(()));
-                            }
-                            None => {
-                                self.bytes_consumed = buf.len();
-                                self.incomplete = Incomplete::new(buf);
-                                // need more input bytes
-                                continue;
-                            }
+                        if let Some(invalid_sequence_length) = error.error_len() {
+                            break (BytesSource::BufRead(invalid_sequence_length), Err(()));
                         }
+                        self.bytes_consumed = buf.len();
+                        self.incomplete = Incomplete::new(buf);
+                        // need more input bytes
+                        continue;
                     }
                 }
             } else {

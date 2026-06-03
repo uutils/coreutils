@@ -24,7 +24,7 @@ pub mod options {
     pub static ZERO: &str = "zero";
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     //
     // Argument parsing
@@ -80,9 +80,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("basename")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("basename"))
         .about(translate!("basename-about"))
         .override_usage(format_usage(&translate!("basename-usage")))
         .infer_long_args(true)

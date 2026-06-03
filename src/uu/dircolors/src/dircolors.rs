@@ -3,14 +3,14 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
+// spell-checker:ignore (ToDO) dircolors eightbit fnmatch setenv colorterm disp cshell
 
 use std::borrow::Borrow;
 use std::env;
 use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write, stdout};
 use std::path::Path;
 
 use clap::{Arg, ArgAction, Command};
@@ -30,28 +30,25 @@ mod options {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum OutputFmt {
+enum OutputFmt {
     Shell,
     CShell,
     Display,
-    Unknown,
 }
 
-pub fn guess_syntax() -> OutputFmt {
-    match env::var("SHELL") {
-        Ok(ref s) if !s.is_empty() => {
-            let shell_path: &Path = s.as_ref();
-            if let Some(name) = shell_path.file_name() {
-                if name == "csh" || name == "tcsh" {
-                    OutputFmt::CShell
-                } else {
-                    OutputFmt::Shell
-                }
-            } else {
-                OutputFmt::Shell
-            }
-        }
-        _ => OutputFmt::Unknown,
+fn guess_syntax<T: AsRef<Path>>(path: T) -> Option<OutputFmt> {
+    let shell_path = path.as_ref();
+
+    if shell_path.as_os_str().is_empty() {
+        return None;
+    }
+
+    let is_cshell = |name| name == "csh" || name == "tcsh";
+
+    if shell_path.file_name().is_some_and(is_cshell) {
+        Some(OutputFmt::CShell)
+    } else {
+        Some(OutputFmt::Shell)
     }
 }
 
@@ -60,20 +57,18 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
         OutputFmt::Shell => "LS_COLORS='".to_string(),
         OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     let suffix = match fmt {
         OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
         OutputFmt::CShell => "'".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     (prefix, suffix)
 }
 
-pub fn generate_type_output(fmt: &OutputFmt) -> String {
+fn generate_type_output(fmt: &OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
@@ -92,40 +87,37 @@ pub fn generate_type_output(fmt: &OutputFmt) -> String {
 }
 
 fn generate_ls_colors(fmt: &OutputFmt, sep: &str) -> String {
-    match fmt {
-        OutputFmt::Display => {
-            let mut display_parts = vec![];
-            let type_output = generate_type_output(fmt);
-            display_parts.push(type_output);
-            for &(extension, code) in FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
-                display_parts.push(formatted_extension);
-            }
-            display_parts.join("\n")
+    if let OutputFmt::Display = fmt {
+        let mut display_parts = vec![];
+        let type_output = generate_type_output(fmt);
+        display_parts.push(type_output);
+        for &(extension, code) in FILE_COLORS {
+            let prefix = if extension.starts_with('*') { "" } else { "*" };
+            let formatted_extension = format!("\x1b[{code}m{prefix}{extension}\t{code}\x1b[0m");
+            display_parts.push(formatted_extension);
         }
-        _ => {
-            // existing logic for other formats
-            let mut parts = vec![];
-            for &(extension, code) in FILE_COLORS {
-                let prefix = if extension.starts_with('*') { "" } else { "*" };
-                let formatted_extension = format!("{prefix}{extension}");
-                parts.push(format!("{formatted_extension}={code}"));
-            }
-            let (prefix, suffix) = get_colors_format_strings(fmt);
-            let ls_colors = parts.join(sep);
-            format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt),)
+        display_parts.join("\n")
+    } else {
+        // existing logic for other formats
+        let mut parts = vec![];
+        for &(extension, code) in FILE_COLORS {
+            let prefix = if extension.starts_with('*') { "" } else { "*" };
+            let formatted_extension = format!("{prefix}{extension}");
+            parts.push(format!("{formatted_extension}={code}"));
         }
+        let (prefix, suffix) = get_colors_format_strings(fmt);
+        let ls_colors = parts.join(sep);
+        format!("{prefix}{}:{ls_colors}:{suffix}", generate_type_output(fmt))
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files = matches
         .get_many::<OsString>(options::FILE)
-        .map_or(vec![], |file_values| file_values.collect());
+        .map_or(vec![], Iterator::collect);
 
     // clap provides .conflicts_with / .conflicts_with_all, but we want to
     // manually handle conflicts so we can match the output of GNU coreutils
@@ -153,48 +145,28 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
 
-        println!("{}", generate_dircolors_config());
+        writeln!(stdout(), "{}", generate_dircolors_config())?;
         return Ok(());
     }
 
-    let mut out_format = if matches.get_flag(options::C_SHELL) {
+    let out_format = if matches.get_flag(options::C_SHELL) {
         OutputFmt::CShell
     } else if matches.get_flag(options::BOURNE_SHELL) {
         OutputFmt::Shell
     } else if matches.get_flag(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
-        OutputFmt::Unknown
+        env::var_os("SHELL")
+            .and_then(|path| guess_syntax(&path))
+            .ok_or_else(|| {
+                USimpleError::new(1, translate!("dircolors-error-no-shell-environment"))
+            })?
     };
-
-    if out_format == OutputFmt::Unknown {
-        match guess_syntax() {
-            OutputFmt::Unknown => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dircolors-error-no-shell-environment"),
-                ));
-            }
-            fmt => out_format = fmt,
-        }
-    }
 
     let result;
     if files.is_empty() {
-        println!("{}", generate_ls_colors(&out_format, ":"));
+        writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
         return Ok(());
-        /*
-        // Check if data is being piped into the program
-        if std::io::stdin().is_terminal() {
-            // No data piped, use default behavior
-            println!("{}", generate_ls_colors(&out_format, ":"));
-            return Ok(());
-        } else {
-            // Data is piped, process the input from stdin
-            let fin = BufReader::new(std::io::stdin());
-            result = parse(fin.lines().map_while(Result::ok), &out_format, "-");
-        }
-         */
     } else if files.len() > 1 {
         return Err(UUsageError::new(
             1,
@@ -233,7 +205,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(s) => {
-            println!("{s}");
+            writeln!(stdout(), "{s}")?;
             Ok(())
         }
         Err(s) => Err(USimpleError::new(1, s)),
@@ -241,9 +213,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dircolors")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("dircolors"))
         .about(translate!("dircolors-about"))
         .after_help(translate!("dircolors-after-help"))
         .override_usage(format_usage(&translate!("dircolors-usage")))
@@ -367,8 +339,7 @@ where
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
 
-    for (num, line) in user_input.into_iter().enumerate() {
-        let num = num + 1;
+    for (num, line) in (1..).zip(user_input) {
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;
@@ -489,7 +460,7 @@ fn escape(s: &str) -> String {
     result
 }
 
-pub fn generate_dircolors_config() -> String {
+fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
     config.push_str(
@@ -543,7 +514,7 @@ pub fn generate_dircolors_config() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::escape;
+    use super::*;
 
     #[test]
     fn test_escape() {
@@ -551,5 +522,16 @@ mod tests {
         assert_eq!("'\\''", escape("'"));
         assert_eq!("\\:", escape(":"));
         assert_eq!("\\:", escape("\\:"));
+    }
+
+    #[test]
+    fn test_guess_syntax() {
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("/path/csh"));
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("csh"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/path/bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/asd/bar"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("foo"));
+        assert_eq!(None, guess_syntax(""));
     }
 }

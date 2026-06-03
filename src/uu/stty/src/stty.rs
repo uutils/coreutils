@@ -21,7 +21,11 @@ use crate::flags::COMBINATION_SETTINGS;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use nix::libc::{O_NONBLOCK, TIOCGWINSZ, TIOCSWINSZ, c_ushort};
 
-#[cfg(target_os = "linux")]
+#[cfg(all(
+    target_os = "linux",
+    not(target_arch = "powerpc"),
+    not(target_arch = "powerpc64")
+))]
 use nix::libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
@@ -212,7 +216,7 @@ impl<'a> Options<'a> {
             device_name,
             settings: matches
                 .get_many::<String>(options::SETTINGS)
-                .map(|v| v.map(|s| s.as_ref()).collect()),
+                .map(|v| v.map(AsRef::as_ref).collect()),
         })
     }
 }
@@ -428,7 +432,7 @@ fn stty(opts: &Options) -> UResult<()> {
                     print_special_setting(setting, opts.file.as_raw_fd())?;
                 }
                 ArgOptions::SavedState(state) => {
-                    apply_saved_state(&mut termios, state)?;
+                    apply_saved_state(&mut termios, state);
                 }
             }
         }
@@ -485,10 +489,12 @@ fn invalid_speed<T>(arg: &str, speed: &str) -> Result<T, Box<dyn UError>> {
 /// GNU uses different error messages if values overflow or underflow a u8,
 /// this function returns the appropriate error message in the case of overflow or underflow, or u8 on success
 fn parse_u8_or_err(arg: &str) -> Result<u8, String> {
-    arg.parse::<u8>().map_err(|e| match e.kind() {
-        IntErrorKind::PosOverflow => translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'")),
-        _ => translate!("stty-error-invalid-integer-argument",
-                        "value" => format!("'{arg}'")),
+    arg.parse::<u8>().map_err(|e| {
+        if let IntErrorKind::PosOverflow = e.kind() {
+            translate!("stty-error-invalid-integer-argument-value-too-large", "value" => format!("'{arg}'"))
+        } else {
+            translate!("stty-error-invalid-integer-argument", "value" => format!("'{arg}'"))
+        }
     })
 }
 
@@ -567,16 +573,15 @@ impl WrappedPrinter {
     /// If term_size is None (typically when output is piped), falls back to
     /// the COLUMNS environment variable or a default width of 80 columns.
     fn new(term_size: Option<&TermSize>) -> Self {
-        let columns = match term_size {
-            Some(term_size) => term_size.columns,
-            None => {
-                const DEFAULT_TERM_WIDTH: u16 = 80;
+        let columns = if let Some(term_size) = term_size {
+            term_size.columns
+        } else {
+            const DEFAULT_TERM_WIDTH: u16 = 80;
 
-                std::env::var_os("COLUMNS")
-                    .and_then(|s| s.to_str()?.parse().ok())
-                    .filter(|&c| c > 0)
-                    .unwrap_or(DEFAULT_TERM_WIDTH)
-            }
+            std::env::var_os("COLUMNS")
+                .and_then(|s| s.to_str()?.parse().ok())
+                .filter(|&c| c > 0)
+                .unwrap_or(DEFAULT_TERM_WIDTH)
         };
 
         Self {
@@ -594,7 +599,7 @@ impl WrappedPrinter {
             self.first_in_line = true;
         }
 
-        print!("{}{}", self.prefix(), token);
+        print!("{}{token}", self.prefix());
         self.current += token_len;
         self.first_in_line = false;
     }
@@ -612,6 +617,10 @@ impl WrappedPrinter {
     }
 }
 
+#[allow(
+    clippy::unnecessary_wraps,
+    reason = "needed for some platform-specific code"
+)]
 fn print_terminal_size(
     termios: &Termios,
     opts: &Options,
@@ -622,19 +631,45 @@ fn print_terminal_size(
     #[cfg(not(target_os = "linux"))]
     let speed = nix::sys::termios::cfgetospeed(termios);
     #[cfg(target_os = "linux")]
+    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     ioctl_read_bad!(tcgets2, TCGETS2, termios2);
     #[cfg(target_os = "linux")]
+    #[cfg(all(not(target_arch = "powerpc"), not(target_arch = "powerpc64")))]
     let speed = {
         let mut t2 = unsafe { std::mem::zeroed::<termios2>() };
         unsafe { tcgets2(opts.file.as_raw_fd(), &raw mut t2)? };
         t2.c_ospeed
     };
+    #[cfg(target_os = "linux")]
+    #[cfg(any(target_arch = "powerpc", target_arch = "powerpc64"))]
+    let speed = nix::sys::termios::cfgetospeed(termios);
 
     let mut printer = WrappedPrinter::new(window_size);
 
-    // BSDs and Linux use a u32 for the baud rate, so we can simply print it.
+    // BSDs and Linux (not ppc/big-endian ppc64) use a u32 for the baud rate, so we can simply
+    // print it.
     #[cfg(any(target_os = "linux", bsd))]
+    #[cfg(all(
+        not(target_arch = "powerpc"),
+        not(all(target_arch = "powerpc64", target_endian = "big"))
+    ))]
     printer.print(&translate!("stty-output-speed", "speed" => speed));
+
+    // Big-endian Linux PowerPC uses BaudRate enum, need to convert to display format
+    #[cfg(target_os = "linux")]
+    #[cfg(any(
+        target_arch = "powerpc",
+        all(target_arch = "powerpc64", target_endian = "big")
+    ))]
+    {
+        // On PowerPC, find the corresponding baud rate string for display
+        let speed_str = BAUD_RATES
+            .iter()
+            .find(|(_, rate)| *rate == speed)
+            .map(|(text, _)| *text)
+            .unwrap_or("unknown");
+        printer.print(&translate!("stty-output-speed", "speed" => speed_str));
+    }
 
     // Other platforms need to use the baud rate enum, so printing the right value
     // becomes slightly more complicated.
@@ -708,7 +743,7 @@ fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
 
         // Validate all remaining chars are digits
         let rest: Vec<_> = chars.collect();
-        if !rest.iter().all(|c| c.is_ascii_digit()) {
+        if !rest.iter().all(char::is_ascii_digit) {
             return None;
         }
 
@@ -985,10 +1020,10 @@ fn apply_char_mapping(termios: &mut Termios, mapping: &(S, u8)) {
 ///
 /// If state has fewer than 4 elements, no changes are applied. This is a defensive
 /// check that should never trigger since `parse_saved_state` rejects such states.
-fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
+fn apply_saved_state(termios: &mut Termios, state: &[u32]) {
     // Require at least 4 elements for the flags (defensive check)
     if state.len() < 4 {
-        return Ok(()); // No-op for invalid state (already validated by parser)
+        return; // No-op for invalid state (already validated by parser)
     }
 
     // Apply the four flag groups, done (as _) for MacOS size compatibility
@@ -1003,8 +1038,6 @@ fn apply_saved_state(termios: &mut Termios, state: &[u32]) -> nix::Result<()> {
             termios.control_chars[i] = cc_val as u8;
         }
     }
-
-    Ok(())
 }
 
 fn apply_special_setting(
@@ -1187,6 +1220,12 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
                 (S::VDISCARD, "^O"),
             ];
         }
+        "tabs" => {
+            flags = vec!["tab0"];
+        }
+        "-tabs" => {
+            flags = vec!["tab3"];
+        }
         _ => unreachable!("invalid combination setting: must have been caught earlier"),
     }
     let mut flags = flags
@@ -1220,9 +1259,9 @@ fn get_sane_control_char(cc_index: S) -> u8 {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("stty")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("stty"))
         .override_usage(format_usage(&translate!("stty-usage")))
         .about(translate!("stty-about"))
         .infer_long_args(true)

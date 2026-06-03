@@ -16,7 +16,7 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, Parser, allow_list_with_all_suffixes};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -124,7 +124,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("truncate")
         .version(uucore::crate_version!())
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
@@ -298,7 +298,7 @@ fn is_modifier(c: char) -> bool {
 
 /// Parse a size string with optional modifier symbol as its first character.
 ///
-/// A size string is as described in [`parse_size_u64`]. The first character
+/// A size string is as described in [`Parser::parse_u64`]. The first character
 /// of `size_string` might be a modifier symbol, like `'+'` or
 /// `'<'`. The first element of the pair returned by this function
 /// indicates which modifier symbol was present, or
@@ -323,15 +323,20 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
-        parse_size_u64(size_string).map(match c {
-            '+' => TruncateMode::Extend,
-            '-' => TruncateMode::Reduce,
-            '<' => TruncateMode::AtMost,
-            '>' => TruncateMode::AtLeast,
-            '/' => TruncateMode::RoundDown,
-            '%' => TruncateMode::RoundUp,
-            _ => TruncateMode::Absolute,
-        })
+        let allow_list = allow_list_with_all_suffixes("EgGkKmMPQRtTYZ");
+        let allow_list_ref = allow_list.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+        Parser::default()
+            .with_allow_list(&allow_list_ref)
+            .parse_u64(size_string)
+            .map(match c {
+                '+' => TruncateMode::Extend,
+                '-' => TruncateMode::Reduce,
+                '<' => TruncateMode::AtMost,
+                '>' => TruncateMode::AtLeast,
+                '/' => TruncateMode::RoundDown,
+                '%' => TruncateMode::RoundUp,
+                _ => TruncateMode::Absolute,
+            })
     } else {
         Err(ParseSizeError::ParseFailure(size_string.to_string()))
     }
@@ -351,6 +356,9 @@ mod tests {
         assert_eq!(parse_mode_and_size(">10"), Ok(TruncateMode::AtLeast(10)));
         assert_eq!(parse_mode_and_size("/10"), Ok(TruncateMode::RoundDown(10)));
         assert_eq!(parse_mode_and_size("%10"), Ok(TruncateMode::RoundUp(10)));
+        assert_eq!(parse_mode_and_size("1kB"), Ok(TruncateMode::Absolute(1000)));
+        assert_eq!(parse_mode_and_size("1kD"), Ok(TruncateMode::Absolute(1000)));
+        assert!(parse_mode_and_size("1b").is_err());
     }
 
     #[test]
@@ -363,5 +371,31 @@ mod tests {
         assert_eq!(TruncateMode::RoundUp(8).to_size(10), Some(16));
         assert_eq!(TruncateMode::RoundUp(8).to_size(16), Some(16));
         assert_eq!(TruncateMode::RoundDown(0).to_size(123), None);
+        assert_eq!(TruncateMode::RoundUp(0).to_size(123), None);
+    }
+
+    #[test]
+    fn test_round_up_when_file_smaller_than_size() {
+        // fsize < size: must round up to size itself
+        assert_eq!(
+            TruncateMode::RoundUp(131_072).to_size(24_696),
+            Some(131_072)
+        );
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(1), Some(4096));
+        assert_eq!(TruncateMode::RoundUp(100).to_size(50), Some(100));
+    }
+
+    #[test]
+    fn test_round_up_already_aligned() {
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(0), Some(0));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(4096), Some(4096));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(8192), Some(8192));
+    }
+
+    #[test]
+    fn test_round_up_not_aligned() {
+        // fsize > size but not a multiple: must round up to next multiple
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(5000), Some(8192));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(13), Some(16));
     }
 }

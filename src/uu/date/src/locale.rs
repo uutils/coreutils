@@ -12,14 +12,7 @@
 macro_rules! cfg_langinfo {
     ($($item:item)*) => {
         $(
-            #[cfg(any(
-                target_os = "linux",
-                target_vendor = "apple",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "dragonfly"
-            ))]
+            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
             $item
         )*
     }
@@ -28,10 +21,16 @@ macro_rules! cfg_langinfo {
 cfg_langinfo! {
     use std::ffi::CStr;
     use std::sync::OnceLock;
-    use nix::libc;
 
     #[cfg(test)]
     use std::sync::Mutex;
+
+    /// glibc's `_DATE_FMT` has been stable for the last 12 years
+    /// being added upstream to libc TODO: update to libc
+    #[cfg(any(target_os = "linux", target_os = "cygwin"))]
+    const DATE_FMT: libc::nl_item = 0x2006c;
+    #[cfg(not(any(target_os = "linux", target_os = "cygwin")))]
+    const DATE_FMT: libc::nl_item = libc::D_T_FMT;
 }
 
 cfg_langinfo! {
@@ -76,7 +75,7 @@ cfg_langinfo! {
             libc::setlocale(libc::LC_TIME, c"".as_ptr());
 
             // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(libc::D_T_FMT);
+            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
             if d_t_fmt_ptr.is_null() {
                 return None;
             }
@@ -111,14 +110,12 @@ cfg_langinfo! {
 }
 
 /// On platforms without nl_langinfo support, use 24-hour format by default
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 pub fn get_locale_default_format() -> &'static str {
     "%a %b %e %X %Z %Y"
 }
@@ -178,9 +175,9 @@ mod tests {
             let _lock = LOCALE_MUTEX.lock().unwrap();
 
             // Save original locale (both environment and process locale)
-            let original_lc_all = std::env::var("LC_ALL").ok();
-            let original_lc_time = std::env::var("LC_TIME").ok();
-            let original_lang = std::env::var("LANG").ok();
+            let original_lc_all = std::env::var_os("LC_ALL");
+            let original_lc_time = std::env::var_os("LC_TIME");
+            let original_lang = std::env::var_os("LANG");
 
             // Save current process locale
             let original_process_locale = unsafe {
@@ -188,7 +185,7 @@ mod tests {
                 if ptr.is_null() {
                     None
                 } else {
-                    CStr::from_ptr(ptr).to_str().ok().map(|s| s.to_string())
+                    CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
                 }
             };
 

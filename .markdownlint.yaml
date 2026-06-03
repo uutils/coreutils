@@ -3,4 +3,3 @@ MD013: false
 # Disable 'Fenced code blocks should have a language specified'
 # Doesn't provide much in src/ to enforce it
 MD040: false
-

@@ -4,17 +4,17 @@ index 99f0563bc..f7b9e7885 100755
 +++ b/tests/ls/no-cap.sh
 @@ -27,11 +27,11 @@ setcap 'cap_net_bind_service=ep' file ||
    skip_ "setcap doesn't work"
- 
+
  LS_COLORS=ca=1; export LS_COLORS
 -strace -e capget ls --color=always > /dev/null 2> out || fail=1
 -$EGREP 'capget\(' out || skip_ "your ls doesn't call capget"
 +strace -e listxattr ls --color=always > /dev/null 2> out || fail=1
 +$EGREP 'listxattr\(' out || skip_ "your ls doesn't call listxattr"
- 
+
  LS_COLORS=ca=:; export LS_COLORS
 -strace -e capget ls --color=always > /dev/null 2> out || fail=1
 -$EGREP 'capget\(' out && fail=1
 +strace -e listxattr ls --color=always > /dev/null 2> out || fail=1
 +$EGREP 'listxattr\(' out && fail=1
- 
+
  Exit $fail

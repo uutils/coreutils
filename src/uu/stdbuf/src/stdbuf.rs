@@ -31,21 +31,19 @@ mod options {
 
 #[cfg(all(
     not(feature = "feat_external_libstdbuf"),
-    any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "dragonfly"
-    )
+    unix,
+    not(target_vendor = "apple"),
+    not(target_os = "cygwin")
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.so"));
 
 #[cfg(all(not(feature = "feat_external_libstdbuf"), target_vendor = "apple"))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dylib"));
 
-#[cfg(all(not(feature = "feat_external_libstdbuf"), target_os = "cygwin"))]
+#[cfg(all(
+    not(feature = "feat_external_libstdbuf"),
+    any(target_os = "cygwin", target_os = "windows")
+))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 
 enum BufferType {
@@ -82,37 +80,19 @@ enum ProgramOptionsError {
     ValueTooLarge(String),
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("LD_PRELOAD", "so"))
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "so")
 }
 
 #[cfg(target_vendor = "apple")]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Ok(("DYLD_LIBRARY_PATH", "dylib"))
+fn preload_strings() -> (&'static str, &'static str) {
+    ("DYLD_LIBRARY_PATH", "dylib")
 }
 
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly",
-    target_vendor = "apple"
-)))]
-fn preload_strings() -> UResult<(&'static str, &'static str)> {
-    Err(USimpleError::new(
-        1,
-        translate!("stdbuf-error-command-not-supported"),
-    ))
+#[cfg(any(target_os = "cygwin", windows))]
+fn preload_strings() -> (&'static str, &'static str) {
+    ("LD_PRELOAD", "dll")
 }
 
 fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
@@ -155,7 +135,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     use std::fs::File;
     use std::io::Write;
 
-    let (preload, extension) = preload_strings()?;
+    let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
     let mut file = File::create(&inject_path)?;
@@ -166,18 +146,39 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    let (preload, extension) = preload_strings()?;
-
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
     const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+
+    let (preload, extension) = preload_strings();
+
+    // Search paths in order:
+    // 1. Directory where stdbuf is located (program_path)
+    // 2. Compile-time directory from LIBSTDBUF_DIR
+    let mut search_paths: Vec<PathBuf> = Vec::with_capacity(2);
+
+    // First, try to get the directory where stdbuf is running from
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            search_paths.push(exe_dir.to_path_buf());
+        }
+    }
+
+    // Add the compile-time directory as fallback
+    search_paths.push(PathBuf::from(LIBSTDBUF_DIR));
+
+    // Search for libstdbuf in each path
+    for base_path in search_paths {
+        let path_buf = base_path.join("libstdbuf").with_extension(extension);
+        if path_buf.exists() {
+            return Ok((preload.to_owned(), path_buf));
+        }
+    }
+
+    // If not found in any path, report error
     let path_buf = PathBuf::from(LIBSTDBUF_DIR)
         .join("libstdbuf")
         .with_extension(extension);
-    if path_buf.exists() {
-        return Ok((preload.to_owned(), path_buf));
-    }
-
     Err(USimpleError::new(
         1,
         translate!("stdbuf-error-external-libstdbuf-not-found", "path" => path_buf.display()),
@@ -194,9 +195,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut command_values = matches
         .get_many::<OsString>(options::COMMAND)
-        .ok_or_else(|| UUsageError::new(125, "no command specified".to_string()))?;
+        .ok_or_else(|| UUsageError::new(125, "no command specified"))?;
     let Some(first_command) = command_values.next() else {
-        return Err(UUsageError::new(125, "no command specified".to_string()));
+        return Err(UUsageError::new(125, "no command specified"));
     };
     let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
@@ -211,7 +212,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     command.args(command_params);
 
     // Replace the current process with the target program (no fork) using exec.
+    #[cfg(unix)]
     let e = command.exec();
+    #[cfg(windows)]
+    let e = match command.spawn() {
+        Ok(mut child) => {
+            let status = child.wait().unwrap();
+            process::exit(status.code().unwrap_or(0));
+        }
+        Err(err) => err,
+    };
     // exec() only returns if there was an error
     match e.kind() {
         std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
@@ -230,10 +240,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    #[cfg(unix)]
+    let about = translate!("stdbuf-about");
+    #[cfg(windows)]
+    let about = translate!("stdbuf-about-windows");
+    Command::new("stdbuf")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("stdbuf-about"))
+        .help_template(uucore::localized_help_template("stdbuf"))
+        .about(about)
         .after_help(translate!("stdbuf-after-help"))
         .override_usage(format_usage(&translate!("stdbuf-usage")))
         .trailing_var_arg(true)

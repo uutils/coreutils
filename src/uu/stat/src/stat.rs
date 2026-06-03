@@ -5,6 +5,8 @@
 // spell-checker:ignore datetime
 
 use uucore::error::{UError, UResult, USimpleError};
+use uucore::i18n::UEncoding;
+use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -19,6 +21,7 @@ use uucore::{entries, format_usage, show_error, show_warning};
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::borrow::Cow;
+use std::cell::OnceCell;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
 use std::io::Write;
@@ -117,7 +120,7 @@ fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
 ///
 /// On Unix systems, this preserves non-UTF8 data by printing raw bytes
 /// On other platforms, falls back to lossy string conversion
-fn pad_and_print_bytes<W: Write>(
+fn write_padded_bytes<W: Write>(
     mut writer: W,
     bytes: &[u8],
     left: bool,
@@ -306,7 +309,8 @@ struct Stater {
     show_fs: bool,
     from_user: bool,
     files: Vec<OsString>,
-    mount_list: Option<Vec<OsString>>,
+    mount_list: OnceCell<Option<Vec<OsString>>>,
+    mount_list_needed: bool,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
 }
@@ -351,21 +355,21 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
     // A sign (+ or -) should always be placed before a number produced by a signed conversion.
     // By default, a sign  is  used only for negative numbers.
     // A + overrides a space if both are used.
-    let padding_char = determine_padding_char(&flags);
+    let padding_char = determine_padding_char(flags);
 
     match output {
-        OutputType::Str(s) => print_str(s, &flags, width, precision),
-        OutputType::OsStr(s) => print_os_str(s, &flags, width, precision),
-        OutputType::Integer(num) => print_integer(*num, &flags, width, precision, padding_char),
-        OutputType::Unsigned(num) => print_unsigned(*num, &flags, width, precision, padding_char),
+        OutputType::Str(s) => print_str(s, flags, width, precision),
+        OutputType::OsStr(s) => print_os_str(s, flags, width, precision),
+        OutputType::Integer(num) => print_integer(*num, flags, width, precision, padding_char),
+        OutputType::Unsigned(num) => print_unsigned(*num, flags, width, precision, padding_char),
         OutputType::UnsignedOct(num) => {
-            print_unsigned_oct(*num, &flags, width, precision, padding_char);
+            print_unsigned_oct(*num, flags, width, precision, padding_char);
         }
         OutputType::UnsignedHex(num) => {
-            print_unsigned_hex(*num, &flags, width, precision, padding_char);
+            print_unsigned_hex(*num, flags, width, precision, padding_char);
         }
         OutputType::Float(num) => {
-            print_float(*num, &flags, width, precision, padding_char);
+            print_float(*num, flags, width, precision, padding_char);
         }
         OutputType::Unknown => print!("?"),
     }
@@ -380,7 +384,7 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
 /// # Returns
 ///
 /// * Padding - An instance of the Padding enum representing the padding character.
-fn determine_padding_char(flags: &Flags) -> Padding {
+fn determine_padding_char(flags: Flags) -> Padding {
     if flags.zero && !flags.left {
         Padding::Zero
     } else {
@@ -396,7 +400,7 @@ fn determine_padding_char(flags: &Flags) -> Padding {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
+fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
     let s = match precision {
         Precision::Number(p) if p < s.len() => &s[..p],
         _ => s,
@@ -415,14 +419,14 @@ fn print_str(s: &str, flags: &Flags, width: usize, precision: Precision) {
 /// * `flags` - A reference to the Flags struct containing formatting flags.
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
-fn print_os_str(s: &OsString, flags: &Flags, width: usize, precision: Precision) {
+fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) {
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStrExt;
 
         let bytes = s.as_bytes();
 
-        if pad_and_print_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
+        if write_padded_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
             // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
             let fallback_string = s.to_string_lossy();
             print_str(&fallback_string, flags, width, precision);
@@ -441,24 +445,47 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{escaped}'")
         }
-        QuotingStyle::ShellEscapeAlways => {
-            let quote = if file_name.contains('\'') { '"' } else { '\'' };
-            format!("{quote}{file_name}{quote}")
-        }
+        QuotingStyle::ShellEscapeAlways => escape_name(
+            OsStr::new(file_name),
+            UucoreQuotingStyle::Shell {
+                escape: true,
+                always_quote: true,
+                show_control: true,
+            },
+            UEncoding::Utf8,
+        )
+        .to_string_lossy()
+        .to_string(),
         QuotingStyle::Quote => file_name.to_string(),
+    }
+}
+
+fn warn_invalid_quoting_style(style: &str) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        show_error!(
+            "{}",
+            translate!("stat-warning-invalid-env-quoting-style", "style" => style.to_string())
+        );
     }
 }
 
 fn get_quoted_file_name(
     display_name: &str,
     file: &OsString,
-    file_type: &FileType,
+    file_type: FileType,
     from_user: bool,
 ) -> Result<String, i32> {
-    let quoting_style = env::var("QUOTING_STYLE")
-        .ok()
-        .and_then(|style| style.parse().ok())
-        .unwrap_or_default();
+    let quoting_style = match env::var("QUOTING_STYLE") {
+        Ok(style) => style.parse().unwrap_or_else(|_| {
+            // Match GNU coreutils 9.11: warn (once) when QUOTING_STYLE is set
+            // to a value we don't understand, then fall back to the default.
+            warn_invalid_quoting_style(&style);
+            QuotingStyle::default()
+        }),
+        Err(_) => QuotingStyle::default(),
+    };
 
     if file_type.is_symlink() {
         let quoted_display_name = quote_file_name(display_name, &quoting_style);
@@ -484,7 +511,7 @@ fn get_quoted_file_name(
 
 fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
     match *t {
-        Token::Byte(byte) => write_raw_byte(byte),
+        Token::Byte(byte) => print_raw_byte(byte),
         Token::Char(c) => print!("{c}"),
         Token::Directive {
             flag,
@@ -536,7 +563,7 @@ fn process_token_filesystem(t: &Token, meta: &StatFs, display_name: &str) {
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_integer(
     num: i64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -601,7 +628,7 @@ fn precision_trunc(num: f64, precision: Precision) -> String {
     }
 }
 
-fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padding_char: Padding) {
+fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, padding_char: Padding) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -625,7 +652,7 @@ fn print_float(num: f64, flags: &Flags, width: usize, precision: Precision, padd
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -655,7 +682,7 @@ fn print_unsigned(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_oct(
     num: u32,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -680,7 +707,7 @@ fn print_unsigned_oct(
 /// * `padding_char` - The padding character as determined by `determine_padding_char`.
 fn print_unsigned_hex(
     num: u64,
-    flags: &Flags,
+    flags: Flags,
     width: usize,
     precision: Precision,
     padding_char: Padding,
@@ -694,7 +721,7 @@ fn print_unsigned_hex(
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
-fn write_raw_byte(byte: u8) {
+fn print_raw_byte(byte: u8) {
     std::io::stdout().write_all(&[byte]).unwrap();
 }
 
@@ -964,30 +991,44 @@ impl Stater {
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
-        let mount_list = if show_fs
-            || !default_tokens
+        let mount_list_needed = !show_fs
+            && default_tokens
                 .iter()
-                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }))
-        {
-            None
-        } else {
-            Some(Self::populate_mount_list()?)
-        };
+                .any(|tok| matches!(tok, Token::Directive { format: 'm', .. }));
 
         Ok(Self {
             follow: matches.get_flag(options::DEREFERENCE),
             show_fs,
             from_user: !format_str.is_empty(),
             files,
+            mount_list: OnceCell::new(),
+            mount_list_needed,
             default_tokens,
             default_dev_tokens,
-            mount_list,
         })
     }
 
     fn find_mount_point<P: AsRef<Path>>(&self, p: P) -> Option<&OsString> {
+        if !self.mount_list_needed {
+            return None;
+        }
+
+        let mount_list = self.mount_list.get_or_init(|| {
+            match Self::populate_mount_list() {
+                Ok(list) => Some(list),
+                Err(e) => {
+                    // Show warning like GNU does when mount information cannot be read
+                    show_warning!(
+                        "{}",
+                        translate!("stat-error-cannot-read-filesystem", "error" => e.to_string())
+                    );
+                    None
+                }
+            }
+        });
+
         let path = p.as_ref().canonicalize().ok()?;
-        self.mount_list
+        mount_list
             .as_ref()?
             .iter()
             .find(|root| path.starts_with(root))
@@ -1015,13 +1056,15 @@ impl Stater {
         meta: &Metadata,
         display_name: &str,
         file: &OsString,
-        file_type: &FileType,
+        file_type: FileType,
         from_user: bool,
-        #[cfg(feature = "selinux")] follow_symbolic_links: bool,
-        #[cfg(not(feature = "selinux"))] _: bool,
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        follow_symbolic_links: bool,
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+        _: bool,
     ) -> Result<(), i32> {
         match *t {
-            Token::Byte(byte) => write_raw_byte(byte),
+            Token::Byte(byte) => print_raw_byte(byte),
             Token::Char(c) => print!("{c}"),
 
             Token::Directive {
@@ -1230,7 +1273,7 @@ impl Stater {
                             &meta,
                             &display_name,
                             &file,
-                            &file_type,
+                            file_type,
                             self.from_user,
                             follow_symbolic_links,
                         ) {
@@ -1303,13 +1346,12 @@ impl Stater {
             };
 
             format!(
-                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
+                "  {}: %N\n  {}: %-10s\t{}: %-10b {} {}: %-6o %F\n{device_line}{}: (%04a/%10.10A)  {}: (%5u/%8U)   {}: (%5g/%8G)\n{}: %x\n{}: %y\n{}: %z\n {}: %w\n",
                 translate!("stat-word-file"),
                 translate!("stat-word-size"),
                 translate!("stat-word-blocks"),
                 translate!("stat-word-io"),
                 translate!("stat-word-block"),
-                device_line,
                 translate!("stat-word-access"),
                 translate!("stat-word-uid"),
                 translate!("stat-word-gid"),
@@ -1336,9 +1378,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("stat")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("stat"))
         .about(translate!("stat-about"))
         .after_help(translate!("stat-after-help"))
         .override_usage(format_usage(&translate!("stat-usage")))
@@ -1406,7 +1448,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{pad_and_print_bytes, quote_file_name, write_padding};
+    use crate::{quote_file_name, write_padded_bytes, write_padding};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1531,23 +1573,23 @@ mod tests {
     }
 
     #[test]
-    fn test_pad_and_print_bytes() {
+    fn test_write_padded_bytes() {
         // testing non-utf8 with normal settings
         let mut buffer = Vec::new();
         let bytes = b"\x80\xFF\x80";
-        pad_and_print_bytes(&mut buffer, bytes, false, 3, Precision::NotSpecified).unwrap();
+        write_padded_bytes(&mut buffer, bytes, false, 3, Precision::NotSpecified).unwrap();
         assert_eq!(&buffer, b"\x80\xFF\x80");
 
         // testing left padding
         let mut buffer = Vec::new();
         let bytes = b"\x80\xFF\x80";
-        pad_and_print_bytes(&mut buffer, bytes, false, 5, Precision::NotSpecified).unwrap();
+        write_padded_bytes(&mut buffer, bytes, false, 5, Precision::NotSpecified).unwrap();
         assert_eq!(&buffer, b"  \x80\xFF\x80");
 
         // testing right padding
         let mut buffer = Vec::new();
         let bytes = b"\x80\xFF\x80";
-        pad_and_print_bytes(&mut buffer, bytes, true, 5, Precision::NotSpecified).unwrap();
+        write_padded_bytes(&mut buffer, bytes, true, 5, Precision::NotSpecified).unwrap();
         assert_eq!(&buffer, b"\x80\xFF\x80  ");
     }
 

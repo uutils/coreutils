@@ -15,7 +15,7 @@
 //! [radix]: https://en.wikipedia.org/wiki/Radix
 //! [positional notation]: https://en.wikipedia.org/wiki/Positional_notation
 use std::error::Error;
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Display, Formatter, Write};
 use uucore::translate;
 
 /// An overflow due to incrementing a number beyond its representable limit.
@@ -144,7 +144,10 @@ impl Number {
     pub fn increment(&mut self) -> Result<(), Overflow> {
         match self {
             Self::FixedWidth(number) => number.increment(),
-            Self::DynamicWidth(number) => number.increment(),
+            Self::DynamicWidth(number) => {
+                number.increment();
+                Ok(())
+            }
         }
     }
 }
@@ -241,12 +244,10 @@ impl FixedWidthNumber {
 
 impl Display for FixedWidthNumber {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        let digits: String = self
-            .digits
-            .iter()
-            .map(|d| map_digit(self.radix, *d))
-            .collect();
-        write!(f, "{digits}")
+        for d in &self.digits {
+            f.write_char(map_digit(self.radix, *d))?;
+        }
+        Ok(())
     }
 }
 
@@ -303,9 +304,8 @@ impl DynamicWidthNumber {
         }
     }
 
-    fn increment(&mut self) -> Result<(), Overflow> {
+    fn increment(&mut self) {
         self.current += 1;
-        Ok(())
     }
 
     fn digits(&self) -> Vec<u8> {

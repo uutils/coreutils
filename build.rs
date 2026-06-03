@@ -44,6 +44,10 @@ pub fn main() {
             // Allow this as we have a bunch of info in the comments
             #[allow(clippy::match_same_arms)]
             match krate.as_ref() {
+                #[cfg(not(any(target_os = "linux", target_os = "android")))]
+                "chcon" | "runcon" => {
+                    continue;
+                }
                 "default" | "macos" | "unix" | "windows" | "selinux" | "zip" | "clap_complete"
                 | "clap_mangen" | "fluent_syntax" => continue, // common/standard feature names
                 "nightly" | "test_unimplemented" | "expensive_tests" | "test_risky_names" => {
@@ -72,26 +76,37 @@ pub fn main() {
     .unwrap();
 
     let mut phf_map = phf_codegen::OrderedMap::<&str>::new();
+    let mut entries = Vec::new();
+
     for krate in &crates {
         let map_value = format!("({krate}::uumain, {krate}::uu_app)");
         match krate.as_ref() {
             // 'test' is named uu_test to avoid collision with rust core crate 'test'.
             // It can also be invoked by name '[' for the '[ expr ] syntax'.
             "uu_test" => {
-                phf_map.entry("test", map_value.clone());
-                phf_map.entry("[", map_value.clone());
+                entries.push(("test", map_value.clone()));
+                entries.push(("[", map_value.clone()));
             }
             k if k.starts_with(OVERRIDE_PREFIX) => {
-                phf_map.entry(&k[OVERRIDE_PREFIX.len()..], map_value.clone());
+                entries.push((&k[OVERRIDE_PREFIX.len()..], map_value.clone()));
             }
             "false" | "true" => {
-                phf_map.entry(krate, format!("(r#{krate}::uumain, r#{krate}::uu_app)"));
+                entries.push((
+                    krate.as_str(),
+                    format!("(r#{krate}::uumain, r#{krate}::uu_app)"),
+                ));
             }
             _ => {
-                phf_map.entry(krate, map_value.clone());
+                entries.push((krate.as_str(), map_value.clone()));
             }
         }
     }
+    entries.sort_by_key(|(name, _)| *name);
+
+    for (name, value) in entries {
+        phf_map.entry(name, value);
+    }
+
     write!(mf, "{}", phf_map.build()).unwrap();
     mf.write_all(b"\n}\n").unwrap();
 

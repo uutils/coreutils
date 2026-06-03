@@ -6,6 +6,7 @@ use std::ffi::OsStr;
 use std::io::{BufWriter, Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
+use uucore::display::Quotable;
 use uucore::fs;
 use uucore::translate;
 
@@ -15,7 +16,7 @@ use uucore::translate;
 /// a file writer
 pub fn instantiate_current_writer(
     _filter: Option<&str>,
-    filename: &str,
+    filename: &OsStr,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
     let file = if is_new {
@@ -24,22 +25,24 @@ pub fn instantiate_current_writer(
             .write(true)
             .create(true)
             .truncate(true)
-            .open(Path::new(&filename))
+            .open(Path::new(filename))
             .map_err(|e| match e.kind() {
-                ErrorKind::IsADirectory => {
-                    Error::other(translate!("split-error-is-a-directory", "dir" => filename))
-                }
-                _ => {
-                    Error::other(translate!("split-error-unable-to-open-file", "file" => filename))
-                }
+                ErrorKind::IsADirectory => Error::other(
+                    translate!("split-error-is-a-directory", "dir" => filename.quote()),
+                ),
+                _ => Error::other(
+                    translate!("split-error-unable-to-open-file", "file" => filename.quote()),
+                ),
             })?
     } else {
         // re-open file that we previously created to append to it
         std::fs::OpenOptions::new()
             .append(true)
-            .open(Path::new(&filename))
+            .open(Path::new(filename))
             .map_err(|_| {
-                Error::other(translate!("split-error-unable-to-reopen-file", "file" => filename))
+                Error::other(
+                    translate!("split-error-unable-to-reopen-file", "file" => filename.quote()),
+                )
             })?
     };
     Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))

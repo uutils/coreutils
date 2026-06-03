@@ -83,7 +83,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
 
         // Apply SMACK context if requested
-        #[cfg(feature = "smack")]
+        #[cfg(all(feature = "smack", target_os = "linux"))]
         {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
@@ -97,9 +97,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mkfifo")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("mkfifo"))
         .override_usage(format_usage(&translate!("mkfifo-usage")))
         .about(translate!("mkfifo-about"))
         .infer_long_args(true)

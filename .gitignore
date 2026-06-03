@@ -6,7 +6,6 @@ coverage/
 /build/
 /tmp/
 /busybox/
-/.vscode/
 /.vs/
 /public/
 *~

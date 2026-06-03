@@ -316,8 +316,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     scene
         .ucmd()
         .arg("-d")
@@ -325,8 +324,7 @@ fn test_mktemp_quiet() {
         .arg("/definitely/not/exist/I/promise")
         .arg("-q")
         .fails()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -695,6 +693,14 @@ fn test_too_few_xs_suffix() {
 fn test_too_few_xs_suffix_directory() {
     new_ucmd!()
         .args(&["-d", "--suffix=X", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
+}
+
+#[test]
+fn test_too_few_xs_quiet() {
+    new_ucmd!()
+        .args(&["-q", "aXX"])
         .fails()
         .stderr_only("mktemp: too few X's in template 'aXX'\n");
 }
@@ -1141,6 +1147,26 @@ fn test_non_utf8_tmpdir_long_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+fn test_invalid_utf8_suffix() {
+    use std::os::unix::ffi::OsStrExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // Create invalid UTF-8 bytes for suffix
+    // This mimics the GNU test which tests mktemp with bad unicode characters
+    let invalid_utf8 = std::ffi::OsStr::from_bytes(b"\xC3|\xED\xBA\xAD");
+
+    // Test that mktemp handles invalid UTF-8 in suffix gracefully
+    // It should succeed and create a file with the lossy conversion of the invalid UTF-8
+    ucmd.arg("-p")
+        .arg(at.as_string())
+        .arg("--suffix")
+        .arg(invalid_utf8)
+        .arg("tmpXXXXXX")
+        .succeeds();
+}
+
+#[test]
+#[cfg(target_os = "linux")]
 fn test_non_utf8_tmpdir_directory_creation() {
     use std::os::unix::ffi::OsStrExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1153,4 +1179,33 @@ fn test_non_utf8_tmpdir_directory_creation() {
     // We can't easily verify the exact output path because of UTF8 conversion issues,
     // but we can verify the command succeeds
     ucmd.arg("-d").arg("-p").arg(at.plus(dir_name)).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mktemp_hidden_file_single_dot() {
+    let scene = TestScenario::new(util_name!());
+    let dir = tempdir().unwrap();
+    let template_name = ".XXXXXX";
+    let template = dir.path().join(template_name);
+
+    let result = scene.ucmd().arg(template.to_str().unwrap()).succeeds();
+
+    let path = result.stdout_str().trim();
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    assert!(
+        filename.starts_with('.'),
+        "expected hidden file, got {path}"
+    );
+    assert_eq!(
+        filename.len(),
+        template_name.len(),
+        "expected filename of length {}, got {filename}",
+        template_name.len()
+    );
 }

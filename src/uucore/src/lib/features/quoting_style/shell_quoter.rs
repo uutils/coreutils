@@ -40,7 +40,7 @@ impl<'a> NonEscapedShellQuoter<'a> {
         dirname: bool,
         size_hint: usize,
     ) -> Self {
-        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote);
+        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote, false);
         Self {
             reference,
             quotes,
@@ -108,7 +108,7 @@ pub(super) struct EscapedShellQuoter<'a> {
 
 impl<'a> EscapedShellQuoter<'a> {
     pub fn new(reference: &'a [u8], always_quote: bool, dirname: bool, size_hint: usize) -> Self {
-        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote);
+        let (quotes, must_quote) = initial_quoting(reference, dirname, always_quote, true);
         Self {
             reference,
             quotes,
@@ -185,11 +185,17 @@ impl Quoter for EscapedShellQuoter<'_> {
 }
 
 /// Deduce the initial quoting status from the provided information
-fn initial_quoting(input: &[u8], dirname: bool, always_quote: bool) -> (Quotes, bool) {
-    if input
-        .iter()
-        .any(|c| shell_escaped_char_set(dirname).contains(c))
-    {
+fn initial_quoting(
+    input: &[u8],
+    dirname: bool,
+    always_quote: bool,
+    check_control_chars: bool,
+) -> (Quotes, bool) {
+    let has_special_chars = input.iter().any(|c| {
+        shell_escaped_char_set(dirname).contains(c) || (check_control_chars && c.is_ascii_control())
+    });
+
+    if has_special_chars {
         (Quotes::Single, true)
     } else if input.contains(&b'\'') {
         (Quotes::Double, true)
@@ -237,5 +243,75 @@ fn finalize_shell_quoter(
         quoted
     } else {
         buffer
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_initial_quoting() {
+        // Control chars (0-31 and 0x7F) force single quotes in escape mode
+        assert_eq!(
+            initial_quoting(b"\x01", false, false, true),
+            (Quotes::Single, true)
+        );
+
+        // Control + quote uses single quotes (segmented) in escape mode
+        assert_eq!(
+            initial_quoting(b"\x01'\x01", false, false, true),
+            (Quotes::Single, true)
+        );
+
+        // Simple quote uses double quotes in escape mode
+        assert_eq!(
+            initial_quoting(b"a'b", false, false, true),
+            (Quotes::Double, true)
+        );
+
+        // Shell special chars force single quotes in escape mode
+        assert_eq!(
+            initial_quoting(b"test$var", false, false, true),
+            (Quotes::Single, true)
+        );
+        assert_eq!(
+            initial_quoting(b"test\nline", false, false, true),
+            (Quotes::Single, true)
+        );
+
+        // Empty string forces quotes in escape mode
+        assert_eq!(
+            initial_quoting(b"", false, false, true),
+            (Quotes::Single, true)
+        );
+
+        // Always quote flag works in escape mode
+        assert_eq!(
+            initial_quoting(b"normal", false, true, true),
+            (Quotes::Single, true)
+        );
+
+        // Normal text doesn't need quoting in escape mode
+        assert_eq!(
+            initial_quoting(b"hello", false, false, true),
+            (Quotes::Single, false)
+        );
+
+        // Dirname affects colon handling in escape mode
+        assert_eq!(
+            initial_quoting(b"dir:name", true, false, true),
+            (Quotes::Single, true)
+        );
+        assert_eq!(
+            initial_quoting(b"file:name", false, false, true),
+            (Quotes::Single, false)
+        );
+
+        // Control chars ignored in non-escape mode
+        assert_eq!(
+            initial_quoting(b"\x01", false, false, false),
+            (Quotes::Single, false)
+        );
     }
 }

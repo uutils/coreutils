@@ -63,4 +63,3 @@ hyperfine 'tr -d aeiou < mixed_input > /dev/null' './target/release/tr -d aeiou 
 - Uses lookup tables instead of hash maps for O(1) operations
 - 32KB I/O buffers for improved throughput
 - Should be competitive with GNU `tr` for most operations
-

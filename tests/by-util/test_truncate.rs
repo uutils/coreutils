@@ -174,6 +174,42 @@ fn test_round_up() {
 }
 
 #[test]
+fn test_round_up_file_smaller_than_size() {
+    let expected = 4096;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"1234567890").unwrap();
+    ucmd.args(&["--size", "%4K", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_round_up_unaligned() {
+    let expected = 16;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"1234567890123").unwrap();
+    ucmd.args(&["--size", "%8", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
+fn test_round_up_already_aligned() {
+    let expected = 8;
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut file = at.make_file(FILE2);
+    file.write_all(b"12345678").unwrap();
+    ucmd.args(&["--size", "%4", FILE2]).succeeds();
+    file.seek(SeekFrom::End(0)).unwrap();
+    let actual = file.stream_position().unwrap();
+    assert_eq!(expected, actual);
+}
+
+#[test]
 fn test_size_and_reference() {
     let expected = 15;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -218,6 +254,10 @@ fn test_invalid_numbers() {
         .args(&["-s", "0B", "file"])
         .fails()
         .stderr_contains("Invalid number: '0B'");
+    new_ucmd!()
+        .args(&["-s", "1b", "file"])
+        .fails()
+        .stderr_contains("Invalid number: '1b'");
 }
 
 #[test]
@@ -256,10 +296,7 @@ fn test_truncate_bytes_size() {
 fn test_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-s", "8", filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "8", filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
 }
@@ -271,10 +308,7 @@ fn test_new_file_reference() {
     let mut old_file = at.make_file(FILE1);
     old_file.write_all(b"1234567890").unwrap();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-r", FILE1, filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-r", FILE1, filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 10]);
 }
@@ -288,8 +322,7 @@ fn test_new_file_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "+3", "-r", FILE1, filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 13]);
 }
@@ -301,8 +334,7 @@ fn test_new_file_no_create_size_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -315,8 +347,7 @@ fn test_new_file_no_create_reference_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -329,8 +360,7 @@ fn test_new_file_no_create_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-s", "+8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -378,10 +408,7 @@ fn test_no_such_dir() {
 #[test]
 fn test_underflow_relative_size() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }
@@ -389,16 +416,14 @@ fn test_underflow_relative_size() {
 #[test]
 fn test_negative_size_with_space() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s", "-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_size_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -410,6 +435,7 @@ fn test_fifo_error_size_only() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_reference_file_only() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -422,6 +448,7 @@ fn test_fifo_error_reference_file_only() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO/mkfifo support")]
 fn test_fifo_error_reference_and_size() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -434,6 +461,7 @@ fn test_fifo_error_reference_and_size() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());

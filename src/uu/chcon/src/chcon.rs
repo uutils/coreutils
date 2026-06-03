@@ -25,7 +25,7 @@ use std::{fs, io};
 mod errors;
 mod fts;
 
-use errors::*;
+use errors::{Error, Result, report_full_error};
 
 pub mod options {
     pub static HELP: &str = "help";
@@ -156,7 +156,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("chcon")
         .version(uucore::crate_version!())
         .about(translate!("chcon-about"))
         .override_usage(format_usage(&translate!("chcon-usage")))
@@ -524,7 +524,7 @@ fn process_file(
         Err(Error::from_io1(s, &file_full_name, r))
     };
 
-    // SAFETY: If `entry.fts_statp` is not null, then is is assumed to be valid.
+    // SAFETY: If `entry.fts_statp` is not null, then it is assumed to be valid.
     let file_dev_ino: DeviceAndINode = if let Some(st) = entry.stat() {
         st.try_into()?
     } else {
@@ -537,33 +537,29 @@ fn process_file(
     let mut result = Ok(());
 
     match entry.flags() {
-        fts_sys::FTS_D => {
-            if options.recursive_mode.is_recursive() {
-                if root_dev_ino_check(root_dev_ino, file_dev_ino) {
-                    // This happens e.g., with "chcon -R --preserve-root ... /"
-                    // and with "chcon -RH --preserve-root ... symlink-to-root".
-                    root_dev_ino_warn(&file_full_name);
+        fts_sys::FTS_D if options.recursive_mode.is_recursive() => {
+            if root_dev_ino_check(root_dev_ino, file_dev_ino) {
+                // This happens e.g., with "chcon -R --preserve-root ... /"
+                // and with "chcon -RH --preserve-root ... symlink-to-root".
+                root_dev_ino_warn(&file_full_name);
 
-                    // Tell fts not to traverse into this hierarchy.
-                    let _ignored = fts.set(fts_sys::FTS_SKIP);
+                // Tell fts not to traverse into this hierarchy.
+                let _ignored = fts.set(fts_sys::FTS_SKIP);
 
-                    // Ensure that we do not process "/" on the second visit.
-                    let _ignored = fts.read_next_entry();
+                // Ensure that we do not process "/" on the second visit.
+                let _ignored = fts.read_next_entry();
 
-                    return Err(err(
-                        translate!("chcon-op-modifying-root-path"),
-                        io::ErrorKind::PermissionDenied,
-                    ));
-                }
-
-                return Ok(());
+                return Err(err(
+                    translate!("chcon-op-modifying-root-path"),
+                    io::ErrorKind::PermissionDenied,
+                ));
             }
+
+            return Ok(());
         }
 
-        fts_sys::FTS_DP => {
-            if !options.recursive_mode.is_recursive() {
-                return Ok(());
-            }
+        fts_sys::FTS_DP if !options.recursive_mode.is_recursive() => {
+            return Ok(());
         }
 
         fts_sys::FTS_NS => {
@@ -585,14 +581,14 @@ fn process_file(
 
         fts_sys::FTS_DNR => result = fts_err(translate!("chcon-op-reading-directory")),
 
-        fts_sys::FTS_DC => {
-            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) {
-                emit_cycle_warning(&file_full_name);
-                return Err(err(
-                    translate!("chcon-op-reading-cyclic-directory"),
-                    io::ErrorKind::InvalidData,
-                ));
-            }
+        fts_sys::FTS_DC
+            if cycle_warning_required(options.recursive_mode.fts_open_options(), &entry) =>
+        {
+            emit_cycle_warning(&file_full_name);
+            return Err(err(
+                translate!("chcon-op-reading-cyclic-directory"),
+                io::ErrorKind::InvalidData,
+            ));
         }
 
         _ => {}
@@ -613,7 +609,7 @@ fn process_file(
         if options.verbose {
             println!(
                 "{}",
-                translate!("chcon-verbose-changing-context", "util_name" => uucore::util_name(), "file" => file_full_name.quote())
+                translate!("chcon-verbose-changing-context", "util_name" => "chcon", "file" => file_full_name.quote())
             );
         }
 
@@ -631,6 +627,8 @@ fn change_file_context(
     context: &SELinuxSecurityContext,
     path: &Path,
 ) -> Result<()> {
+    type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
+
     match &options.mode {
         CommandLineMode::Custom {
             user,
@@ -676,8 +674,6 @@ fn change_file_context(
                     let err = io::ErrorKind::InvalidInput.into();
                     Error::from_io1(translate!("chcon-op-creating-security-context"), path, err)
                 })?;
-
-            type SetValueProc = fn(&OpaqueSecurityContext, &CStr) -> selinux::errors::Result<()>;
 
             let list: &[(&Option<OsString>, SetValueProc)] = &[
                 (user, OpaqueSecurityContext::set_user),

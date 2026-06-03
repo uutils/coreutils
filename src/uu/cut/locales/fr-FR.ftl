@@ -70,7 +70,7 @@ cut-after-help = Chaque appel doit spécifier un mode (quoi utiliser pour les co
 
   #### Filtrage optionnel basé sur le délimiteur
 
-  Si le drapeau --only-delimited (-s) est fourni, seules les lignes qui
+  Si l'option --only-delimited (-s) est fournie, seules les lignes qui
   contiennent le délimiteur seront affichées
 
   #### Remplacer le délimiteur

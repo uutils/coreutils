@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{Rng, SeedableRng, rngs::StdRng, seq::SliceRandom};
+use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -189,7 +189,7 @@ impl BytesWriter {
         match pass {
             PassType::Random => match random_source {
                 None => Ok(Self::Random {
-                    rng: StdRng::from_os_rng(),
+                    rng: rand::make_rng(),
                     buffer: [0; BLOCK_SIZE],
                 }),
                 Some(file_cell) => {
@@ -253,17 +253,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let iterations = match matches.get_one::<String>(options::ITERATIONS) {
-        Some(s) => match s.parse::<usize>() {
-            Ok(u) => u,
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
-                ));
-            }
-        },
-        None => unreachable!(),
+    let iterations = {
+        let s = matches.get_one::<String>(options::ITERATIONS).unwrap(); // safe to unwrap, has default value
+        s.parse::<usize>().map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
+            )
+        })?
     };
 
     let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
@@ -318,9 +315,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("shred")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("shred"))
         .about(translate!("shred-about"))
         .after_help(translate!("shred-after-help"))
         .override_usage(format_usage(&translate!("shred-usage")))
@@ -549,17 +546,17 @@ fn create_test_compatible_sequence(
         }
     }
 
-    create_standard_pass_sequence(num_passes)
+    Ok(create_standard_pass_sequence(num_passes))
 }
 
 /// Create standard pass sequence with patterns and random passes
-fn create_standard_pass_sequence(num_passes: usize) -> UResult<Vec<PassType>> {
+fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     if num_passes == 0 {
-        return Ok(Vec::new());
+        return Vec::new();
     }
 
     if num_passes <= 3 {
-        return Ok(vec![PassType::Random; num_passes]);
+        return vec![PassType::Random; num_passes];
     }
 
     let mut sequence = Vec::new();
@@ -590,13 +587,13 @@ fn create_standard_pass_sequence(num_passes: usize) -> UResult<Vec<PassType>> {
     }
 
     // For standard sequence, use system randomness for shuffling
-    let mut rng = StdRng::from_os_rng();
+    let mut rng: StdRng = rand::make_rng();
     sequence[1..].shuffle(&mut rng);
 
     // Final pass is always random
     sequence.push(PassType::Random);
 
-    Ok(sequence)
+    sequence
 }
 
 /// Create compatible pass sequence using the standard algorithm
@@ -609,7 +606,7 @@ fn create_compatible_sequence(
         create_test_compatible_sequence(num_passes, random_source)
     } else {
         // For system random, use standard algorithm
-        create_standard_pass_sequence(num_passes)
+        Ok(create_standard_pass_sequence(num_passes))
     }
 }
 
@@ -679,7 +676,7 @@ fn wipe_file(
             if random_source.is_some() {
                 pass_sequence = create_compatible_sequence(n_passes, random_source)?;
             } else {
-                pass_sequence = create_standard_pass_sequence(n_passes)?;
+                pass_sequence = create_standard_pass_sequence(n_passes);
             }
         }
 
@@ -719,7 +716,7 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
-        do_remove(path, path_str, verbose, remove_method).map_err_context(
+        do_remove(path, verbose, remove_method).map_err_context(
             || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
     }
@@ -773,7 +770,7 @@ fn do_pass(
 
 /// Repeatedly renames the file with strings of decreasing length (most likely all 0s)
 /// Return the path of the file after its last renaming or None in case of an error
-fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Option<PathBuf> {
+fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> PathBuf {
     let file_name_len = orig_path.file_name().unwrap().len();
 
     let mut last_path = PathBuf::from(orig_path);
@@ -821,36 +818,29 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Op
         }
     }
 
-    Some(last_path)
+    last_path
 }
 
-fn do_remove(
-    path: &Path,
-    orig_filename: &OsString,
-    verbose: bool,
-    remove_method: RemoveMethod,
-) -> Result<(), io::Error> {
+fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<(), io::Error> {
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removing", "file" => orig_filename.maybe_quote())
+            translate!("shred-removing", "file" => path.maybe_quote())
         );
     }
 
     let remove_path = if remove_method == RemoveMethod::Unlink {
-        Some(path.with_file_name(orig_filename))
+        path.to_path_buf()
     } else {
         wipe_name(path, verbose, remove_method)
     };
 
-    if let Some(rp) = remove_path {
-        fs::remove_file(rp)?;
-    }
+    fs::remove_file(remove_path)?;
 
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removed", "file" => orig_filename.maybe_quote())
+            translate!("shred-removed", "file" => path.maybe_quote())
         );
     }
 

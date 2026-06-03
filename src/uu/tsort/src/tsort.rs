@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree fadvise FADV
+//spell-checker:ignore TAOCP indegree FADV
 //spell-checker:ignore (libs) interner uclibc
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
@@ -49,7 +49,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!(
                     "tsort-error-extra-operand",
                     "operand" => extra.quote(),
-                    "util" => uucore::util_name()
+                    "util" => "tsort"
                 ),
             ));
         }
@@ -76,29 +76,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(windows))]
         {
             file = File::open(input)?;
-
-            // advise the OS we will access the data sequentially if available.
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "fuchsia",
-                target_os = "wasi",
-                target_env = "uclibc",
-                target_os = "freebsd",
-            ))]
-            {
-                use nix::fcntl::{PosixFadviseAdvice, posix_fadvise};
-                use std::os::unix::io::AsFd;
-
-                posix_fadvise(
-                    file.as_fd(),
-                    0, // offset 0 => from the start of the file
-                    0, // length 0 => for the whole file
-                    PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
-                )
-                .ok();
-            }
         }
+        // advise the OS we will access the data sequentially if available.
+        // offset 0 => from the start of the file. None => for the whole file.
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+
         let reader = BufReader::new(file);
         process_input(reader, &mut g)?;
     }
@@ -108,9 +91,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("tsort")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tsort"))
         .override_usage(format_usage(&translate!("tsort-usage")))
         .about(translate!("tsort-about"))
         .infer_long_args(true)

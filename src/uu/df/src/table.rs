@@ -474,7 +474,7 @@ impl Table {
             .columns
             .iter()
             .enumerate()
-            .map(|(i, col)| Column::min_width(col).max(headers[i].len()))
+            .map(|(i, col)| col.min_width().max(headers[i].len()))
             .collect();
 
         let mut rows = vec![headers.iter().map(Cell::from_string).collect()];
@@ -527,7 +527,7 @@ impl Table {
         let mut alignments = Vec::new();
 
         for column in columns {
-            alignments.push(Column::alignment(column));
+            alignments.push(column.alignment());
         }
 
         alignments
@@ -950,7 +950,6 @@ mod tests {
 
     #[test]
     fn test_row_formatter_with_round_up_byte_values() {
-        init();
         fn get_formatted_values(bytes: u64, bytes_used: u64, bytes_avail: u64) -> Vec<Cell> {
             let options = Options {
                 block_size: BlockSize::Bytes(1000),
@@ -966,6 +965,8 @@ mod tests {
             };
             RowFormatter::new(&row, &options, false).get_cells()
         }
+
+        init();
 
         assert!(compare_cell_content(
             get_formatted_values(100, 100, 0),
@@ -1122,7 +1123,7 @@ mod tests {
             ..Default::default()
         };
 
-        let table = Table::new(&options, filesystems.clone());
+        let table = Table::new(&options, filesystems);
         let mut data: Vec<u8> = vec![];
         table.write_to(&mut data).expect("Write error.");
         assert_eq!(

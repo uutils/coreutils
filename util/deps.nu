@@ -88,7 +88,7 @@ export def all_dep_info [] {
     let features = [unix, feat_selinux]
 
     let lock = open Cargo.lock | from toml | get package
-    
+
     $lock
     # Add number of versions
     | join ($lock | group-by name | transpose | update column1 { length } | rename name num_versions) name

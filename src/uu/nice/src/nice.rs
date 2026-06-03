@@ -6,9 +6,8 @@
 // spell-checker:ignore (ToDO) getpriority setpriority nstr PRIO
 
 use clap::{Arg, ArgAction, Command};
-use libc::PRIO_PROCESS;
 use std::ffi::OsString;
-use std::io::{Error, ErrorKind, Write, stdout};
+use std::io::{ErrorKind, Write, stdout};
 use std::num::IntErrorKind;
 use std::os::unix::process::CommandExt;
 use std::process;
@@ -110,44 +109,39 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    nix::errno::Errno::clear();
-    let mut niceness = unsafe { libc::getpriority(PRIO_PROCESS, 0) };
-    if Error::last_os_error().raw_os_error().unwrap() != 0 {
-        return Err(USimpleError::new(
-            125,
-            format!("getpriority: {}", Error::last_os_error()),
-        ));
-    }
+    let mut niceness = match rustix::process::getpriority_process(None) {
+        Ok(p) => p,
+        Err(e) => {
+            return Err(USimpleError::new(125, format!("getpriority: {e}")));
+        }
+    };
 
-    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
-        Some(nstr) => {
-            if !matches.contains_id(options::COMMAND) {
-                return Err(UUsageError::new(
-                    125,
-                    translate!("nice-error-command-required-with-adjustment"),
-                ));
-            }
-            match nstr.parse::<i32>() {
-                Ok(num) => num,
-                Err(e) => match e.kind() {
-                    IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
-                    IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
-                    _ => {
-                        return Err(USimpleError::new(
-                            125,
-                            translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
-                        ));
-                    }
-                },
-            }
+    let adjustment = if let Some(nstr) = matches.get_one::<String>(options::ADJUSTMENT) {
+        if !matches.contains_id(options::COMMAND) {
+            return Err(UUsageError::new(
+                125,
+                translate!("nice-error-command-required-with-adjustment"),
+            ));
         }
-        None => {
-            if !matches.contains_id(options::COMMAND) {
-                writeln!(stdout(), "{niceness}")?;
-                return Ok(());
-            }
-            10_i32
+        match nstr.parse::<i32>() {
+            Ok(num) => num,
+            Err(e) => match e.kind() {
+                IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
+                IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
+                _ => {
+                    return Err(USimpleError::new(
+                        125,
+                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
+                    ));
+                }
+            },
         }
+    } else {
+        if !matches.contains_id(options::COMMAND) {
+            writeln!(stdout(), "{niceness}")?;
+            return Ok(());
+        }
+        10_i32
     };
 
     niceness += adjustment;
@@ -155,8 +149,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
-    if unsafe { libc::setpriority(PRIO_PROCESS, 0, niceness) } == -1 {
-        let warning_msg = translate!("nice-warning-setpriority", "util_name" => uucore::util_name(), "error" => Error::last_os_error());
+    if let Err(e) = rustix::process::setpriority_process(None, niceness) {
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => e.to_string() );
 
         if write!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
@@ -182,13 +176,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nice")
         .about(translate!("nice-about"))
         .override_usage(format_usage(&translate!("nice-usage")))
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nice"))
         .arg(
             Arg::new(options::ADJUSTMENT)
                 .short('n')

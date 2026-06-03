@@ -112,7 +112,7 @@ impl OutputInfo {
     ///
     /// This function calculates the required spacing for a single line, given the size
     /// of a block, and the width of a block. The size of a block is the largest type
-    /// and the width is width of the the type which needs the most space to print that
+    /// and the width is the width of the type which needs the most space to print that
     /// number of bytes. So both numbers might refer to different types. All widths
     /// include a space at the front. For example the width of a 8-bit hexadecimal,
     /// is 3 characters, for example " FF".
@@ -222,10 +222,9 @@ fn assert_alignment(
     assert_eq!(
         expected,
         &spacing[..byte_size_block],
-        "unexpected spacing for byte_size={} print_width={} block_width={}",
+        "unexpected spacing for byte_size={} print_width={} block_width={print_width_block}",
         type_info.byte_size,
         type_info.print_width,
-        print_width_block
     );
     assert!(
         spacing[byte_size_block..].iter().all(|&s| s == 0),

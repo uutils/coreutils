@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -15,7 +15,7 @@ mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
-use datastructures::*;
+use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::fcntl::FcntlArg;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -23,6 +23,8 @@ use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
+#[cfg(target_os = "linux")]
+use progress::{check_and_reset_sigusr1, install_sigusr1_handler};
 use uucore::io::OwnedFileDescriptorOrHandle;
 use uucore::translate;
 
@@ -90,7 +92,7 @@ struct Settings {
 ///
 /// After being constructed with [`Alarm::with_interval`], [`Alarm::get_trigger`]
 /// will return [`ALARM_TRIGGER_TIMER`] once per the given [`Duration`].
-/// Alarm can be manually triggered with closure returned by [`Alarm::manual_trigger_fn`].
+/// Alarm can be manually triggered with [`Alarm::manual_trigger`].
 /// [`Alarm::get_trigger`] will return [`ALARM_TRIGGER_SIGNAL`] in this case.
 ///
 /// Can be cloned, but the trigger status is shared across all instances so only
@@ -122,18 +124,9 @@ impl Alarm {
         Self { interval, trigger }
     }
 
-    /// Returns a closure that allows to manually trigger the alarm
-    ///
-    /// This is useful for cases where more than one alarm even source exists
-    /// In case of `dd` there is the SIGUSR1/SIGINFO case where we want to
-    /// trigger an manual progress report.
-    pub fn manual_trigger_fn(&self) -> Box<dyn Send + Sync + Fn()> {
-        let weak_trigger = Arc::downgrade(&self.trigger);
-        Box::new(move || {
-            if let Some(trigger) = weak_trigger.upgrade() {
-                trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
-            }
-        })
+    /// Manually trigger the alarm as a signal event
+    pub fn manual_trigger(&self) {
+        self.trigger.store(ALARM_TRIGGER_SIGNAL, Relaxed);
     }
 
     /// Use this function to poll for any pending alarm event
@@ -191,13 +184,15 @@ impl Num {
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    let mut buf = vec![0u8; buf_size];
+    // todo: consider splice()ing to /dev/null on Linux
+    let mut buf = Vec::new();
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
-
     while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64) as usize;
-        match reader.read(&mut buf[..to_read]) {
+        let to_read = cmp::min(remaining, buf_size as u64);
+        buf.clear();
+        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
             Ok(0) => break, // EOF
             Ok(bytes_read) => {
                 total += bytes_read as u64;
@@ -262,17 +257,17 @@ impl Source {
             }
             #[cfg(unix)]
             Self::StdinFile(f) => {
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 // Get file length before seeking to avoid race condition
                 let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
@@ -365,7 +360,7 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
             let is_file = if let Ok(metadata) = f.metadata() {
@@ -384,17 +379,21 @@ impl<'a> Input<'a> {
                 Source::Stdin(io::stdin())
             }
         };
+        #[cfg(all(not(unix), not(windows)))]
+        let mut src = Source::Stdin(io::stdin());
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
-            if settings.iflags.directory && !f.metadata()?.is_dir() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dd-error-not-directory", "file" => "standard input"),
-                ));
-            }
+        if let Source::StdinFile(f) = &src
+            && settings.iflags.directory
+            && !f.metadata()?.is_dir()
+        {
+            return Err(USimpleError::new(
+                1,
+                translate!("dd-error-not-directory", "file" => "standard input"),
+            ));
         }
+
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
@@ -574,7 +573,7 @@ impl Input<'_> {
                     bytes_total += rlen;
                     reads_partial += 1;
                     let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                    buf.splice(base_idx + rlen..next_blk, padding);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -661,17 +660,17 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
@@ -748,7 +747,7 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         // Log any restoration errors without failing the operation
         if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {}", os_err);
+            show_error!("Failed to restore O_DIRECT flag: {os_err}");
         }
 
         write_result
@@ -1092,7 +1091,7 @@ impl BlockWriter<'_> {
 
 /// depending on the command line arguments, this function
 /// informs the OS to flush/discard the caches for input and/or output file.
-fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
+fn flush_caches_full_length(i: &Input, o: &Output) {
     // Using len=0 in posix_fadvise means "to end of file"
     if i.settings.iflags.nocache {
         i.discard_cache(0, 0);
@@ -1100,8 +1099,6 @@ fn flush_caches_full_length(i: &Input, o: &Output) -> io::Result<()> {
     if i.settings.oflags.nocache {
         o.discard_cache(0, 0);
     }
-
-    Ok(())
 }
 
 /// Copy the given input data to this output, consuming both.
@@ -1163,7 +1160,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // requests that we inform the system that we no longer
         // need the contents of the input file in a system cache.
         //
-        flush_caches_full_length(&i, &o)?;
+        flush_caches_full_length(&i, &o);
         return finalize(
             BlockWriter::Unbuffered(o),
             rstat,
@@ -1175,26 +1172,21 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         );
     }
 
-    // Create a common buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
-
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
     //
     // This avoids the need to query the OS monotonic clock for every block.
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
-    // The signal handler spawns an own thread that waits for signals.
-    // When the signal is received, it calls a handler function.
-    // We inject a handler function that manually triggers the alarm.
     #[cfg(target_os = "linux")]
-    let signal_handler = progress::SignalHandler::install_signal_handler(alarm.manual_trigger_fn());
-    #[cfg(target_os = "linux")]
-    if let Err(e) = &signal_handler {
-        if Some(StatusLevel::None) != i.settings.status {
-            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
-        }
+    if let Err(e) = install_sigusr1_handler()
+        && i.settings.status != Some(StatusLevel::None)
+    {
+        let _ = writeln!(
+            io::stderr(),
+            "{}\n\t{e}",
+            translate!("dd-warning-signal-handler")
+        );
     }
 
     // Index in the input file where we are reading bytes and in
@@ -1214,6 +1206,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     } else {
         BlockWriter::Unbuffered(o)
     };
+
+    // Create a common empty buffer with a capacity of the block size.
+    // This is the max size needed.
+    let mut buf = Vec::new();
+    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
 
     // The main read/write loop.
     //
@@ -1272,6 +1269,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error.
         rstat += rstat_update;
         wstat += wstat_update;
+        #[cfg(target_os = "linux")]
+        if check_and_reset_sigusr1() {
+            alarm.manual_trigger();
+        }
         match alarm.get_trigger() {
             ALARM_TRIGGER_NONE => {}
             t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
@@ -1376,6 +1377,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     // ------------------------------------------------------------------
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
     buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
@@ -1505,12 +1507,7 @@ fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
 /// Decide whether the named file is a named pipe, also known as a FIFO.
 #[cfg(unix)]
 fn is_fifo(filename: &str) -> bool {
-    if let Ok(metadata) = std::fs::metadata(filename) {
-        if metadata.file_type().is_fifo() {
-            return true;
-        }
-    }
-    false
+    std::fs::metadata(filename).is_ok_and(|m| m.file_type().is_fifo())
 }
 
 #[uucore::main]
@@ -1545,7 +1542,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dd")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("dd-about"))

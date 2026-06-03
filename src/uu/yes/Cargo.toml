@@ -3,12 +3,12 @@ name = "uu_yes"
 description = "yes ~ (uutils) repeatedly display a line with STRING (or 'y')"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/yes"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 readme.workspace = true
 
 [lints]
@@ -16,17 +16,14 @@ workspace = true
 
 [lib]
 path = "src/yes.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
 itertools = { workspace = true }
 fluent = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-uucore = { workspace = true, features = ["pipes", "signals"] }
-
-[target.'cfg(not(unix))'.dependencies]
-uucore = { workspace = true, features = ["pipes"] }
+rustix = { workspace = true, features = ["stdio", "pipe"] }
+uucore = { workspace = true, features = ["fs", "pipes"] }
 
 [[bin]]
 name = "yes"

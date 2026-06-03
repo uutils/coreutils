@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest funcs nprimes
+// spell-checker:ignore (methods) hexdigest funcs nprimes cmdline
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -15,8 +15,11 @@ use uutests::new_ucmd;
 use std::fmt::Write;
 use std::time::{Duration, SystemTime};
 
-use rand::distr::{Distribution, Uniform};
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::{
+    RngExt as _, SeedableRng,
+    distr::{Distribution, Uniform},
+    rngs::SmallRng,
+};
 
 const NUM_PRIMES: usize = 10000;
 const NUM_TESTS: usize = 100;
@@ -55,8 +58,18 @@ fn test_repeated_exponents() {
 }
 
 #[test]
+fn test_trim_null_chars() {
+    new_ucmd!()
+        .pipe_in("42\0")
+        .succeeds()
+        .stdout_only("42: 2 3 7\n")
+        .no_stderr();
+}
+
+#[test]
 #[cfg(feature = "sort")]
 #[cfg(not(target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_parallel() {
     use hex_literal::hex;
     use sha1::{Digest, Sha1};
@@ -1602,6 +1615,16 @@ fn fails_on_directory() {
 }
 
 #[test]
+fn test_large_number() {
+    // fixed with num-prime 0.5.0
+    // https://github.com/uutils/num-prime/issues/23
+    new_ucmd!()
+        .arg("4611686018427387896")
+        .succeeds()
+        .stdout_is("4611686018427387896: 2 2 2 179951 3203431780337\n");
+}
+
+#[test]
 fn succeeds_with_numbers_larger_than_u64() {
     new_ucmd!()
         .arg("158909489063877810457")
@@ -1649,4 +1672,31 @@ fn succeeds_with_numbers_larger_than_u256() {
             "115792089237316195423570985008687907853\
                 269984665640564039457584007913129639936: 2^256\n",
         );
+}
+
+#[test]
+fn handles_non_unicode_data() {
+    let input = b"\0 \xFF\0\xFF\xAA\0\xAA\x44 a&#2\n6 9\x003\xC024\t2\t\t4\x000+4\xFF \xF7\xC1";
+    let expected_out = "6: 2 3\n9: 3 3\n2: 2\n4: 2 2\n";
+    let expected_err = r"factor: '' is not a valid positive integer
+factor: '\377' is not a valid positive integer
+factor: 'a&#2' is not a valid positive integer
+factor: '\367\301' is not a valid positive integer
+";
+    new_ucmd!()
+        .pipe_in(input)
+        .fails_with_code(1)
+        .stdout_is(expected_out)
+        .stderr_is(expected_err);
+}
+
+// GNU's `tests/factor/factor.pl` `cont` test passes `factor a 4` and expects
+// `factor: 'a' is not a valid positive integer` while still factoring 4.
+#[test]
+fn invalid_cmdline_arg_continues() {
+    new_ucmd!()
+        .args(&["a", "4"])
+        .fails_with_code(1)
+        .stdout_is("4: 2 2\n")
+        .stderr_is("factor: 'a' is not a valid positive integer\n");
 }

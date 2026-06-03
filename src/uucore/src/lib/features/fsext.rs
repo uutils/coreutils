@@ -28,6 +28,7 @@ use crate::os_str_from_bytes;
 #[cfg(windows)]
 use crate::show_warning;
 
+#[cfg(not(target_os = "wasi"))]
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -64,13 +65,14 @@ use libc::{
 };
 #[cfg(unix)]
 use std::ffi::{CStr, CString};
+#[cfg(not(target_os = "wasi"))]
 use std::io::Error as IOError;
 #[cfg(unix)]
 use std::mem;
 #[cfg(windows)]
 use std::path::Path;
 use std::time::SystemTime;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::time::UNIX_EPOCH;
 use std::{borrow::Cow, ffi::OsString};
 
@@ -143,6 +145,10 @@ impl From<&str> for MetadataTimeField {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "fn sig must match on all platforms"
+)]
 fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
     let mut st = UNIX_EPOCH;
     let (secs, nsecs) = (md.ctime(), md.ctime_nsec());
@@ -422,6 +428,7 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     }
 }
 
+#[cfg(not(target_os = "wasi"))]
 use crate::error::UResult;
 #[cfg(any(
     target_os = "freebsd",
@@ -452,6 +459,7 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
+#[cfg(not(target_os = "wasi"))]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -531,12 +539,19 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "aix",
         target_os = "redox",
         target_os = "illumos",
-        target_os = "solaris"
+        target_os = "solaris",
     ))]
     {
-        // No method to read mounts, yet
+        // No method to read mounts on these platforms
         Ok(Vec::new())
     }
+}
+
+/// Read file system list.
+#[cfg(target_os = "wasi")]
+pub fn read_fs_list() -> Vec<MountInfo> {
+    // No method to read mounts on WASI
+    Vec::new()
 }
 
 #[derive(Debug, Clone)]
@@ -552,6 +567,7 @@ pub struct FsUsage {
 
 impl FsUsage {
     #[cfg(unix)]
+    #[allow(clippy::unnecessary_cast)]
     pub fn new(statvfs: StatFs) -> Self {
         {
             #[cfg(all(
@@ -811,10 +827,12 @@ impl FsMeta for StatFs {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         self.f_frsize as u64
     }
     #[cfg(any(target_vendor = "apple", target_os = "freebsd", target_os = "netbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn io_size(&self) -> u64 {
         #[cfg(target_os = "freebsd")]
         return self.f_iosize;
@@ -849,7 +867,8 @@ impl FsMeta for StatFs {
     fn fsid(&self) -> u64 {
         // Use type inference to determine the type of f_fsid
         // (libc::__fsid_t on Android, libc::fsid_t on other platforms)
-        let f_fsid: &[u32; 2] = unsafe { &*(&raw const self.f_fsid).cast() };
+        let f_fsid = self.f_fsid;
+        let f_fsid: [u32; 2] = unsafe { mem::transmute(f_fsid) };
         ((u64::from(f_fsid[0])) << 32) | u64::from(f_fsid[1])
     }
     #[cfg(not(any(
@@ -859,6 +878,7 @@ impl FsMeta for StatFs {
         target_os = "android",
         target_os = "openbsd"
     )))]
+    #[allow(clippy::unnecessary_cast)]
     fn fsid(&self) -> u64 {
         self.f_fsid as u64
     }
@@ -872,6 +892,7 @@ impl FsMeta for StatFs {
         1024
     }
     #[cfg(any(target_os = "freebsd", target_os = "netbsd", target_os = "openbsd"))]
+    #[allow(clippy::unnecessary_cast)]
     fn namelen(&self) -> u64 {
         self.f_namemax as u64 // spell-checker:disable-line
     }
@@ -900,15 +921,14 @@ pub fn statfs(path: &OsStr) -> Result<StatFs, String> {
         Ok(p) => {
             let mut buffer: StatFs = unsafe { mem::zeroed() };
             unsafe {
-                match statfs_fn(p.as_ptr(), &raw mut buffer) {
-                    0 => Ok(buffer),
-                    _ => {
-                        let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
-                        Err(CStr::from_ptr(strerror(errno))
-                            .to_str()
-                            .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
-                            .to_owned())
-                    }
+                if statfs_fn(p.as_ptr(), &raw mut buffer) == 0 {
+                    Ok(buffer)
+                } else {
+                    let errno = IOError::last_os_error().raw_os_error().unwrap_or(0);
+                    Err(CStr::from_ptr(strerror(errno))
+                        .to_str()
+                        .map_err(|_| "Error message contains invalid UTF-8".to_owned())?
+                        .to_owned())
                 }
             }
         }

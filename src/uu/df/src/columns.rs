@@ -99,7 +99,7 @@ impl Column {
                 let names = matches
                     .get_many::<String>(OPT_OUTPUT)
                     .unwrap()
-                    .map(|s| s.as_str());
+                    .map(String::as_str);
                 let mut seen: Vec<&str> = vec![];
                 let mut columns = vec![];
                 for name in names {
@@ -191,16 +191,16 @@ impl Column {
     }
 
     /// Return the alignment of the specified column.
-    pub(crate) fn alignment(column: &Self) -> Alignment {
-        match column {
+    pub(crate) fn alignment(self) -> Alignment {
+        match self {
             Self::Source | Self::Target | Self::File | Self::Fstype => Alignment::Left,
             _ => Alignment::Right,
         }
     }
 
     /// Return the minimum width of the specified column.
-    pub(crate) fn min_width(column: &Self) -> usize {
-        match column {
+    pub(crate) fn min_width(self) -> usize {
+        match self {
             // 14 = length of "Filesystem" plus 4 spaces
             Self::Source => 14,
             Self::Used => 5,

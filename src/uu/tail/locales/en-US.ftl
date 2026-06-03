@@ -1,8 +1,9 @@
 tail-about = Print the last 10 lines of each FILE to standard output.
   With more than one FILE, precede each with a header giving the file name.
   With no FILE, or when FILE is -, read standard input.
-  Mandatory arguments to long flags are mandatory for short flags too.
-tail-usage = tail [FLAG]... [FILE]...
+
+  Mandatory arguments to long options are mandatory for short options too.
+tail-usage = tail [OPTION]... [FILE]...
 
 # Help messages
 tail-help-bytes = Number of bytes to print
@@ -58,10 +59,8 @@ tail-status-has-been-replaced-following-new-file = { $file } has been replaced; 
 tail-status-file-truncated = { $file }: file truncated
 tail-status-replaced-with-untailable-file = { $file } has been replaced with an untailable file
 tail-status-replaced-with-untailable-file-giving-up = { $file } has been replaced with an untailable file; giving up on this name
-tail-status-file-became-inaccessible = { $file } { $become_inaccessible }: { $no_such_file }
 tail-status-directory-containing-watched-file-removed = directory containing watched file was removed
 tail-status-backend-cannot-be-used-reverting-to-polling = { $backend } cannot be used, reverting to polling
-tail-status-file-no-such-file = { $file }: { $no_such_file }
 
 # Text constants
 tail-bad-fd = Bad file descriptor

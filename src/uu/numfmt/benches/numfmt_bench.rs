@@ -18,7 +18,7 @@ fn numfmt_to_si(bencher: Bencher, count: usize) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -34,7 +34,7 @@ fn numfmt_to_si_precision(bencher: Bencher, count: usize) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -50,7 +50,7 @@ fn numfmt_to_iec(bencher: Bencher, count: usize) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -67,7 +67,7 @@ fn numfmt_from_si(bencher: Bencher, count: usize) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -88,7 +88,7 @@ fn numfmt_large_numbers_si(bencher: Bencher, count: usize) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -104,7 +104,7 @@ fn numfmt_padding(bencher: Bencher, (count, padding): (usize, usize)) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }
@@ -121,7 +121,7 @@ fn numfmt_round_modes(bencher: Bencher, (round_mode, count): (&str, usize)) {
             args
         })
         .bench_values(|args| {
-            let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+            let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
             black_box(run_util_function(uumain, &arg_refs));
         });
 }

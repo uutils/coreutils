@@ -9,29 +9,12 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
-mod platform {
-    pub const DYLIB_EXT: &str = ".so";
-}
-
-#[cfg(target_vendor = "apple")]
-mod platform {
-    pub const DYLIB_EXT: &str = ".dylib";
-}
-
-#[cfg(target_os = "cygwin")]
-mod platform {
-    pub const DYLIB_EXT: &str = ".dll";
-}
-
 fn main() {
+    // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
+    if env::var("CARGO_CFG_UNIX").is_err() {
+        println!("cargo:rustc-cfg=feature=\"feat_external_libstdbuf\"");
+        return;
+    }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/libstdbuf/src/libstdbuf.rs");
 
@@ -58,6 +41,17 @@ fn main() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR not set");
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown".to_string());
 
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target_vendor = env::var("CARGO_CFG_TARGET_VENDOR").unwrap();
+
+    let dylib_ext = if target_vendor == "apple" {
+        ".dylib"
+    } else if target_os == "cygwin" {
+        ".dll"
+    } else {
+        ".so"
+    };
+
     // Check if we're building from the repository (where src/libstdbuf exists)
     // or from crates.io (where it doesn't)
     let libstdbuf_src = Path::new("src/libstdbuf");
@@ -65,7 +59,7 @@ fn main() {
         // When building from crates.io, libstdbuf is already available as a dependency
         // We can't build it here, so we'll need to handle this differently
         // For now, we'll create a dummy library file to satisfy the include_bytes! macro
-        let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
+        let lib_name = format!("libstdbuf{dylib_ext}");
         let dest_path = Path::new(&out_dir).join(&lib_name);
 
         // Create an empty file as a placeholder
@@ -108,11 +102,12 @@ fn main() {
     assert!(status.success(), "Failed to build libstdbuf");
 
     // Copy the built library to OUT_DIR for include_bytes! to find
-    #[cfg(target_os = "cygwin")]
-    let lib_name = format!("stdbuf{}", platform::DYLIB_EXT);
-    #[cfg(not(target_os = "cygwin"))]
-    let lib_name = format!("libstdbuf{}", platform::DYLIB_EXT);
-    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{}", platform::DYLIB_EXT));
+    let lib_name = if target_os == "cygwin" {
+        format!("stdbuf{dylib_ext}")
+    } else {
+        format!("libstdbuf{dylib_ext}")
+    };
+    let dest_path = Path::new(&out_dir).join(format!("libstdbuf{dylib_ext}"));
 
     // Check multiple possible locations for the built library
     let possible_paths = if !target.is_empty() && target != "unknown" {
@@ -145,4 +140,40 @@ fn main() {
         found,
         "Could not find built libstdbuf library. Searched in: {possible_paths:?}."
     );
+
+    // Create a symlink to libstdbuf in the main target directory for development convenience
+    // This allows running stdbuf directly from the build directory (e.g., target/debug/coreutils)
+    // without needing to install the library to LIBSTDBUF_DIR. This is particularly useful for
+    // running tests and manual testing during development.
+    #[cfg(all(unix, feature = "feat_external_libstdbuf"))]
+    {
+        use std::path::PathBuf;
+
+        // Get the main target directory (e.g., target/debug or target/release)
+        // OUT_DIR is something like target/debug/build/uu_stdbuf-<hash>/out
+        let out_dir_path = PathBuf::from(&out_dir);
+        if let Some(target_dir) = out_dir_path
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
+            let lib_filename = format!("libstdbuf{dylib_ext}");
+            let source = target_dir.join("deps").join(&lib_filename);
+            let dest = target_dir.join(&lib_filename);
+
+            // Remove old symlink if it exists (in case it points to the wrong place)
+            let _ = fs::remove_file(&dest);
+
+            // Create symlink if the source exists
+            if source.exists() {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::symlink;
+                    if let Err(e) = symlink(&source, &dest) {
+                        eprintln!("Warning: Failed to create symlink for libstdbuf: {e}");
+                    }
+                }
+            }
+        }
+    }
 }
