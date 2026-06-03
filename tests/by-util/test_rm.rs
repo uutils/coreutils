@@ -1581,3 +1581,37 @@ fn test_symlink_to_dot_protection() {
     assert!(at.file_exists("subdir/file"));
     assert!(at.file_exists("topfile"));
 }
+
+#[test]
+fn test_dash_hint() {
+    // `rm -foo` where a file named "-foo" exists: GNU suggests `rm ./-foo`.
+    // The invocation prefix (`{$util_name}`) varies in tests, so only the
+    // stable parts are checked.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("-foo");
+    ts.ucmd()
+        .arg("-foo")
+        .fails_with_code(1)
+        .stderr_contains("./-foo' to remove the file '-foo'.")
+        .stderr_contains("--help' for more information.");
+    assert!(at.file_exists("-foo"));
+
+    // The suggestion is shell-escaped so it can be copy-pasted. Newlines are
+    // not valid in Windows file names, so only exercise this on Unix.
+    #[cfg(unix)]
+    {
+        at.touch("-foo\nbar");
+        ts.ucmd()
+            .arg("-foo\nbar")
+            .fails_with_code(1)
+            .stderr_contains("./'-foo'$'\\n''bar'' to remove the file '-foo'$'\\n''bar'.");
+    }
+
+    // No matching file exists: the hint must not be shown.
+    ts.ucmd()
+        .arg("-bar")
+        .fails_with_code(1)
+        .stderr_does_not_contain("to remove the file");
+}

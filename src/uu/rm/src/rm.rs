@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
-use std::io::{self, IsTerminal, stdin};
+use std::io::{self, IsTerminal, Write, stdin};
 use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -22,6 +22,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
@@ -203,7 +204,9 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
+    let matches = uu_app()
+        .try_get_matches_from(args.iter())
+        .map_err(|e| handle_parse_error(e, &args))?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -291,6 +294,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     Ok(())
+}
+
+/// Turn a clap parsing error into a `UError`, reproducing GNU's hint when an
+/// unknown `-foo` option is actually the name of an existing file: it suggests
+/// `rm ./-foo` so the name is treated as a path. See `tests/rm/dash-hint.sh`.
+fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
+    let dash_file = args.iter().skip(1).find(|a| {
+        os_str_as_bytes(a).is_ok_and(|b| b.len() >= 2 && b[0] == b'-')
+            && fs::symlink_metadata(a).is_ok()
+    });
+    if let (true, Some(file)) = (e.exit_code() != 0, dash_file) {
+        // The path is shell-escaped (quoted only if needed), the file name is
+        // always quoted, matching GNU's two quoting styles.
+        let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let _ = writeln!(
+            io::stderr(),
+            "{}",
+            translate!(
+                "rm-hint-dash-file",
+                "util_name" => uucore::execution_phrase(),
+                "path" => path.to_string_lossy(),
+                "file" => quoted.to_string_lossy()
+            )
+        );
+        return 1.into();
+    }
+    // Otherwise defer to the standard clap handling (incl. `--help`/`--version`).
+    match uucore::clap_localization::handle_clap_result(uu_app(), args.iter()) {
+        Ok(_) => 1.into(),
+        Err(e) => e,
+    }
 }
 
 pub fn uu_app() -> Command {
