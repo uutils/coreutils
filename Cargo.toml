@@ -324,7 +324,7 @@ feat_require_unix_utmpx = ["pinky", "uptime", "users", "who"]
 # "feat_require_unix_hostid" == set of utilities requiring gethostid in libc (only some unixes provide)
 feat_require_unix_hostid = ["hostid"]
 # "feat_require_selinux" == set of utilities depending on SELinux.
-feat_require_selinux = ["chcon", "runcon"]
+feat_require_selinux = ["chcon/selinux", "runcon/selinux"]
 ## (alternate/newer/smaller platforms) feature sets
 # "feat_os_unix_fuchsia" == set of utilities which can be built/run on the "Fuchsia" OS (refs: <https://fuchsia.dev>; <https://en.wikipedia.org/wiki/Google_Fuchsia>)
 feat_os_unix_fuchsia = [

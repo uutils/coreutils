@@ -19,16 +19,32 @@ path = "src/chcon.rs"
 test = false
 doctest = false
 
-# TODO: block fetching crates without feat_selinux
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-clap = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "perms"] }
-selinux = { workspace = true }
-thiserror = { workspace = true }
-libc = { workspace = true }
-fts-sys = { workspace = true }
-fluent = { workspace = true }
+clap = { workspace = true, optional = true }
+fluent = { workspace = true, optional = true }
+fts-sys = { workspace = true, optional = true }
+libc = { workspace = true, optional = true }
+selinux = { workspace = true, optional = true }
+thiserror = { workspace = true, optional = true }
+uucore = { workspace = true, features = [
+  "entries",
+  "fs",
+  "perms",
+  "selinux",
+], optional = true }
+
+[features]
+selinux = [
+  "dep:clap",
+  "dep:fluent",
+  "dep:fts-sys",
+  "dep:libc",
+  "dep:selinux",
+  "dep:thiserror",
+  "dep:uucore",
+]
 
 [[bin]]
 name = "chcon"
 path = "src/main.rs"
+required-features = ["uucore/selinux"]
