@@ -89,6 +89,8 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
             ));
         }
         let f = File::open(path).map_err_context(String::new)?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Box::new(f) as Box<dyn Read>)
     }
 }
