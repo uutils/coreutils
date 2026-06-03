@@ -2463,7 +2463,7 @@ fn test_follow_name_move2() {
 
     let mut args = vec!["--follow=name", file1, file2];
 
-    let mut delay = 500;
+    let mut delay = 100;
     for i in 0..2 {
         at.truncate(file1, "file1_content\n");
         at.truncate(file2, "file2_content\n");
@@ -2530,7 +2530,7 @@ fn test_follow_name_move_retry1() {
 
     let mut args = vec!["--follow=name", "--retry", source, "--use-polling"];
 
-    let mut delay = 1500;
+    let mut delay = 100;
     for _ in 0..2 {
         at.touch(source);
         let mut p = ts.ucmd().args(&args).run_no_wait();
