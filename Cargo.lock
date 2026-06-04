@@ -3523,10 +3523,10 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
+ "foldhash 0.2.0",
  "num-bigint",
  "num-traits",
  "onig",
- "rustc-hash",
  "thiserror 2.0.18",
  "uucore",
 ]

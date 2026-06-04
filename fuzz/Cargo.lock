@@ -2007,10 +2007,10 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "foldhash 0.2.0",
  "num-bigint",
  "num-traits",
  "onig",
- "rustc-hash",
  "thiserror",
  "uucore",
 ]
