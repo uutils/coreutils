@@ -74,6 +74,7 @@ rustc
 rustfmt
 rustup
 rustdoc
+prek
 #
 bitor # BitOr trait function
 bitxor # BitXor trait function

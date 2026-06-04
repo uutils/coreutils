@@ -211,8 +211,8 @@ jobs:
         run: |
           python3 -m unittest util/test_compare_test_results.py util/test_compare_size_results.py
 
-  pre_commit:
-    name: Pre-commit hooks
+  prek:
+    name: Prek hooks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -234,19 +234,19 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install pre-commit
-        run: pip install pre-commit
+      - name: Install prek
+        run: pip install prek
 
       - name: Install cspell
         run: npm install -g cspell
 
-      - name: Cache pre-commit environments
+      - name: Cache prek environments
         uses: actions/cache@v5
         with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+          path: ~/.cache/prek
+          key: prek-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
           restore-keys: |
-            pre-commit-${{ runner.os }}-
+            prek-${{ runner.os }}-
 
-      - name: Run pre-commit
-        run: pre-commit run
+      - name: Run prek
+        run: prek run
