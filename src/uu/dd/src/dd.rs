@@ -52,7 +52,7 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
@@ -305,7 +305,7 @@ impl Source {
     /// source. This function informs the kernel that the specified
     /// portion of the source is no longer needed. If not possible,
     /// then this function returns an error.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
@@ -492,9 +492,12 @@ impl Input<'_> {
     /// the input file is no longer needed. If not possible, then this
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
     fn discard_cache(&self, offset: u64, len: u64) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -507,11 +510,7 @@ impl Input<'_> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO: Is there a way to discard filesystem cache on other targets?
     }
 
     /// Fills a given buffer.
@@ -693,7 +692,7 @@ impl Dest {
     /// destination. This function informs the kernel that the
     /// specified portion of the destination is no longer needed. If
     /// not possible, then this function returns an error.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
@@ -935,9 +934,12 @@ impl<'a> Output<'a> {
     /// the output file is no longer needed. If not possible, then
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
     fn discard_cache(&self, offset: u64, len: u64) {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -950,11 +952,7 @@ impl<'a> Output<'a> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO Is there a way to discard filesystem cache on other targets?
     }
 
     /// writes a block of data. optionally retries when first try didn't complete
