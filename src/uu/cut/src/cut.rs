@@ -13,6 +13,7 @@ use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, std
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::i18n::charmap::{is_multibyte_locale, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 
@@ -29,6 +30,8 @@ struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,
     line_ending: LineEnding,
     field_opts: Option<FieldOptions<'a>>,
+    /// `-n`: with `-b`, do not split multi-byte characters across the selection.
+    suppress_split: bool,
 }
 
 enum Delimiter<'a> {
@@ -92,6 +95,102 @@ fn cut_bytes<R: Read, W: Write>(
             let low = low - 1;
             let high = high.min(line.len());
             out.write_all(&line[low..high])?;
+        }
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Walk `line` from byte offset `idx` (at position `pos`) as long as the
+/// position of the last consumed character stays within `limit`, and return the
+/// byte offset and position reached.
+///
+/// The position is the number of characters seen so far when `by_char` is set
+/// (`-c`), or the offset of the last byte consumed otherwise (`-b -n`).
+fn advance(
+    line: &[u8],
+    mut idx: usize,
+    mut pos: usize,
+    limit: usize,
+    by_char: bool,
+) -> (usize, usize) {
+    while pos < limit && idx < line.len() {
+        // ASCII bytes are single-byte characters in every encoding handled
+        // here, which keeps the common case out of the decoder.
+        let len = if line[idx] < 0x80 {
+            1
+        } else {
+            mb_char_len(&line[idx..]).max(1) // never exceeds the length left
+        };
+        let step = if by_char { 1 } else { len };
+        if pos + step > limit {
+            break;
+        }
+        idx += len;
+        pos += step;
+    }
+    (idx, pos)
+}
+
+/// Cut `-c` (whole characters) or `-b -n` (bytes, keeping whole characters).
+///
+/// In a single-byte locale, or for `-b` without `-n`, this falls back to the
+/// plain byte path. Otherwise each character is emitted whole when its 1-based
+/// position falls in a range: the character index for `-c`, or the offset of
+/// its last byte for `-b -n` (matching GNU).
+fn cut_chars<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+    by_char: bool,
+) -> UResult<()> {
+    if !is_multibyte_locale() || !(by_char || opts.suppress_split) {
+        return cut_bytes(reader, out, ranges, opts);
+    }
+
+    let newline_char = opts.line_ending.into();
+    let mut buf_in = BufReader::new(reader);
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
+
+    let result = buf_in.for_byte_record(newline_char, |line| {
+        let mut print_delim = false;
+        // Byte offset of the next character to look at, and the position
+        // already consumed. `ranges` is sorted and disjoint, so one pass over
+        // the line is enough and each range maps to a contiguous slice of it.
+        let (mut idx, mut pos) = (0, 0);
+        for &Range { low, high } in ranges {
+            // Skip the characters located before the range, then take the ones
+            // it covers: a character belongs to the range when its position is
+            // in `low..=high`.
+            (idx, pos) = advance(line, idx, pos, low - 1, by_char);
+            let start = idx;
+            if high >= line.len() {
+                // A character never ends before its own byte offset, so a range
+                // reaching past the end of the line covers everything left:
+                // there is no need to decode it.
+                idx = line.len();
+            } else {
+                (idx, pos) = advance(line, idx, pos, high, by_char);
+            }
+            if start < idx {
+                if print_delim {
+                    out.write_all(out_delim)?;
+                } else if opts.out_delimiter.is_some() {
+                    print_delim = true;
+                }
+                out.write_all(&line[start..idx])?;
+            }
+            if idx == line.len() {
+                // The rest of the ranges start further away, past the line end.
+                break;
+            }
         }
         out.write_all(&[newline_char])?;
         Ok(true)
@@ -458,8 +557,8 @@ where
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) =>
-                    cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Bytes(ranges, opts) => cut_chars(stdin(), &mut out, ranges, opts, false),
+                Mode::Characters(ranges, opts) => cut_chars(stdin(), &mut out, ranges, opts, true),
                 Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
             });
 
@@ -482,8 +581,11 @@ where
                     .map_err_context(|| filename.maybe_quote().to_string())
                     .and_then(|file| {
                         match &mode {
-                            Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
-                                cut_bytes(file, &mut out, ranges, opts)
+                            Mode::Bytes(ranges, opts) => {
+                                cut_chars(file, &mut out, ranges, opts, false)
+                            }
+                            Mode::Characters(ranges, opts) => {
+                                cut_chars(file, &mut out, ranges, opts, true)
                             }
                             Mode::Fields(ranges, opts) => cut_fields(file, &mut out, ranges, opts),
                         }
@@ -514,12 +616,14 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
-                // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
-                // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
+                // The delimiter must be a single character. We accept a single
+                // UTF-8 character (e.g. an emoji), a single byte (including a
+                // non-UTF-8 byte like `b"\xFF"`), or a single character of the
+                // current locale's encoding (e.g. a 2-byte GB18030 character).
                 let bytes = os_str_as_bytes(os_string)?;
-                if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
-                    || os_string.to_str().is_none() && bytes.len() > 1
-                {
+                let single_utf8_char = os_string.to_str().is_some_and(|s| s.chars().count() == 1);
+                let single_locale_char = mb_char_len(bytes) == bytes.len();
+                if !single_utf8_char && !single_locale_char {
                     return Err(USimpleError::new(
                         1,
                         translate!("cut-error-delimiter-must-be-single-character"),
@@ -583,6 +687,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
+    let suppress_split = matches.get_flag(options::NOTHING);
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
     // is expected. The number of those arguments is used for parsing a cutting
@@ -610,6 +715,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         out_delimiter,
                         line_ending,
                         field_opts: None,
+                        suppress_split,
                     },
                 )
             })
@@ -623,6 +729,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         out_delimiter,
                         line_ending,
                         field_opts: None,
+                        suppress_split,
                     },
                 )
             })
@@ -639,6 +746,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             delimiter,
                             only_delimited,
                         }),
+                        suppress_split,
                     },
                 )
             })
@@ -776,7 +884,8 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::NOTHING)
                 .short('n')
-                .help("(ignored)")
+                .long("no-partial")
+                .help(translate!("cut-help-no-partial"))
                 .action(ArgAction::SetTrue),
         )
 }

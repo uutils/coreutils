@@ -101,6 +101,7 @@ cut-help-complement = inverser le filtre - au lieu d'afficher seulement les colo
 cut-help-only-delimited = en mode champ, afficher seulement les lignes qui contiennent le délimiteur
 cut-help-zero-terminated = au lieu de filtrer les colonnes basées sur la ligne, filtrer les colonnes basées sur \\0 (caractère NULL)
 cut-help-output-delimiter = en mode champ, remplacer le délimiteur dans les lignes de sortie avec l'argument de cette option
+cut-help-no-partial = avec -b, ne pas afficher les caractères multi-octets partiels
 
 # Messages d'erreur
 cut-error-is-directory = Est un répertoire
