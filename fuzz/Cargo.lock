@@ -2010,6 +2010,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
+ "rustc-hash",
  "thiserror",
  "uucore",
 ]

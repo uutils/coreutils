@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
 
 use uucore::{
     CharByte, IntoCharByteIterator,
@@ -42,7 +41,7 @@ fn index_with_locale(
             // switch to byte comparison when the byte is an invalid sequence.
             // Collect the needle chars into a set first so the search is
             // O(N + M) rather than O(N * M).
-            let needles: HashSet<CharByte> = right.iter_char_bytes().collect();
+            let needles: rustc_hash::FxHashSet<CharByte> = right.iter_char_bytes().collect();
             left.iter_char_bytes()
                 .position(|ch_h| needles.contains(&ch_h))
                 .map_or(0, |idx| idx + 1)

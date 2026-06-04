@@ -3526,6 +3526,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
+ "rustc-hash",
  "thiserror 2.0.18",
  "uucore",
 ]
