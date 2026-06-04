@@ -380,14 +380,15 @@ fn read_to_buffer<T: Read>(
                         }
                     }
 
+                    let search_start = newline_search_offset;
                     let mut sep_iter =
-                        memchr_iter(separator, &buffer[newline_search_offset..buffer.len()]).rev();
+                        memchr_iter(separator, &buffer[search_start..buffer.len()]).rev();
                     newline_search_offset = buffer.len();
                     if let Some(last_line_end) = sep_iter.next() {
                         if found_newline || sep_iter.next().is_some() {
                             // We read enough lines.
                             // We want to include the separator here, because it shouldn't be carried over.
-                            return Ok((last_line_end + 1, true));
+                            return Ok((search_start + last_line_end + 1, true));
                         }
                         found_newline = true;
                     }

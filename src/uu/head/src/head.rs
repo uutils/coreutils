@@ -170,12 +170,9 @@ fn wrap_in_stdout_error(err: io::Error) -> io::Error {
 
 // zero-copy fast-path
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn print_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
-    let mut out = io::stdout();
-    let res = uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error);
-    // flush prevents ignoring I/O error
-    out.flush().map_err(wrap_in_stdout_error)?;
-    res
+fn print_n_bytes(input: impl AsFd, n: u64) -> io::Result<u64> {
+    let out = io::stdout();
+    uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]

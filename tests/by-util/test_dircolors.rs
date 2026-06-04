@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
-use dircolors::{OutputFmt, StrUtils, guess_syntax};
+use dircolors::StrUtils;
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -28,50 +28,6 @@ fn test_dircolors_non_utf8_paths() {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-}
-
-#[test]
-fn test_shell_syntax() {
-    use std::env;
-    let last = env::var("SHELL");
-    unsafe {
-        env::set_var("SHELL", "/path/csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "csh");
-    }
-    assert_eq!(OutputFmt::CShell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/path/bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "bash");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "/asd/bar");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "foo");
-    }
-    assert_eq!(OutputFmt::Shell, guess_syntax());
-    unsafe {
-        env::set_var("SHELL", "");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-    unsafe {
-        env::remove_var("SHELL");
-    }
-    assert_eq!(OutputFmt::Unknown, guess_syntax());
-
-    if let Ok(s) = last {
-        unsafe {
-            env::set_var("SHELL", s);
-        }
-    }
 }
 
 #[test]
@@ -148,7 +104,9 @@ fn test_overridable_args() {
 #[test]
 fn test_no_env() {
     // no SHELL and TERM
-    new_ucmd!().fails();
+    new_ucmd!()
+        .fails()
+        .stderr_only("dircolors: no SHELL environment variable, and no shell type option given\n");
 }
 
 #[test]
@@ -181,8 +139,7 @@ fn test_stdin() {
         .pipe_in("owt 40;33\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='tw=40;33:';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='tw=40;33:';\nexport LS_COLORS\n");
 }
 
 #[test]
@@ -191,8 +148,7 @@ fn test_quoting() {
         .pipe_in("exec 'echo Hello;:'\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='ex='\\''echo Hello;\\:'\\'':';\nexport LS_COLORS\n");
 }
 
 /*
@@ -232,8 +188,7 @@ TERM {term_pattern}
             .pipe_in(theme)
             .args(&["-b", "-"])
             .succeeds()
-            .stdout_is(expectation)
-            .no_stderr();
+            .stdout_only(expectation);
     }
 
     let expectation_if_match = r"
@@ -297,6 +252,5 @@ fn test_colorterm_empty_with_wildcard() {
         .pipe_in("COLORTERM ?*\nowt 40;33\n")
         .args(&["-b", "-"])
         .succeeds()
-        .stdout_is("LS_COLORS='';\nexport LS_COLORS\n")
-        .no_stderr();
+        .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
 }

@@ -54,6 +54,8 @@ uutils aims to work on as many platforms as possible, to be able to use the same
 utils on Linux, macOS, *BSD, Windows, WASI and other platforms. This ensures, for example,
 that scripts can be easily transferred between platforms.
 
+uutils coreutils ships by default on Ubuntu since version 25.10.
+
 <div class="oranda-hide">
 
 ## Documentation
@@ -66,6 +68,10 @@ Both can also be generated locally, the instructions for that can be found in
 the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 
 Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/) to translate the Rust coreutils into your language.
+
+You can try the utilities in your browser through the
+[WebAssembly playground](https://uutils.github.io/playground/), without
+installing anything.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
 

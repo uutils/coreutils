@@ -5,7 +5,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -279,6 +279,7 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
     strategy:
       fail-fast: false
       matrix:

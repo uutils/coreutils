@@ -5,6 +5,8 @@
 // spell-checker:ignore datetime
 
 use uucore::error::{UError, UResult, USimpleError};
+use uucore::i18n::UEncoding;
+use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
@@ -443,10 +445,17 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{escaped}'")
         }
-        QuotingStyle::ShellEscapeAlways => {
-            let quote = if file_name.contains('\'') { '"' } else { '\'' };
-            format!("{quote}{file_name}{quote}")
-        }
+        QuotingStyle::ShellEscapeAlways => escape_name(
+            OsStr::new(file_name),
+            UucoreQuotingStyle::Shell {
+                escape: true,
+                always_quote: true,
+                show_control: true,
+            },
+            UEncoding::Utf8,
+        )
+        .to_string_lossy()
+        .to_string(),
         QuotingStyle::Quote => file_name.to_string(),
     }
 }
