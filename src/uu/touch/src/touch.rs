@@ -10,7 +10,9 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+#[cfg(not(unix))]
+use filetime::set_file_times;
+use filetime::{FileTime, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -607,30 +609,36 @@ fn update_times(
 
     #[cfg(unix)]
     {
+        let timestamps = to_timestamps(atime, mtime);
+
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if !is_stdout && try_futimens_via_write_fd(path, atime, mtime).is_ok() {
+        if !is_stdout && try_futimens_via_write_fd(path, &timestamps).is_ok() {
             return Ok(());
         }
+
+        // Fall back to `utimensat` by path. Unlike `filetime::set_file_times`
+        // (which opens the file to call `futimens` on the fd), this only
+        // requires ownership of the file, so it still succeeds when the file is
+        // neither readable nor writable (e.g. mode 0).
+        rustix::fs::utimensat(
+            rustix::fs::CWD,
+            path,
+            &timestamps,
+            rustix::fs::AtFlags::empty(),
+        )
+        .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
     }
 
+    #[cfg(not(unix))]
     set_file_times(path, atime, mtime)
         .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
+/// Build a rustix [`Timestamps`] from access and modification [`FileTime`]s.
 #[cfg(unix)]
-/// Set file times via file descriptor using `futimens`.
-///
-/// This opens the file write-only and uses the POSIX `futimens` call to set
-/// access and modification times on the open FD (not by path), which also
-/// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
-fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
-    let file = OpenOptions::new()
-        .write(true)
-        // Avoid blocking on special files (e.g. FIFOs) before we can inspect metadata.
-        .custom_flags(O_NONBLOCK)
-        .open(path)?;
-
-    let timestamps = Timestamps {
+fn to_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+    Timestamps {
         last_access: rustix::fs::Timespec {
             tv_sec: atime.unix_seconds(),
             tv_nsec: atime.nanoseconds() as _,
@@ -639,9 +647,23 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
             tv_sec: mtime.unix_seconds(),
             tv_nsec: mtime.nanoseconds() as _,
         },
-    };
+    }
+}
 
-    futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+#[cfg(unix)]
+/// Set file times via file descriptor using `futimens`.
+///
+/// This opens the file write-only and uses the POSIX `futimens` call to set
+/// access and modification times on the open FD (not by path), which also
+/// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
+fn try_futimens_via_write_fd(path: &Path, timestamps: &Timestamps) -> std::io::Result<()> {
+    let file = OpenOptions::new()
+        .write(true)
+        // Avoid blocking on special files (e.g. FIFOs) before we can inspect metadata.
+        .custom_flags(O_NONBLOCK)
+        .open(path)?;
+
+    futimens(&file, timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Get metadata of the provided path
@@ -985,7 +1007,7 @@ mod tests {
         let atime = FileTime::from_unix_time(1_600_000_000, 123_456_789);
         let mtime = FileTime::from_unix_time(1_600_000_100, 987_654_321);
 
-        super::try_futimens_via_write_fd(&path, atime, mtime).unwrap();
+        super::try_futimens_via_write_fd(&path, &super::to_timestamps(atime, mtime)).unwrap();
 
         let metadata = std::fs::metadata(&path).unwrap();
         let actual_atime = FileTime::from_last_access_time(&metadata);
