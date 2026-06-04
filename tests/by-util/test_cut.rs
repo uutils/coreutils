@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg
+// spell-checker:ignore defg naïve nave
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -660,4 +660,202 @@ fn test_cut_non_utf8_paths() {
         .arg(file_name)
         .succeeds()
         .stdout_only("a\tc\n1\t3\n");
+}
+
+// We exercise the GB18030 path with two real two-byte characters that are not
+// valid UTF-8: 啊 (0xB0 0xA1) and 中 (0xD6 0xD0). The active encoding comes
+// straight from `LC_ALL`, so the host does not need the locale installed.
+#[cfg(target_os = "linux")]
+const GB_LOCALE: &str = "zh_CN.gb18030";
+#[cfg(target_os = "linux")]
+const A: &[u8] = b"\xB0\xA1"; // 啊
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_fields_gb18030_delimiter() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // Three words separated by the two-byte 啊: "red啊green啊blue".
+    let line = b"red\xB0\xA1green\xB0\xA1blue\n";
+    let delim = OsString::from_vec(A.to_vec());
+
+    // Pick the last field; the chosen output delimiter replaces the input one.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f3", "--output-delimiter=/"])
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only("blue\n");
+
+    // Two non-adjacent fields; with no override the multibyte delimiter itself
+    // is re-emitted between them.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-d")
+        .arg(&delim)
+        .arg("-f1,3")
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"red\xB0\xA1blue\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_fields_gb18030_complement_and_gaps() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let delim = OsString::from_vec(A.to_vec());
+
+    // --complement of the middle field leaves the two outer ones, rejoined.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("--complement")
+        .arg("-d")
+        .arg(&delim)
+        .arg("-f2")
+        .pipe_in(b"red\xB0\xA1green\xB0\xA1blue\n".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"red\xB0\xA1blue\n");
+
+    // A line that is only delimiters yields empty fields around a trailing one.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f1-3", "--output-delimiter=|"])
+        .pipe_in(b"\xB0\xA1\xB0\xA1z\n".to_vec())
+        .succeeds()
+        .stdout_only("||z\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cut_fields_single_byte_delimiter_in_mb_locale() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    // 0x80 never starts a GB18030 sequence, yet a lone byte is a fine delimiter.
+    let delim = OsString::from_vec(vec![0x80]);
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f1,3", "--output-delimiter=-"])
+        .pipe_in(b"a\x80b\x80c\n".to_vec())
+        .succeeds()
+        .stdout_only("a-c\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_chars_gb18030() {
+    // "啊w中": -c counts characters, so the second one is the ASCII 'w'.
+    let line = b"\xB0\xA1w\xD6\xD0\n";
+
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-c2")
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only("w\n");
+
+    // Selecting the trailing multibyte character returns it whole.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-c3")
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"\xD6\xD0\n");
+
+    // A range that spans the leading and ASCII characters.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .arg("-c1-2")
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"\xB0\xA1w\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_chars_gb18030_ranges_and_complement() {
+    // "啊w中": list of two single-char ranges joined by a custom delimiter.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .args(&["-c1,3", "--output-delimiter=+"])
+        .pipe_in(b"\xB0\xA1w\xD6\xD0\n".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"\xB0\xA1+\xD6\xD0\n");
+
+    // Complement of the ASCII middle character keeps both multibyte ones.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .args(&["--complement", "-c2"])
+        .pipe_in(b"\xB0\xA1w\xD6\xD0\n".to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"\xB0\xA1\xD6\xD0\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_bytes_no_split_gb18030() {
+    // -n forbids splitting a multibyte character: a byte index landing inside
+    // 啊 only produces output once its final byte is included.
+    let line = b"\xB0\xA1w\n";
+
+    // Byte 1 is the first half of 啊 -> nothing is emitted.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .args(&["-b1", "-n"])
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only("\n");
+
+    // Byte 2 completes 啊 -> the whole character comes out.
+    new_ucmd!()
+        .env("LC_ALL", GB_LOCALE)
+        .args(&["-b2", "-n"])
+        .pipe_in(line.to_vec())
+        .succeeds()
+        .stdout_only_bytes(b"\xB0\xA1\n");
+}
+
+// `-c` also operates on whole characters in a UTF-8 locale. The harness runs
+// under `LC_ALL=C`, so the locale is forced here. "naïve" is n a ï(2 bytes) v e.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_chars_utf8() {
+    // The third character is the accented 'ï', returned in full.
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c3")
+        .pipe_in("naïve\n".as_bytes().to_vec())
+        .succeeds()
+        .stdout_only("ï\n");
+
+    // Complement of that character removes it and nothing else.
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["--complement", "-c3"])
+        .pipe_in("naïve\n".as_bytes().to_vec())
+        .succeeds()
+        .stdout_only("nave\n");
+
+    // A list straddling 'ï' joins the two picked characters.
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-c1,4", "--output-delimiter=+"])
+        .pipe_in("naïve\n".as_bytes().to_vec())
+        .succeeds()
+        .stdout_only("n+v\n");
 }
