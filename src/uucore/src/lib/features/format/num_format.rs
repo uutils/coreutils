@@ -389,7 +389,7 @@ fn format_float_decimal(
     }
 
     //precision overflows at 65535, prevent overflow with overflow check of 1000
-    //as the usual behaviour is "%.xf", where if x is >= 1000, precision will be 0.
+    //as the usual behavior is "%.xf", where if x is >= 1000, precision will be 0.
     if precision < 1000 {
         return format!("{bd:.precision$}");
     }
