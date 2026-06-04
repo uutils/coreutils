@@ -896,11 +896,11 @@ impl Attributes {
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
         context: {
-            #[cfg(feature = "feat_selinux")]
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             {
                 Preserve::Yes { required: false }
             }
-            #[cfg(not(feature = "feat_selinux"))]
+            #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
             {
                 Preserve::No { explicit: false }
             }
@@ -1141,7 +1141,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(feature = "selinux"))]
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
@@ -1692,7 +1692,7 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<(
     Ok(())
 }
 
-#[cfg(all(feature = "selinux", target_os = "linux"))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> CopyResult<()> {
     if !uucore::selinux::is_selinux_enabled() {
         return Ok(());
@@ -2670,7 +2670,7 @@ fn copy_file(
         fs::File::create(dest).map(|f| f.set_len(0)).ok();
     })?;
 
-    #[cfg(all(feature = "selinux", target_os = "linux"))]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if options.set_selinux_context {
         set_selinux_context(dest, options.context.as_ref())?;
     }

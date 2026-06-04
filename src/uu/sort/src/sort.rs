@@ -668,10 +668,11 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
+            // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
+                .filter(|s| !s.trim_ascii_start().starts_with('+'))
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }

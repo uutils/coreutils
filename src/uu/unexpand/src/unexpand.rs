@@ -115,11 +115,9 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
 
     // Handle the increment if specified
     // Only add an extra tab stop if increment is non-zero
-    if let Some(inc) = increment_size {
-        if inc > 0 {
-            let last = *nums.last().unwrap();
-            nums.push(last + inc);
-        }
+    if let Some(inc) = increment_size.filter(|&i| i > 0) {
+        let last = *nums.last().unwrap();
+        nums.push(last + inc);
     }
 
     if let (false, _) = nums

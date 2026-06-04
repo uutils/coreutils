@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid
+// spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid TTIN TTOU
 
 mod status;
 
@@ -18,17 +18,16 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_time;
 use uucore::process::ChildExt;
+use uucore::signals::install_signal_handler;
 use uucore::translate;
 
+use rustix::process::{Pid, Signal, getpid, kill_process, setpgid};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use uucore::{
     format_usage,
     signals::{signal_by_name_or_value, signal_list_name_by_value},
 };
-
-use nix::sys::signal::{SigHandler, Signal, kill};
-use nix::unistd::{Pid, getpid, setpgid};
-#[cfg(unix)]
-use std::os::unix::process::CommandExt;
 
 pub mod options {
     pub static FOREGROUND: &str = "foreground";
@@ -182,7 +181,7 @@ pub fn uu_app() -> Command {
 /// Install SIGCHLD handler to ensure waiting for child works even if parent ignored SIGCHLD.
 fn install_sigchld() {
     extern "C" fn chld(_: libc::c_int) {}
-    let _ = unsafe { nix::sys::signal::signal(Signal::SIGCHLD, SigHandler::Handler(chld)) };
+    let _ = install_signal_handler(Signal::as_raw(Signal::CHILD), chld);
 }
 
 /// We should terminate child process when receiving termination signals.
@@ -197,27 +196,26 @@ fn install_signal_handlers(term_signal: usize) {
         RECEIVED_SIGNAL.store(sig, atomic::Ordering::Relaxed);
     }
 
-    let handler = SigHandler::Handler(handle_signal);
     let sigpipe_ignored = uucore::signals::sigpipe_was_ignored();
 
     for sig in [
-        Signal::SIGALRM,
-        Signal::SIGINT,
-        Signal::SIGQUIT,
-        Signal::SIGHUP,
-        Signal::SIGTERM,
-        Signal::SIGPIPE,
-        Signal::SIGUSR1,
-        Signal::SIGUSR2,
+        Signal::ALARM,
+        Signal::INT,
+        Signal::QUIT,
+        Signal::HUP,
+        Signal::TERM,
+        Signal::PIPE,
+        Signal::USR1,
+        Signal::USR2,
     ] {
-        if sig == Signal::SIGPIPE && sigpipe_ignored {
+        if sig == Signal::PIPE && sigpipe_ignored {
             continue; // Skip SIGPIPE if it was ignored by parent
         }
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+        let _ = install_signal_handler(Signal::as_raw(sig), handle_signal);
     }
 
-    if let Ok(sig) = Signal::try_from(term_signal as i32) {
-        let _ = unsafe { nix::sys::signal::signal(sig, handler) };
+    if let Some(sig) = signal_from_raw(term_signal as i32) {
+        let _ = install_signal_handler(Signal::as_raw(sig), handle_signal);
     }
 }
 
@@ -237,6 +235,27 @@ fn report_if_verbose(signal: usize, cmd: &str, verbose: bool) {
         );
         let _ = stderr.flush();
     }
+}
+
+fn signal_from_raw(sig: i32) -> Option<Signal> {
+    if sig <= 0 {
+        return None;
+    }
+    // Fast path: standard named signals (SIGHUP, SIGTERM, SIGKILL, etc.)
+    if let Some(s) = Signal::from_named_raw(sig) {
+        return Some(s);
+    }
+    // Slow path: realtime signals (SIGRTMIN..=SIGRTMAX).
+    #[cfg(target_os = "linux")]
+    {
+        let rtmin = libc::SIGRTMIN();
+        let rtmax = libc::SIGRTMAX();
+        if sig >= rtmin && sig <= rtmax {
+            return Some(unsafe { Signal::from_raw_unchecked(sig) });
+        }
+    }
+
+    None
 }
 
 fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
@@ -324,8 +343,8 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
     // The easiest way to preserve the latter seems to be to kill
     // ourselves with whatever signal our child exited with, which is
     // what the following is intended to accomplish.
-    if let Ok(sig) = Signal::try_from(signal) {
-        let _ = kill(getpid(), Some(sig));
+    if let Some(sig) = signal_from_raw(signal) {
+        let _ = kill_process(getpid(), sig);
     }
     signal
 }
@@ -359,27 +378,25 @@ fn timeout(
     #[cfg(unix)]
     {
         #[cfg(target_os = "linux")]
-        let death_sig = Signal::try_from(signal as i32).ok();
+        let death_sig = signal_from_raw(signal as i32);
         let sigpipe_was_ignored = uucore::signals::sigpipe_was_ignored();
         let stdin_was_closed = uucore::signals::stdin_was_closed();
 
         unsafe {
             cmd_builder.pre_exec(move || {
                 // Reset terminal signals to default
-                let _ = nix::sys::signal::signal(Signal::SIGTTIN, SigHandler::SigDfl);
-                let _ = nix::sys::signal::signal(Signal::SIGTTOU, SigHandler::SigDfl);
+                let _ = libc::signal(Signal::as_raw(Signal::TTIN), libc::SIG_DFL);
+                let _ = libc::signal(Signal::as_raw(Signal::TTOU), libc::SIG_DFL);
                 // Preserve SIGPIPE ignore status if parent had it ignored
                 if sigpipe_was_ignored {
-                    let _ = nix::sys::signal::signal(Signal::SIGPIPE, SigHandler::SigIgn);
+                    let _ = libc::signal(Signal::as_raw(Signal::PIPE), libc::SIG_IGN);
                 }
                 // If stdin was closed before Rust reopened it as /dev/null, close it in child
                 if stdin_was_closed {
                     libc::close(libc::STDIN_FILENO);
                 }
                 #[cfg(target_os = "linux")]
-                if let Some(sig) = death_sig {
-                    let _ = nix::sys::prctl::set_pdeathsig(sig);
-                }
+                let _ = rustix::process::set_parent_process_death_signal(death_sig);
                 Ok(())
             });
         }

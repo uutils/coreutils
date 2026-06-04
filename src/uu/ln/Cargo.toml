@@ -25,6 +25,9 @@ uucore = { workspace = true, features = ["backup-control", "fs"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [[bin]]
 name = "ln"
 path = "src/main.rs"

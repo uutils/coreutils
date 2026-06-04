@@ -3,19 +3,19 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore cmdline dyld dylib PDEATHSIG setvbuf
+
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
-use uutests::new_ucmd;
-#[cfg(not(target_os = "windows"))]
-use uutests::util::TestScenario;
-use uutests::util_name;
+#[cfg(unix)]
+use uutests::{new_ucmd, util::TestScenario, util_name};
 
 #[test]
+#[cfg(unix)]
 fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 #[test]
 fn test_permission() {
     new_ucmd!()
@@ -28,7 +28,7 @@ fn test_permission() {
 // LD_DEBUG is not available on macOS, OpenBSD, Android, or musl
 #[cfg(all(
     feature = "feat_external_libstdbuf",
-    not(target_os = "windows"),
+    unix,
     not(target_os = "openbsd"),
     not(target_os = "macos"),
     not(target_os = "android"),
@@ -121,7 +121,7 @@ fn test_stdbuf_search_order_exe_dir_first() {
     );
 }
 
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 #[test]
 fn test_no_such() {
     new_ucmd!()
@@ -135,7 +135,7 @@ fn test_no_such() {
 // does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
 // when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
-    not(target_os = "windows"),
+    unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(all(target_arch = "x86_64", target_env = "musl"))
@@ -157,7 +157,7 @@ fn test_stdbuf_unbuffered_stdout() {
 // does not provide musl-compiled system utilities (like head), leading to dynamic linker errors
 // when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
-    not(target_os = "windows"),
+    unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(all(target_arch = "x86_64", target_env = "musl"))
@@ -174,8 +174,8 @@ fn test_stdbuf_line_buffered_stdout() {
         .stdout_is("The quick brown fox jumps over the lazy dog.");
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
+#[cfg(unix)]
 fn test_stdbuf_no_buffer_option_fails() {
     let ts = TestScenario::new(util_name!());
 
@@ -185,8 +185,8 @@ fn test_stdbuf_no_buffer_option_fails() {
         .stderr_contains("the following required arguments were not provided:");
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
+#[cfg(unix)]
 fn test_stdbuf_no_command_fails_with_125() {
     // Test that missing command fails with exit code 125 (stdbuf error)
     // This verifies proper error handling without unwrap panic
@@ -200,7 +200,7 @@ fn test_stdbuf_no_command_fails_with_125() {
 // does not provide musl-compiled system utilities (like tail), leading to dynamic linker errors
 // when preloading musl-compiled libstdbuf.so into glibc-compiled binaries. Same thing for FreeBSD.
 #[cfg(all(
-    not(target_os = "windows"),
+    unix,
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(all(target_arch = "x86_64", target_env = "musl"))
@@ -214,8 +214,8 @@ fn test_stdbuf_trailing_var_arg() {
         .stdout_is("jumps over the lazy dog.");
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
+#[cfg(unix)]
 fn test_stdbuf_line_buffering_stdin_fails() {
     new_ucmd!()
         .args(&["-i", "L", "head"])
@@ -223,8 +223,8 @@ fn test_stdbuf_line_buffering_stdin_fails() {
         .usage_error("line buffering stdin is meaningless");
 }
 
-#[cfg(not(target_os = "windows"))]
 #[test]
+#[cfg(unix)]
 fn test_stdbuf_invalid_mode_fails() {
     let options = ["--input", "--output", "--error"];
     for option in &options {
@@ -254,7 +254,7 @@ fn test_stdbuf_invalid_mode_fails() {
 // and is sometimes disabled. Disable test on Android for now.
 // musl libc dynamic loader does not support LD_DEBUG, so disable on musl targets as well.
 #[cfg(all(
-    not(target_os = "windows"),
+    unix,
     not(target_os = "openbsd"),
     not(target_os = "macos"),
     not(target_os = "android"),

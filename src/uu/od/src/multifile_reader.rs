@@ -56,15 +56,7 @@ impl MultifileReader<'_> {
                     // limit.
                     #[cfg(any(unix, target_os = "wasi"))]
                     {
-                        use std::os::fd::AsFd;
-                        // todo: definition is generic enough to move to uucore::io::RawReader if useful
-                        struct RawReader<T: AsFd>(pub T);
-                        impl<T: AsFd> io::Read for RawReader<T> {
-                            fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
-                                rustix::io::read(&self.0, b).map_err(Into::into)
-                            }
-                        }
-                        let stdin = RawReader(rustix::stdio::stdin());
+                        let stdin = uucore::io::RawReader(rustix::stdio::stdin());
                         self.curr_file = Some(Box::new(stdin));
                     }
 

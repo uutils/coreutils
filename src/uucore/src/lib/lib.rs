@@ -95,7 +95,10 @@ pub use crate::features::mode;
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
-#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    any(feature = "pipes", feature = "buf-copy")
+))]
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
@@ -598,7 +601,7 @@ macro_rules! prompt_yes(
 
 /// Represent either a character or a byte.
 /// Used to iterate on partially valid UTF-8 data
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CharByte {
     Char(char),
     Byte(u8),
