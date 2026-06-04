@@ -52,8 +52,6 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
-#[cfg(target_os = "linux")]
-use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
 const BUF_INIT_BYTE: u8 = 0xDD;
@@ -303,19 +301,13 @@ impl Source {
     ///
     /// `offset` and `len` specify a contiguous portion of the data
     /// source. This function informs the kernel that the specified
-    /// portion of the source is no longer needed. If not possible,
-    /// then this function returns an error.
+    /// portion of the source is no longer needed. All errors are ignored
     #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f) => {
-                use rustix::fs::{Advice::DontNeed, fadvise};
-                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
-                Ok(())
-            }
-            // fadvise for nonseekable returns this error. We manually do that...
-            _ => Err(rustix::io::Errno::SPIPE.into()),
+    fn discard_cache(&self, offset: u64, len: u64) {
+        // fadvise for nonseekable returns ESPIPE. But no need to cause discarded error
+        if let Self::File(f) = self {
+            use rustix::fs::{Advice::DontNeed, fadvise};
+            let _ = fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed);
         }
     }
 }
@@ -489,29 +481,13 @@ impl Input<'_> {
     ///
     /// `offset` and `len` specify a contiguous portion of the input.
     /// This function informs the kernel that the specified portion of
-    /// the input file is no longer needed. If not possible, then this
-    /// function prints an error message to stderr and sets the exit
-    /// status code to 1.
+    /// the input file is no longer needed. All errors are ignored for GNU compatibility.
     #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
     fn discard_cache(&self, offset: u64, len: u64) {
         #[cfg(target_os = "linux")]
-        {
-            let file = self
-                .settings
-                .infile
-                .clone()
-                .unwrap_or_else(|| translate!("dd-standard-input"));
-            show_if_err!(
-                self.src.discard_cache(offset, len).map_err_context(
-                    || translate!("dd-error-failed-discard-cache", "file" => file)
-                )
-            );
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        self.src.discard_cache(offset, len);
+        // TODO Is there a way to discard filesystem cache on
+        // these other operating systems?
     }
 
     /// Fills a given buffer.
@@ -691,18 +667,14 @@ impl Dest {
     ///
     /// `offset` and `len` specify a contiguous portion of the
     /// destination. This function informs the kernel that the
-    /// specified portion of the destination is no longer needed. If
-    /// not possible, then this function returns an error.
+    /// specified portion of the destination is no longer needed.
+    /// All errors are ignored.
     #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
-        match self {
-            Self::File(f, _) => {
-                use rustix::fs::{Advice::DontNeed, fadvise};
-                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
-                Ok(())
-            }
-            // fadvise for nonseekable returns this error. We manually do that...
-            _ => Err(rustix::io::Errno::SPIPE.into()),
+    fn discard_cache(&self, offset: u64, len: u64) {
+        // fadvise for nonseekable returns ESPIPE. But no need to cause discarded error
+        if let Self::File(f, _) = self {
+            use rustix::fs::{Advice::DontNeed, fadvise};
+            let _ = fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed);
         }
     }
 }
@@ -938,23 +910,9 @@ impl<'a> Output<'a> {
     #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
     fn discard_cache(&self, offset: u64, len: u64) {
         #[cfg(target_os = "linux")]
-        {
-            let file = self
-                .settings
-                .outfile
-                .clone()
-                .unwrap_or_else(|| translate!("dd-standard-output"));
-            show_if_err!(
-                self.dst.discard_cache(offset, len).map_err_context(
-                    || translate!("dd-error-failed-discard-cache", "file" => file)
-                )
-            );
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        self.dst.discard_cache(offset, len);
+        // TODO Is there a way to discard filesystem cache on
+        // these other operating systems?
     }
 
     /// writes a block of data. optionally retries when first try didn't complete

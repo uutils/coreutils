@@ -127,7 +127,6 @@ dd-error-cannot-skip-offset = '{ $file }' : impossible d'ignorer jusqu'au décal
 dd-error-cannot-skip-invalid = '{ $file }' : impossible d'ignorer : Argument invalide
 dd-error-cannot-seek-invalid = '{ $output }' : impossible de rechercher : Argument invalide
 dd-error-not-directory = définir les indicateurs pour '{ $file }' : N'est pas un répertoire
-dd-error-failed-discard-cache = échec de la suppression du cache pour : { $file }
 
 # Parse errors
 dd-error-unrecognized-operand = Opérande non reconnue '{ $operand }'

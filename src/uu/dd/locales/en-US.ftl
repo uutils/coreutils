@@ -127,7 +127,6 @@ dd-error-cannot-skip-offset = '{ $file }': cannot skip to specified offset
 dd-error-cannot-skip-invalid = '{ $file }': cannot skip: Invalid argument
 dd-error-cannot-seek-invalid = '{ $output }': cannot seek: Invalid argument
 dd-error-not-directory = setting flags for '{ $file }': Not a directory
-dd-error-failed-discard-cache = failed to discard cache for: { $file }
 
 # Parse errors
 dd-error-unrecognized-operand = Unrecognized operand '{ $operand }'
