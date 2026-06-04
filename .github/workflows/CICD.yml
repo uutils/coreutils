@@ -372,6 +372,7 @@ jobs:
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-latest  , target: riscv64gc-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
+          - { os: ubuntu-latest  , target: powerpc64le-unknown-linux-gnu , features: feat_os_unix , use-cross: use-cross , skip-tests: true }
           # - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: feat_selinux           , use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-gnu      , features: "feat_os_unix,test_risky_names", use-cross: use-cross }
           - { os: ubuntu-latest  , target: i686-unknown-linux-musl     , features: feat_os_unix_musl , use-cross: use-cross }
@@ -536,6 +537,10 @@ jobs:
           riscv64gc-unknown-linux-*)
             sudo apt-get -y update
             sudo apt-get -y install gcc-riscv64-linux-gnu
+          ;;
+          powerpc64le-unknown-linux-*)
+            sudo apt-get -y update
+            sudo apt-get -y install gcc-powerpc64le-linux-gnu
           ;;
           *-redox*)
             sudo apt-get -y update
