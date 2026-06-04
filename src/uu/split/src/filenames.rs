@@ -46,6 +46,12 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
+// This is an allocation guard, not a semantic suffix limit. 4096 is around the
+// common full-path limit and is already far above typical filename-component
+// limits, so realistic suffix lengths stay accepted while pathological values
+// cannot request attacker-sized filename buffers.
+const MAX_SUFFIX_LENGTH: usize = 4096;
+
 /// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
 pub enum SuffixType {
@@ -175,11 +181,13 @@ impl Suffix {
         let (mut length, is_length_cmd_opt) =
             if let Some(v) = matches.get_one::<String>(OPT_SUFFIX_LENGTH) {
                 // suffix length was specified in command line
-                (
-                    v.parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(v.to_owned()))?,
-                    true,
-                )
+                let parsed_length = v
+                    .parse::<usize>()
+                    .map_err(|_| SuffixError::NotParsable(v.to_owned()))?;
+                if parsed_length > MAX_SUFFIX_LENGTH {
+                    return Err(SuffixError::NotParsable(v.to_owned()));
+                }
+                (parsed_length, true)
             } else {
                 // no suffix length option was specified in command line
                 // set to default value
