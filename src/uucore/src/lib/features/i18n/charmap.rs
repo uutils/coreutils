@@ -10,6 +10,7 @@
 use std::sync::OnceLock;
 
 enum MbEncoding {
+    SingleByte,
     Utf8,
     Gb18030,
     EucJp,
@@ -19,11 +20,12 @@ enum MbEncoding {
 
 fn encoding_from_name(enc: &str) -> MbEncoding {
     match enc {
+        "utf-8" | "utf8" => MbEncoding::Utf8,
         "gb18030" | "gbk" | "gb2312" => MbEncoding::Gb18030,
         "euc-jp" | "eucjp" => MbEncoding::EucJp,
         "euc-kr" | "euckr" => MbEncoding::EucKr,
         "big5" | "big5-hkscs" | "big5hkscs" | "euc-tw" | "euctw" => MbEncoding::Big5,
-        _ => MbEncoding::Utf8,
+        _ => MbEncoding::SingleByte,
     }
 }
 
@@ -35,7 +37,7 @@ fn get_encoding() -> &'static MbEncoding {
             .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()));
         let s = match val.as_deref() {
             Some(s) if s != "C" && s != "POSIX" => s,
-            _ => return MbEncoding::Utf8,
+            _ => return MbEncoding::SingleByte,
         };
         if let Some(enc) = s.split('.').nth(1) {
             let enc = enc.split('@').next().unwrap_or(enc);
@@ -51,6 +53,12 @@ fn get_encoding() -> &'static MbEncoding {
     })
 }
 
+/// Whether the current locale uses a multi-byte encoding (i.e. `MB_CUR_MAX > 1`).
+/// `C`/`POSIX` and single-byte encodings return `false`.
+pub fn is_multibyte_locale() -> bool {
+    !matches!(get_encoding(), MbEncoding::SingleByte)
+}
+
 /// Byte length of the first character in `bytes` under the current locale encoding.
 pub fn mb_char_len(bytes: &[u8]) -> usize {
     debug_assert!(!bytes.is_empty());
@@ -59,12 +67,27 @@ pub fn mb_char_len(bytes: &[u8]) -> usize {
         return 1;
     }
     match get_encoding() {
-        MbEncoding::Utf8 => utf8_len(bytes, b0),
+        // `C`/`POSIX` and unknown encodings have `MB_CUR_MAX == 1`, but we still
+        // decode UTF-8 there as a sensible default for byte-length detection.
+        MbEncoding::SingleByte | MbEncoding::Utf8 => utf8_len(bytes, b0),
         MbEncoding::Gb18030 => gb18030_len(bytes, b0),
         MbEncoding::EucJp => eucjp_len(bytes, b0),
         MbEncoding::EucKr => euckr_len(bytes, b0),
         MbEncoding::Big5 => big5_len(bytes, b0),
     }
+}
+
+/// Iterate over the characters of `bytes` under the current locale encoding,
+/// yielding each character as a byte slice. Invalid bytes are yielded one at a
+/// time, so the concatenation of all items is always `bytes`.
+pub fn mb_chars(bytes: &[u8]) -> impl Iterator<Item = &[u8]> {
+    let mut idx = 0;
+    std::iter::from_fn(move || {
+        let rest = bytes.get(idx..).filter(|r| !r.is_empty())?;
+        let len = mb_char_len(rest).max(1); // mb_char_len never exceeds rest.len()
+        idx += len;
+        Some(&bytes[idx - len..idx])
+    })
 }
 
 // All helpers below assume b0 > 0x7F (ASCII already handled by caller).
