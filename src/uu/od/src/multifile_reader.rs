@@ -4,9 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) multifile curr fnames fname xfrd fillloop mockstream
 
-use std::cmp;
 use std::fs::File;
 use std::io;
+#[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 
 use uucore::display::Quotable;
@@ -161,18 +161,11 @@ impl MultifileReader<'_> {
 /// that still need to be skipped (0 if the skip landed inside this file, or
 /// the remainder if the file ended first).
 fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
+    #[cfg(unix)]
     if let CurrentReader::File(f) = curr {
         if let Ok(meta) = f.metadata() {
             let size = meta.len();
-            #[cfg(unix)]
-            let blksize = {
-                use std::os::unix::fs::MetadataExt;
-                meta.blksize()
-            };
-            // Without st_blksize we can't tell a trustworthy size from a bogus
-            // one, so never take the size shortcut on those platforms.
-            #[cfg(not(unix))]
-            let blksize = size;
+            let blksize = uucore::fs::sane_blksize::sane_blksize_from_metadata(&meta);
 
             // A regular file larger than a block reports a reliable size, so we
             // can either drop the whole file or seek within it. Small or
@@ -181,38 +174,31 @@ fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
                 if size < n_skip {
                     return Ok(n_skip - size);
                 }
-                if let Ok(off) = i64::try_from(n_skip) {
-                    f.seek(SeekFrom::Current(off))?;
+                if seek_forward(f, n_skip)? {
                     return Ok(0);
                 }
             } else if !meta.is_file() {
                 // Seekable special files (character/block devices) can be
                 // skipped past their end without error.
-                if let Ok(off) = i64::try_from(n_skip) {
-                    if f.seek(SeekFrom::Current(off)).is_ok() {
-                        return Ok(0);
-                    }
+                if seek_forward(f, n_skip).unwrap_or(false) {
+                    return Ok(0);
                 }
             }
         }
     }
-    read_and_discard(curr, n_skip)
+    let read = uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?;
+    Ok(n_skip - read)
 }
 
-/// Advance `reader` by discarding up to `n_skip` bytes. Returns the number of
-/// bytes left to skip; non-zero means the reader hit EOF first.
-fn read_and_discard(reader: &mut impl io::Read, mut n_skip: u64) -> io::Result<u64> {
-    let mut buf = [0u8; SKIP_BUFFER_SIZE];
-    while n_skip > 0 {
-        let want = cmp::min(n_skip, buf.len() as u64) as usize;
-        match reader.read(&mut buf[..want]) {
-            Ok(0) => break, // EOF: caller moves on to the next file.
-            Ok(n) => n_skip -= n as u64,
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
+/// Seek `f` forward by `n` bytes. Returns `Ok(true)` if the seek happened, or
+/// `Ok(false)` if `n` is too large to express as a seek offset (the caller
+/// should fall back to reading and discarding).
+#[cfg(unix)]
+fn seek_forward(f: &mut File, n: u64) -> io::Result<bool> {
+    match i64::try_from(n) {
+        Ok(off) => f.seek(SeekFrom::Current(off)).map(|_| true),
+        Err(_) => Ok(false),
     }
-    Ok(n_skip)
 }
 
 impl io::Read for MultifileReader<'_> {
