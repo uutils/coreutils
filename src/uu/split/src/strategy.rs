@@ -144,6 +144,9 @@ impl NumberType {
             (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
@@ -159,6 +162,9 @@ impl NumberType {
             (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
@@ -344,6 +350,18 @@ mod tests {
         assert_eq!(
             NumberType::from("r/xyz").unwrap_err(),
             NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
         );
         assert_eq!(
             NumberType::from("r/123/xyz").unwrap_err(),
