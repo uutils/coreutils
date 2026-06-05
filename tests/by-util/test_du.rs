@@ -948,6 +948,26 @@ fn test_du_h_precision() {
     }
 }
 
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_du_h_locale_decimal_separator() {
+    for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(8500)
+            .expect("cannot truncate test len to size");
+        ucmd.env("LC_ALL", locale)
+            .arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 #[cfg(feature = "touch")]
 #[test]
@@ -1516,6 +1536,23 @@ fn test_du_exclude_invalid_syntax() {
         .arg("azerty")
         .fails()
         .stderr_contains("du: Invalid exclude syntax");
+}
+
+#[test]
+fn test_du_exclude_from_nonexistent_file() {
+    new_ucmd!()
+        .arg("--exclude-from=nonexistent-file")
+        .fails()
+        .stderr_contains("du: No such file or directory");
+}
+
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[test]
+fn test_du_exclude_from_read_error() {
+    new_ucmd!()
+        .arg("--exclude-from=/proc/self/mem")
+        .fails()
+        .stderr_contains("du: Input/output error");
 }
 
 #[cfg(not(windows))]

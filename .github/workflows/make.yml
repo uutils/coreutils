@@ -1,11 +1,11 @@
 name: make
 
 # spell-checker:ignore (abbrev/names) CACHEDIR taiki
-# spell-checker:ignore (env/flags) RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
+# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
-# spell-checker:ignore (shell/tools) nextest sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest testsuite toybox uutils
+# spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -93,26 +93,6 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
-      shell: bash
-      run: |
-        set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
-        # Check that the progs have prefix
-        test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
-        # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
-        # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
-        # don't publish binaries with uu-
-        make uninstall PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-      env:
-        RUST_BACKTRACE: "1"
     - name: "`make install`"
       shell: bash
       run: |
@@ -201,14 +181,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v20
+      uses: dawidd6/action-download-artifact@v21
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v20
+      uses: dawidd6/action-download-artifact@v21
       with:
         workflow: make.yml
         name: size-result
@@ -292,11 +272,14 @@ jobs:
         DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   # keep this job minimal to avoid have many duplicated build with CICD
-  build_makefile-other:
-    name: Build/Makefile
+  build_makefile-windows-cygwin:
+    name: Build MSYS
+    permissions:
+      contents: write # Publish cygwin binary
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
     strategy:
       fail-fast: false
       matrix:
@@ -316,13 +299,47 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        set -x
+        pacman -Sy --noconfirm --needed make rust base-devel
+        DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that utils are built with given profile
+        ./target/release-small/true
+        # Check that the progs have prefix
+        test -f /tmp/c/usr/local/bin/uu-tty
+        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.*
+        # Check that the manpage is not present
+        ! test -f /tmp/c/usr/local/share/man/man1/uu-whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/c/usr/local/share/zsh/site-functions/_uu-install
+        ! test -f /tmp/c/usr/local/share/bash-completion/completions/uu-head.bash
+        ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # package
+        mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
+        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+      env:
+        CHERE_INVOKING: 1
+        RUST_BACKTRACE: "1"
+    - name: Publish
+      uses: softprops/action-gh-release@v3
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        files: |
+          x86_64-pc-cygwin.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: "`make build`"
       shell: bash
       run: |
         set -x
         # Check that we exclude unix programs to avoid build failure
         make PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
-         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr truncate tsort uname unexpand uniq unlink vdir wc whoami yes"
+         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
         target/debug/coreutils.exe true
 
   test_busybox:

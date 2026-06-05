@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime DATETIME UTIME futimens
-// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
+// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT
 
 pub mod error;
 
@@ -23,9 +23,8 @@ use rustix::fs::Timestamps;
 use rustix::fs::futimens;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-#[cfg(unix)]
+use std::fs;
 use std::fs::OpenOptions;
-use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
@@ -436,6 +435,20 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     Ok(())
 }
 
+/// Create `path` if it does not exist, without ever truncating it.
+///
+/// Uses `O_CREAT` but deliberately not `O_TRUNC`: if an attacker plants a
+/// symlink at `path` in the window between the metadata check in
+/// [`touch_file`] and this open, the open follows it but must not zero the
+/// symlink's target. Matches GNU touch (issue #10019).
+fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+}
+
 /// Create or update the timestamp for a single file.
 ///
 /// # Arguments
@@ -486,7 +499,7 @@ fn touch_file(
             return Ok(());
         }
 
-        if let Err(e) = File::create(path) {
+        if let Err(e) = create_without_truncate(path) {
             // we need to check if the path is the path to a directory (ends with a separator)
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
@@ -980,5 +993,35 @@ mod tests {
 
         assert_eq!(actual_atime, atime);
         assert_eq!(actual_mtime, mtime);
+    }
+
+    // The #10019 fix: the create-open must use O_CREAT without O_TRUNC. During
+    // the TOCTOU race the open lands on an *existing* file (the symlink's
+    // target), so opening an existing file must leave its contents intact. This
+    // deterministically distinguishes the fix from the old File::create, which
+    // used O_TRUNC and would zero the file here.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_does_not_truncate_existing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("victim");
+        std::fs::write(&path, b"do not truncate me").unwrap();
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"do not truncate me");
+    }
+
+    // The other half of the contract: when the path is missing it must be
+    // created (as an empty file), matching the old File::create behavior.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_creates_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("new");
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
     }
 }

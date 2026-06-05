@@ -896,7 +896,7 @@ fn test_write_to_dev_full() {
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
                 .fails()
-                .stderr_contains("error writing 'standard output': No space left on device");
+                .stderr_is("head: error writing 'standard output': No space left on device\n");
         }
     }
 }
@@ -932,4 +932,51 @@ fn test_do_not_attempt_to_read_a_directory() {
         .arg(".")
         .fails_with_code(1)
         .stderr_contains("error reading '.'");
+}
+
+/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
+#[test]
+fn test_zero_bytes_on_directory_succeeds() {
+    new_ucmd!().args(&["-c", "0", "."]).succeeds().no_output();
+}
+
+/// `head -n0 <directory>` should also succeed.
+#[test]
+fn test_zero_lines_on_directory_succeeds() {
+    new_ucmd!().args(&["-n", "0", "."]).succeeds().no_output();
+}
+
+/// GNU `head` prints the `==> name <==` header for every file argument
+/// (including directories) when invoked with multiple files. With non-zero
+/// output, directories also produce an "Is a directory" error after the
+/// header.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "5", "d", "f"])
+        .fails_with_code(1)
+        .stdout_is("==> d <==\n\n==> f <==\nhello")
+        .stderr_contains("Is a directory");
+}
+
+/// With `-c 0` (zero output), the directory header is still printed but no
+/// error is emitted.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files_zero_output() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "0", "d", "f"])
+        .succeeds()
+        .stdout_is("==> d <==\n\n==> f <==\n")
+        .no_stderr();
 }

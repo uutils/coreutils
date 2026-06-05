@@ -710,10 +710,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 
     // From the GNU documentation:
@@ -735,10 +732,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 }
 
@@ -1079,4 +1073,39 @@ fn test_touch_device_files() {
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
         .succeeds()
         .no_output();
+}
+
+// Touching a symlink to an existing file must not truncate the target, like
+// GNU touch. The target exists, so this exercises the update_times path, not
+// the create path changed for #10019 — it guards the general "touch never
+// truncates" contract. The create-path fix itself is covered by the
+// create_without_truncate unit tests in src/touch.rs and the syscall-flag
+// check in util/check-safe-traversal.sh.
+#[test]
+#[cfg(unix)]
+fn test_touch_does_not_truncate_symlink_target() {
+    use std::os::unix::fs::symlink;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("victim", "do not truncate me");
+    symlink(at.plus("victim"), at.plus("link")).unwrap();
+
+    ucmd.arg("link").succeeds();
+
+    assert_eq!(at.read("victim"), "do not truncate me");
+}
+
+// Touching a dangling symlink creates its target as an empty file, like GNU.
+#[test]
+#[cfg(unix)]
+fn test_touch_through_dangling_symlink_creates_target() {
+    use std::os::unix::fs::symlink;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    symlink(at.plus("missing"), at.plus("link")).unwrap();
+
+    ucmd.arg("link").succeeds();
+
+    assert!(at.file_exists("missing"));
+    assert_eq!(at.read("missing"), "");
 }

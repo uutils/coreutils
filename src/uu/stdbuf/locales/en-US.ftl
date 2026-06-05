@@ -1,4 +1,5 @@
 stdbuf-about = Run COMMAND, with modified buffering operations for its standard streams.
+stdbuf-about-windows = Run COMMAND linked against cygwin runtime, with modified buffering operations for its standard streams.
 
   Mandatory arguments to long options are mandatory for short options too.
 stdbuf-usage = stdbuf [OPTION]... COMMAND

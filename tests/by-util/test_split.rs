@@ -411,8 +411,7 @@ fn test_split_lines_number() {
         .ucmd()
         .args(&["--lines", "2", "file"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     scene
         .ucmd()
         .args(&["--lines", "0", "file"])
@@ -476,7 +475,7 @@ fn test_split_obs_lines_standalone() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "obs-lines-standalone";
     RandomFile::new(&at, name).add_lines(4);
-    ucmd.args(&["-2", name]).succeeds().no_stderr().no_stdout();
+    ucmd.args(&["-2", name]).succeeds().no_output();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -490,8 +489,7 @@ fn test_split_obs_lines_standalone_overflow() {
     RandomFile::new(&at, name).add_lines(4);
     ucmd.args(&["-99999999999999999991", name])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 1);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -517,10 +515,7 @@ fn test_split_obs_lines_within_combined_shorts() {
     let name = "obs-lines-within-shorts";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-x200de", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-x200de", name]).succeeds().no_output();
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -548,10 +543,7 @@ fn test_split_obs_lines_starts_combined_shorts() {
     let name = "obs-lines-starts-shorts";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-200xd", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-200xd", name]).succeeds().no_output();
 
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
@@ -650,10 +642,7 @@ fn test_split_multiple_obs_lines_standalone() {
     let name = "multiple-obs-lines";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-3000", "-200", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-3000", "-200", name]).succeeds().no_output();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
@@ -671,8 +660,7 @@ fn test_split_multiple_obs_lines_within_combined() {
 
     ucmd.args(&["-d5000x", "-e200d", name])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
@@ -1140,10 +1128,7 @@ fn test_include_newlines() {
 #[test]
 fn test_split_number_chunks_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n3", "threebytes.txt"])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-n3", "threebytes.txt"]).succeeds().no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1154,8 +1139,7 @@ fn test_allow_empty_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1167,8 +1151,7 @@ fn test_elide_empty_files_n_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1181,8 +1164,7 @@ fn test_elide_dev_null_n_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "3", "/dev/null"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.plus("xaa").exists());
     assert!(!at.plus("xab").exists());
     assert!(!at.plus("xac").exists());
@@ -1205,8 +1187,7 @@ fn test_elide_empty_files_l_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "l/7", "fivelines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "2\n");
     assert_eq!(at.read("xac"), "3\n");
@@ -1222,8 +1203,7 @@ fn test_elide_dev_null_l_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "l/3", "/dev/null"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.plus("xaa").exists());
     assert!(!at.plus("xab").exists());
     assert!(!at.plus("xac").exists());
@@ -1326,8 +1306,7 @@ fn test_line_bytes_no_final_newline() {
     ucmd.args(&["-C", "2"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "22");
     assert_eq!(at.read("xac"), "22");
@@ -1342,8 +1321,7 @@ fn test_line_bytes_no_empty_file() {
     ucmd.args(&["-C", "1"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1");
     assert_eq!(at.read("xab"), "\n");
     assert_eq!(at.read("xac"), "2");
@@ -1363,8 +1341,7 @@ fn test_line_bytes_no_eof() {
     ucmd.args(&["-C", "3"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "222");
     assert_eq!(at.read("xac"), "2\n");
@@ -1383,8 +1360,7 @@ fn test_guard_input() {
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
     scene
@@ -1392,8 +1368,7 @@ fn test_guard_input() {
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
     scene
@@ -1424,8 +1399,7 @@ fn test_numeric_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric-suffixes=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1437,8 +1411,7 @@ fn test_numeric_suffix_inferred() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1450,8 +1423,7 @@ fn test_hex_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--hex-suffixes=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
@@ -1463,8 +1435,7 @@ fn test_hex_suffix_alias() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--hex=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
@@ -1493,8 +1464,7 @@ fn test_short_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "-d", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1515,8 +1485,7 @@ fn test_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "--numeric-suffixes", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1537,8 +1506,7 @@ fn test_short_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "-x", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1559,8 +1527,7 @@ fn test_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "--hex-suffixes", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1599,8 +1566,7 @@ fn test_short_combination() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-dxen", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "a");
     assert_eq!(at.read("x01"), "b");
     assert_eq!(at.read("x02"), "c");
@@ -1623,8 +1589,7 @@ fn test_effective_suffix_numeric_last() {
         "threebytes.txt",
     ])
     .succeeds()
-    .no_stdout()
-    .no_stderr();
+    .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1647,8 +1612,7 @@ fn test_effective_suffix_hex_last() {
         "threebytes.txt",
     ])
     .succeeds()
-    .no_stdout()
-    .no_stderr();
+    .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");

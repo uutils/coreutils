@@ -235,6 +235,31 @@ fn test_range_permute_no_overflow_0_max() {
 }
 
 #[test]
+fn test_range_full_huge_no_head_count_memory_exhausted() {
+    // Repro for #12500: `shuf -i 1-huge` with no --head-count used to abort
+    // (hashbrown "Hash table capacity overflow" panic, or an allocator abort)
+    // because the sparse iterator reserved a map sized to the whole range.
+    // It must now fail cleanly, like GNU.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
+fn test_range_huge_head_count_memory_exhausted() {
+    // Repro for #12500: a large --head-count is just as unsatisfiable as no
+    // --head-count; both used to abort. Must now fail cleanly.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-n{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
 fn test_very_high_range_full() {
     let input_seq = vec![
         2_147_483_641,
@@ -1113,5 +1138,5 @@ fn test_seed_long_range_no_repeat() {
 
 #[test]
 fn test_empty_range_no_repeat() {
-    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
+    new_ucmd!().arg("-i4-3").succeeds().no_output();
 }

@@ -10,7 +10,7 @@ use std::io::{Write, stderr};
 use std::{env, ptr};
 
 // This runs automatically when the library is loaded via LD_PRELOAD
-#[ctor]
+#[ctor(unsafe)]
 fn init() {
     unsafe { __stdbuf() };
 }

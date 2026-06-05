@@ -74,7 +74,10 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 
 /// Gets the binary path from command line arguments
 /// Panics if the binary path cannot be determined
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[cfg(any(
+    not(any(target_os = "linux", target_os = "android")),
+    target_env = "musl"
+))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     match args.next() {
         Some(ref s) if !s.is_empty() => PathBuf::from(s),
@@ -84,7 +87,10 @@ pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
 }
 /// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
 /// AppArmor, SELinux policies on hard-linked binaries
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    not(target_env = "musl")
+))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
     use std::fs::File;
     use std::io::Read;

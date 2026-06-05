@@ -519,8 +519,14 @@ fn consider_suffix(
         _ => return Err(translate!("numfmt-error-number-too-big")),
     };
 
+    // iec caps at 3 decimals to match gnu, si stays as is
+    let effective_precision = if matches!(u, Unit::Iec(_)) {
+        precision.min(3)
+    } else {
+        precision
+    };
     let v = if precision > 0 {
-        round_with_precision(n / bases[i], round_method, precision)
+        round_with_precision(n / bases[i], round_method, effective_precision)
     } else {
         div_round(n, bases[i], round_method)
     };
@@ -533,11 +539,20 @@ fn consider_suffix(
     }
 }
 
+fn is_too_large_to_format(scaled: i128, precision: usize) -> bool {
+    const MAX_FORMATTED: u128 = 10_000_000_000_000_000_000;
+    let precision_factor = 10_u128.pow(precision.min(19) as u32);
+    scaled
+        .unsigned_abs()
+        .checked_mul(precision_factor)
+        .is_none_or(|v| v >= MAX_FORMATTED)
+}
+
 fn try_format_exact_int_without_suffix_scaling(
     value: ParsedNumber,
     opts: &TransformOptions,
     precision: usize,
-) -> Option<String> {
+) -> Option<Result<String>> {
     if opts.to != Unit::None {
         return None;
     }
@@ -551,7 +566,14 @@ fn try_format_exact_int_without_suffix_scaling(
 
     let scaled = integer / to_unit;
 
-    Some(if precision == 0 {
+    if is_too_large_to_format(scaled, precision) {
+        let value_sci = format_gnu_scientific(scaled as f64);
+        return Some(Err(format!(
+            "value/precision too large to be printed: '{value_sci}/{precision}' (consider using --to)"
+        )));
+    }
+
+    Some(Ok(if precision == 0 {
         scaled.to_string()
     } else {
         format!(
@@ -559,7 +581,23 @@ fn try_format_exact_int_without_suffix_scaling(
             locale_decimal_separator(),
             "0".repeat(precision)
         )
-    })
+    }))
+}
+
+fn format_gnu_scientific(v: f64) -> String {
+    // 6 significant figures with trimmed trailing zeros and signed exponent
+    let s = format!("{v:.5e}");
+    let Some(e_pos) = s.find('e') else {
+        return s;
+    };
+    let (mantissa, rest) = s.split_at(e_pos);
+    let exp = &rest[1..];
+    let mantissa = mantissa.trim_end_matches('0').trim_end_matches('.');
+    if exp.starts_with('-') {
+        format!("{mantissa}e{exp}")
+    } else {
+        format!("{mantissa}e+{exp}")
+    }
 }
 
 fn transform_to(
@@ -571,7 +609,7 @@ fn transform_to(
     is_precision_specified: bool,
 ) -> Result<String> {
     if let Some(result) = try_format_exact_int_without_suffix_scaling(s, opts, precision) {
-        return Ok(result);
+        return result;
     }
 
     let s = s.to_f64();
@@ -586,10 +624,15 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None => localize(format!(
+        None if opts.to == Unit::None => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
+        None if is_precision_specified && precision <= u16::MAX.into() => {
+            let i2 = round_with_precision(i2, round_method, 0);
+            localize(format!("{i2:.precision$}"))
+        }
+        None => localize(format!("{i2:.0}")),
         Some(s) if precision > 0 => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
@@ -614,7 +657,7 @@ fn transform_to(
 /// Right-aligns when `right_align` is true, left-aligns otherwise.
 /// Unlike `format!("{:>width$}")`, this handles widths larger than 65535.
 fn pad_string(s: &str, width: usize, fill: char, right_align: bool) -> String {
-    let len = s.len();
+    let len = s.chars().count();
     if len >= width {
         return s.to_string();
     }

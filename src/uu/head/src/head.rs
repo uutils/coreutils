@@ -13,7 +13,9 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
-use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -162,19 +164,19 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => err),
+        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
     )
 }
 
 // zero-copy fast-path
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn read_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
+fn print_n_bytes(input: impl AsFd, n: u64) -> io::Result<u64> {
     let out = io::stdout();
-    uucore::pipes::send_n_bytes(input, out, n).map_err(wrap_in_stdout_error)
+    uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
+fn print_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
     // Read the first `n` bytes from the `input` reader.
     let mut reader = input.take(n);
 
@@ -184,15 +186,13 @@ fn read_n_bytes(input: impl Read, n: u64) -> io::Result<u64> {
 
     let bytes_written = io::copy(&mut reader, &mut stdout).map_err(wrap_in_stdout_error)?;
 
-    // Make sure we finish writing everything to the target before
-    // exiting. Otherwise, when Rust is implicitly flushing, any
-    // error will be silently ignored.
+    // flush prevents ignoring I/O error
     stdout.flush().map_err(wrap_in_stdout_error)?;
 
     Ok(bytes_written)
 }
 
-fn read_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
+fn print_n_lines(input: &mut impl io::BufRead, n: u64, separator: u8) -> io::Result<u64> {
     // Read the first `n` lines from the `input` reader.
     let mut reader = take_lines(input, n, separator);
 
@@ -215,7 +215,7 @@ fn catch_too_large_numbers_in_backwards_bytes_or_lines(n: u64) -> Option<usize> 
     usize::try_from(n).ok()
 }
 
-fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
+fn print_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     let mut bytes_written: u64 = 0;
     if let Some(n) = catch_too_large_numbers_in_backwards_bytes_or_lines(n) {
         let stdout = io::stdout();
@@ -234,7 +234,7 @@ fn read_but_last_n_bytes(mut input: impl Read, n: u64) -> io::Result<u64> {
     Ok(bytes_written)
 }
 
-fn read_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Result<u64> {
+fn print_but_last_n_lines(mut input: impl Read, n: u64, separator: u8) -> io::Result<u64> {
     let stdout = io::stdout();
     let mut stdout = stdout.lock();
     if n == 0 {
@@ -363,8 +363,8 @@ fn head_backwards_file(input: &mut File, options: &HeadOptions) -> io::Result<u6
 
 fn head_backwards_without_seek_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
-        Mode::AllButLastBytes(n) => read_but_last_n_bytes(input, n),
-        Mode::AllButLastLines(n) => read_but_last_n_lines(input, n, options.line_ending.into()),
+        Mode::AllButLastBytes(n) => print_but_last_n_bytes(input, n),
+        Mode::AllButLastLines(n) => print_but_last_n_lines(input, n, options.line_ending.into()),
         _ => unreachable!(),
     }
 }
@@ -376,12 +376,12 @@ fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> i
             if n >= size {
                 Ok(0)
             } else {
-                read_n_bytes(input, size - n)
+                print_n_bytes(input, size - n)
             }
         }
         Mode::AllButLastLines(n) => {
             let found = find_nth_line_from_end(input, n, options.line_ending.into())?;
-            read_n_bytes(input, found)
+            print_n_bytes(input, found)
         }
         _ => unreachable!(),
     }
@@ -389,8 +389,8 @@ fn head_backwards_on_seekable_file(input: &mut File, options: &HeadOptions) -> i
 
 fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
     match options.mode {
-        Mode::FirstBytes(n) => read_n_bytes(input, n),
-        Mode::FirstLines(n) => read_n_lines(
+        Mode::FirstBytes(n) => print_n_bytes(input, n),
+        Mode::FirstLines(n) => print_n_lines(
             &mut io::BufReader::with_capacity(BUF_SIZE, input),
             n,
             options.line_ending.into(),
@@ -401,14 +401,15 @@ fn head_file(input: &mut File, options: &HeadOptions) -> io::Result<u64> {
 
 #[allow(clippy::cognitive_complexity)]
 fn uu_head(options: &HeadOptions) -> UResult<()> {
+    let mut stdout = io::stdout().lock();
     let mut first = true;
     for file in &options.files {
         let res = if file == "-" {
             if (options.files.len() > 1 && !options.quiet) || options.verbose {
                 if !first {
-                    println!();
+                    writeln!(stdout)?;
                 }
-                println!("{}", translate!("head-header-stdin"));
+                writeln!(stdout, "{}", translate!("head-header-stdin"))?;
             }
             let stdin = io::stdin();
 
@@ -434,26 +435,68 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 let mut stdin = stdin.lock();
 
                 match options.mode {
-                    Mode::FirstBytes(n) => read_n_bytes(&mut stdin, n),
-                    Mode::AllButLastBytes(n) => read_but_last_n_bytes(&mut stdin, n),
-                    Mode::FirstLines(n) => read_n_lines(&mut stdin, n, options.line_ending.into()),
+                    Mode::FirstBytes(n) => print_n_bytes(&mut stdin, n),
+                    Mode::AllButLastBytes(n) => print_but_last_n_bytes(&mut stdin, n),
+                    Mode::FirstLines(n) => print_n_lines(&mut stdin, n, options.line_ending.into()),
                     Mode::AllButLastLines(n) => {
-                        read_but_last_n_lines(&mut stdin, n, options.line_ending.into())
+                        print_but_last_n_lines(&mut stdin, n, options.line_ending.into())
                     }
                 }?;
             }
 
             Ok(())
         } else {
-            if Path::new(file).is_dir() {
-                show!(USimpleError::new(
-                    1,
-                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                ));
-                continue;
-            }
+            // When 0 bytes or 0 lines are requested, there is nothing to
+            // read, so we should succeed on directories just like GNU head
+            // does. Skip opening the file entirely in that case.
+            let zero_output = matches!(options.mode, Mode::FirstBytes(0) | Mode::FirstLines(0));
+
+            // GNU head prints "==> name <==" for existing files and
+            // directories, but NOT for nonexistent ones — those produce
+            // only an error message.
+            let mut print_header = || -> UResult<()> {
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    if !first {
+                        writeln!(stdout)?;
+                    }
+                    write!(stdout, "==> ")?;
+                    print_verbatim(file).unwrap();
+                    writeln!(stdout, " <==")?;
+                    first = false;
+                }
+                Ok(())
+            };
+
             let mut file_handle = match File::open(file) {
                 Ok(f) => f,
+                Err(err) => {
+                    #[cfg(windows)]
+                    // On Windows, `File::open` on a directory fails with "Permission denied").
+                    if err.kind() == io::ErrorKind::PermissionDenied {
+                        if let Ok(m) = Path::new(file).metadata() {
+                            if m.is_dir() {
+                                // We need to print the header, as we have an existing directory
+                                print_header()?;
+                                if !zero_output {
+                                    show!(USimpleError::new(
+                                        1,
+                                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                                    ));
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.quote())
+                    ));
+                    continue;
+                }
+            };
+
+            let metadata = match file_handle.metadata() {
+                Ok(m) => m,
                 Err(err) => {
                     show!(err.map_err_context(
                         || translate!("head-error-cannot-open", "name" => file.quote())
@@ -461,13 +504,16 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     continue;
                 }
             };
-            if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                if !first {
-                    println!();
+
+            print_header()?;
+            if metadata.is_dir() {
+                if !zero_output {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                    ));
                 }
-                print!("==> ");
-                print_verbatim(file).unwrap();
-                println!(" <==");
+                continue;
             }
             head_file(&mut file_handle, options)?;
             Ok(())
@@ -617,8 +663,8 @@ mod tests {
     #[cfg(not(any(target_os = "linux", target_os = "android")))] // missing trait for AsFd
     fn read_early_exit() {
         let mut empty = io::BufReader::new(Cursor::new(Vec::new()));
-        assert!(read_n_bytes(&mut empty, 0).is_ok());
-        assert!(read_n_lines(&mut empty, 0, b'\n').is_ok());
+        assert!(print_n_bytes(&mut empty, 0).is_ok());
+        assert!(print_n_lines(&mut empty, 0, b'\n').is_ok());
     }
 
     #[test]

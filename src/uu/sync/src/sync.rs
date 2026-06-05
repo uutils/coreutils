@@ -80,10 +80,13 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
+    pub fn do_sync_with<F>(files: &[String], op: F) -> UResult<()>
+    where
+        F: Fn(File) -> Result<(), nix::Error>,
+    {
         for path in files {
-            let f = open_and_reset_nonblock(&path)?;
-            syncfs(f).map_err_context(
+            let f = open_and_reset_nonblock(path)?;
+            op(f).map_err_context(
                 || translate!("sync-error-syncing-file", "file" => path.quote()),
             )?;
         }
@@ -91,14 +94,13 @@ mod platform {
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    pub fn do_fdatasync(files: Vec<String>) -> UResult<()> {
-        for path in files {
-            let f = open_and_reset_nonblock(&path)?;
-            fdatasync(f).map_err_context(
-                || translate!("sync-error-syncing-file", "file" => path.quote()),
-            )?;
-        }
-        Ok(())
+    pub fn do_syncfs(files: &[String]) -> UResult<()> {
+        do_sync_with(files, syncfs)
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    pub fn do_fdatasync(files: &[String]) -> UResult<()> {
+        do_sync_with(files, fdatasync)
     }
 }
 
@@ -197,9 +199,9 @@ mod platform {
         Ok(())
     }
 
-    pub fn do_syncfs(files: Vec<String>) -> UResult<()> {
+    pub fn do_syncfs(files: &[String]) -> UResult<()> {
         for path in files {
-            let maybe_first = Path::new(&path).components().next();
+            let maybe_first = Path::new(path).components().next();
             let vol_name = match maybe_first {
                 Some(c) => c.as_os_str().to_string_lossy().into_owned(),
                 None => {
@@ -234,7 +236,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // Use the Nix open to be able to set the NONBLOCK flags for fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
-            let path = Path::new(&f);
+            let path = Path::new(f);
             if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
                 if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
                     show_error!(
@@ -267,11 +269,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sync()?;
         } else {
             #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-            syncfs(files)?;
+            syncfs(&files)?;
         }
     } else if matches.get_flag(options::DATA) {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        fdatasync(files)?;
+        fdatasync(&files)?;
     } else {
         sync()?;
     }
@@ -313,11 +315,11 @@ fn sync() -> UResult<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "windows"))]
-fn syncfs(files: Vec<String>) -> UResult<()> {
+fn syncfs(files: &[String]) -> UResult<()> {
     platform::do_syncfs(files)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn fdatasync(files: Vec<String>) -> UResult<()> {
+fn fdatasync(files: &[String]) -> UResult<()> {
     platform::do_fdatasync(files)
 }

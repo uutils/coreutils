@@ -426,6 +426,10 @@ fn safe_du(
     };
 
     'file_loop: for entry_name in entries {
+        const S_IFMT: u32 = 0o170_000;
+        const S_IFDIR: u32 = 0o040_000;
+        const S_IFLNK: u32 = 0o120_000;
+
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
             Ok(stat) => stat,
@@ -439,9 +443,6 @@ fn safe_du(
         };
 
         // Check if it's a symlink
-        const S_IFMT: u32 = 0o170_000;
-        const S_IFDIR: u32 = 0o040_000;
-        const S_IFLNK: u32 = 0o120_000;
         #[allow(clippy::unnecessary_cast)]
         let is_symlink = (lstat.st_mode as u32 & S_IFMT) == S_IFLNK;
 
@@ -575,11 +576,12 @@ fn du_regular(
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+    // Maximum symlink depth to prevent infinite loops
+    const MAX_SYMLINK_DEPTH: usize = 40;
+
     let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
-    // Maximum symlink depth to prevent infinite loops
-    const MAX_SYMLINK_DEPTH: usize = 40;
 
     // Add current directory to ancestors if it's a directory
     let my_inode = if my_stat.metadata.is_dir() {
@@ -755,13 +757,11 @@ enum DuError {
 impl UError for DuError {}
 
 /// Read a file and return each line in a vector of String
-fn file_as_vec(filename: impl AsRef<Path>) -> Vec<String> {
-    let file = File::open(filename).expect("no such file");
+fn file_as_vec(filename: impl AsRef<Path>) -> UResult<Vec<String>> {
+    let file = File::open(filename)?;
     let buf = BufReader::new(file);
-
-    buf.lines()
-        .map(|l| l.expect("Could not parse line"))
-        .collect()
+    let lines = buf.lines().collect::<Result<Vec<String>, _>>()?;
+    Ok(lines)
 }
 
 /// Given the `--exclude-from` and/or `--exclude` arguments, returns the globset lists
@@ -770,7 +770,10 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
     let exclude_from_iterator = matches
         .get_many::<String>(options::EXCLUDE_FROM)
         .unwrap_or_default()
-        .flat_map(file_as_vec);
+        .map(file_as_vec)
+        .collect::<UResult<Vec<Vec<String>>>>()?
+        .into_iter()
+        .flatten();
 
     let excludes_iterator = matches
         .get_many::<String>(options::EXCLUDE)

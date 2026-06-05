@@ -800,7 +800,7 @@ fn test_uchild_when_run_no_wait_with_a_non_blocking_util() {
     child.kill();
 
     // we should be able to call wait without panics and apply some assertions
-    child.wait().unwrap().code_is(0).no_stdout().no_stderr();
+    child.wait().unwrap().code_is(0).no_output();
 }
 
 #[test]

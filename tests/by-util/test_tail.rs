@@ -13,23 +13,16 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))]
-use nix::sys::signal::{Signal, kill};
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))]
-use nix::unistd::Pid;
 use pretty_assertions::assert_eq;
 use rand::distr::Alphanumeric;
 use rstest::rstest;
+#[cfg(all(
+    not(target_vendor = "apple"),
+    not(target_os = "windows"),
+    not(target_os = "android"),
+    not(target_os = "freebsd")
+))]
+use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
 use std::fs::File;
 use std::io::Write;
@@ -440,11 +433,7 @@ fn test_follow_stdin_descriptor() {
             .args(&args)
             .run_no_wait();
         p.make_assertion_with_delay(500).is_alive();
-        p.kill()
-            .make_assertion()
-            .with_all_output()
-            .no_stderr()
-            .no_stdout();
+        p.kill().make_assertion().with_all_output().no_output();
 
         args.pop();
     }
@@ -580,7 +569,7 @@ fn test_permission_denied_is_not_reported_as_not_found() {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         return;
     }
 
@@ -657,7 +646,7 @@ fn test_follow_name_multiple() {
         child
             .make_assertion_with_delay(delay)
             .is_alive()
-            .with_current_output()
+            .with_all_output()
             .stdout_only_fixture("foobar_follow_multiple.expected");
 
         let first_append = "trois\n";
@@ -794,7 +783,11 @@ fn test_follow_with_pid() {
         .stdout_only_fixture("foobar_follow_multiple_appended.expected");
 
     // kill the dummy process and give tail time to notice this
-    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    kill_process(
+        Pid::from_raw(i32::try_from(pid).unwrap()).unwrap(),
+        Signal::USR1,
+    )
+    .unwrap();
     let _ = dummy.wait();
 
     child.delay(DEFAULT_SLEEP_INTERVAL_MILLIS);
@@ -806,8 +799,7 @@ fn test_follow_with_pid() {
         .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
         .is_not_alive()
         .with_current_output()
-        .no_stderr()
-        .no_stdout()
+        .no_output()
         .success();
 }
 
@@ -1104,8 +1096,7 @@ fn test_positive_zero_bytes() {
         .pipe_in("abcde")
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 /// Test for reading all but the first NUM lines: `tail -n +3`.
@@ -1185,8 +1176,7 @@ fn test_obsolete_syntax_zero_lines_file() {
     new_ucmd!()
         .args(&["-0", "foobar.txt"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 /// Test for reading all lines, specified by `tail -n +0`.
@@ -1203,8 +1193,7 @@ fn test_positive_zero_lines() {
         .pipe_in("a\nb\nc\nd\ne\n")
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -1578,7 +1567,7 @@ fn test_retry7() {
         "--use-polling",
     ];
 
-    let mut delay = 100;
+    let mut delay = 500;
     for _ in 0..2 {
         at.mkdir(untailable);
 
@@ -2692,11 +2681,7 @@ fn test_follow_inotify_only_regular() {
     let mut p = ts.ucmd().arg("-f").arg("/dev/null").run_no_wait();
 
     p.make_assertion_with_delay(200).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .no_stderr()
-        .no_stdout();
+    p.kill().make_assertion().with_all_output().no_output();
 }
 
 #[test]
@@ -2746,20 +2731,12 @@ fn test_fifo() {
 
     let mut p = ts.ucmd().arg("FIFO").run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .no_stderr()
-        .no_stdout();
+    p.kill().make_assertion().with_all_output().no_output();
 
     for arg in ["-f", "-F"] {
         let mut p = ts.ucmd().arg(arg).arg("FIFO").run_no_wait();
         p.make_assertion_with_delay(500).is_alive();
-        p.kill()
-            .make_assertion()
-            .with_all_output()
-            .no_stderr()
-            .no_stdout();
+        p.kill().make_assertion().with_all_output().no_output();
     }
 }
 
@@ -2790,15 +2767,18 @@ fn test_fifo_with_pid() {
 
     child.make_assertion_with_delay(500).is_alive();
 
-    kill(Pid::from_raw(i32::try_from(pid).unwrap()), Signal::SIGUSR1).unwrap();
+    kill_process(
+        Pid::from_raw(i32::try_from(pid).unwrap()).unwrap(),
+        Signal::USR1,
+    )
+    .unwrap();
     let _ = dummy.wait();
 
     child
         .make_assertion_with_delay(DEFAULT_SLEEP_INTERVAL_MILLIS)
         .is_not_alive()
         .with_all_output()
-        .no_stderr()
-        .no_stdout()
+        .no_output()
         .success();
 }
 
@@ -2861,24 +2841,21 @@ fn test_pipe_when_lines_option_value_is_higher_than_contained_lines() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-n", "+4"])
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-n", "+999"])
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -2890,8 +2867,7 @@ fn test_pipe_when_negative_lines_option_given_no_newline_at_eof() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-n", "1"])
@@ -2972,8 +2948,7 @@ fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-n", "-4"])
@@ -3008,8 +2983,7 @@ fn test_pipe_when_lines_option_given_multibyte_utf8_characters() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -3075,8 +3049,7 @@ fn test_pipe_when_lines_option_given_input_size_is_equal_to_buffer_size() {
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     let expected = lines.clone().skip(total_lines - 1).collect::<String>();
     new_ucmd!()
@@ -3183,8 +3156,7 @@ fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     let expected = lines.clone().skip(total_lines - 1).collect::<String>();
     new_ucmd!()
@@ -3239,24 +3211,21 @@ fn test_pipe_when_bytes_option_value_is_higher_than_contained_bytes() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-c", "+5"])
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-c", "+999"])
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -3304,8 +3273,7 @@ fn test_pipe_when_bytes_option_given_multibyte_utf8_characters() {
         .pipe_in(test_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["-c", "-1"])
@@ -3368,8 +3336,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_equal_to_buffer_size() {
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     let expected = &random_string.as_bytes()[1..];
     new_ucmd!()
@@ -3427,8 +3394,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     let expected = &random_string.as_bytes()[CHUNK_BUFFER_SIZE..];
     new_ucmd!()
@@ -3474,8 +3440,7 @@ fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     let expected = &random_string.as_bytes()[8192..];
     new_ucmd!()
@@ -3583,8 +3548,7 @@ fn test_args_when_presume_input_pipe_given_input_is_pipe() {
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["---presume-input-pipe", "-c", "+0"])
@@ -3598,8 +3562,7 @@ fn test_args_when_presume_input_pipe_given_input_is_pipe() {
         .pipe_in(random_string)
         .ignore_stdin_write_error()
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     new_ucmd!()
         .args(&["---presume-input-pipe", "-n", "+0"])
@@ -3621,8 +3584,7 @@ fn test_args_when_presume_input_pipe_given_input_is_file() {
     ts.ucmd()
         .args(&["---presume-input-pipe", "-c", "-0", "data"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     ts.ucmd()
         .args(&["---presume-input-pipe", "-c", "+0", "data"])
@@ -3632,8 +3594,7 @@ fn test_args_when_presume_input_pipe_given_input_is_file() {
     ts.ucmd()
         .args(&["---presume-input-pipe", "-n", "-0", "data"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 
     ts.ucmd()
         .args(&["---presume-input-pipe", "-n", "+0", "data"])
@@ -3684,11 +3645,7 @@ fn test_when_argument_file_is_a_symlink() {
 
     at.symlink_file("target", "link");
 
-    ts.ucmd()
-        .args(&["-c", "+0", "link"])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ts.ucmd().args(&["-c", "+0", "link"]).succeeds().no_output();
 
     let random_string = RandomizedString::generate(AlphanumericNewline, 100);
     let result = file.write_all(random_string.as_bytes());
@@ -4915,11 +4872,7 @@ fn test_gnu_args_f() {
     at.touch(source);
     let mut p = scene.ucmd().args(&["+f", source]).run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .no_stderr()
-        .no_stdout();
+    p.kill().make_assertion().with_all_output().no_output();
 
     let mut p = scene
         .ucmd()
@@ -4927,11 +4880,7 @@ fn test_gnu_args_f() {
         .arg("+f")
         .run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
-    p.kill()
-        .make_assertion()
-        .with_all_output()
-        .no_stderr()
-        .no_stdout();
+    p.kill().make_assertion().with_all_output().no_output();
 }
 
 #[test]
@@ -5040,8 +4989,7 @@ fn test_when_piped_input_then_no_broken_pipe() {
             .args(&["-n", "0"])
             .pipe_in(test_string)
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 

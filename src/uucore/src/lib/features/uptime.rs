@@ -413,7 +413,7 @@ pub fn format_nusers(n: usize) -> String {
     )
 }
 
-/// Get the number of users currently logged in in a human-readable format
+/// Get the number of users currently logged in, in a human-readable format
 ///
 /// # Returns
 ///

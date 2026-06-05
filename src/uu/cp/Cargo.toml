@@ -22,7 +22,6 @@ doctest = false
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "buf-copy",
@@ -32,12 +31,17 @@ uucore = { workspace = true, features = [
   "parser",
   "perms",
   "mode",
+  "safe-copy",
   "update-control",
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 exacl = { workspace = true, optional = true }

@@ -27,6 +27,12 @@ fluent = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs", "termios"] }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
+
 [[bin]]
 name = "tty"
 path = "src/main.rs"

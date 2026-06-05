@@ -16,8 +16,13 @@ use std::{
 use clap::{Arg, Command};
 use clap_complete::Shell;
 use clap_mangen::Man;
-use fluent_syntax::ast::{Entry, Message, Pattern};
-use fluent_syntax::parser;
+use fluent_syntax::{
+    ast::{
+        Entry, Expression, InlineExpression, Message, Pattern,
+        PatternElement::{Placeable, TextElement},
+    },
+    parser,
+};
 use jiff::Zoned;
 use regex::Regex;
 use textwrap::{fill, indent, termwidth};
@@ -447,10 +452,6 @@ impl MDWriter<'_, '_> {
                 if id.name == key {
                     // Simple text extraction - just concatenate text elements
                     let mut result = String::new();
-                    use fluent_syntax::ast::{
-                        Expression, InlineExpression,
-                        PatternElement::{Placeable, TextElement},
-                    };
                     for element in elements {
                         if let TextElement { ref value } = element {
                             result.push_str(value);
