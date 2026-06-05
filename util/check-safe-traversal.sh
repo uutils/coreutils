@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp chcon; do
+    for util in rm chmod chown chgrp du mv cp chcon touch; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -429,6 +429,28 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         echo "OK: mv symlink replace uses symlinkat+renameat with parent dirfd and unguessable temp name"
         rm -f "$sym_dst"
     fi
+fi
+
+# Test touch - creating a file must use O_CREAT but never O_TRUNC, so that a
+# symlink planted in the metadata-check/open race window (#10019) is not
+# truncated. This observes the flags directly, which integration tests cannot.
+if echo "$AVAILABLE_UTILS" | grep -q "touch"; then
+    echo ""
+    echo "Testing touch (create_no_truncate)..."
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        touch_cmd="$COREUTILS_BIN touch"
+    else
+        touch_cmd="$PROJECT_ROOT/target/${PROFILE}/touch"
+    fi
+    strace -f -e trace=openat -o strace_touch_create.log $touch_cmd test_touch_new 2>/dev/null || true
+    cat strace_touch_create.log
+    if ! grep -q 'openat(.*test_touch_new.*O_CREAT' strace_touch_create.log; then
+        fail_immediately "touch did not create test_touch_new via openat(O_CREAT)"
+    fi
+    if grep 'test_touch_new' strace_touch_create.log | grep -q 'O_TRUNC'; then
+        fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
+    fi
+    echo "✓ touch creates with O_CREAT and without O_TRUNC"
 fi
 
 echo ""
