@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp; do
+    for util in rm chmod chown chgrp du mv cp split; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -289,6 +289,49 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     fi
     echo "✓ cp -P opens source with O_NOFOLLOW"
     rm -f test_cp_src test_cp_dst
+fi
+
+# split must harden its output open against TOCTOU target swaps (issue #11401 /
+# CVE-2026-35374). The old code opened the output by path with O_TRUNC, so an
+# attacker could swap the just-validated output for a symlink and have split
+# truncate a different file. The fix creates outputs atomically with
+# O_CREAT|O_EXCL and only ever truncates via ftruncate after an fd-based check
+# that the opened output is not the input -- so a split that would overwrite its
+# own input is refused.
+if echo "$AVAILABLE_UTILS" | grep -q "split"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        split_cmd="$COREUTILS_BIN split"
+    else
+        split_cmd="$PROJECT_ROOT/target/${PROFILE}/split"
+    fi
+
+    printf '0123456789abcdef' > split_input
+    strace -f -e trace=openat -o strace_split_output_open.log \
+        $split_cmd -b 4 split_input split_out_ 2>/dev/null || true
+
+    if ! grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_CREAT[^)]*O_EXCL' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must create output files with O_CREAT|O_EXCL (issue #11401)"
+    fi
+    if grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_TRUNC' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must not open output files with a path-based O_TRUNC (TOCTOU truncation risk, issue #11401)"
+    fi
+    echo "✓ split creates outputs with O_CREAT|O_EXCL and no path-based O_TRUNC"
+    rm -f split_input split_out_*
+
+    # A split whose output already resolves (via a symlink) to the input must be
+    # refused, leaving the input untouched.
+    printf 'split_victim_payload' > split_victim
+    ln -s split_victim split_swap_aa
+    if $split_cmd -b 4 split_victim split_swap_ 2>/dev/null; then
+        fail_immediately "split must refuse when the output would overwrite the input (issue #11401)"
+    fi
+    if [ "$(cat split_victim)" != "split_victim_payload" ]; then
+        fail_immediately "split truncated its own input through a swapped output symlink (issue #11401)"
+    fi
+    echo "✓ split refuses to overwrite its input via a swapped output symlink"
+    rm -f split_victim split_swap_*
 fi
 
 # mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
