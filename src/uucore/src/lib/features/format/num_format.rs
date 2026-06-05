@@ -724,19 +724,26 @@ fn write_output(
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
     let remaining_width = width - min(width, sign_indicator.len());
 
-    // Check if the width is too large for formatting
-    super::check_width(remaining_width)?;
-
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            let padding = remaining_width.saturating_sub(s.len());
+            super::write_padding(writer, b' ', padding)
+        }
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
                 // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+                let padding = width.saturating_sub(sign_indicator.len().saturating_add(s.len()));
+                super::write_padding(&mut writer, b' ', padding)?;
+                writer.write_all(sign_indicator.as_bytes())?;
+                writer.write_all(s.as_bytes())
             } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
+                writer.write_all(sign_indicator.as_bytes())?;
+                let padding = remaining_width.saturating_sub(s.len());
+                super::write_padding(&mut writer, b' ', padding)?;
+                writer.write_all(s.as_bytes())
             }
         }
         NumberAlignment::RightZero => {
@@ -747,7 +754,11 @@ fn write_output(
                 ("", s.as_str())
             };
             let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(prefix.as_bytes())?;
+            let padding = remaining_width.saturating_sub(rest.len());
+            super::write_padding(&mut writer, b'0', padding)?;
+            writer.write_all(rest.as_bytes())
         }
     }
 }
