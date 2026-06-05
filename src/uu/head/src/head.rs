@@ -471,7 +471,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Ok(f) => f,
                 Err(err) => {
                     #[cfg(windows)]
-                    // On Windows, `File::open` on a directory fails with "Permission denied").
+                    // On Windows, `File::open` on a directory fails with "Permission denied".
                     if err.kind() == io::ErrorKind::PermissionDenied {
                         if let Ok(m) = Path::new(file).metadata() {
                             if m.is_dir() {
