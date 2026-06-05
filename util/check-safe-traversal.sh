@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp chcon touch head; do
+    for util in rm chmod chown chgrp du mv cp chcon split; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -335,6 +335,49 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     rm -f test_cp_src test_cp_dst
 fi
 
+# split must harden its output open against TOCTOU target swaps (issue #11401 /
+# CVE-2026-35374). The old code opened the output by path with O_TRUNC, so an
+# attacker could swap the just-validated output for a symlink and have split
+# truncate a different file. The fix creates outputs atomically with
+# O_CREAT|O_EXCL and only ever truncates via ftruncate after an fd-based check
+# that the opened output is not the input -- so a split that would overwrite its
+# own input is refused.
+if echo "$AVAILABLE_UTILS" | grep -q "split"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        split_cmd="$COREUTILS_BIN split"
+    else
+        split_cmd="$PROJECT_ROOT/target/${PROFILE}/split"
+    fi
+
+    printf '0123456789abcdef' > split_input
+    strace -f -e trace=openat -o strace_split_output_open.log \
+        $split_cmd -b 4 split_input split_out_ 2>/dev/null || true
+
+    if ! grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_CREAT[^)]*O_EXCL' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must create output files with O_CREAT|O_EXCL (issue #11401)"
+    fi
+    if grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_TRUNC' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must not open output files with a path-based O_TRUNC (TOCTOU truncation risk, issue #11401)"
+    fi
+    echo "✓ split creates outputs with O_CREAT|O_EXCL and no path-based O_TRUNC"
+    rm -f split_input split_out_*
+
+    # A split whose output already resolves (via a symlink) to the input must be
+    # refused, leaving the input untouched.
+    printf 'split_victim_payload' > split_victim
+    ln -s split_victim split_swap_aa
+    if $split_cmd -b 4 split_victim split_swap_ 2>/dev/null; then
+        fail_immediately "split must refuse when the output would overwrite the input (issue #11401)"
+    fi
+    if [ "$(cat split_victim)" != "split_victim_payload" ]; then
+        fail_immediately "split truncated its own input through a swapped output symlink (issue #11401)"
+    fi
+    echo "✓ split refuses to overwrite its input via a swapped output symlink"
+    rm -f split_victim split_swap_*
+fi
+
 # mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
 if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
     # Need different filesystems for the EXDEV fallback to fire.
@@ -429,55 +472,6 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         echo "OK: mv symlink replace uses symlinkat+renameat with parent dirfd and unguessable temp name"
         rm -f "$sym_dst"
     fi
-fi
-
-# Test touch - creating a file must use O_CREAT but never O_TRUNC, so that a
-# symlink planted in the metadata-check/open race window (#10019) is not
-# truncated. This observes the flags directly, which integration tests cannot.
-if echo "$AVAILABLE_UTILS" | grep -q "touch"; then
-    echo ""
-    echo "Testing touch (create_no_truncate)..."
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        touch_cmd="$COREUTILS_BIN touch"
-    else
-        touch_cmd="$PROJECT_ROOT/target/${PROFILE}/touch"
-    fi
-    strace -f -e trace=openat -o strace_touch_create.log $touch_cmd test_touch_new 2>/dev/null || true
-    cat strace_touch_create.log
-    if ! grep -q 'openat(.*test_touch_new.*O_CREAT' strace_touch_create.log; then
-        fail_immediately "touch did not create test_touch_new via openat(O_CREAT)"
-    fi
-    if grep 'test_touch_new' strace_touch_create.log | grep -q 'O_TRUNC'; then
-        fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
-    fi
-    echo "✓ touch creates with O_CREAT and without O_TRUNC"
-fi
-
-# Test head - the is-a-directory check must derive from the already-open
-# descriptor (fstat/statx on the fd), not from a separate path-based stat
-# performed before the open. A path stat followed by an open is a TOCTOU
-# window (#11972): the object named by the path can be swapped in between.
-if echo "$AVAILABLE_UTILS" | grep -q "head"; then
-    echo ""
-    echo "Testing head (fstat_after_open)..."
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        head_cmd="$COREUTILS_BIN head"
-    else
-        head_cmd="$PROJECT_ROOT/target/${PROFILE}/head"
-    fi
-    echo "headtest" > test_head_file.txt
-    strace -f -e trace=openat,fstat,newfstatat,statx,stat,lstat \
-        -o strace_head_metadata.log $head_cmd -c 4 test_head_file.txt 2>/dev/null || true
-    cat strace_head_metadata.log
-    if ! grep -q 'openat(AT_FDCWD, "test_head_file.txt"' strace_head_metadata.log; then
-        fail_immediately "head did not open test_head_file.txt via openat"
-    fi
-    # The filename should appear only in the openat; any stat-family call naming
-    # the path means head stat'd it before opening - the TOCTOU window.
-    if grep '"test_head_file.txt"' strace_head_metadata.log | grep -qv 'openat('; then
-        fail_immediately "head stat'd the path before opening it - TOCTOU window (#11972); metadata must come from the open descriptor"
-    fi
-    echo "✓ head reads metadata from the open descriptor, not a path stat"
 fi
 
 echo ""

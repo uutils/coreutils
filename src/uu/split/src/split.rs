@@ -549,7 +549,7 @@ impl Settings {
             ));
         }
 
-        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), &self.input, filename, is_new)
     }
 }
 
