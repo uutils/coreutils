@@ -82,10 +82,13 @@ struct Flags {
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
+        // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
+        // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
+        let directive: String = slice.chars().skip(beg).take(end - beg).collect();
         return Err(USimpleError::new(
             1,
             StatError::InvalidDirective {
-                directive: slice[beg..end].quote().to_string(),
+                directive: directive.quote().to_string(),
             }
             .to_string(),
         ));
