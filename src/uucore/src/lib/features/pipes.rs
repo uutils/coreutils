@@ -25,20 +25,19 @@ const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 /// use rustix::io::Result for functions without read/write fallback
 type PipeRes = std::io::Result<Result<(), ()>>;
 
-/// return pipe larger than given size
+/// return pipe and try to extend its size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
 /// e.g. writing size to pipe should not hang
+/// SIZE_REQUIRED=false allows to continue unbuffered splice I/O with default pipe size even if fcntl failed
 ///
 /// used for resolving the limitation for splice: one of a input or output should be pipe
 #[inline]
-pub fn pipe<const SIZE_REQUIRED: bool>(s: usize) -> std::io::Result<(PipeReader, PipeWriter)> {
+pub fn pipe<const SIZE_REQUIRED: bool>() -> std::io::Result<(PipeReader, PipeWriter)> {
     let pair = std::io::pipe()?;
-    // guard unnecessary syscall
-    if s > KERNEL_DEFAULT_PIPE_SIZE {
-        let r = fcntl_setpipe_size(&pair.0, s);
-        if SIZE_REQUIRED {
-            r?;
-        }
+    // pipe size is not RAM consumed by pipe with zero-copy. So we never use other size
+    let r = fcntl_setpipe_size(&pair.0, MAX_ROOTLESS_PIPE_SIZE);
+    if SIZE_REQUIRED {
+        r?;
     }
 
     Ok(pair)
@@ -86,17 +85,7 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 /// splice all of source to dest
 /// returns Ok(()) at end of file
 #[inline]
-pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
-    // avoid fcntl overhead for small input. splice twice to catch end of file.
-    if splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-        || splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? == 0
-    {
-        return Ok(());
-    }
-    // fcntl for input would not improve throughput since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
+fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io::Result<()> {
     while splice(&source, &dest, MAX_ROOTLESS_PIPE_SIZE)? > 0 {}
     Ok(())
 }
@@ -105,18 +94,11 @@ pub fn splice_unbounded(source: &impl AsFd, dest: &mut impl AsFd) -> rustix::io:
 ///
 /// This should not be used if one of them are pipe to save resources
 #[inline]
-pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
+fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
-    let Some((pipe_rd, pipe_wr)) =
-        PIPE_CACHE.get_or_init(|| pipe::<false>(MAX_ROOTLESS_PIPE_SIZE).ok())
-    else {
+    let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
         return Ok(Err(()));
     };
-    // improve throughput
-    // no need to increase pipe size of input fd since
-    // - sender with splice probably increased size already
-    // - sender without splice is bottleneck
-    let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
 
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
@@ -132,10 +114,17 @@ pub fn splice_unbounded_broker(source: &impl AsFd, dest: &mut impl AsFd) -> Pipe
 }
 
 /// try splice_unbounded 1st and splice_unbounded_broker if both of in/output are not pipe
+/// This includes read ahead and optimization for stdout's pipe size
 #[inline]
 pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
-    if splice_unbounded(source, dest).is_err() {
-        // input or output is not pipe
+    // fcntl for input would not improve throughput since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let is_pipe_out = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE).is_ok();
+    // pre-generate page caches for splice
+    let is_file_in = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential).is_ok();
+    if (is_file_in && !is_pipe_out) || splice_unbounded(source, dest).is_err() {
+        // both of in/output are not pipe
         return splice_unbounded_broker(source, dest);
     }
     Ok(Ok(()))
@@ -147,9 +136,8 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
 pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Result<u64> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let pipe_size = MAX_ROOTLESS_PIPE_SIZE.min(n as usize);
-    // improve throughput or save RAM usage
+    // improve throughput if output is pipe
     // expected that input is already extended if it is coming from splice
-    // we can use pipe_size * N with some case e.g. head -c N inputs, but we need N splice call anyway
     if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
         let _ = fcntl_setpipe_size(&target, pipe_size);
     }
@@ -171,7 +159,14 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
     };
     let succeed_or_fuse = succeed_or_fuse
         || if let Some((broker_r, broker_w)) = PIPE_CACHE
-            .get_or_init(|| pipe::<false>(pipe_size).ok())
+            .get_or_init(|| {
+                // use std::io::pipe to avoid unnecessary fcntl
+                let pair = std::io::pipe().ok()?;
+                if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+                    let _ = fcntl_setpipe_size(&pair.0, pipe_size);
+                }
+                Some(pair)
+            })
             .as_ref()
         {
             // todo: create fn splice_bounded_broker

@@ -379,27 +379,22 @@ impl ValueParserFactory for OptionalPathBufParser {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
-    let matches = match uu_app().try_get_matches_from(&args) {
-        Ok(m) => m,
-        Err(e) => {
-            use uucore::clap_localization::handle_clap_error_with_exit_code;
-            if e.kind() == clap::error::ErrorKind::UnknownArgument {
-                handle_clap_error_with_exit_code(e, 1);
-            }
-            if e.kind() == clap::error::ErrorKind::TooManyValues
-                && e.context().any(|(kind, val)| {
-                    kind == clap::error::ContextKind::InvalidArg
-                        && val == &clap::error::ContextValue::String("[template]".into())
-                })
+    let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
+        use clap::error::{ContextKind, ContextValue, ErrorKind};
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+
+        match e.kind() {
+            ErrorKind::UnknownArgument => handle_clap_error_with_exit_code(e, 1),
+            ErrorKind::TooManyValues
+                if e.context().any(|(k, v)| {
+                    k == ContextKind::InvalidArg && v == &ContextValue::String("[template]".into())
+                }) =>
             {
-                return Err(UUsageError::new(
-                    1,
-                    translate!("mktemp-error-too-many-templates"),
-                ));
+                UUsageError::new(1, translate!("mktemp-error-too-many-templates"))
             }
-            return Err(e.into());
+            _ => e.into(),
         }
-    };
+    })?;
 
     // Parse command-line options into a format suitable for the
     // application logic.

@@ -380,8 +380,12 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                 continue;
             }
 
-            // Recursively remove subdirectory using safe traversal
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
+            // Recursively remove subdirectory using safe traversal. rm never
+            // follows symlinks during recursion, so open with NoFollow: if an
+            // attacker swaps this just-stat'd directory for a symlink before the
+            // open, O_NOFOLLOW makes openat fail instead of descending off-tree
+            // and deleting unrelated files.
+            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
                 Ok(fd) => fd,
                 Err(e) => {
                     // If we can't open the subdirectory for safe traversal,

@@ -1627,3 +1627,11 @@ fn test_multibyte_suffix_issue11937() {
         .succeeds()
         .stdout_is("   692.00€\n");
 }
+
+#[test]
+fn test_float_precision_greater_than_16bits() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.65536f", "1"])
+        .succeeds()
+        .stdout_is("1\n");
+}

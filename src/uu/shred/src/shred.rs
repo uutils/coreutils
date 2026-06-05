@@ -253,17 +253,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let iterations = match matches.get_one::<String>(options::ITERATIONS) {
-        Some(s) => match s.parse::<usize>() {
-            Ok(u) => u,
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
-                ));
-            }
-        },
-        None => unreachable!(),
+    let iterations = {
+        let s = matches.get_one::<String>(options::ITERATIONS).unwrap(); // safe to unwrap, has default value
+        s.parse::<usize>().map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("shred-invalid-number-of-passes", "passes" => s.quote()),
+            )
+        })?
     };
 
     let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
@@ -719,7 +716,7 @@ fn wipe_file(
     }
 
     if remove_method != RemoveMethod::None {
-        do_remove(path, path_str, verbose, remove_method).map_err_context(
+        do_remove(path, verbose, remove_method).map_err_context(
             || translate!("shred-failed-to-remove-file", "file" => path.maybe_quote()),
         )?;
     }
@@ -824,21 +821,16 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
     last_path
 }
 
-fn do_remove(
-    path: &Path,
-    orig_filename: &OsString,
-    verbose: bool,
-    remove_method: RemoveMethod,
-) -> Result<(), io::Error> {
+fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<(), io::Error> {
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removing", "file" => orig_filename.maybe_quote())
+            translate!("shred-removing", "file" => path.maybe_quote())
         );
     }
 
     let remove_path = if remove_method == RemoveMethod::Unlink {
-        path.with_file_name(orig_filename)
+        path.to_path_buf()
     } else {
         wipe_name(path, verbose, remove_method)
     };
@@ -848,7 +840,7 @@ fn do_remove(
     if verbose {
         show_error!(
             "{}",
-            translate!("shred-removed", "file" => orig_filename.maybe_quote())
+            translate!("shred-removed", "file" => path.maybe_quote())
         );
     }
 
