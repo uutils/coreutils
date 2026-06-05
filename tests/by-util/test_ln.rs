@@ -746,6 +746,13 @@ fn test_relative_requires_symbolic() {
 }
 
 #[test]
+fn test_relative_target_with_no_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "data");
+    ucmd.args(&["-rsfT", "src", ""]).fails_with_code(1);
+}
+
+#[test]
 fn test_relative_dst_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
