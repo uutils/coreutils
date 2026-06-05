@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp touch; do
+    for util in rm chmod chown chgrp du mv cp touch head; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -407,6 +407,33 @@ if echo "$AVAILABLE_UTILS" | grep -q "touch"; then
         fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
     fi
     echo "✓ touch creates with O_CREAT and without O_TRUNC"
+fi
+
+# Test head - the is-a-directory check must derive from the already-open
+# descriptor (fstat/statx on the fd), not from a separate path-based stat
+# performed before the open. A path stat followed by an open is a TOCTOU
+# window (#11972): the object named by the path can be swapped in between.
+if echo "$AVAILABLE_UTILS" | grep -q "head"; then
+    echo ""
+    echo "Testing head (fstat_after_open)..."
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        head_cmd="$COREUTILS_BIN head"
+    else
+        head_cmd="$PROJECT_ROOT/target/${PROFILE}/head"
+    fi
+    echo "headtest" > test_head_file.txt
+    strace -f -e trace=openat,fstat,newfstatat,statx,stat,lstat \
+        -o strace_head_metadata.log $head_cmd -c 4 test_head_file.txt 2>/dev/null || true
+    cat strace_head_metadata.log
+    if ! grep -q 'openat(AT_FDCWD, "test_head_file.txt"' strace_head_metadata.log; then
+        fail_immediately "head did not open test_head_file.txt via openat"
+    fi
+    # The filename should appear only in the openat; any stat-family call naming
+    # the path means head stat'd it before opening - the TOCTOU window.
+    if grep '"test_head_file.txt"' strace_head_metadata.log | grep -qv 'openat('; then
+        fail_immediately "head stat'd the path before opening it - TOCTOU window (#11972); metadata must come from the open descriptor"
+    fi
+    echo "✓ head reads metadata from the open descriptor, not a path stat"
 fi
 
 echo ""
