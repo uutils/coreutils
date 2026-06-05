@@ -57,12 +57,27 @@ fn test_fmt_width_max_display_width() {
         .args(&["-w", "8"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is("aa bb cc\ndd ee\n");
+        .stdout_is("aa\nbb cc\ndd ee\n");
     new_ucmd!()
         .args(&["-w", "7"])
         .pipe_in(input)
         .succeeds()
         .stdout_is("aa\nbb cc\ndd ee\n");
+}
+
+#[test]
+fn test_fmt_width_matches_gnu_newline_budget() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("漢 字 test 日 本 語")
+        .succeeds()
+        .stdout_is("漢 字\ntest 日\n本 語\n");
+
+    new_ucmd!()
+        .args(&["-w", "15"])
+        .pipe_in("漢字 test 日本語")
+        .succeeds()
+        .stdout_is("漢字 test\n日本語\n");
 }
 
 #[test]

@@ -129,7 +129,7 @@ impl FmtOptions {
             None
         };
 
-        let (width, goal) = match (width_opt, goal_opt) {
+        let (mut width, mut goal) = match (width_opt, goal_opt) {
             (Some(w), Some(g)) => {
                 if g > w {
                     return Err(FmtError::GoalGreaterThanWidth.into());
@@ -153,14 +153,22 @@ impl FmtOptions {
             }
             (None, None) => (DEFAULT_WIDTH, DEFAULT_GOAL),
         };
-        debug_assert!(
-            width >= goal,
-            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
-        );
 
         if width > MAX_WIDTH {
             return Err(FmtError::WidthOutOfRange(width).into());
         }
+
+        if width_opt.is_some() && width > 0 {
+            // GNU fmt counts the terminating newline against an explicit width,
+            // so the line-breaking budget for visible content is one column lower.
+            width -= 1;
+            goal = goal.saturating_sub(1).min(width);
+        }
+
+        debug_assert!(
+            width >= goal,
+            "GOAL {goal} should not be greater than WIDTH {width} when given {width_opt:?} and {goal_opt:?}."
+        );
 
         let mut tabwidth = 8;
         if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
