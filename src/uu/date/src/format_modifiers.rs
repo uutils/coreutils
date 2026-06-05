@@ -483,6 +483,13 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     Ok(result)
 }
 
+/// Upper bound on the field width we will allocate for. Anything wider is
+/// rejected as `FieldWidthTooLarge` instead of being handed to the allocator.
+/// A huge request (e.g. `%6666666666666D`) would otherwise abort the process
+/// under a sanitizer before `try_reserve` could fail gracefully, and OOM
+/// elsewhere. No legitimate date field comes anywhere near a mebibyte wide.
+const MAX_FIELD_WIDTH: usize = 1 << 20;
+
 /// Allocate a `String` with enough capacity for `current_len + padding`,
 /// returning `FieldWidthTooLarge` on arithmetic overflow or allocation failure.
 fn try_alloc_padded(
@@ -491,19 +498,16 @@ fn try_alloc_padded(
     width: usize,
     specifier: &str,
 ) -> Result<String, FormatError> {
-    let target_len =
-        current_len
-            .checked_add(padding)
-            .ok_or_else(|| FormatError::FieldWidthTooLarge {
-                width,
-                specifier: specifier.to_string(),
-            })?;
+    let too_large = || FormatError::FieldWidthTooLarge {
+        width,
+        specifier: specifier.to_string(),
+    };
+    let target_len = current_len.checked_add(padding).ok_or_else(too_large)?;
+    if target_len > MAX_FIELD_WIDTH {
+        return Err(too_large());
+    }
     let mut s = String::new();
-    s.try_reserve(target_len)
-        .map_err(|_| FormatError::FieldWidthTooLarge {
-            width,
-            specifier: specifier.to_string(),
-        })?;
+    s.try_reserve(target_len).map_err(|_| too_large())?;
     Ok(s)
 }
 
@@ -867,6 +871,27 @@ mod tests {
             FormatError::FieldWidthTooLarge { width, specifier }
             if width == usize::MAX && specifier == "Y"
         ));
+    }
+
+    #[test]
+    fn test_format_with_modifiers_huge_width_does_not_allocate() {
+        // A width that fits in `usize` but is absurdly large must be rejected
+        // up front rather than attempting a multi-terabyte allocation (which
+        // aborts under a sanitizer). Regression test for issue #12458.
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        for format in ["%6666666666666D", "%+6666666666666D", "%8888888888888q"] {
+            let err = format_with_modifiers(&date, format, &config).unwrap_err();
+            assert!(matches!(err, FormatError::FieldWidthTooLarge { .. }));
+        }
+    }
+
+    #[test]
+    fn test_try_alloc_padded_boundary() {
+        // A target length exactly at the cap is allowed; one byte over is rejected.
+        assert!(try_alloc_padded(0, MAX_FIELD_WIDTH, MAX_FIELD_WIDTH, "Y").is_ok());
+        let err = try_alloc_padded(1, MAX_FIELD_WIDTH, MAX_FIELD_WIDTH, "Y").unwrap_err();
+        assert!(matches!(err, FormatError::FieldWidthTooLarge { .. }));
     }
 
     #[test]

@@ -362,6 +362,15 @@ fn test_date_format_q() {
 }
 
 #[test]
+fn test_date_format_huge_width_fails_gracefully() {
+    // An absurdly large field width must be rejected with an error rather than
+    // attempting a multi-terabyte allocation. Regression test for issue #12458.
+    for fmt in ["+%6666666666666D", "+%+6666666666666D", "+%8888888888888q"] {
+        new_ucmd!().arg(fmt).fails().no_stdout();
+    }
+}
+
+#[test]
 fn test_date_format_m() {
     let scene = TestScenario::new(util_name!());
 
