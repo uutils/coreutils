@@ -127,8 +127,8 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
         }
         if let Ok((broker_read, broker_write)) = pipe::<true>() {
             'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+                && remain == bytes.len()
             {
-                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
                 while remain > 0 {
                     if let Ok(s) = splice(&broker_read, &stdout, remain) {
                         remain -= s;
