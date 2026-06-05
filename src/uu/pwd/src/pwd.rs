@@ -109,6 +109,15 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
+#[cfg(windows)]
+fn strip_windows_verbatim_prefix(path: &str) -> Option<PathBuf> {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        Some(PathBuf::from(format!(r"\\{rest}")))
+    } else {
+        path.strip_prefix(r"\\?\").map(PathBuf::from)
+    }
+}
+
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -135,11 +144,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // With the right extension trait we can remove it non-lossily, but
     // we print it lossily anyway, so no reason to bother.
     #[cfg(windows)]
-    let cwd = cwd
-        .to_string_lossy()
-        .strip_prefix(r"\\?\")
-        .map(Into::into)
-        .unwrap_or(cwd);
+    let cwd = {
+        let path = cwd.to_string_lossy();
+        strip_windows_verbatim_prefix(&path).unwrap_or(cwd)
+    };
 
     println_verbatim(cwd)
         .map_err_context(|| translate!("pwd-error-failed-to-print-current-directory"))?;
