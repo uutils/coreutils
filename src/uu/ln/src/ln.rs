@@ -386,12 +386,16 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
-    if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
-        if let Ok(dst_abs) = canonicalize(
-            dst.parent().unwrap(),
-            MissingHandling::Missing,
-            ResolveMode::Physical,
-        ) {
+    // `dst.parent()` is None for a destination with no parent (`/`, `""`, or a
+    // bare Windows prefix). Fall through to the non-relative `src` rather than
+    // unwrapping it; the caller then reports the usual error.
+    if let (Ok(src_abs), Some(dst_parent)) = (
+        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+        dst.parent(),
+    ) {
+        if let Ok(dst_abs) =
+            canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical)
+        {
             return make_path_relative_to(src_abs, dst_abs).into();
         }
     }
