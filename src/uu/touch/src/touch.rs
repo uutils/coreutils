@@ -811,7 +811,10 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
 /// - 68 and before is interpreted as 20xx
 /// - 69 and after is interpreted as 19xx
 fn prepend_century(s: &str) -> UResult<String> {
-    let first_two_digits = s[..2].parse::<u32>().map_err(|_| {
+    // Take the first two chars rather than byte-slicing `s[..2]`: a leading
+    // multibyte char would otherwise split a UTF-8 boundary and panic.
+    let first_two: String = s.chars().take(2).collect();
+    let first_two_digits = first_two.parse::<u32>().map_err(|_| {
         USimpleError::new(
             1,
             translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
