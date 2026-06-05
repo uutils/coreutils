@@ -934,6 +934,27 @@ fn test_skip_bytes_error() {
         .failure();
 }
 
+// A seekable special file such as /dev/null can be skipped past its (empty)
+// end without error, matching GNU od.
+#[cfg(unix)]
+#[test]
+fn test_skip_bytes_past_end_of_seekable_device() {
+    new_ucmd!()
+        .arg("-j1")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+// Skipping past the end of a regular file is an error and must not print a
+// trailing offset line, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_no_offset() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.arg("-j10").arg("f").fails().no_stdout();
+}
+
 #[test]
 #[cfg_attr(
     wasi_runner,
