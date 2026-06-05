@@ -138,6 +138,7 @@ jobs:
       shell: bash
       run: |
         mkdir /tmp/empty
+        sudo rsync -a --delete /tmp/empty/ /usr/lib/jvm/
         sudo rsync -a --delete /tmp/empty/ /usr/share/dotnet/
         sudo rsync -a --delete /tmp/empty/ /usr/local/lib/android/
     - name: Prepare, build and test
