@@ -4413,6 +4413,16 @@ fn test_cp_attributes_only() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_attributes_only_dest_open_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("s.txt", "hi");
+    ucmd.args(&["--attributes-only", "s.txt", "/dev/null/n.txt"])
+        .fails_with_code(1)
+        .stderr_contains("cp: 's.txt' -> '/dev/null/n.txt'");
+}
+
+#[test]
 fn test_cp_seen_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

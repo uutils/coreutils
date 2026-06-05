@@ -2386,7 +2386,7 @@ fn handle_copy_mode(
                 .truncate(false)
                 .create(true)
                 .open(dest)
-                .unwrap();
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
