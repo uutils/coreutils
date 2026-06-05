@@ -596,10 +596,12 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
-            io::copy(file, &mut stdout)?;
+        match uucore::pipes::splice_unbounded_auto(file, &mut stdout) {
+            Ok(_) => return Ok(()),
+            Err(e) if e.kind() == ErrorKind::Other => {}
+            Err(e) => return Err(e.into()),
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+
         io::copy(file, &mut stdout)?;
     }
     Ok(())

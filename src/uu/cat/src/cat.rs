@@ -481,10 +481,10 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let mut stdout = stdout;
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok()
-        && !uucore::pipes::might_fuse(&handle.reader)
-    {
-        return Ok(());
+    match uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout) {
+        Ok(_) => return Ok(()),
+        Err(e) if e.kind() == ErrorKind::Other => {}
+        Err(e) => return Err(e.into()),
     }
 
     // If we're not on Linux or Android, or the splice() call failed,
