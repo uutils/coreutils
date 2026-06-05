@@ -3214,6 +3214,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
 ]
 
@@ -3418,7 +3419,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
- "nix",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3520,6 +3521,7 @@ name = "uu_expr"
 version = "0.9.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "num-bigint",
  "num-traits",
@@ -3662,7 +3664,8 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
 ]
 
@@ -4185,6 +4188,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
 ]
 
