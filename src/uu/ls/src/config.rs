@@ -1054,19 +1054,19 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     Some(format::ISO.to_string() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
-                _ => match field.chars().next().unwrap() {
-                    '+' => {
-                        // recent/older formats are (optionally) separated by a newline
-                        let mut it = field[1..].split('\n');
-                        let recent = it.next().unwrap_or_default();
-                        let older = it.next();
-                        match it.next() {
-                            None => ok((recent, older)),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        }
+                // `field` can be empty here (e.g. --time-style=posix-), so test
+                // the prefix instead of unwrapping the first char.
+                _ if field.starts_with('+') => {
+                    // recent/older formats are (optionally) separated by a newline
+                    let mut it = field[1..].split('\n');
+                    let recent = it.next().unwrap_or_default();
+                    let older = it.next();
+                    match it.next() {
+                        None => ok((recent, older)),
+                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
-                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
-                },
+                }
+                _ => Err(LsError::TimeStyleParseError(String::from(field))),
             }
         }
     } else if options.get_flag(options::FULL_TIME) {
