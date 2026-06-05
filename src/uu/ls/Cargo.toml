@@ -51,6 +51,13 @@ selinux = { workspace = true, optional = true }
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 hostname = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Storage_FileSystem",
+] }
+
 [[bin]]
 name = "ls"
 path = "src/main.rs"

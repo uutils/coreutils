@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
 // spell-checker:ignore nohash strtime clocale ilog drwxr
+// spell-checker:ignore NFSV specdata iosb nonoverlapping
 
 use core::ops::RangeInclusive;
 use std::cell::LazyCell;
@@ -14,6 +15,8 @@ use std::fmt::Display;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
+#[cfg(windows)]
+use std::path::Path;
 use std::sync::LazyLock;
 use std::time::SystemTime;
 /// Show the directory name in the case where several arguments are given to ls
@@ -63,7 +66,7 @@ pub(crate) struct LongFormat {
     pub(crate) author: bool,
     pub(crate) group: bool,
     pub(crate) owner: bool,
-    #[cfg(unix)]
+    #[cfg_attr(not(any(unix, windows)), allow(dead_code))]
     pub(crate) numeric_uid_gid: bool,
 }
 
@@ -262,8 +265,8 @@ fn display_dir_entry_size(
         let nlink_len = display_symlink_count(md).len();
         (
             nlink_len,
-            display_uname(md, config, &mut state.uid_cache).len(),
-            display_group(md, config, &mut state.gid_cache).len(),
+            display_uname(entry, md, config, &mut state.uid_cache).len(),
+            display_group(entry, md, config, &mut state.gid_cache).len(),
             size_len,
             major_len,
             minor_len,
@@ -573,45 +576,228 @@ fn display_additional_leading_info(
 // a posix-compliant attribute this can be updated...
 #[cfg(unix)]
 fn display_uname<'a>(
+    _item: &PathData,
     metadata: &Metadata,
     config: &Config,
     uid_cache: &'a mut FxHashMap<u32, String>,
-) -> &'a String {
+) -> Cow<'a, str> {
     let uid = metadata.uid();
 
-    uid_cache.entry(uid).or_insert_with(|| {
+    Cow::Borrowed(uid_cache.entry(uid).or_insert_with(|| {
         if config.long.numeric_uid_gid {
             uid.to_string()
         } else {
             entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string())
         }
-    })
+    }))
 }
 
 #[cfg(unix)]
 fn display_group<'a>(
+    _item: &PathData,
     metadata: &Metadata,
     config: &Config,
     gid_cache: &'a mut FxHashMap<u32, String>,
-) -> &'a String {
+) -> Cow<'a, str> {
     let gid = metadata.gid();
-    gid_cache.entry(gid).or_insert_with(|| {
+    Cow::Borrowed(gid_cache.entry(gid).or_insert_with(|| {
         if config.long.numeric_uid_gid {
             gid.to_string()
         } else {
             entries::gid2grp(gid).unwrap_or_else(|_| gid.to_string())
         }
-    })
+    }))
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config, _uid_cache: &mut ()) -> &'static str {
-    "somebody"
+fn display_uname(
+    item: &PathData,
+    _metadata: &Metadata,
+    config: &Config,
+    _uid_cache: &mut (),
+) -> Cow<'static, str> {
+    #[cfg(windows)]
+    if config.long.numeric_uid_gid {
+        if let Some((uid, _gid)) = nfs3_uid_gid(item.path(), item.must_dereference) {
+            return Cow::Owned(uid.to_string());
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (item, config);
+
+    Cow::Borrowed("somebody")
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config, _gid_cache: &mut ()) -> &'static str {
-    "somegroup"
+fn display_group(
+    item: &PathData,
+    _metadata: &Metadata,
+    config: &Config,
+    _gid_cache: &mut (),
+) -> Cow<'static, str> {
+    #[cfg(windows)]
+    if config.long.numeric_uid_gid {
+        if let Some((_uid, gid)) = nfs3_uid_gid(item.path(), item.must_dereference) {
+            return Cow::Owned(gid.to_string());
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = (item, config);
+
+    Cow::Borrowed("somegroup")
+}
+
+#[cfg(windows)]
+fn nfs3_uid_gid(path: &Path, dereference: bool) -> Option<(u32, u32)> {
+    use std::mem::{MaybeUninit, size_of};
+    use std::os::windows::ffi::OsStrExt;
+    use std::{ffi::c_void, ptr};
+    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_OPEN_REPARSE_POINT, FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ,
+        FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+
+    const EA_NFSV3ATTRIBUTES: &[u8] = b"NfsV3Attributes";
+    const FILE_GET_EA_INFORMATION_HEADER_LEN: usize = 5;
+    const FILE_FULL_EA_INFORMATION_HEADER_LEN: usize = 8;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Nfs3AttrsTime {
+        tv_sec: i32,
+        tv_nsec: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct Nfs3Attrs {
+        file_type: u32,
+        mode: u32,
+        nlink: u32,
+        uid: u32,
+        gid: u32,
+        _filler1: u32,
+        size: u64,
+        used: u64,
+        rdev_specdata1: u32,
+        rdev_specdata2: u32,
+        fsid: u64,
+        fileid: u64,
+        atime: Nfs3AttrsTime,
+        mtime: Nfs3AttrsTime,
+        ctime: Nfs3AttrsTime,
+    }
+
+    #[repr(C)]
+    struct IoStatusBlock {
+        status: usize,
+        information: usize,
+    }
+
+    unsafe extern "system" {
+        fn NtQueryEaFile(
+            file_handle: HANDLE,
+            io_status_block: *mut IoStatusBlock,
+            buffer: *mut c_void,
+            length: u32,
+            return_single_entry: u8,
+            ea_list: *mut c_void,
+            ea_list_length: u32,
+            ea_index: *mut u32,
+            restart_scan: u8,
+        ) -> i32;
+    }
+
+    struct Handle(HANDLE);
+
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                CloseHandle(self.0);
+            }
+        }
+    }
+
+    let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
+    wide_path.push(0);
+
+    let flags = if dereference {
+        FILE_FLAG_BACKUP_SEMANTICS
+    } else {
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
+    };
+    let handle = unsafe {
+        CreateFileW(
+            wide_path.as_ptr(),
+            FILE_GENERIC_READ,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+            ptr::null(),
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL | flags,
+            ptr::null_mut(),
+        )
+    };
+    if handle == INVALID_HANDLE_VALUE {
+        return None;
+    }
+    let handle = Handle(handle);
+
+    let ea_list_len = FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1;
+    let mut ea_list = vec![0u8; ea_list_len];
+    ea_list[4] = EA_NFSV3ATTRIBUTES.len() as u8;
+    ea_list[FILE_GET_EA_INFORMATION_HEADER_LEN
+        ..FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len()]
+        .copy_from_slice(EA_NFSV3ATTRIBUTES);
+
+    let mut buffer = vec![
+        0u8;
+        FILE_FULL_EA_INFORMATION_HEADER_LEN
+            + EA_NFSV3ATTRIBUTES.len()
+            + 1
+            + size_of::<Nfs3Attrs>()
+    ];
+    let mut iosb = MaybeUninit::<IoStatusBlock>::uninit();
+    let status = unsafe {
+        NtQueryEaFile(
+            handle.0,
+            iosb.as_mut_ptr(),
+            buffer.as_mut_ptr().cast(),
+            buffer.len() as u32,
+            1,
+            ea_list.as_mut_ptr().cast(),
+            ea_list.len() as u32,
+            ptr::null_mut(),
+            1,
+        )
+    };
+    if status < 0 {
+        return None;
+    }
+
+    let name_len = buffer.get(5).copied()? as usize;
+    if name_len != EA_NFSV3ATTRIBUTES.len() {
+        return None;
+    }
+
+    let value_len = u16::from_le_bytes(buffer.get(6..8)?.try_into().ok()?) as usize;
+    if value_len < size_of::<Nfs3Attrs>() {
+        return None;
+    }
+
+    let value_offset = FILE_FULL_EA_INFORMATION_HEADER_LEN + name_len + 1;
+    let value = buffer.get(value_offset..value_offset + size_of::<Nfs3Attrs>())?;
+    let mut attrs = MaybeUninit::<Nfs3Attrs>::uninit();
+    unsafe {
+        ptr::copy_nonoverlapping(
+            value.as_ptr(),
+            attrs.as_mut_ptr().cast::<u8>(),
+            size_of::<Nfs3Attrs>(),
+        );
+        let attrs = attrs.assume_init();
+        Some((attrs.uid, attrs.gid))
+    }
 }
 
 fn display_date(
@@ -915,7 +1101,7 @@ fn display_item_long(
         if config.long.owner {
             state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
-                display_uname(md, config, &mut state.uid_cache),
+                &display_uname(item, md, config, &mut state.uid_cache),
                 padding.uname,
             );
         }
@@ -923,7 +1109,7 @@ fn display_item_long(
         if config.long.group {
             state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
-                display_group(md, config, &mut state.gid_cache),
+                &display_group(item, md, config, &mut state.gid_cache),
                 padding.group,
             );
         }
@@ -940,7 +1126,7 @@ fn display_item_long(
         if config.long.author {
             state.display_buf.push(b' ');
             state.display_buf.extend_pad_right(
-                display_uname(md, config, &mut state.uid_cache),
+                &display_uname(item, md, config, &mut state.uid_cache),
                 padding.uname,
             );
         }
