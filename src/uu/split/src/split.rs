@@ -1572,48 +1572,32 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
+    }
+}
+
+fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
+    match io::copy(reader, writer) {
+        Ok(_) => Ok(()),
+        // TODO Since the writer object controls the creation of
+        // new files, we need to rely on the `io::Result`
+        // returned by its `write()` method to communicate any
+        // errors to this calling scope. If a new file cannot be
+        // created because we have exceeded the number of
+        // allowable filenames, we use `ErrorKind::Other` to
+        // indicate that. A special error message needs to be
+        // printed in that case.
+        Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
+        Err(e) => Err(uio_error!(
+            e,
+            "{}",
+            translate!("split-error-input-output-error")
+        )),
     }
 }
