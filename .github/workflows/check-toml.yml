@@ -11,6 +11,9 @@ on:
     paths:
       - "**.toml"
 
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
