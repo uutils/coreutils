@@ -4800,6 +4800,38 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
+fn test_ls_long_self_referential_dir_lists_contents() {
+    // `ls -l` for a directory referenced via `.` (e.g. run from inside a symlinked
+    // directory) must list its contents, not show a `. -> target` link entry. On
+    // Windows/Redox a `.` in a symlinked dir was reported as the symlink itself
+    // (issues #6467, #7873). A named symlink-to-dir argument must still be a link.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("real");
+    at.touch("real/inside");
+    at.symlink_dir("real", "link");
+
+    // Run from inside the symlinked directory: the implicit `.` is the directory
+    // itself, so its contents must be listed, never shown as a `-> target` link.
+    scene
+        .ucmd()
+        .arg("-l")
+        .current_dir(at.plus("link"))
+        .succeeds()
+        .stdout_contains("inside")
+        .stdout_does_not_contain("-> ");
+
+    // A named symlink-to-dir argument is still shown as a link, not dereferenced.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link ->");
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
