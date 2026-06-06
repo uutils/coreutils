@@ -15,7 +15,8 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
-    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
+    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
+    from_native_int_representation_owned, get_single_native_int_value,
 };
 #[cfg(unix)]
 use nix::libc;
@@ -462,14 +463,15 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
         let var_error = |pos: usize| {
             // Find the '$' that started this variable reference and format
             // the error like GNU: "only ${VARNAME} expansion is supported, error at: $..."
+            let dollar = get_single_native_int_value('$');
             let dollar_pos = text[..pos]
                 .iter()
-                .rposition(|&c| c == b'$')
+                .rposition(|&c| Some(c) == dollar)
                 .unwrap_or(pos);
-            let rest = String::from_utf8_lossy(&text[dollar_pos..]);
+            let rest = from_native_int_representation(Cow::Borrowed(&text[dollar_pos..]));
             USimpleError::new(
                 125,
-                translate!("env-error-only-braced-variable-at", "rest" => rest),
+                translate!("env-error-only-braced-variable-at", "rest" => rest.to_string_lossy()),
             )
         };
         match e {
@@ -1293,7 +1295,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("variable name issue (at 10): Missing closing brace")
+                .contains("only ${VARNAME} expansion is supported, error at: ${FOO")
         );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value}"));
@@ -1315,7 +1317,12 @@ mod tests {
         );
         let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported, error at: ${1FOO}")
+        );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
         assert!(result.is_err());
