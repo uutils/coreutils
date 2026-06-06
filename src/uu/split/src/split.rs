@@ -1573,7 +1573,10 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            match io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(USimpleError::new(1, format!("{e}"))),
+            }
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
