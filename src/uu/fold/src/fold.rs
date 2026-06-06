@@ -13,6 +13,7 @@ use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
@@ -155,7 +156,14 @@ fn fold(
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
+            // Like GNU, report the error but keep processing the remaining files.
+            match File::open(Path::new(filename)) {
+                Ok(f) => file_buf = f,
+                Err(e) => {
+                    show!(e.map_err_context(|| filename.to_string()));
+                    continue;
+                }
+            }
             &mut file_buf as &mut dyn Read
         });
 
