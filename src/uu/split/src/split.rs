@@ -1539,6 +1539,8 @@ fn split(settings: &Settings) -> UResult<()> {
         let r = File::open(Path::new(&settings.input)).map_err_context(
             || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
