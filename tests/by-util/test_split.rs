@@ -2068,3 +2068,12 @@ fn test_split_directory_already_exists() {
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_io_error() {
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        .stderr_is("split: Input/output error (os error 5)\n");
+}
