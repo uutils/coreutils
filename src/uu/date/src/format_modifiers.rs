@@ -488,7 +488,7 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
 /// A huge request (e.g. `%6666666666666D`) would otherwise abort the process
 /// under a sanitizer before `try_reserve` could fail gracefully, and OOM
 /// elsewhere. No legitimate date field comes anywhere near a mebibyte wide.
-const MAX_FIELD_WIDTH: usize = 1 << 20;
+const MAX_FIELD_WIDTH: usize = u16::MAX as usize;
 
 /// Allocate a `String` with enough capacity for `current_len + padding`,
 /// returning `FieldWidthTooLarge` on arithmetic overflow or allocation failure.
