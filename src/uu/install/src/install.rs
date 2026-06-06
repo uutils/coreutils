@@ -339,6 +339,16 @@ pub fn uu_app() -> Command {
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
+/// Resolve an owner/group argument to a numeric id.
+///
+/// First looks the value up by name (or by id) via `lookup`. When no matching
+/// entry exists but the value is a plain integer, that integer is used as the
+/// id directly. This matches GNU, which accepts unused numeric ids such as
+/// `install -o 1100`. Returns `None` when the value is neither known nor numeric.
+fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Option<u32> {
+    lookup(value).ok().or_else(|| value.parse::<u32>().ok())
+}
+
 fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
@@ -403,17 +413,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let owner_id = if owner.is_empty() {
         None
     } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            // When using -o500 option and there's no user with uid 500 on the system
-            // usr2uid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with uid 500 in the same situation
-            // so just return the supplied owner as uid if it's an integer value
-            Err(_) => match owner.parse::<u32>() {
-                Ok(u) => Some(u),
-                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
-            },
-        }
+        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     };
 
     let group = matches
@@ -424,17 +424,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let group_id = if group.is_empty() {
         None
     } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            // When using -g500 option and there's no group with gid 500 on the system
-            // grp2gid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with gid 500 in the same situation
-            // so just return the supplied group as gid if it's an integer value
-            Err(_) => match group.parse::<u32>() {
-                Ok(g) => Some(g),
-                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
-            },
-        }
+        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
