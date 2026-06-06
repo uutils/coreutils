@@ -432,6 +432,7 @@ impl Display for UIoError {
                 WriteZero => "Write zero",
                 Interrupted => "Interrupted",
                 UnexpectedEof => "Unexpected end of file",
+                IsADirectory => "Is a directory",
                 _ => {
                     // TODO: When the new error variants
                     // (https://github.com/rust-lang/rust/issues/86442)
