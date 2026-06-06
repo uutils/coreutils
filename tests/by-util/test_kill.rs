@@ -493,3 +493,49 @@ fn test_kill_signal_only_no_pid() {
         .fails()
         .stderr_contains("no process ID specified");
 }
+
+#[test]
+fn test_kill_signal_zero_process() {
+    let target = Target::new();
+    // kill -0 should succeed for a running process (signal 0 = existence check)
+    new_ucmd!()
+        .arg("-0")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+}
+
+#[test]
+fn test_kill_signal_zero_new_form() {
+    let target = Target::new();
+    // kill -s 0 should also work
+    new_ucmd!()
+        .arg("-s")
+        .arg("0")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+}
+
+#[test]
+fn test_kill_signal_zero_nonexistent() {
+    // kill -0 with a nonexistent PID should fail
+    new_ucmd!().arg("-0").arg("999999999").fails();
+}
+
+#[test]
+fn test_kill_signal_zero_current_process_group() {
+    // kill -0 0 should succeed (checks current process group)
+    new_ucmd!().arg("-0").arg("0").succeeds();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_realtime_signal() {
+    let mut target = Target::new();
+    // kill -s RTMIN should send SIGRTMIN and terminate the process
+    new_ucmd!()
+        .arg("-s")
+        .arg("RTMIN")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGRTMIN()));
+}

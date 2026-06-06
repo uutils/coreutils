@@ -599,22 +599,43 @@ fn build_options(
     let expand_tabs = matches
         .get_one::<String>(options::EXPAND_TABS)
         .map(|s| {
-            s.chars().next().map_or(Ok(ExpandTabsOptions::default()), |c| {
-                if c.is_ascii_digit() {
-                    s
-                        .parse()
-                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => s), translate!("pr-try-help-message")) })
-                        .map(|width| ExpandTabsOptions{input_char: TAB, width})
-                } else if s.len() > 1 {
-                    s[1..]
-                        .parse()
-                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => &s[1..]), translate!("pr-try-help-message")) })
-                        .map(|width| ExpandTabsOptions{input_char: c, width})
-                } else {
-                    Ok(ExpandTabsOptions{input_char: c, width: 8})
-                }
-            })
-        }).transpose()?;
+            s.chars()
+                .next()
+                .map_or(Ok(ExpandTabsOptions::default()), |c| {
+                    let invalid = |arg: &str| PrError::EncounteredErrors {
+                        msg: format!(
+                            "{}\n{}",
+                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg),
+                            translate!("pr-try-help-message")
+                        ),
+                    };
+                    if c.is_ascii_digit() {
+                        let width: i32 = s.parse().map_err(|_e| invalid(s))?;
+                        if width <= 0 {
+                            return Err(invalid(s));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: TAB,
+                            width,
+                        })
+                    } else if s.len() > 1 {
+                        let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
+                        if width <= 0 {
+                            return Err(invalid(&s[1..]));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width,
+                        })
+                    } else {
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width: 8,
+                        })
+                    }
+                })
+        })
+        .transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 

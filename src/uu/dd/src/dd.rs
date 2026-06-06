@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -16,10 +16,6 @@ mod progress;
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
@@ -35,8 +31,6 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -54,16 +48,11 @@ use std::time::{Duration, Instant};
 
 use clap::{Arg, Command};
 use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use nix::{
-    errno::Errno,
-    fcntl::{PosixFadviseAdvice, posix_fadvise},
-};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
@@ -185,7 +174,8 @@ impl Num {
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
     // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::with_capacity(buf_size);
+    let mut buf = Vec::new();
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
     while remaining > 0 {
@@ -315,15 +305,17 @@ impl Source {
     /// source. This function informs the kernel that the specified
     /// portion of the source is no longer needed. If not possible,
     /// then this function returns an error.
-    #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                use rustix::fs::{Advice::DontNeed, fadvise};
+                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            // fadvise for nonseekable returns this error. We manually do that...
+            _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
 }
@@ -500,9 +492,12 @@ impl Input<'_> {
     /// the input file is no longer needed. If not possible, then this
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
+    fn discard_cache(&self, offset: u64, len: u64) {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -515,11 +510,7 @@ impl Input<'_> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO: Is there a way to discard filesystem cache on other targets?
     }
 
     /// Fills a given buffer.
@@ -701,14 +692,16 @@ impl Dest {
     /// destination. This function informs the kernel that the
     /// specified portion of the destination is no longer needed. If
     /// not possible, then this function returns an error.
-    #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                use rustix::fs::{Advice::DontNeed, fadvise};
+                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            // fadvise for nonseekable returns this error. We manually do that...
+            _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
 }
@@ -722,31 +715,33 @@ fn is_sparse(buf: &[u8]) -> bool {
 /// This follows GNU dd behavior for partial block writes with O_DIRECT.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 
-    // Get current flags using nix
-    let oflags = match fcntl(&mut *f, FcntlArg::F_GETFL) {
-        Ok(flags) => OFlag::from_bits_retain(flags),
-        Err(_) => return Err(original_error),
+    // Get current flags
+    let Ok(oflags) = fcntl_getfl(&*f) else {
+        return Err(original_error);
     };
 
     // If O_DIRECT is set, try removing it temporarily
-    if oflags.contains(OFlag::O_DIRECT) {
-        let flags_without_direct = oflags - OFlag::O_DIRECT;
+    if oflags.contains(OFlags::DIRECT) {
+        let flags_without_direct = oflags & !OFlags::DIRECT;
 
-        // Remove O_DIRECT flag using nix
-        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
+        // Remove O_DIRECT flag
+        if fcntl_setfl(&*f, flags_without_direct).is_err() {
             return Err(original_error);
         }
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
-        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
+        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {os_err}");
+            show_error!(
+                "Failed to restore O_DIRECT flag: {}",
+                io::Error::from(os_err)
+            );
         }
 
         write_result
@@ -893,10 +888,11 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            nix::fcntl::fcntl(
-                fx.as_raw().as_fd(),
-                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
-            )?;
+            rustix::fs::fcntl_setfl(
+                fx.as_raw(),
+                rustix::fs::OFlags::from_bits_retain(libc_flags as _),
+            )
+            .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
         Self::prepare_file(fx.into_file(), settings)
@@ -938,9 +934,12 @@ impl<'a> Output<'a> {
     /// the output file is no longer needed. If not possible, then
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
+    fn discard_cache(&self, offset: u64, len: u64) {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -953,11 +952,7 @@ impl<'a> Output<'a> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO Is there a way to discard filesystem cache on other targets?
     }
 
     /// writes a block of data. optionally retries when first try didn't complete
@@ -1045,7 +1040,7 @@ enum BlockWriter<'a> {
 }
 
 impl BlockWriter<'_> {
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    fn discard_cache(&self, offset: u64, len: u64) {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
             Self::Buffered(o) => o.discard_cache(offset, len),
@@ -1227,7 +1222,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
-                i.discard_cache(read_offset.try_into().unwrap(), 0);
+                i.discard_cache(read_offset, 0);
             }
             if output_nocache || output_direct {
                 o.discard_cache(write_offset.try_into().unwrap(), 0);
@@ -1242,8 +1237,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // TODO Better error handling for overflowing `offset` and `len`.
         let read_len = rstat_update.bytes_total;
         if input_nocache {
-            let offset = read_offset.try_into().unwrap();
-            let len = read_len.try_into().unwrap();
+            let offset = read_offset;
+            let len = read_len;
             i.discard_cache(offset, len);
         }
         read_offset += read_len;

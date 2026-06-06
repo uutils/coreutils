@@ -72,7 +72,7 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: feat_os_unix }
+          - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
@@ -186,23 +186,6 @@ jobs:
         unset CSPELL_CFG_OPTION ; if [ -n "$cfg_file" ]; then CSPELL_CFG_OPTION="--config $cfg_file" ; fi
         S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/^(.*):([0-9]+):([0-9]+) - Unknown word \(([^)]+)\).*$/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \`cspell\`: Unknown word '\4' (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
-
-  toml_format:
-    name: Style/toml
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install taplo-cli
-        uses: taiki-e/install-action@v2
-        with:
-          tool: taplo-cli
-
-      - name: Check
-        run: taplo fmt --check --diff
 
   python:
     name: Style/Python

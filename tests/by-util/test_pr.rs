@@ -934,3 +934,16 @@ fn test_page_range_with_plus() {
         .succeeds()
         .stdout_only(expected);
 }
+
+#[test]
+fn test_zero_expand_tab_width() {
+    let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
+    new_ucmd!()
+        .arg("-e0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+    new_ucmd!()
+        .arg("-eX0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+}

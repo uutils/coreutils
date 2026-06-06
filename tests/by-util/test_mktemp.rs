@@ -698,6 +698,14 @@ fn test_too_few_xs_suffix_directory() {
 }
 
 #[test]
+fn test_too_few_xs_quiet() {
+    new_ucmd!()
+        .args(&["-q", "aXX"])
+        .fails()
+        .stderr_only("mktemp: too few X's in template 'aXX'\n");
+}
+
+#[test]
 fn test_too_many_arguments() {
     new_ucmd!()
         .args(&["-q", "a", "b"])
@@ -1171,4 +1179,33 @@ fn test_non_utf8_tmpdir_directory_creation() {
     // We can't easily verify the exact output path because of UTF8 conversion issues,
     // but we can verify the command succeeds
     ucmd.arg("-d").arg("-p").arg(at.plus(dir_name)).succeeds();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mktemp_hidden_file_single_dot() {
+    let scene = TestScenario::new(util_name!());
+    let dir = tempdir().unwrap();
+    let template_name = ".XXXXXX";
+    let template = dir.path().join(template_name);
+
+    let result = scene.ucmd().arg(template.to_str().unwrap()).succeeds();
+
+    let path = result.stdout_str().trim();
+    let filename = std::path::Path::new(path)
+        .file_name()
+        .unwrap()
+        .to_str()
+        .unwrap();
+
+    assert!(
+        filename.starts_with('.'),
+        "expected hidden file, got {path}"
+    );
+    assert_eq!(
+        filename.len(),
+        template_name.len(),
+        "expected filename of length {}, got {filename}",
+        template_name.len()
+    );
 }

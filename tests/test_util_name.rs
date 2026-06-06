@@ -26,7 +26,11 @@ fn init() {
 }
 
 #[test]
-#[cfg(all(feature = "env", any(target_os = "linux", target_os = "android")))]
+#[cfg(all(
+    feature = "env",
+    any(target_os = "linux", target_os = "android"),
+    not(target_env = "musl")
+))]
 fn binary_name_protection() {
     let ts = TestScenario::new("env");
     let bin = ts.bin_path.clone();

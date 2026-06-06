@@ -30,6 +30,16 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
+// create reader without buffering
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct RawReader<T: AsFd>(pub T);
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> io::Read for RawReader<T> {
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+        rustix::io::read(&self.0, b).map_err(Into::into)
+    }
+}
+
 // create writer without buffering
 #[cfg(any(unix, target_os = "wasi"))]
 pub struct RawWriter<T: AsFd>(pub T);

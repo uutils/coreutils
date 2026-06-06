@@ -168,12 +168,30 @@ check_utility() {
     fi
 }
 
+# Recursive descent must open every subdirectory relative to the parent dirfd
+# WITH O_NOFOLLOW. Otherwise an attacker who swaps the just-stat'd directory for
+# a symlink between the stat and the open redirects the descent off-tree (the
+# chown/chgrp/chmod/rm recursive-descent TOCTOU). The top-level command-line
+# argument is opened via AT_FDCWD and is allowed to follow, so it is excluded by
+# matching only numeric-dirfd openat calls.
+assert_descent_nofollow() {
+    local util="$1"
+    local log="$2"
+    local offenders
+    offenders=$(grep -E 'openat\([0-9]+, "[^"]*",[^)]*O_DIRECTORY' "$log" | grep -v 'O_NOFOLLOW' || true)
+    if [ -n "$offenders" ]; then
+        echo "$offenders"
+        fail_immediately "$util descends into subdirectories without O_NOFOLLOW (TOCTOU symlink-swap risk)"
+    fi
+    echo "✓ $util descent opens use O_NOFOLLOW"
+}
+
 # Get list of available utilities
 if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp; do
+    for util in rm chmod chown chgrp du mv cp chcon split; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -192,6 +210,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "rm"; then
     if grep -qE 'statx\(AT_FDCWD, "[^"]*/' strace_rm_recursive_remove.log; then
         fail_immediately "rm is using path-based statx (multi-component relative path); expected dirfd-relative newfstatat"
     fi
+    assert_descent_nofollow "rm" strace_rm_recursive_remove.log
 fi
 
 # Test chmod - should use openat, fchmodat, newfstatat
@@ -203,6 +222,7 @@ if echo "$AVAILABLE_UTILS" | grep -q "chmod"; then
     if grep -q 'openat(AT_FDCWD, "test_chmod/' strace_chmod_recursive_chmod.log; then
         fail_immediately "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     fi
+    assert_descent_nofollow "chmod" strace_chmod_recursive_chmod.log
 fi
 
 # Test chown - should use openat, fchownat, newfstatat
@@ -211,12 +231,58 @@ if echo "$AVAILABLE_UTILS" | grep -q "chown"; then
     USER_ID=$(id -u)
     GROUP_ID=$(id -g)
     check_utility "chown" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $USER_ID:$GROUP_ID test_chown" "recursive_chown"
+    assert_descent_nofollow "chown" strace_chown_recursive_chown.log
 fi
 
 # Test chgrp - should use openat, fchownat, newfstatat
 if echo "$AVAILABLE_UTILS" | grep -q "chgrp"; then
     cp -r test_dir test_chgrp
     check_utility "chgrp" "openat,fchownat,newfstatat,chown,lchown" "openat fchownat" "-R $GROUP_ID test_chgrp" "recursive_chgrp"
+    assert_descent_nofollow "chgrp" strace_chgrp_recursive_chgrp.log
+fi
+
+# chcon recursive relabel must resolve each target relative to the traversal
+# directory fd with O_NOFOLLOW and operate on the resulting fd (fd-based xattr,
+# or /proc/self/fd), never re-resolving the entry by path. Otherwise a
+# rename/symlink race could redirect a privileged recursive relabel off-tree
+# (issue #11402). This holds even without SELinux: the fd-anchored open happens
+# before the SELinux get/set, so the syscalls are observable regardless.
+if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        chcon_cmd="$COREUTILS_BIN chcon"
+    else
+        chcon_cmd="$PROJECT_ROOT/target/${PROFILE}/chcon"
+    fi
+
+    mkdir -p chcon_tree/sub
+    echo a > chcon_tree/file
+    echo b > chcon_tree/sub/nested
+    strace -f -e trace=openat,getxattr,lgetxattr,fgetxattr,setxattr,lsetxattr,fsetxattr \
+        -o strace_chcon_recursive.log \
+        $chcon_cmd -R -t etc_t chcon_tree 2>/dev/null || true
+
+    # Each relabel target is opened relative to a numeric dirfd with O_NOFOLLOW.
+    if ! grep -qE 'openat\([0-9]+, "(file|sub|nested)", [^)]*O_NOFOLLOW' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R must open relabel targets relative to the traversal dirfd with O_NOFOLLOW (issue #11402)"
+    fi
+    # SELinux xattr ops must be fd-anchored: fgetxattr/fsetxattr on a numeric fd,
+    # or *xattr on /proc/self/fd. A path-based xattr on the traversal entry is the
+    # TOCTOU pattern the fix removes.
+    path_based_xattr=$(grep -E '\bl?(get|set)xattr\("' strace_chcon_recursive.log | grep -v '"/proc/self/fd/' || true)
+    if [ -n "$path_based_xattr" ]; then
+        echo "$path_based_xattr"
+        fail_immediately "chcon -R is using path-based SELinux xattr (TOCTOU; expected fd-anchored access, issue #11402)"
+    fi
+    # The relabel must actually reach SELinux through the anchored fd. Without
+    # this positive check, a chcon that aborts before the get/set (e.g. EBADF
+    # from f*filecon on an O_PATH fd) would still pass the assertions above.
+    if ! grep -qE '(get|set)xattr\("/proc/self/fd/|f(get|set)xattr\([0-9]+,' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R never reached an fd-anchored SELinux xattr op (relabel aborted before get/set?, issue #11402)"
+    fi
+    echo "✓ chcon -R anchors relabel to the traversal dirfd (O_NOFOLLOW, fd-based access)"
+    rm -rf chcon_tree
 fi
 
 # Test du - should use openat, newfstatat
@@ -267,6 +333,145 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     fi
     echo "✓ cp -P opens source with O_NOFOLLOW"
     rm -f test_cp_src test_cp_dst
+fi
+
+# split must harden its output open against TOCTOU target swaps (issue #11401 /
+# CVE-2026-35374). The old code opened the output by path with O_TRUNC, so an
+# attacker could swap the just-validated output for a symlink and have split
+# truncate a different file. The fix creates outputs atomically with
+# O_CREAT|O_EXCL and only ever truncates via ftruncate after an fd-based check
+# that the opened output is not the input -- so a split that would overwrite its
+# own input is refused.
+if echo "$AVAILABLE_UTILS" | grep -q "split"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        split_cmd="$COREUTILS_BIN split"
+    else
+        split_cmd="$PROJECT_ROOT/target/${PROFILE}/split"
+    fi
+
+    printf '0123456789abcdef' > split_input
+    strace -f -e trace=openat -o strace_split_output_open.log \
+        $split_cmd -b 4 split_input split_out_ 2>/dev/null || true
+
+    if ! grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_CREAT[^)]*O_EXCL' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must create output files with O_CREAT|O_EXCL (issue #11401)"
+    fi
+    if grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_TRUNC' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must not open output files with a path-based O_TRUNC (TOCTOU truncation risk, issue #11401)"
+    fi
+    echo "✓ split creates outputs with O_CREAT|O_EXCL and no path-based O_TRUNC"
+    rm -f split_input split_out_*
+
+    # A split whose output already resolves (via a symlink) to the input must be
+    # refused, leaving the input untouched.
+    printf 'split_victim_payload' > split_victim
+    ln -s split_victim split_swap_aa
+    if $split_cmd -b 4 split_victim split_swap_ 2>/dev/null; then
+        fail_immediately "split must refuse when the output would overwrite the input (issue #11401)"
+    fi
+    if [ "$(cat split_victim)" != "split_victim_payload" ]; then
+        fail_immediately "split truncated its own input through a swapped output symlink (issue #11401)"
+    fi
+    echo "✓ split refuses to overwrite its input via a swapped output symlink"
+    rm -f split_victim split_swap_*
+fi
+
+# mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    # Need different filesystems for the EXDEV fallback to fire.
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv cross-device xattr check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+    shm_probe=$(mktemp -p /dev/shm mv_xattr_probe.XXXXXX)
+    if setfattr -n user.probe -v ok "$shm_probe" 2>/dev/null; then
+        rm -f "$shm_probe"
+        cross_src=$(mktemp -p "$TEMP_DIR" cross_src.XXXXXX)
+        cross_dst=$(mktemp -u -p /dev/shm cross_dst.XXXXXX)
+        echo "cross-device payload" > "$cross_src"
+        if setfattr -n user.tag -v pinned "$cross_src" 2>/dev/null; then
+            if [ "$USE_MULTICALL" -eq 1 ]; then
+                mv_cmd="$COREUTILS_BIN mv"
+            else
+                mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+            fi
+            strace -f -e trace='%file,fgetxattr,fsetxattr,flistxattr,getxattr,setxattr,listxattr' \
+                -o strace_mv_xattr.log \
+                $mv_cmd "$cross_src" "$cross_dst" 2>/dev/null || true
+
+            # Path-based xattr calls on src/dst basenames = the TOCTOU pattern.
+            cross_src_base=$(basename "$cross_src")
+            cross_dst_base=$(basename "$cross_dst")
+            if grep -qE "(listxattr|getxattr|setxattr)\([^,]*($cross_src_base|$cross_dst_base)" strace_mv_xattr.log; then
+                cat strace_mv_xattr.log
+                fail_immediately "mv cross-device must use fd-based xattr ops (issue #10014)"
+            fi
+            if grep -qE 'flistxattr|fgetxattr|fsetxattr' strace_mv_xattr.log; then
+                echo "OK: mv cross-device uses fd-based xattr syscalls"
+            else
+                echo "WARN: mv cross-device xattr check: no xattr syscalls observed (xattr may have been filtered - check filesystem support)"
+            fi
+            rm -f "$cross_dst"
+        else
+            echo "WARN: mv cross-device xattr check: TMPDIR does not support user xattrs; skipped"
+        fi
+    else
+        rm -f "$shm_probe"
+        echo "WARN: mv cross-device xattr check: /dev/shm does not support user xattrs; skipped"
+    fi
+    fi
+fi
+
+# mv cross-device symlink replacement must use *at syscalls against a
+# pinned parent fd (matches GNU's force_symlinkat) so a concurrent rename
+# of the parent directory cannot redirect the temp-and-rename dance, and
+# the temp name must come from /dev/urandom rather than a guessable
+# pid+nanos pattern.
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv symlink-replace check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+        sym_src=$(mktemp -u -p "$TEMP_DIR" sym_src.XXXXXX)
+        sym_dst=$(mktemp -u -p /dev/shm sym_dst.XXXXXX)
+        ln -s /nowhere "$sym_src"
+        # Pre-existing dest forces the EEXIST branch into create_symlink_replace.
+        ln -s /elsewhere "$sym_dst"
+
+        if [ "$USE_MULTICALL" -eq 1 ]; then
+            mv_cmd="$COREUTILS_BIN mv"
+        else
+            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+        fi
+        strace -f -e trace=openat,symlink,symlinkat,rename,renameat,renameat2,unlink,unlinkat,read \
+            -o strace_mv_symlink_replace.log \
+            $mv_cmd "$sym_src" "$sym_dst" 2>/dev/null || true
+
+        sym_dst_base=$(basename "$sym_dst")
+
+        # Temp-and-rename must happen against a real parent dirfd, not AT_FDCWD.
+        if ! grep -qE 'symlinkat\("[^"]*", [0-9]+,' strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must use symlinkat with a parent dirfd (issue #10010 follow-up)"
+        fi
+        if ! grep -qE "renameat2?\([0-9]+, \"[^\"]+\", [0-9]+, \"$sym_dst_base\"" strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must use renameat with a parent dirfd to commit the dest (issue #10010 follow-up)"
+        fi
+
+        # Random temp source must be /dev/urandom (rejecting the prior pid+nanos scheme).
+        if ! grep -q 'openat(AT_FDCWD, "/dev/urandom"' strace_mv_symlink_replace.log; then
+            cat strace_mv_symlink_replace.log
+            fail_immediately "mv symlink replace must seed the temp name from /dev/urandom"
+        fi
+
+        echo "OK: mv symlink replace uses symlinkat+renameat with parent dirfd and unguessable temp name"
+        rm -f "$sym_dst"
+    fi
 fi
 
 echo ""

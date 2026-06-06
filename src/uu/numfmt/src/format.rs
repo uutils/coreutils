@@ -628,7 +628,7 @@ fn transform_to(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
-        None if is_precision_specified => {
+        None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format!("{i2:.precision$}"))
         }

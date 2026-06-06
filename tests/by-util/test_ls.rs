@@ -10,8 +10,6 @@
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(unix, feature = "chmod"))]
-use nix::unistd::{close, dup};
 use regex::Regex;
 #[cfg(unix)]
 use rlimit::Resource;
@@ -599,8 +597,8 @@ fn test_ls_io_errors() {
 
         at.touch("some-dir4/bad-fd.txt");
         let fd1 = at.open("some-dir4/bad-fd.txt");
-        let fd2 = dup(dbg!(&fd1)).unwrap();
-        close(fd1).unwrap();
+        let fd2 = rustix::io::dup(dbg!(&fd1)).unwrap();
+        drop(fd1); //close
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
@@ -644,7 +642,7 @@ fn test_ls_io_errors() {
             .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
-        let _ = close(fd2);
+        drop(fd2); //close
     }
 }
 
@@ -1282,7 +1280,14 @@ fn test_ls_long_symlink_color() {
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
-    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    // Use --file-type to ensure symlink targets are stat'd and colored
+    let result = scene
+        .ucmd()
+        .arg("-laR")
+        .arg("--color")
+        .arg("--file-type")
+        .arg(".")
+        .succeeds();
     let mut result_lines = result
         .stdout_str()
         .lines()
@@ -1521,6 +1526,41 @@ fn test_ls_dangling_symlink_or_and_missing_colors() {
 
     assert_eq!(captures.name("link").unwrap().as_str(), "40");
     assert_eq!(captures.name("target").unwrap().as_str(), "34");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_symlink_to_dir_with_mi_colors() {
+    // When LS_COLORS contains mi=, ln=, di=, ls -lp should stat the symlink target,
+    // color the link with ln color, the target with di color, and append '/' to the target.
+    use std::os::unix::fs::symlink;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("target_dir");
+    symlink("target_dir", at.plus("link")).unwrap();
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "mi=41:ln=1;36:di=1;34")
+        .arg("-lp")
+        .arg("--color=always")
+        .arg("link")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    // Regex to capture link color and target color
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)[m]link\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)[m]target_dir\x1b\[0m/",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture symlink colors");
+
+    assert_eq!(captures.name("link").unwrap().as_str(), "1;36");
+    assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
 }
 
 #[test]
@@ -3402,6 +3442,110 @@ fn test_ls_indicator_style() {
     }
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_ls_indicator_style_symlink_target_long() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    at.symlink_dir("dir", "dir_link");
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--classify")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> ")
+        .stdout_does_not_contain("dir_link@ -> ")
+        .stdout_contains("/dir/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_target_long() {
+    // GNU `ls -l --file-type` does append `/` to a symlink target that resolves to a
+    // directory unlike `ls -lp`
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir/")
+        .stdout_does_not_contain("dir_link/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_to_executable_target_long() {
+    use std::fs;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("exec_target");
+    let mut perms = fs::metadata(at.plus("exec_target")).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(at.plus("exec_target"), perms).unwrap();
+
+    symlink("exec_target", at.plus("link")).unwrap();
+    assert!(at.is_symlink("link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link -> exec_target")
+        .stdout_does_not_contain("exec_target*");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_slash_symlink_target_long() {
+    // GNU `ls -lp` does NOT append `/` to a symlink target that resolves to a
+    // directory — the slash indicator style only applies to real directories.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("-lp")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir\n")
+        .stdout_does_not_contain("dir_link/")
+        .stdout_does_not_contain("-> dir/");
+}
+
 // Essentially the same test as above, but only test symlinks and directories,
 // not pipes or sockets.
 #[test]
@@ -4656,7 +4800,10 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4671,7 +4818,10 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4687,7 +4837,10 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -4706,7 +4859,10 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4736,7 +4892,10 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -4751,7 +4910,10 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4784,7 +4946,10 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -5005,7 +5170,7 @@ fn test_symlink_target_extension_color() {
     at.touch("archive.tar.gz");
     at.relative_symlink_file("archive.tar.gz", "link");
     let out = ucmd
-        .env("LS_COLORS", "*.tar.gz=31")
+        .env("LS_COLORS", "*.tar.gz=31:or=33")
         .args(&["-l", "--color=always", "link"])
         .succeeds()
         .stdout_move_str();
@@ -6026,7 +6191,7 @@ fn test_ls_hyperlink_symlink_target_handling() {
 
     let result = scene
         .ucmd()
-        .args(&["-l", "--hyperlink", "--color"])
+        .args(&["-l", "--hyperlink", "--color", "--file-type"])
         .succeeds();
     let output = result.stdout_str();
 

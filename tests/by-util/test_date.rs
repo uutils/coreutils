@@ -1873,10 +1873,12 @@ fn test_date_input_hhmm_ampm() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/281 — GNU date re-zones input with trailing TZ abbreviation (e.g. `2024-01-01 EST`) into the local TZ; uutils keeps the input TZ on output."]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
-    // (GNU: 04:00:00 UTC), not leave it in EST (uutils: 00:00:00 -05).
+    // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
+    // behavior was 00:00:00 -05). The trailing abbreviation only specifies
+    // the input timezone; output should be re-zoned to local.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/281.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC+1")
@@ -2559,9 +2561,21 @@ fn test_date_format_modifier_huge_width_fails_without_abort() {
 }
 
 #[test]
+fn test_date_format_modifier_parseable_huge_width_fails_without_hanging() {
+    // Target pointer width can affect the reported parsed width, so assert the
+    // stable diagnostic shape instead of the exact oversized literal.
+    new_ucmd!()
+        .arg("+%8888888888888s")
+        .fails()
+        .code_is(1)
+        .stderr_contains("format modifier width '")
+        .stderr_contains("' is too large for specifier '%s'");
+}
+
+#[test]
 fn test_date_format_large_width_no_oom() {
     // Regression: very large width like %8888888888r caused OOM.
-    // GNU caps width to i32::MAX; verify we don't crash.
+    // Cap supported widths well below that so we don't crash.
     // Use a moderate width with a fixed date to check the code path works.
     new_ucmd!()
         .arg("-d")

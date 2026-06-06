@@ -43,7 +43,7 @@ pub fn getgid() -> gid_t {
 
 /// `getuid()` returns the real user ID of the calling process.
 pub fn getuid() -> uid_t {
-    nix::unistd::getuid().as_raw()
+    rustix::process::getuid().as_raw()
 }
 
 /// `getpid()` returns the pid of the calling process.
@@ -169,11 +169,11 @@ impl ChildExt for Child {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     #[cfg(not(target_os = "redox"))]
     fn test_getsid() {
+        use super::{getpid, getsid};
+
         assert_eq!(
             getsid(getpid()).expect("getsid(getpid)"),
             // zero is a special value for SID.

@@ -10,7 +10,10 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 #[cfg(unix)]
@@ -2617,7 +2620,10 @@ fn test_mv_cross_device_permission_denied() {
 }
 
 #[test]
-#[cfg(feature = "selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_mv_selinux_context() {
     let test_cases = [
         ("-Z", None),
@@ -2840,6 +2846,87 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Cross-device mv of a symlink onto an existing file must replace the
+/// destination atomically, matching GNU.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_exists");
+    fs::write(&dst_path, "placeholder").expect("Failed to write placeholder dst");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(
+        dst_path.is_symlink(),
+        "dst_exists should now be a symlink after the cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&dst_path).expect("read_link failed"),
+        Path::new("/etc/passwd"),
+    );
+    assert!(
+        !at.symlink_exists("src_link"),
+        "source symlink should be gone"
+    );
+}
+
+/// Cross-device mv of a symlink onto an existing directory (`-T`) must
+/// fail without destroying the directory or its contents.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing_dir() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_dir = other_fs_tempdir.path().join("dst_dir");
+    fs::create_dir(&dst_dir).expect("Failed to create destination directory");
+    fs::write(dst_dir.join("guard"), "preserved").expect("Failed to write guard file");
+
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_dir.to_str().unwrap())
+        .fails();
+
+    assert!(
+        dst_dir.is_dir(),
+        "destination directory must still exist after failed mv"
+    );
+    assert!(
+        dst_dir.join("guard").is_file(),
+        "destination directory contents must be untouched"
+    );
+    assert!(
+        at.symlink_exists("src_link"),
+        "source symlink must not be removed when mv fails"
+    );
 }
 
 /// Test that symlinks inside directories are preserved during cross-device moves

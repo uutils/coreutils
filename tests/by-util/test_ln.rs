@@ -379,6 +379,51 @@ fn test_symlink_target_dir() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_symlink_target_dir_non_utf8_source_name() {
+    use std::ffi::OsStr;
+    use std::fs;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let target_dir = "test_symlink_target_dir_non_utf8";
+    let source_bytes = b"source_\xFF\xFE";
+    let source_name = OsStr::from_bytes(source_bytes);
+
+    at.mkdir(target_dir);
+    at.touch(source_name);
+
+    scene
+        .ucmd()
+        .args(&["-s", "-t", target_dir])
+        .arg(source_name)
+        .succeeds()
+        .no_stderr();
+
+    let target_dir_path = at.plus(target_dir);
+    let mut dir_entries = fs::read_dir(&target_dir_path)
+        .expect("reading target directory entries after creating symlink");
+    let created_entry = dir_entries
+        .next()
+        .expect("finding created entry in target directory")
+        .expect("reading created target-directory entry");
+    assert!(
+        dir_entries.next().is_none(),
+        "expected only one created entry in target directory"
+    );
+    assert_eq!(
+        created_entry.file_name().as_os_str().as_bytes(),
+        source_bytes
+    );
+
+    let created_link_path = target_dir_path.join(source_name);
+    let created_link_target = fs::read_link(&created_link_path)
+        .expect("reading created symlink target in target directory");
+    assert_eq!(created_link_target.as_os_str().as_bytes(), source_bytes);
+}
+
+#[test]
 fn test_symlink_target_dir_from_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_ln_target_dir_dir";
@@ -501,6 +546,7 @@ fn test_symlink_implicit_target_dir() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_symlink_to_dir_2args() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "test_symlink_to_dir_2args_file";
@@ -754,6 +800,10 @@ fn test_relative_dst_already_symlink() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: read_link on absolute paths fails under wasmtime via spawned test harness"
+)]
 fn test_relative_src_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
@@ -967,6 +1017,7 @@ fn test_ln_seen_file() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_ln_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

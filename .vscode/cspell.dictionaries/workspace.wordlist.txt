@@ -362,12 +362,14 @@ uutils
 
 # * function names
 execfn
+fadvise
 fstatfs
 getcwd
 mkfifoat
 setpipe
 
 # * other
+auxv
 getlimits
 weblate
 algs

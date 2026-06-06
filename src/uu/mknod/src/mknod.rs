@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use std::io::{self, Write as _};
 
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
@@ -94,25 +95,24 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     }
 
     if let Some(err) = mknod_err {
-        eprintln!(
+        let _ = writeln!(
+            io::stderr(),
             "{}: {}",
             uucore::execution_phrase(),
-            std::io::Error::from(err)
+            io::Error::from(err)
         );
     }
 
     // Apply SELinux context if requested
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
     if config.set_security_context {
-        use std::io::Write as _;
-
         if let Err(e) = uucore::selinux::set_selinux_security_context(
             std::path::Path::new(file_name),
             config.context.as_ref(),
         ) {
             // if it fails, delete the file
             let _ = std::fs::remove_file(file_name);
-            let _ = writeln!(std::io::stderr(), "mknod: {e}");
+            let _ = writeln!(io::stderr(), "mknod: {e}");
             return 1;
         }
     }
@@ -120,14 +120,12 @@ fn mknod(file_name: &str, config: Config) -> i32 {
     // Apply SMACK context if requested
     #[cfg(all(feature = "smack", target_os = "linux"))]
     if config.set_security_context {
-        use std::io::Write as _;
-
         if let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
             })
         {
-            let _ = writeln!(std::io::stderr(), "mknod: {e}");
+            let _ = writeln!(io::stderr(), "mknod: {e}");
             return 1;
         }
     }

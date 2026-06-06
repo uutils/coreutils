@@ -3,7 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore sysconf
 use crate::{wc_simd_allowed, word_count::WordCount};
 use uucore::hardware::SimdPolicy;
 
@@ -11,8 +10,6 @@ use super::WordCountable;
 
 use std::io::{self, ErrorKind, Read};
 
-#[cfg(unix)]
-use libc::S_IFREG;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 #[cfg(unix)]
@@ -24,11 +21,6 @@ const FILE_ATTRIBUTE_ARCHIVE: u32 = 32;
 #[cfg(windows)]
 const FILE_ATTRIBUTE_NORMAL: u32 = 128;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use libc::S_IFIFO;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice, splice_exact};
-
 const BUF_SIZE: usize = 64 * 1024;
 
 /// This is a Linux-specific function to count the number of bytes using the
@@ -39,34 +31,27 @@ const BUF_SIZE: usize = 64 * 1024;
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
+    use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
     let mut byte_count = 0;
-    if let Ok(res) = splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-        byte_count += res;
-        // no need to increase pipe size of input fd since
-        // - sender with splice probably increased size already
-        // - sender without splice is bottleneck of our wc -c
-        loop {
-            match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => return Ok(byte_count),
-                Ok(res) => byte_count += res,
-                Err(_) => return Err(byte_count),
-            }
-        }
-    } else {
-        // input is not pipe. needs broker to use splice() with additional cost
-        let (pipe_rd, pipe_wr) = pipe().map_err(|_| 0_usize)?;
-        loop {
-            match splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-                Ok(0) => return Ok(byte_count),
-                Ok(res) => {
-                    byte_count += res;
-                    splice_exact(&pipe_rd, &null_file, res).map_err(|_| byte_count)?;
-                }
-                Err(_) => return Err(byte_count),
-            }
+    // no need to increase pipe size of input fd since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck of our wc -c
+    loop {
+        match splice(fd, &null_file, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(byte_count),
+            Ok(res) => byte_count += res,
+            Err(_) => break, // input is not pipe. needs additional pipe...
         }
     }
+    let (pipe_rd, pipe_wr) = pipe::<false>().map_err(|_| byte_count)?;
+    while let s @ 1.. = splice(fd, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(|_| byte_count)? {
+        byte_count += s;
+        // pipe to null is not blocked. So this returns the same length at most cases
+        // next splice does not hang if we discarded 1+ pages
+        splice(&pipe_rd, &null_file, s).map_err(|_| byte_count)?;
+    }
+    Ok(byte_count)
 }
 
 /// In the special case where we only need to count the number of bytes. There
@@ -125,7 +110,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // for STDIN in both invocations.
             // Therefore we cannot rely of `st_size` here and should fall back on full read.
             if fd.as_raw_fd() > 0
-                && (stat.st_mode as libc::mode_t & S_IFREG) != 0
+                && (stat.st_mode as libc::mode_t & libc::S_IFREG) != 0
                 && stat.st_size > 0
             {
                 let sys_page_size = rustix::param::page_size();
@@ -149,44 +134,36 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                     }
                 }
             }
+            // Else, if we're on Linux and our file is a FIFO pipe
+            // (or stdin), we use splice to count the number of bytes.
             #[cfg(any(target_os = "linux", target_os = "android"))]
-            {
-                // Else, if we're on Linux and our file is a FIFO pipe
-                // (or stdin), we use splice to count the number of bytes.
-                if (stat.st_mode as libc::mode_t & S_IFIFO) != 0 {
-                    match count_bytes_using_splice(handle) {
-                        Ok(n) => return (n, None),
-                        Err(n) => byte_count = n,
-                    }
+            if (stat.st_mode as libc::mode_t & libc::S_IFIFO) != 0 {
+                match count_bytes_using_splice(handle) {
+                    Ok(n) => return (n, None),
+                    Err(n) => byte_count = n,
                 }
             }
         }
     }
 
     #[cfg(windows)]
+    if let Some(file) = handle.inner_file()
+        && let Ok(metadata) = file.metadata()
     {
-        if let Some(file) = handle.inner_file() {
-            if let Ok(metadata) = file.metadata() {
-                let attributes = metadata.file_attributes();
-
-                if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0
-                    || (attributes & FILE_ATTRIBUTE_NORMAL) != 0
-                {
-                    return (metadata.file_size() as usize, None);
-                }
-            }
+        let attributes = metadata.file_attributes();
+        if (attributes & FILE_ATTRIBUTE_ARCHIVE) != 0 || (attributes & FILE_ATTRIBUTE_NORMAL) != 0 {
+            return (metadata.file_size() as usize, None);
         }
     }
 
     // Fall back on `read`, but without the overhead of counting words and lines.
+
     let mut buf = [0_u8; BUF_SIZE];
     loop {
         match handle.read(&mut buf) {
             Ok(0) => return (byte_count, None),
-            Ok(n) => {
-                byte_count += n;
-            }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Ok(n) => byte_count += n,
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (byte_count, Some(e)),
         }
     }
@@ -250,7 +227,7 @@ pub(crate) fn count_bytes_chars_and_lines_fast<
                     };
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::Interrupted => (),
+            Err(e) if e.kind() == ErrorKind::Interrupted => (),
             Err(e) => return (total, Some(e)),
         }
     }

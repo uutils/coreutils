@@ -386,7 +386,8 @@ macro_rules! impl_digest_common {
             }
 
             fn hash_finalize(&mut self, out: &mut [u8]) {
-                digest::Digest::finalize_into_reset(&mut self.0, out.into());
+                let result = digest::Digest::finalize_reset(&mut self.0);
+                out.copy_from_slice(&result);
             }
 
             fn reset(&mut self) {
@@ -473,11 +474,11 @@ impl_digest_common!(Sha3_384, 384);
 impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128 {
-    digest: sha3::Shake128,
+    digest: shake::Shake128,
     bit_size: usize,
 }
 pub struct Shake256 {
-    digest: sha3::Shake256,
+    digest: shake::Shake256,
     bit_size: usize,
 }
 impl_digest_shake!(Shake128, 256);
