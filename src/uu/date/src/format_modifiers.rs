@@ -38,6 +38,11 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
 
+/// Upper bound on the field width we will allocate for. Anything wider is
+/// rejected as `FieldWidthTooLarge` instead of being handed to the allocator.
+/// A huge request (e.g. `%6666666666666D`) would otherwise abort the process
+/// under a sanitizer before `try_reserve` could fail gracefully, and OOM
+/// elsewhere.
 const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
 
 /// Error type for format modifier operations
@@ -880,6 +885,8 @@ mod tests {
 
     #[test]
     fn test_try_alloc_padded_rejects_width_above_supported_max() {
+        // A target length exactly at the cap is allowed; one byte over is rejected.
+        assert!(try_alloc_padded(0, MAX_FORMAT_WIDTH, MAX_FORMAT_WIDTH, "Y").is_ok());
         let err = try_alloc_padded(1, 1, MAX_FORMAT_WIDTH + 1, "s").unwrap_err();
         assert!(matches!(
             err,
