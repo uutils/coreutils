@@ -1551,11 +1551,9 @@ fn split(settings: &Settings) -> UResult<()> {
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
-            // split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
-            // kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
