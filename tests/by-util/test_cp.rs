@@ -2850,6 +2850,61 @@ fn test_cp_sparse_never_windows() {
     );
 }
 
+// `--sparse=auto` (the default) must preserve an already-sparse source on Windows,
+// matching GNU. Before this fix the default mode did a plain copy that dropped the
+// source's holes. A non-sparse source must still copy plainly (no new holes).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_auto_preserves_sparse_source_windows() {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    const BUFFER_SIZE: usize = 1024 * 1024;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // A 1 MiB file with data only near the start and end: a clear sparse candidate.
+    let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    buf[1024] = b'x';
+    buf[BUFFER_SIZE - 2048] = b'y';
+    at.make_file("src");
+    at.write_bytes("src", &buf);
+
+    // Seed a genuinely sparse source via the already-supported --sparse=always.
+    scene
+        .ucmd()
+        .args(&["--sparse=always", "src", "sparse_src"])
+        .succeeds();
+    assert_ne!(
+        at.metadata("sparse_src").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "precondition: seeded source should be sparse"
+    );
+
+    // Default mode is --sparse=auto: an already-sparse source must stay sparse.
+    scene.ucmd().args(&["sparse_src", "auto_dst"]).succeeds();
+    assert_eq!(
+        at.read_bytes("auto_dst").into_boxed_slice(),
+        buf,
+        "auto copy must be byte-for-byte identical to the source"
+    );
+    assert_ne!(
+        at.metadata("auto_dst").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "--sparse=auto should preserve an already-sparse source"
+    );
+
+    // A non-sparse source copied with the default mode must NOT become sparse.
+    at.make_file("plain_src");
+    at.write_bytes("plain_src", &buf);
+    scene.ucmd().args(&["plain_src", "plain_dst"]).succeeds();
+    assert_eq!(
+        at.metadata("plain_dst").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "--sparse=auto must not make a non-sparse source sparse"
+    );
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
 #[test]
