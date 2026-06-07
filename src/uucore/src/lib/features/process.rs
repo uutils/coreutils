@@ -5,13 +5,13 @@
 
 // spell-checker:ignore (vars) cvar exitstatus cmdline kworker getsid getpid
 // spell-checker:ignore (sys/unix) WIFSIGNALED ESRCH
-// spell-checker:ignore pgrep pwait snice getpgrp
+// spell-checker:ignore pgrep pwait snice getpgrp SRCH
 
 use libc::{gid_t, pid_t, uid_t};
-#[cfg(not(target_os = "redox"))]
-use nix::errno::Errno;
-use nix::sys::signal::{self as nix_signal, SigHandler, Signal};
-use nix::unistd::Pid;
+use rustix::process::{
+    Pid, Signal, kill_current_process_group, kill_process, test_kill_current_process_group,
+    test_kill_process,
+};
 use std::io;
 use std::process::Child;
 use std::process::ExitStatus;
@@ -22,23 +22,22 @@ use std::time::{Duration, Instant};
 
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
-    nix::unistd::geteuid().as_raw()
+    rustix::process::geteuid().as_raw()
 }
 
 /// `getpgrp()` returns the process group ID of the calling process.
-/// It is a trivial wrapper over nix::unistd::getpgrp.
 pub fn getpgrp() -> pid_t {
-    nix::unistd::getpgrp().as_raw()
+    rustix::process::getpgrp().as_raw_pid()
 }
 
 /// `getegid()` returns the effective group ID of the calling process.
 pub fn getegid() -> gid_t {
-    nix::unistd::getegid().as_raw()
+    rustix::process::getegid().as_raw()
 }
 
 /// `getgid()` returns the real group ID of the calling process.
 pub fn getgid() -> gid_t {
-    nix::unistd::getgid().as_raw()
+    rustix::process::getgid().as_raw()
 }
 
 /// `getuid()` returns the real user ID of the calling process.
@@ -48,7 +47,7 @@ pub fn getuid() -> uid_t {
 
 /// `getpid()` returns the pid of the calling process.
 pub fn getpid() -> pid_t {
-    nix::unistd::getpid().as_raw()
+    rustix::process::getpid().as_raw_pid()
 }
 
 /// `getsid()` returns the session ID of the process with process ID pid.
@@ -57,8 +56,8 @@ pub fn getpid() -> pid_t {
 ///
 /// # Error
 ///
-/// - [Errno::EPERM] A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
-/// - [Errno::ESRCH] No process with process ID pid was found.
+/// - `EPERM` A process with process ID pid exists, but it is not in the same session as the calling process, and the implementation considers this an error.
+/// - `ESRCH` No process with process ID pid was found.
 ///
 ///
 /// # Platform
@@ -66,13 +65,12 @@ pub fn getpid() -> pid_t {
 /// This function only support standard POSIX implementation platform,
 /// so some system such as redox doesn't supported.
 #[cfg(not(target_os = "redox"))]
-pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
-    let pid = if pid == 0 {
-        None
-    } else {
-        Some(Pid::from_raw(pid))
+pub fn getsid(pid: i32) -> Result<pid_t, rustix::io::Errno> {
+    let pid = match pid {
+        0 => None,
+        _ => Some(Pid::from_raw(pid).ok_or(rustix::io::Errno::SRCH)?),
     };
-    nix::unistd::getsid(pid).map(Pid::as_raw)
+    rustix::process::getsid(pid).map(Pid::as_raw_pid)
 }
 
 /// Missing methods for Child objects
@@ -95,17 +93,33 @@ pub trait ChildExt {
     ) -> io::Result<Option<ExitStatus>>;
 }
 
+/// Build a rustix [`Signal`] from a raw number, including real-time signals
+/// (`SIGRTMIN..=SIGRTMAX`). Those are not "named" signals, so
+/// [`Signal::from_named_raw`] rejects them; build them from the raw value.
+fn signal_from_value(signal: usize) -> io::Result<Signal> {
+    let raw = i32::try_from(signal).ok().filter(|&s| s > 0);
+    raw.and_then(|raw| {
+        Signal::from_named_raw(raw).or_else(|| {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            if (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&raw) {
+                // SAFETY: `raw` is within the real-time signal range.
+                return Some(unsafe { Signal::from_raw_unchecked(raw) });
+            }
+            None
+        })
+    })
+    .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))
+}
+
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
-        let pid = Pid::from_raw(self.id() as pid_t);
-        let result = if signal == 0 {
-            nix_signal::kill(pid, None)
-        } else {
-            let signal = Signal::try_from(signal as i32)
-                .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
-            nix_signal::kill(pid, Some(signal))
-        };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        let pid = Pid::from_raw(self.id() as pid_t)
+            .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))?;
+        // signal == 0 only probes whether the pid is still alive.
+        if signal == 0 {
+            return test_kill_process(pid).map_err(io::Error::from);
+        }
+        kill_process(pid, signal_from_value(signal)?).map_err(io::Error::from)
     }
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
@@ -115,23 +129,31 @@ impl ChildExt for Child {
         // in the group. If the child has created its own process group (via setpgid),
         // it won't receive this group signal, but will have received the direct signal.
 
-        // Signal 0 is special - it just checks if process exists, doesn't send anything.
+        // Signal 0 is special - it just checks if the group exists, doesn't send anything.
         // No need to manipulate signal handlers for it.
         if signal == 0 {
-            return nix_signal::kill(Pid::from_raw(0), None)
-                .map_err(|e| io::Error::from_raw_os_error(e as i32));
+            return test_kill_current_process_group().map_err(io::Error::from);
         }
 
-        let signal = Signal::try_from(signal as i32)
-            .map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+        let sig = signal_from_value(signal)?;
+        let sig_raw = sig.as_raw();
 
-        // Ignore the signal temporarily so we don't receive it ourselves.
-        let old_handler = unsafe { nix_signal::signal(signal, SigHandler::SigIgn) }
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-        let result = nix_signal::kill(Pid::from_raw(0), Some(signal));
-        // Restore the old handler
-        let _ = unsafe { nix_signal::signal(signal, old_handler) };
-        result.map_err(|e| io::Error::from_raw_os_error(e as i32))
+        // Ignore the signal temporarily so we don't receive it ourselves. rustix
+        // deliberately does not wrap sigaction (see its not_implemented::libc_internals);
+        // its only equivalent is the experimental `runtime` module, which is UB in a
+        // process that links libc. Signal disposition is left to libc, so use it here.
+        // SAFETY: a zeroed sigaction with SIG_IGN is a valid disposition; we restore the
+        // previous one right after sending to our own process group.
+        let mut ignore: libc::sigaction = unsafe { std::mem::zeroed() };
+        ignore.sa_sigaction = libc::SIG_IGN;
+        let mut old: libc::sigaction = unsafe { std::mem::zeroed() };
+        if unsafe { libc::sigaction(sig_raw, &raw const ignore, &raw mut old) } == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        let res = kill_current_process_group(sig);
+        // Restore the previous disposition.
+        unsafe { libc::sigaction(sig_raw, &raw const old, std::ptr::null_mut()) };
+        res.map_err(io::Error::from)
     }
 
     fn wait_or_timeout(
