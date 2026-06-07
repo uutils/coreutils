@@ -132,7 +132,7 @@ impl NumberType {
             (Some(k_str), Some(n_str), None, None)
                 if !k_str.starts_with('l') && !k_str.starts_with('r') =>
             {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
@@ -147,7 +147,7 @@ impl NumberType {
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
@@ -162,7 +162,7 @@ impl NumberType {
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
-                let num_chunks = parse_size_u64(n_str)
+                let num_chunks = parse_size_u64_max(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
                 let chunk_number = parse_size_u64(k_str)
                     .map_err(|_| NumberTypeError::ChunkNumber(k_str.to_string()))?;
