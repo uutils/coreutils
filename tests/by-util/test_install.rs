@@ -2695,3 +2695,17 @@ fn test_install_d_dangling_symlink_in_path_errors() {
         "The symlink target must not have been created"
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_install_fifo_path() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file = "existing-file-to-be-overwritten.txt";
+    at.touch(file);
+    scene
+        .ucmd()
+        .args(&["-m644", "/dev/stdin", "existing-file-to-be-overwritten.txt"])
+        .pipe_in("some stuff\n")
+        .succeeds();
+}
