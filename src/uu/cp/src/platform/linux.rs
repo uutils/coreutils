@@ -192,12 +192,7 @@ where
 /// Checks whether an existing destination is a fifo
 fn check_dest_is_fifo(dest: &Path) -> bool {
     // If our destination file exists and its a fifo , we do a standard copy .
-    let file_type = std::fs::metadata(dest);
-    match file_type {
-        Ok(f) => f.file_type().is_fifo(),
-
-        _ => false,
-    }
+    std::fs::metadata(dest).is_ok_and(|f| f.file_type().is_fifo())
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
