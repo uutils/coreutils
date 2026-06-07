@@ -3018,6 +3018,88 @@ fn test_korean_time_zone() {
         .stdout_is("2026-01-15 01:00:00 UTC\n");
 }
 
+#[test]
+fn test_positional_set_invalid_inputs() {
+    let invalid_args: &[&[&str]] = &[
+        &["13011200"],     // invalid month
+        &["01321200"],     // invalid day
+        &["02301200"],     // Feb 30
+        &["01012500"],     // invalid hour
+        &["01010160"],     // invalid minute
+        &["010101600"],    // invalid length
+        &["010110a"],      // non-digits
+        &["01011200.1"],   // bad seconds suffix (too short)
+        &["01012359.aa"],  // bad seconds suffix (non-digits)
+        &["01011200.123"], // bad seconds suffix (too long)
+    ];
+    for args in invalid_args {
+        let result = new_ucmd!().args(args).fails_with_code(1);
+        assert!(
+            result.stderr_str().contains("invalid date"),
+            "Expected 'invalid date' in stderr for {args:?}, got: {}",
+            result.stderr_str()
+        );
+    }
+}
+
+#[test]
+fn test_positional_set_with_extra_operand() {
+    new_ucmd!()
+        .args(&["01011200", "+%Y"])
+        .fails_with_code(1)
+        .stderr_contains("extra operand");
+}
+
+#[test]
+fn test_positional_set_with_d_flag_format_error() {
+    new_ucmd!()
+        .args(&["--date", "2025-01-01", "01012025"])
+        .fails_with_code(1)
+        .stderr_contains("lacks a leading '+'");
+}
+
+#[test]
+#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+fn test_positional_set_valid_inputs_require_privilege() {
+    if geteuid() == 0 || uucore::os::is_wsl_1() {
+        return;
+    }
+    // Each entry covers a different valid input shape: 12 digits, 8 digits,
+    // 10 digits, 12 digits + seconds, 12 digits with -u, and the 68/69
+    // century-rule boundaries. Without root we expect a "cannot set date:"
+    // error from the syscall, which is enough to confirm parsing succeeded.
+    let valid_args: &[&[&str]] = &[
+        &["010112002025"],
+        &["01011200"],
+        &["0101120025"],
+        &["010112002025.40"],
+        &["-u", "010112002025"],
+        &["0101120068"],
+        &["0101120069"],
+    ];
+    for args in valid_args {
+        let result = new_ucmd!().args(args).fails();
+        result.no_stdout();
+        assert!(
+            result.stderr_str().starts_with("date: cannot set date: "),
+            "Expected permission error for {args:?}, got: {}",
+            result.stderr_str()
+        );
+    }
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn test_positional_set_macos_unavailable() {
+    let result = new_ucmd!().arg("010112002025").fails();
+    result.no_stdout();
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("date: setting the date is not supported by macOS")
+    );
+}
+
 // https://github.com/uutils/coreutils/issues/12001
 // date: width prefix in %N format specifier is ignored ( %3N, %6N always output full 9 nanosecond digits) #12001
 #[test]
