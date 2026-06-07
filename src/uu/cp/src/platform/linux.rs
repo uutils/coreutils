@@ -24,14 +24,14 @@ use crate::{
 // only applies `O_NOFOLLOW` to the *source* open. The destination is
 // followed if it is a pre-existing symlink, matching GNU cp -d/-P which
 // only forbid dereferencing on the source side.
-fn fs_copy<P, Q>(source: P, dest: Q, source_nofollow: bool) -> std::io::Result<u64>
+fn fs_copy<P, Q>(source: P, dest: Q, source_nofollow: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
-    std::io::copy(&mut src, &mut dst)
+    std::io::copy(&mut src, &mut dst).map(|_| ())
 }
 
 /// The fallback behavior for [`clone`] on failed system call.
@@ -76,7 +76,7 @@ where
     if ioctl_ficlone(dst_file, src_file).is_err() {
         return match fallback {
             CloneFallback::Error => Err(std::io::Error::last_os_error()),
-            CloneFallback::FSCopy => fs_copy(source, dest, nofollow).map(|_| ()),
+            CloneFallback::FSCopy => fs_copy(source, dest, nofollow),
             CloneFallback::SparseCopy => sparse_copy(source, dest, nofollow),
             CloneFallback::SparseCopyWithoutHole => {
                 sparse_copy_without_hole(source, dest, nofollow)
@@ -256,7 +256,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_always(source, dest, nofollow);
@@ -266,7 +266,7 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::FSCopy => fs_copy(source, dest, nofollow).map(|_| ()),
+                    CopyMethod::FSCopy => fs_copy(source, dest, nofollow),
                     _ => sparse_copy(source, dest, nofollow),
                 }
             }
@@ -276,13 +276,13 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let result = handle_reflink_never_sparse_never(source, nofollow);
                 if let Ok(debug) = result {
                     copy_debug = debug;
                 }
-                fs_copy(source, dest, nofollow).map(|_| ())
+                fs_copy(source, dest, nofollow)
             }
         }
         (ReflinkMode::Never, SparseMode::Auto) => {
@@ -290,7 +290,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_auto(source, dest, nofollow);
@@ -303,7 +303,7 @@ pub(crate) fn copy_on_write(
                     CopyMethod::SparseCopyWithoutHole => {
                         sparse_copy_without_hole(source, dest, nofollow)
                     }
-                    _ => fs_copy(source, dest, nofollow).map(|_| ()),
+                    _ => fs_copy(source, dest, nofollow),
                 }
             }
         }
@@ -312,7 +312,7 @@ pub(crate) fn copy_on_write(
             // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_always(source, dest, nofollow);
@@ -332,7 +332,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let result = handle_reflink_auto_sparse_never(source, nofollow);
                 if let Ok(debug) = result {
@@ -345,7 +345,7 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, SparseMode::Auto) => {
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Unsupported;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_auto(source, dest, nofollow);
