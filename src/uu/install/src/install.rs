@@ -945,10 +945,15 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 ///
 fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     use std::os::unix::fs::OpenOptionsExt;
-    if let Ok(to_abs) = to.canonicalize()
-        && from.canonicalize()? == to_abs
-    {
-        return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+    let mut handle = File::open(from)?;
+
+    if let Ok(to_meta) = metadata(to) {
+        let from_meta = handle.metadata()?;
+        // Refuse to replace the source file with itself; otherwise removing
+        // the destination below would delete the opened input before copying.
+        if from_meta.dev() == to_meta.dev() && from_meta.ino() == to_meta.ino() {
+            return Err(InstallError::SameFile(from.to_path_buf(), to.to_path_buf()).into());
+        }
     }
 
     if to.is_dir() && !from.is_dir() {
@@ -969,7 +974,6 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         );
     }
 
-    let mut handle = File::open(from)?;
     // create_new provides TOCTOU protection
     let mut dest = OpenOptions::new()
         .write(true)
