@@ -3443,6 +3443,7 @@ dependencies = [
  "thiserror 2.0.18",
  "uucore",
  "walkdir",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

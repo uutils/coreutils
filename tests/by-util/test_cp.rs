@@ -2786,6 +2786,70 @@ fn test_cp_sparse_never_reflink_always() {
     .fails();
 }
 
+// Regression test for https://github.com/uutils/coreutils/issues/12186
+// `cp --sparse=always` should be supported on Windows (matching GNU), not
+// rejected with "--sparse is only supported on linux".
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_always_windows() {
+    const BUFFER_SIZE: usize = 4096 * 16 + 3;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A file with long runs of zeros: a candidate for sparse copying.
+    let mut buf = vec![0; BUFFER_SIZE].into_boxed_slice();
+    let bytes_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
+    for i in bytes_to_touch {
+        buf[i] = b'x';
+    }
+
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
+        .succeeds();
+
+    // The copy must be byte-for-byte identical to the source...
+    assert_eq!(at.read_bytes("dst_file_sparse").into_boxed_slice(), buf);
+
+    // ...and the destination must actually be flagged sparse (proving the
+    // FSCTL_SET_SPARSE path ran rather than a plain copy). The temp dir used by
+    // the test harness is on NTFS, which supports sparse files.
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    assert_ne!(
+        at.metadata("dst_file_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "destination should have the sparse file attribute set"
+    );
+}
+
+// Companion to the regression above: `cp --sparse=never` must also be accepted
+// on Windows and produce a faithful, non-sparse copy (it was rejected by the
+// same "--sparse is only supported on linux" error before #12186).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_never_windows() {
+    const BUFFER_SIZE: usize = 4096 * 4;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=never", "src_file1", "dst_file_non_sparse"])
+        .succeeds();
+
+    assert_eq!(at.read_bytes("dst_file_non_sparse"), buf);
+
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    assert_eq!(
+        at.metadata("dst_file_non_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "destination must not be sparse with --sparse=never"
+    );
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
 #[test]
