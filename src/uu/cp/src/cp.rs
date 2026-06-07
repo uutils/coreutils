@@ -2029,14 +2029,10 @@ fn is_forbidden_to_copy_to_same_file(
     }
     // If source and dest are both the same symlink but with different names, then allow the copy.
     // This can occur, for example, if source and dest are both hardlinks to the same symlink.
-    if dest_is_symlink
+    !(dest_is_symlink
         && source_is_symlink
         && source.file_name() != dest.file_name()
-        && !options.dereference
-    {
-        return false;
-    }
-    true
+        && !options.dereference)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
