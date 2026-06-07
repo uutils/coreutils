@@ -199,16 +199,15 @@ mod platform {
 
     pub fn do_syncfs(files: &[String]) -> UResult<()> {
         for path in files {
-            let maybe_first = Path::new(path).components().next();
-            let vol_name = match maybe_first {
-                Some(c) => c.as_os_str().to_string_lossy().into_owned(),
-                None => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sync-error-no-such-file", "file" => path),
-                    ));
-                }
-            };
+            let vol_name = Path::new(path)
+                .components()
+                .next()
+                .ok_or_else(|| {
+                    USimpleError::new(1, translate!("sync-error-no-such-file", "file" => path))
+                })?
+                .as_os_str()
+                .to_string_lossy()
+                .into_owned();
             flush_volume(&vol_name)?;
         }
         Ok(())
