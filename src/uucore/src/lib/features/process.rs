@@ -99,14 +99,15 @@ pub trait ChildExt {
 fn signal_from_value(signal: usize) -> io::Result<Signal> {
     let raw = i32::try_from(signal).ok().filter(|&s| s > 0);
     raw.and_then(|raw| {
-        Signal::from_named_raw(raw).or_else(|| {
-            #[cfg(any(target_os = "linux", target_os = "android"))]
-            if (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&raw) {
-                // SAFETY: `raw` is within the real-time signal range.
-                return Some(unsafe { Signal::from_raw_unchecked(raw) });
-            }
-            None
-        })
+        if let Some(sig) = Signal::from_named_raw(raw) {
+            return Some(sig);
+        }
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&raw) {
+            // SAFETY: `raw` is within the real-time signal range.
+            return Some(unsafe { Signal::from_raw_unchecked(raw) });
+        }
+        None
     })
     .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))
 }
