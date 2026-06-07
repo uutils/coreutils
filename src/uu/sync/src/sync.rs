@@ -126,28 +126,27 @@ mod platform {
     fn flush_volume(name: &str) -> UResult<()> {
         let name_wide = name.to_wide_null();
         // SAFETY: `name` is a valid `str`, so `name_wide` is valid null-terminated UTF-16
-        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } == DRIVE_FIXED {
-            let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
-            match OpenOptions::new().write(true).open(sliced_name) {
-                Ok(file) => {
-                    // SAFETY: `file` is a valid `File`
-                    if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
-                        Err(USimpleError::new(
-                            get_last_error() as i32,
-                            translate!("sync-error-flush-file-buffer"),
-                        ))
-                    } else {
-                        Ok(())
-                    }
-                }
-                Err(e) => Err(USimpleError::new(
+        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } != DRIVE_FIXED {
+            return Ok(());
+        }
+        let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
+        let file = OpenOptions::new()
+            .write(true)
+            .open(sliced_name)
+            .map_err(|e| {
+                USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
                     translate!("sync-error-create-volume-handle"),
-                )),
-            }
-        } else {
-            Ok(())
+                )
+            })?;
+        // SAFETY: `file` is a valid `File`
+        if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
+            return Err(USimpleError::new(
+                get_last_error() as i32,
+                translate!("sync-error-flush-file-buffer"),
+            ));
         }
+        Ok(())
     }
 
     fn find_first_volume() -> UResult<(String, HANDLE)> {
