@@ -548,31 +548,40 @@ fn find_existing_ancestor(path: &Path) -> io::Result<(PathBuf, Vec<OsString>)> {
 /// # Returns
 /// A DirFd for the subdirectory
 fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Result<DirFd> {
-    match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
-        Ok(stat) => {
-            let file_type = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
-            match file_type {
-                libc::S_IFDIR => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
-                libc::S_IFLNK => {
-                    // Follow symlinks to directories (GNU coreutils behavior).
-                    // O_DIRECTORY in open_subdir ensures we only succeed if the
-                    // symlink resolves to a directory; dangling or non-dir symlinks error out.
-                    parent_fd.open_subdir(name, SymlinkBehavior::Follow)
-                }
-                _ => Err(io::Error::new(
-                    io::ErrorKind::AlreadyExists,
-                    format!(
-                        "path component exists but is not a directory: {}",
-                        name.display()
-                    ),
-                )),
+    // Loop to handle the TOCTOU race between `stat_at` and `mkdir_at`
+    // (issue #12355): a concurrent process can create `name` after our stat
+    // returns NotFound, causing mkdir_at to return EEXIST. Re-stat and
+    // proceed with whatever is now at `name`.
+    loop {
+        match parent_fd.stat_at(name, SymlinkBehavior::NoFollow) {
+            Ok(stat) => {
+                let file_type = (stat.st_mode as libc::mode_t) & libc::S_IFMT;
+                return match file_type {
+                    libc::S_IFDIR => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+                    libc::S_IFLNK => {
+                        // Follow symlinks to directories (GNU coreutils behavior).
+                        // O_DIRECTORY in open_subdir ensures we only succeed if the
+                        // symlink resolves to a directory; dangling or non-dir symlinks error out.
+                        parent_fd.open_subdir(name, SymlinkBehavior::Follow)
+                    }
+                    _ => Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "path component exists but is not a directory: {}",
+                            name.display()
+                        ),
+                    )),
+                };
             }
+            // `name` does not exist yet: create it.
+            Err(e) if e.kind() == io::ErrorKind::NotFound => match parent_fd.mkdir_at(name, mode) {
+                Ok(()) => return parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+                // Another process created `name` first; loop back to re-stat it.
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            },
+            Err(e) => return Err(e),
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            parent_fd.mkdir_at(name, mode)?;
-            parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
-        }
-        Err(e) => Err(e),
     }
 }
 
