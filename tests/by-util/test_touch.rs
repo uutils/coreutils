@@ -1109,3 +1109,29 @@ fn test_touch_through_dangling_symlink_creates_target() {
     assert!(at.file_exists("missing"));
     assert_eq!(at.read("missing"), "");
 }
+
+// touch must be able to update the times of an owned file that is neither
+// readable nor writable (mode 0). Setting explicit times via utimensat-by-path
+// only requires ownership, so this succeeds even though the file cannot be
+// opened. Regression test for GNU tests/touch/no-rights.sh.
+#[test]
+#[cfg(unix)]
+fn test_touch_set_time_on_unreadable_unwritable_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "no_rights";
+    at.touch(file);
+    std::fs::set_permissions(at.plus(file), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.args(&["-d", "2000-01-03 00:00", "-c", file])
+        .succeeds()
+        .no_output();
+
+    // Restore permissions so the test harness can read back the metadata.
+    std::fs::set_permissions(at.plus(file), std::fs::Permissions::from_mode(0o644)).unwrap();
+    let expected = str_to_filetime("%Y-%m-%d %H:%M", "2000-01-03 00:00");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
