@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore reflink ioctl Ioctl FSCTL fsctl
+// spell-checker:ignore reflink ioctl Ioctl
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::os::windows::ffi::OsStrExt;
