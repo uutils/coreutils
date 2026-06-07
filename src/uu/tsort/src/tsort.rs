@@ -10,12 +10,12 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, strip_errno};
 use uucore::{format_usage, show, translate};
 
 // short types for switching interning behavior on the fly.
@@ -86,7 +86,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(reader, &mut g)?;
     }
 
-    g.run_tsort();
+    g.run_tsort()?;
     Ok(())
 }
 
@@ -132,9 +132,13 @@ enum TsortError {
     #[error("{input}: {message}", input = .0, message = translate!("tsort-error-loop"))]
     Loop(String),
 
-    /// Wrapper for bubbling up IO errors
-    #[error("{0}")]
-    IO(#[from] io::Error),
+    /// Read error.
+    #[error("{}", translate!("tsort-error-read", "error" => strip_errno(.0)))]
+    Read(io::Error),
+
+    /// Write error.
+    #[error("{}", translate!("tsort-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
 }
 
 // Auxiliary struct, just for printing loop nodes via show! macro
@@ -157,7 +161,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
             if e.kind() == io::ErrorKind::IsADirectory {
                 TsortError::IsDir(graph.name())
             } else {
-                e.into()
+                TsortError::Read(e)
             }
         })?;
         for token in line.split_whitespace() {
@@ -260,7 +264,7 @@ impl Graph {
     }
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) {
+    fn run_tsort(&mut self) -> Result<(), TsortError> {
         let mut independent_nodes_queue: VecDeque<Sym> = self
             .nodes
             .iter()
@@ -273,6 +277,10 @@ impl Graph {
             })
             .collect();
 
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        let mut res: io::Result<()> = Ok(());
+
         // Sort by resolved string for deterministic output
         independent_nodes_queue
             .make_contiguous()
@@ -280,7 +288,12 @@ impl Graph {
 
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            println!("{}", self.get_node_name(v));
+
+            // Attempt write but continue regardless on error
+            if res.is_ok() {
+                res = writeln!(handle, "{}", self.get_node_name(v));
+            }
+
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -295,6 +308,8 @@ impl Graph {
                 }
             }
         }
+
+        res.map_err(TsortError::Write)
     }
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
         self.nodes.get(&sym).map(|data| data.predecessor_count)
