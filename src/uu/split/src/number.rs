@@ -194,7 +194,9 @@ pub struct FixedWidthNumber {
 impl FixedWidthNumber {
     /// Instantiate a number of the given radix and width.
     pub fn new(radix: u8, width: usize, mut suffix_start: usize) -> Result<Self, Overflow> {
-        let mut digits = vec![0_u8; width];
+        let mut digits = Vec::new();
+        digits.try_reserve_exact(width).map_err(|_| Overflow)?;
+        digits.resize(width, 0);
 
         for i in (0..digits.len()).rev() {
             let remainder = (suffix_start % (radix as usize)) as u8;
