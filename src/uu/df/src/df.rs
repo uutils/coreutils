@@ -273,11 +273,7 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
     // matching an existing mnt point, to avoid problematic
     // replacement when given inaccurate mount lists, seen with some
     // chroot environments for example.
-    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
-        return false;
-    }
-
-    true
+    !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
 /// Whether to prioritize given mount info over all others on the same device.
