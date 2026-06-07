@@ -2959,3 +2959,34 @@ fn test_install_backup_nil_same_file() {
         assert_eq!(at.read(file), "content");
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_parallel_mkdir_race() {
+    // Regression test for issue #12355: concurrent `install -D` invocations
+    // that share parent directories must all succeed instead of one losing
+    // the stat/mkdir race and failing with `cannot create directory`.
+    const PARALLEL: usize = 32;
+    const ROUNDS: usize = 10;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("s");
+
+    for round in 0..ROUNDS {
+        let mut children = Vec::with_capacity(PARALLEL);
+        for k in 0..PARALLEL {
+            let mut cmd = scene.ucmd();
+            cmd.arg("-D").arg("s").arg(format!("o{round}/q/f{k}"));
+            children.push(cmd.run_no_wait());
+        }
+
+        for child in children {
+            child.wait().unwrap().success().no_stderr();
+        }
+
+        for k in 0..PARALLEL {
+            assert!(at.file_exists(format!("o{round}/q/f{k}")));
+        }
+    }
+}
