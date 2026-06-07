@@ -116,10 +116,7 @@ fn check_sparse_detection(source: &Path, nofollow: bool) -> Result<bool, std::io
     let size = metadata.size();
     let blocks = metadata.blocks();
 
-    if blocks < size / 512 {
-        return Ok(true);
-    }
-    Ok(false)
+    Ok(blocks < size / 512)
 }
 
 /// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
