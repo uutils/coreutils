@@ -380,6 +380,10 @@ fn test_symlink_target_dir() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: non-utf8 arguments cannot be passed through the spawned test harness"
+)]
 fn test_symlink_target_dir_non_utf8_source_name() {
     use std::ffi::OsStr;
     use std::fs;
