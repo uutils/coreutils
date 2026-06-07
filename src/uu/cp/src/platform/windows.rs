@@ -6,14 +6,16 @@
 use std::fs::{File, OpenOptions};
 use std::io::Read;
 use std::os::windows::ffi::OsStrExt;
-use std::os::windows::fs::FileExt;
+use std::os::windows::fs::{FileExt, MetadataExt};
 use std::os::windows::io::AsRawHandle;
 use std::path::Path;
 
 use uucore::translate;
 
 use windows_sys::Win32::Foundation::MAX_PATH;
-use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+use windows_sys::Win32::Storage::FileSystem::{
+    FILE_ATTRIBUTE_SPARSE_FILE, GetDiskFreeSpaceW, GetVolumePathNameW,
+};
 use windows_sys::Win32::System::IO::DeviceIoControl;
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
@@ -176,6 +178,13 @@ fn sparse_copy(source: &Path, dest: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Whether `path` is already a sparse file (has the sparse file attribute set).
+fn is_sparse(path: &Path) -> bool {
+    std::fs::metadata(path)
+        .map(|m| m.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0)
+        .unwrap_or(false)
+}
+
 /// Copies `source` to `dest`, honoring `--sparse` on Windows.
 ///
 /// Windows has no copy-on-write reflink support, so any `--reflink` other than
@@ -205,9 +214,20 @@ pub(crate) fn copy_on_write(
             copy_debug.sparse_detection = SparseDebug::Zeros;
             sparse_copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
-        // `--sparse=auto` (the default) and `--sparse=never` perform a plain copy
-        // that never introduces holes. (`auto` would additionally preserve
-        // already-sparse sources, which is not detected here yet.)
+        // `--sparse=auto` (the default) preserves holes only when the source is
+        // already sparse, matching GNU. A sparse source is re-copied sparsely;
+        // anything else is a plain copy that never introduces new holes.
+        //
+        // `sparse_copy` re-derives holes by scanning for zero runs rather than
+        // mirroring the source's exact allocated-range layout. The content is
+        // identical and the result is sparse; a byte-exact hole layout would
+        // instead query `FSCTL_QUERY_ALLOCATED_RANGES`, which is out of scope.
+        SparseMode::Auto if is_sparse(source) => {
+            copy_debug.sparse_detection = SparseDebug::Zeros;
+            sparse_copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+        }
+        // `--sparse=auto` on a non-sparse source, and `--sparse=never`, perform a
+        // plain copy that never introduces holes.
         SparseMode::Auto | SparseMode::Never => {
             std::fs::copy(source, dest)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
