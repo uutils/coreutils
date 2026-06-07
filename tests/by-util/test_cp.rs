@@ -2792,7 +2792,9 @@ fn test_cp_sparse_never_reflink_always() {
 #[cfg(target_os = "windows")]
 #[test]
 fn test_cp_sparse_always_windows() {
+    use std::os::windows::fs::MetadataExt;
     const BUFFER_SIZE: usize = 4096 * 16 + 3;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
     let (at, mut ucmd) = at_and_ucmd!();
 
     // A file with long runs of zeros: a candidate for sparse copying.
@@ -2814,8 +2816,6 @@ fn test_cp_sparse_always_windows() {
     // ...and the destination must actually be flagged sparse (proving the
     // FSCTL_SET_SPARSE path ran rather than a plain copy). The temp dir used by
     // the test harness is on NTFS, which supports sparse files.
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
     assert_ne!(
         at.metadata("dst_file_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
         0,
@@ -2829,7 +2829,9 @@ fn test_cp_sparse_always_windows() {
 #[cfg(target_os = "windows")]
 #[test]
 fn test_cp_sparse_never_windows() {
+    use std::os::windows::fs::MetadataExt;
     const BUFFER_SIZE: usize = 4096 * 4;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
     let (at, mut ucmd) = at_and_ucmd!();
 
     let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
@@ -2841,8 +2843,6 @@ fn test_cp_sparse_never_windows() {
 
     assert_eq!(at.read_bytes("dst_file_non_sparse"), buf);
 
-    use std::os::windows::fs::MetadataExt;
-    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
     assert_eq!(
         at.metadata("dst_file_non_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
         0,

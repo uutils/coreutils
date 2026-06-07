@@ -180,9 +180,7 @@ fn sparse_copy(source: &Path, dest: &Path) -> std::io::Result<()> {
 
 /// Whether `path` is already a sparse file (has the sparse file attribute set).
 fn is_sparse(path: &Path) -> bool {
-    std::fs::metadata(path)
-        .map(|m| m.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0)
-        .unwrap_or(false)
+    std::fs::metadata(path).is_ok_and(|m| m.file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE != 0)
 }
 
 /// Copies `source` to `dest`, honoring `--sparse` on Windows.
