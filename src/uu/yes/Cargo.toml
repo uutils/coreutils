@@ -25,6 +25,9 @@ fluent = { workspace = true }
 rustix = { workspace = true, features = ["stdio", "pipe"] }
 uucore = { workspace = true, features = ["fs", "pipes"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [[bin]]
 name = "yes"
 path = "src/main.rs"

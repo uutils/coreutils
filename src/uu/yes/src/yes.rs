@@ -97,6 +97,11 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+    #[cfg(unix)]
+    if uucore::signals::stdout_was_closed() {
+        return Err(io::Error::from_raw_os_error(libc::EBADF));
+    }
+
     repeat_content_to_capacity(&mut bytes);
     let bytes = bytes.as_slice();
     let mut stdout = io::stdout().lock();
@@ -109,6 +114,10 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
     use uucore::io::RawWriter;
     use uucore::pipes::{pipe, splice, tee};
+
+    if uucore::signals::stdout_was_closed() {
+        return Err(io::Error::from_raw_os_error(libc::EBADF));
+    }
 
     let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
     repeat_content_to_capacity(&mut bytes);
