@@ -889,6 +889,22 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
         .succeeds()
         .stdout_is("fizz\rb\nuzz\rfi\nzzbuzz"); // spell-checker:disable-line
 }
+
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_bytewise_read_from_pseudo_device() {
+    let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
+
+    child.make_assertion_with_delay(100).is_alive();
+
+    child
+        .kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_contains_bytes(b"\x00\x0a")
+        .no_stderr();
+}
+
 #[test]
 fn test_obsolete_syntax() {
     new_ucmd!()
