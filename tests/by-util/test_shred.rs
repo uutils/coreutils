@@ -434,3 +434,17 @@ fn test_gnu_shred_passes_different_counts() {
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
 }
+
+/// shred /dev/full should succeed (ENOSPC is a valid termination condition for devices)
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_dev_full() {
+    new_ucmd!().arg("/dev/full").succeeds();
+}
+
+/// shred /dev/null should loop until interrupted; with --size we can bound it
+#[test]
+#[cfg(target_os = "linux")]
+fn test_shred_dev_null() {
+    new_ucmd!().arg("--size=1M").arg("/dev/null").succeeds();
+}
