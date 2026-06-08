@@ -298,7 +298,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 /// Turn a clap parsing error into a `UError`, reproducing GNU's hint when an
 /// unknown `-foo` option is actually the name of an existing file: it suggests
-/// `rm ./-foo` so the name is treated as a path. See `tests/rm/dash-hint.sh`.
+/// `rm ./-foo` so the name is treated as a path.
 fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
     let dash_file = args.iter().skip(1).find(|a| {
         os_str_as_bytes(a).is_ok_and(|b| b.len() >= 2 && b[0] == b'-')
