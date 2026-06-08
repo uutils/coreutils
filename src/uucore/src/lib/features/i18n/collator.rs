@@ -70,6 +70,7 @@ pub fn init_locale_collation() -> bool {
     // UTF-8 locale - initialize collator with Shifted mode to match GNU behavior
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
+    opts.strength = Some(Strength::Quaternary);
 
     try_init_collator(opts)
 }

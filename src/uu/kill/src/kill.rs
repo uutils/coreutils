@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) signalname pids killpg　NSIG
+// spell-checker:ignore (ToDO) signalname pids killpg
 
 use clap::{Arg, ArgAction, Command};
 use rustix::process::{
@@ -217,53 +217,20 @@ fn list(signals: &Vec<String>) {
     }
 }
 
-/// Convert a validated non-realtime signal number to a rustix [`Signal`].
-///
-/// # Safety (justification)
-///
-/// The caller must guarantee `sig > 0`. In this module that invariant is
-/// upheld by the control flow in [`kill()`], which routes `sig == 0` to the
-/// `test_kill_*` functions before reaching this helper.
-///
-/// Signal validity is ensured by [`signal_by_name_or_value`], which accepts:
-/// named and numeric signals in the supported platform range. Realtime signals
-/// are handled by [`raw_kill`] before this helper is called, because rustix
-/// does not permit libc-reserved realtime [`Signal`] values to be used for
-/// sending signals.
-fn sig_from_usize(sig: usize) -> Signal {
-    debug_assert!(
-        sig > 0,
-        "signal 0 must be handled before calling this function"
-    );
-    debug_assert!(!is_realtime_signal(sig));
-    // SAFETY: See function-level safety comment above.
-    unsafe { Signal::from_raw_unchecked(sig as i32) }
-}
-
 fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
     result.map_err(io::Error::from)
 }
 
+// rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
+// raw `libc::kill` for any value its safe constructor doesn't recognize.
 fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
     let sig = i32::try_from(sig).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+    // SAFETY: plain FFI call; `kill` has no memory-safety preconditions.
     if unsafe { libc::kill(pid as libc::pid_t, sig) } == 0 {
         Ok(())
     } else {
         Err(io::Error::last_os_error())
     }
-}
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn is_realtime_signal(sig: usize) -> bool {
-    let Ok(sig) = i32::try_from(sig) else {
-        return false;
-    };
-    (libc::SIGRTMIN()..=libc::SIGRTMAX()).contains(&sig)
-}
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-fn is_realtime_signal(_: usize) -> bool {
-    false
 }
 
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
@@ -291,19 +258,24 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
 }
 
 fn kill(sig: usize, pids: &[i32]) {
+    // Standard named signals use rustix's typed API; anything its safe
+    // constructor doesn't recognize (realtime/reserved) falls back to libc.
+    let named = (sig != 0)
+        .then(|| i32::try_from(sig).ok().and_then(Signal::from_named_raw))
+        .flatten();
     for &pid in pids {
         let result = match pid.cmp(&0) {
-            Ordering::Equal if sig == 0 => rustix_to_io(test_kill_current_process_group()),
-            Ordering::Equal if is_realtime_signal(sig) => raw_kill(0, sig),
-            Ordering::Equal => rustix_to_io(kill_current_process_group(sig_from_usize(sig))),
+            Ordering::Equal => match named {
+                _ if sig == 0 => rustix_to_io(test_kill_current_process_group()),
+                Some(s) => rustix_to_io(kill_current_process_group(s)),
+                None => raw_kill(0, sig),
+            },
             Ordering::Greater => {
                 let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
-                if sig == 0 {
-                    rustix_to_io(test_kill_process(pid))
-                } else if is_realtime_signal(sig) {
-                    raw_kill(pid.as_raw_nonzero().get(), sig)
-                } else {
-                    rustix_to_io(kill_process(pid, sig_from_usize(sig)))
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process(pid)),
+                    Some(s) => rustix_to_io(kill_process(pid, s)),
+                    None => raw_kill(pid.as_raw_nonzero().get(), sig),
                 }
             }
             Ordering::Less => {
@@ -316,12 +288,10 @@ fn kill(sig: usize, pids: &[i32]) {
                 };
                 let pid =
                     Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
-                if sig == 0 {
-                    rustix_to_io(test_kill_process_group(pid))
-                } else if is_realtime_signal(sig) {
-                    raw_kill(-pid.as_raw_nonzero().get(), sig)
-                } else {
-                    rustix_to_io(kill_process_group(pid, sig_from_usize(sig)))
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process_group(pid)),
+                    Some(s) => rustix_to_io(kill_process_group(pid, s)),
+                    None => raw_kill(-pid.as_raw_nonzero().get(), sig),
                 }
             }
         };

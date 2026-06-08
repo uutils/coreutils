@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# spell-checker:ignore mknod mknodat fchmod fchmodat mkfifoat strace
+# spell-checker:ignore mknod mknodat fchmod fchmodat mkfifoat strace newfstatat statx lstat CREAT FDCWD headtest
 #
 # TOCTOU (time-of-check / time-of-use) verification.
 #
@@ -61,9 +61,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    # The list intentionally holds a single util today; more will be added.
-    # shellcheck disable=SC2043
-    for util in mkfifo; do
+    for util in mkfifo touch head; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -103,6 +101,49 @@ if echo "$AVAILABLE_UTILS" | grep -q "mkfifo"; then
     fi
     echo "✓ mkfifo does not chmod after creation"
     rm -f test_fifo
+fi
+
+# Test touch - creating a file must use O_CREAT but never O_TRUNC, so that a
+# symlink planted in the metadata-check/open race window (#10019) is not
+# truncated. This observes the flags directly, which integration tests cannot.
+if echo "$AVAILABLE_UTILS" | grep -q "touch"; then
+    echo ""
+    echo "Testing touch (create_no_truncate)..."
+    touch_cmd=$(util_cmd touch)
+    strace -f -e trace=openat -o strace_touch_create.log $touch_cmd test_touch_new 2>/dev/null || true
+    cat strace_touch_create.log
+    if ! grep -q 'openat(.*test_touch_new.*O_CREAT' strace_touch_create.log; then
+        fail_immediately "touch did not create test_touch_new via openat(O_CREAT)"
+    fi
+    if grep 'test_touch_new' strace_touch_create.log | grep -q 'O_TRUNC'; then
+        fail_immediately "touch opened the target with O_TRUNC - vulnerable to truncating a symlink target (#10019)"
+    fi
+    echo "✓ touch creates with O_CREAT and without O_TRUNC"
+    rm -f test_touch_new
+fi
+
+# Test head - the is-a-directory check must derive from the already-open
+# descriptor (fstat/statx on the fd), not from a separate path-based stat
+# performed before the open. A path stat followed by an open is a TOCTOU
+# window (#11972): the object named by the path can be swapped in between.
+if echo "$AVAILABLE_UTILS" | grep -q "head"; then
+    echo ""
+    echo "Testing head (fstat_after_open)..."
+    head_cmd=$(util_cmd head)
+    echo "headtest" > test_head_file.txt
+    strace -f -e trace=openat,fstat,newfstatat,statx,stat,lstat \
+        -o strace_head_metadata.log $head_cmd -c 4 test_head_file.txt 2>/dev/null || true
+    cat strace_head_metadata.log
+    if ! grep -q 'openat(AT_FDCWD, "test_head_file.txt"' strace_head_metadata.log; then
+        fail_immediately "head did not open test_head_file.txt via openat"
+    fi
+    # The filename should appear only in the openat; any stat-family call naming
+    # the path means head stat'd it before opening - the TOCTOU window.
+    if grep '"test_head_file.txt"' strace_head_metadata.log | grep -qv 'openat('; then
+        fail_immediately "head stat'd the path before opening it - TOCTOU window (#11972); metadata must come from the open descriptor"
+    fi
+    echo "✓ head reads metadata from the open descriptor, not a path stat"
+    rm -f test_head_file.txt
 fi
 
 echo ""
