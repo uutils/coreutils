@@ -23,6 +23,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
 use uucore::translate;
+use uucore::error::strip_errno;
 
 use uucore::parser::parse_size::parse_size_u64;
 
