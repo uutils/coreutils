@@ -8,7 +8,7 @@ use rustix::fs::Mode;
 use rustix::process::umask;
 use std::io;
 use uucore::display::Quotable;
-use uucore::error::{UIoError, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!(
                     "mkfifo-error-cannot-create-fifo",
                     "path" => f.quote(),
-                    "error" => UIoError::from(e)
+                    "error" => os_err_msg(&e)
                 ),
             ));
         } else {
@@ -158,6 +158,18 @@ fn create_fifo(path: &str, mode: u32) -> Result<(), io::Error> {
         Ok(())
     } else {
         Err(io::Error::last_os_error())
+    }
+}
+
+/// Returns the OS error message without Rust's appended `(os error N)` suffix,
+/// so the output matches the format produced by GNU coreutils (e.g. "File exists"
+/// rather than "File exists (os error 17)").
+fn os_err_msg(e: &io::Error) -> String {
+    let s = e.to_string();
+    if let Some(idx) = s.rfind(" (os error ") {
+        s[..idx].to_string()
+    } else {
+        s
     }
 }
 

@@ -168,7 +168,9 @@ fn test_create_fifo_permission_denied() {
 
     // We no longer attempt to modify file permission if the file was failed to be created.
     // Therefore the error message should only contain "cannot create".
-    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
+    // The directory has mode 0o644 (no execute bit), so the real OS error is
+    // EACCES ("Permission denied"), not EEXIST ("File exists").
+    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': Permission denied\n");
 
     scene
         .ucmd()
