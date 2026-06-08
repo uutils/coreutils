@@ -177,6 +177,13 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // Match GNU install: zero the process umask so ancestor directories and
+    // target files are created with exact modes rather than umask-modified ones.
+    // chmod is applied explicitly for the target, and ancestors always use
+    // DEFAULT_MODE (0755) without umask interference.
+    #[cfg(unix)]
+    uucore::mode::zero_umask();
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
@@ -493,8 +500,23 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
                 //
                 // NOTE: the GNU "install" sets the expected mode only for the
                 // target directory. All created ancestor directories will have
-                // the default mode. Hence it is safe to use fs::create_dir_all
-                // and then only modify the target's dir mode.
+                // DEFAULT_MODE (0755). We use DirBuilder with an explicit mode
+                // rather than fs::create_dir_all so that the zeroed umask
+                // (set in uumain) does not cause ancestors to be created at 0777.
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::DirBuilderExt;
+                    let mut builder = fs::DirBuilder::new();
+                    builder.recursive(true).mode(DEFAULT_MODE);
+                    if let Err(e) = builder
+                        .create(path_to_create.as_path())
+                        .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
+                    {
+                        show!(e);
+                        continue;
+                    }
+                }
+                #[cfg(not(unix))]
                 if let Err(e) = fs::create_dir_all(path_to_create.as_path())
                     .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
                 {
