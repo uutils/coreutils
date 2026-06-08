@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-/* Last synced with: sync (GNU coreutils) 8.13 */
-
 use clap::{Arg, ArgAction, Command};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use nix::errno::Errno;
@@ -128,28 +126,27 @@ mod platform {
     fn flush_volume(name: &str) -> UResult<()> {
         let name_wide = name.to_wide_null();
         // SAFETY: `name` is a valid `str`, so `name_wide` is valid null-terminated UTF-16
-        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } == DRIVE_FIXED {
-            let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
-            match OpenOptions::new().write(true).open(sliced_name) {
-                Ok(file) => {
-                    // SAFETY: `file` is a valid `File`
-                    if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
-                        Err(USimpleError::new(
-                            get_last_error() as i32,
-                            translate!("sync-error-flush-file-buffer"),
-                        ))
-                    } else {
-                        Ok(())
-                    }
-                }
-                Err(e) => Err(USimpleError::new(
+        if unsafe { GetDriveTypeW(name_wide.as_ptr()) } != DRIVE_FIXED {
+            return Ok(());
+        }
+        let sliced_name = &name[..name.len() - 1]; // eliminate trailing backslash
+        let file = OpenOptions::new()
+            .write(true)
+            .open(sliced_name)
+            .map_err(|e| {
+                USimpleError::new(
                     e.raw_os_error().unwrap_or(1),
                     translate!("sync-error-create-volume-handle"),
-                )),
-            }
-        } else {
-            Ok(())
+                )
+            })?;
+        // SAFETY: `file` is a valid `File`
+        if unsafe { FlushFileBuffers(file.as_raw_handle() as HANDLE) } == 0 {
+            return Err(USimpleError::new(
+                get_last_error() as i32,
+                translate!("sync-error-flush-file-buffer"),
+            ));
         }
+        Ok(())
     }
 
     fn find_first_volume() -> UResult<(String, HANDLE)> {
@@ -201,16 +198,15 @@ mod platform {
 
     pub fn do_syncfs(files: &[String]) -> UResult<()> {
         for path in files {
-            let maybe_first = Path::new(path).components().next();
-            let vol_name = match maybe_first {
-                Some(c) => c.as_os_str().to_string_lossy().into_owned(),
-                None => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sync-error-no-such-file", "file" => path),
-                    ));
-                }
-            };
+            let vol_name = Path::new(path)
+                .components()
+                .next()
+                .ok_or_else(|| {
+                    USimpleError::new(1, translate!("sync-error-no-such-file", "file" => path))
+                })?
+                .as_os_str()
+                .to_string_lossy()
+                .into_owned();
             flush_volume(&vol_name)?;
         }
         Ok(())
