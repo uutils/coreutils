@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
+#[cfg(windows)]
+use uucore::display::strip_windows_verbatim_prefix;
 use uucore::error::{FromIo, UResult};
 use uucore::show_error;
 
@@ -106,15 +108,6 @@ fn logical_path() -> io::Result<PathBuf> {
             Some(value) if looks_reasonable(&value) => Ok(value),
             _ => env::current_dir(),
         }
-    }
-}
-
-#[cfg(windows)]
-fn strip_windows_verbatim_prefix(path: &str) -> Option<PathBuf> {
-    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
-        Some(PathBuf::from(format!(r"\\{rest}")))
-    } else {
-        path.strip_prefix(r"\\?\").map(PathBuf::from)
     }
 }
 

@@ -12,6 +12,8 @@ use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+#[cfg(windows)]
+use uucore::display::strip_windows_verbatim_prefix;
 use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
@@ -183,15 +185,6 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::AnyPath),
         )
-}
-
-#[cfg(windows)]
-fn strip_windows_verbatim_prefix(path: &str) -> Option<PathBuf> {
-    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
-        Some(PathBuf::from(format!(r"\\{rest}")))
-    } else {
-        path.strip_prefix(r"\\?\").map(PathBuf::from)
-    }
 }
 
 fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
