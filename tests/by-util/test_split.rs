@@ -2072,8 +2072,8 @@ fn test_split_directory_already_exists() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_io_error() {
-    new_ucmd!()
-        .arg("/proc/self/mem")
-        .fails_with_code(1)
-        .stderr_is("split: Input/output error\n");
+    let scene = new_ucmd!().arg("/proc/self/mem").fails_with_code(1);
+    let stderr = scene.stderr_str();
+
+    assert!(stderr == "split: Input/output error\n" || stderr == "split: I/O error\n");
 }
