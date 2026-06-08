@@ -1583,35 +1583,38 @@ fn test_symlink_to_dot_protection() {
 }
 
 #[test]
-fn test_dash_hint() {
-    // `rm -foo` where a file named "-foo" exists: GNU suggests `rm ./-foo`.
-    // The invocation prefix (`{$util_name}`) varies in tests, so only the
-    // stable parts are checked.
-    let ts = TestScenario::new(util_name!());
-    let at = &ts.fixtures;
+fn test_dash_hint_shown_for_existing_dash_file() {
+    // A dash-prefixed name that exists is parsed as an option; rm should point
+    // the user at the `./` workaround instead of silently failing.
+    let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("-foo");
-    ts.ucmd()
-        .arg("-foo")
-        .fails_with_code(1)
-        .stderr_contains("./-foo' to remove the file '-foo'.")
-        .stderr_contains("--help' for more information.");
-    assert!(at.file_exists("-foo"));
+    at.touch("-z");
+    let result = ucmd.arg("-z").fails_with_code(1);
+    result.stderr_contains("./-z' to remove the file '-z'.");
+    result.stderr_contains("--help' for more information.");
+    assert!(at.file_exists("-z"));
+}
 
-    // The suggestion is shell-escaped so it can be copy-pasted. Newlines are
-    // not valid in Windows file names, so only exercise this on Unix.
-    #[cfg(unix)]
-    {
-        at.touch("-foo\nbar");
-        ts.ucmd()
-            .arg("-foo\nbar")
-            .fails_with_code(1)
-            .stderr_contains("./'-foo'$'\\n''bar'' to remove the file '-foo'$'\\n''bar'.");
-    }
-
-    // No matching file exists: the hint must not be shown.
-    ts.ucmd()
-        .arg("-bar")
+#[test]
+fn test_dash_hint_absent_without_matching_file() {
+    // When no such file is on disk there is nothing to suggest, so the hint
+    // line must be omitted entirely.
+    new_ucmd!()
+        .arg("-q")
         .fails_with_code(1)
         .stderr_does_not_contain("to remove the file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_dash_hint_is_shell_escaped() {
+    // Awkward characters in the name (here a tab and a quote) must be escaped so
+    // the printed command can be pasted into a shell verbatim.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let name = "-a\tb'c";
+    at.touch(name);
+    ucmd.arg(name)
+        .fails_with_code(1)
+        .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }
