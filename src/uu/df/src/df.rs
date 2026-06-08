@@ -6,6 +6,7 @@
 mod blocks;
 mod columns;
 mod filesystem;
+pub mod output;
 mod table;
 
 use blocks::HumanReadable;
@@ -22,13 +23,14 @@ use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
 use std::io::stdout;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
-use crate::filesystem::Filesystem;
+pub use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
+pub use crate::output::{DfOutput, StreamMode, StreamingOutput};
 use crate::table::Table;
 
 static OPT_HELP: &str = "help";
@@ -58,7 +60,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 /// Most of these parameters control which rows and which columns are
 /// displayed. The `block_size` determines the units to use when
 /// displaying numbers of bytes or inodes.
-struct Options {
+pub struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     human_readable: Option<HumanReadable>,
@@ -112,6 +114,11 @@ impl Default for Options {
 }
 
 impl Options {
+    /// Convert command-line arguments into [`Options`].
+    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
+        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    }
+
     /// Whether -a, -l, -t, or -x options require the mount table.
     fn requires_mount_table(&self) -> bool {
         self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
@@ -434,6 +441,86 @@ impl UError for DfError {
     }
 }
 
+/// Text output implementation that formats filesystem data as the standard `df` table.
+pub struct TextOutput;
+
+impl DfOutput for TextOutput {
+    fn write_filesystems(
+        &mut self,
+        filesystems: Vec<Filesystem>,
+        options: &Options,
+    ) -> UResult<()> {
+        Table::new(options, filesystems).write_to(&mut stdout())?;
+        Ok(())
+    }
+}
+
+/// Display filesystem usage information, sending output to a custom sink.
+///
+/// This is the programmatic entry point for `df`. It gathers filesystems using
+/// the provided options and sends the results to `output` without requiring
+/// consumers to parse text output.
+pub fn df_with_output<P, O>(paths: Option<&[P]>, opt: &Options, output: &mut O) -> UResult<()>
+where
+    P: AsRef<Path>,
+    O: DfOutput,
+{
+    output.initialize(opt)?;
+
+    let filesystems = match paths {
+        None => {
+            let filesystems = get_all_filesystems(opt).map_err(|e| {
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+                USimpleError::new(e.code(), format!("{context}: {e}"))
+            })?;
+
+            if filesystems.is_empty() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed"),
+                ));
+            }
+
+            filesystems
+        }
+        Some(paths) => {
+            let filesystems = get_named_filesystems(paths, opt).map_err(|e| {
+                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+                USimpleError::new(e.code(), format!("{context}: {e}"))
+            })?;
+
+            // This can happen if paths are given as command-line arguments
+            // but none of the paths exist.
+            if filesystems.is_empty() {
+                output.finalize(opt)?;
+                return Ok(());
+            }
+
+            filesystems
+        }
+    };
+
+    if matches!(output.stream_mode(), StreamMode::Streaming) {
+        for filesystem in &filesystems {
+            output.write_filesystem(filesystem, opt)?;
+        }
+    } else {
+        output.write_filesystems(filesystems, opt)?;
+    }
+
+    output.finalize(opt)?;
+    Ok(())
+}
+
+/// Display filesystem usage information as text on stdout.
+pub fn df<P>(paths: Option<&[P]>, opt: &Options) -> UResult<()>
+where
+    P: AsRef<Path>,
+{
+    let mut output = TextOutput;
+    df_with_output(paths, opt, &mut output)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -449,44 +536,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
-    // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
-        None => {
-            let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
+    let opt = Options::from_matches(&matches)?;
+    let paths: Option<Vec<PathBuf>> = matches
+        .get_many::<OsString>(OPT_PATHS)
+        .map(|paths| paths.map(PathBuf::from).collect());
 
-            if filesystems.is_empty() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("df-error-no-file-systems-processed"),
-                ));
-            }
-
-            filesystems
-        }
-        Some(paths) => {
-            let paths: Vec<_> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
-
-            // This can happen if paths are given as command-line arguments
-            // but none of the paths exist.
-            if filesystems.is_empty() {
-                return Ok(());
-            }
-
-            filesystems
-        }
-    };
-
-    Table::new(&opt, filesystems).write_to(&mut stdout())?;
-
-    Ok(())
+    df(paths.as_deref(), &opt)
 }
 
 pub fn uu_app() -> Command {
