@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigemptyset sigaddset sighandler
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -19,11 +19,6 @@ use native_int_str::{
 };
 #[cfg(unix)]
 use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SigHandler::{SigDfl, SigIgn},
-    SigSet, SigmaskHow, Signal, signal, sigprocmask,
-};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
@@ -294,17 +289,21 @@ fn build_signal_request(
     Ok(request)
 }
 
+/// Validate a signal number and return it as a raw `c_int`.
+///
+/// Returns `None` for numbers that are not usable signals (e.g. the
+/// glibc-reserved 32/33 on Linux). Real-time signals (`SIGRTMIN..=SIGRTMAX`)
+/// are accepted directly since nix's `Signal` enum cannot represent them.
 #[cfg(unix)]
-fn signal_from_value(sig_value: usize) -> UResult<Signal> {
-    Signal::try_from(sig_value as i32).map_err(|_| {
-        USimpleError::new(
-            125,
-            translate!(
-                "env-error-invalid-signal",
-                "signal" => sig_value.to_string().quote()
-            ),
-        )
-    })
+fn signal_from_value(sig_value: usize) -> Option<i32> {
+    let sig = i32::try_from(sig_value).ok()?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if sig >= libc::SIGRTMIN() && sig <= libc::SIGRTMAX() {
+        return Some(sig);
+    }
+    // For standard signals, let nix reject platform gaps (matches GNU, which
+    // silently skips undefined signals).
+    nix::sys::signal::Signal::try_from(sig).ok().map(|_| sig)
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -731,13 +730,13 @@ impl EnvAppData {
                 &opts.default_signal,
                 &mut signal_action_log,
                 SignalActionKind::Default,
-                reset_signal,
+                |sig| set_signal_disposition(sig, libc::SIG_DFL),
             )?;
             apply_signal_action(
                 &opts.ignore_signal,
                 &mut signal_action_log,
                 SignalActionKind::Ignore,
-                ignore_signal,
+                |sig| set_signal_disposition(sig, libc::SIG_IGN),
             )?;
             apply_signal_action(
                 &opts.block_signal,
@@ -1072,12 +1071,12 @@ fn apply_signal_action<F>(
     signal_fn: F,
 ) -> UResult<()>
 where
-    F: Fn(Signal) -> UResult<()>,
+    F: Fn(i32) -> UResult<()>,
 {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
-        let Ok(sig) = signal_from_value(sig_value) else {
+        let Some(sig) = signal_from_value(sig_value) else {
             return Ok(());
         };
         signal_fn(sig)?;
@@ -1095,46 +1094,47 @@ where
     })
 }
 
+/// Set `sig`'s disposition to `SIG_IGN`/`SIG_DFL`.
+///
+/// We use `libc::sigaction` directly rather than nix so that real-time signals
+/// (whose numbers are not in nix's `Signal` enum) are handled too. rustix
+/// deliberately does not wrap sigaction (see its not_implemented::libc_internals),
+/// leaving signal disposition to libc, so libc is the intended tool here.
 #[cfg(unix)]
-fn ignore_signal(sig: Signal) -> UResult<()> {
-    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    let result = unsafe { signal(sig, SigIgn) };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
+fn set_signal_disposition(sig: i32, handler: libc::sighandler_t) -> UResult<()> {
+    // SAFETY: a zeroed sigaction with an empty mask and SIG_IGN/SIG_DFL is a valid
+    // disposition; we only set the handler for each signal once.
+    let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
+    action.sa_sigaction = handler;
+    unsafe { libc::sigemptyset(&raw mut action.sa_mask) };
+    if unsafe { libc::sigaction(sig, &raw const action, std::ptr::null_mut()) } == -1 {
+        return Err(signal_action_error(sig));
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn reset_signal(sig: Signal) -> UResult<()> {
-    let result = unsafe { signal(sig, SigDfl) };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
+fn block_signal(sig: i32) -> UResult<()> {
+    // SAFETY: build a set containing only `sig` and add it to the process mask.
+    let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
+    unsafe { libc::sigemptyset(&raw mut set) };
+    unsafe { libc::sigaddset(&raw mut set, sig) };
+    if unsafe { libc::sigprocmask(libc::SIG_BLOCK, &raw const set, std::ptr::null_mut()) } == -1 {
+        return Err(signal_action_error(sig));
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn block_signal(sig: Signal) -> UResult<()> {
-    let mut set = SigSet::empty();
-    set.add(sig);
-    if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-    Ok(())
+fn signal_action_error(sig: i32) -> Box<dyn UError> {
+    USimpleError::new(
+        125,
+        translate!(
+            "env-error-failed-set-signal-action",
+            "signal" => sig,
+            "error" => io::Error::last_os_error().to_string()
+        ),
+    )
 }
 
 #[cfg(unix)]
