@@ -704,8 +704,8 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
                 #[cfg(unix)]
                 {
-                    // Use DEFAULT_MODE (0o755) for created directories - this matches GNU install
-                    // behavior. The actual mode will be modified by umask at the kernel level.
+                    // Use DEFAULT_MODE (0o755) for created directories. umask was zeroed in
+                    // uumain, so ancestors are created at exactly 0755, matching GNU install.
                     match create_dir_all_safe(to_create, DEFAULT_MODE) {
                         Ok(dir_fd) => {
                             if b.target_dir.is_none()
