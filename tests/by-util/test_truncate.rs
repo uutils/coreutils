@@ -404,6 +404,19 @@ fn test_no_such_dir() {
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
 }
 
+/// Test that truncate processes every file even if one fails.
+#[test]
+fn test_continue_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "0", "a", "dir", "b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("dir");
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+}
+
 /// Test that truncate with a relative size less than 0 is not an error.
 #[test]
 fn test_underflow_relative_size() {
