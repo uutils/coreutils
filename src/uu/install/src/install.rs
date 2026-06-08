@@ -127,6 +127,9 @@ enum InstallError {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
+
+    #[error("{}", translate!("install-error-not-permitted", "path" => .0.quote()))]
+    NotPermitted(PathBuf),
 }
 
 impl UError for InstallError {
@@ -977,13 +980,17 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
-    if let Err(e) = fs::remove_file(to)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        show_error!(
-            "{}",
-            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-        );
+    if let Err(e) = fs::remove_file(to) {
+        match e.kind() {
+            std::io::ErrorKind::NotFound => {}
+            std::io::ErrorKind::PermissionDenied => {
+                return Err(InstallError::NotPermitted(to.to_path_buf()).into());
+            }
+            _ => show_error!(
+                "{}",
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+            ),
+        }
     }
 
     let mut handle = File::open(from)?;
