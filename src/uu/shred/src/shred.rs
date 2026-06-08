@@ -625,6 +625,12 @@ fn wipe_file(
 ) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
+    if !path.is_file() {
+        return Err(USimpleError::new(
+            1,
+            translate!("shred-failed-to-open-writing-not-dir"),
+        ));
+    }
     if !path.exists() {
         return Err(USimpleError::new(
             1,

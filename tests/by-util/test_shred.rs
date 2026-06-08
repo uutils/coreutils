@@ -434,3 +434,15 @@ fn test_gnu_shred_passes_different_counts() {
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
 }
+
+#[test]
+fn test_shred_trailing_slash_on_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    scene
+        .ucmd()
+        .arg("a/")
+        .fails()
+        .stderr_contains("Not a directory");
+}
