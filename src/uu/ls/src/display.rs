@@ -618,7 +618,7 @@ fn display_uname(
 ) -> Cow<'static, str> {
     #[cfg(windows)]
     if config.long.numeric_uid_gid {
-        if let Some((uid, _gid)) = nfs3_uid_gid(item.path(), item.must_dereference) {
+        if let Some((uid, _gid)) = windows_nfs::uid_gid(item.path(), item.must_dereference) {
             return Cow::Owned(uid.to_string());
         }
     }
@@ -637,7 +637,7 @@ fn display_group(
 ) -> Cow<'static, str> {
     #[cfg(windows)]
     if config.long.numeric_uid_gid {
-        if let Some((_uid, gid)) = nfs3_uid_gid(item.path(), item.must_dereference) {
+        if let Some((_uid, gid)) = windows_nfs::uid_gid(item.path(), item.must_dereference) {
             return Cow::Owned(gid.to_string());
         }
     }
@@ -648,8 +648,9 @@ fn display_group(
 }
 
 #[cfg(windows)]
-fn nfs3_uid_gid(path: &Path, dereference: bool) -> Option<(u32, u32)> {
-    use std::mem::{MaybeUninit, size_of};
+mod windows_nfs {
+    use super::Path;
+    use std::mem::size_of;
     use std::os::windows::ffi::OsStrExt;
     use std::{ffi::c_void, ptr};
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
@@ -678,7 +679,7 @@ fn nfs3_uid_gid(path: &Path, dereference: bool) -> Option<(u32, u32)> {
         nlink: u32,
         uid: u32,
         gid: u32,
-        _filler1: u32,
+        reserved: u32,
         size: u64,
         used: u64,
         rdev_specdata1: u32,
@@ -720,83 +721,166 @@ fn nfs3_uid_gid(path: &Path, dereference: bool) -> Option<(u32, u32)> {
         }
     }
 
-    let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
-    wide_path.push(0);
+    pub(super) fn uid_gid(path: &Path, dereference: bool) -> Option<(u32, u32)> {
+        let handle = open_path(path, dereference)?;
+        let mut ea_list = nfs3_ea_query_list();
+        let mut buffer = vec![0u8; nfs3_ea_buffer_len()];
+        let mut iosb = IoStatusBlock {
+            status: 0,
+            information: 0,
+        };
 
-    let flags = if dereference {
-        FILE_FLAG_BACKUP_SEMANTICS
-    } else {
-        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
-    };
-    let handle = unsafe {
-        CreateFileW(
-            wide_path.as_ptr(),
-            FILE_GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-            ptr::null(),
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | flags,
-            ptr::null_mut(),
-        )
-    };
-    if handle == INVALID_HANDLE_VALUE {
-        return None;
-    }
-    let handle = Handle(handle);
+        let status = unsafe {
+            NtQueryEaFile(
+                handle.0,
+                &mut iosb,
+                buffer.as_mut_ptr().cast(),
+                buffer.len() as u32,
+                1,
+                ea_list.as_mut_ptr().cast(),
+                ea_list.len() as u32,
+                ptr::null_mut(),
+                1,
+            )
+        };
+        if status < 0 {
+            return None;
+        }
 
-    let ea_list_len = FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1;
-    let mut ea_list = vec![0u8; ea_list_len];
-    ea_list[4] = EA_NFSV3ATTRIBUTES.len() as u8;
-    ea_list[FILE_GET_EA_INFORMATION_HEADER_LEN
-        ..FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len()]
-        .copy_from_slice(EA_NFSV3ATTRIBUTES);
-
-    let mut buffer = vec![
-        0u8;
-        FILE_FULL_EA_INFORMATION_HEADER_LEN
-            + EA_NFSV3ATTRIBUTES.len()
-            + 1
-            + size_of::<Nfs3Attrs>()
-    ];
-    let mut iosb = MaybeUninit::<IoStatusBlock>::uninit();
-    let status = unsafe {
-        NtQueryEaFile(
-            handle.0,
-            iosb.as_mut_ptr(),
-            buffer.as_mut_ptr().cast(),
-            buffer.len() as u32,
-            1,
-            ea_list.as_mut_ptr().cast(),
-            ea_list.len() as u32,
-            ptr::null_mut(),
-            1,
-        )
-    };
-    if status < 0 {
-        return None;
+        parse_uid_gid(&buffer)
     }
 
-    let name_len = buffer.get(5).copied()? as usize;
-    if name_len != EA_NFSV3ATTRIBUTES.len() {
-        return None;
+    fn open_path(path: &Path, dereference: bool) -> Option<Handle> {
+        let mut wide_path: Vec<u16> = path.as_os_str().encode_wide().collect();
+        wide_path.push(0);
+
+        let flags = if dereference {
+            FILE_FLAG_BACKUP_SEMANTICS
+        } else {
+            FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT
+        };
+        let handle = unsafe {
+            CreateFileW(
+                wide_path.as_ptr(),
+                FILE_GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                ptr::null(),
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL | flags,
+                ptr::null_mut(),
+            )
+        };
+        if handle == INVALID_HANDLE_VALUE {
+            None
+        } else {
+            Some(Handle(handle))
+        }
     }
 
-    let value_len = u16::from_le_bytes(buffer.get(6..8)?.try_into().ok()?) as usize;
-    if value_len < size_of::<Nfs3Attrs>() {
-        return None;
+    fn nfs3_ea_query_list() -> Vec<u8> {
+        let mut ea_list =
+            vec![0u8; FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1];
+        ea_list[4] = EA_NFSV3ATTRIBUTES.len() as u8;
+        ea_list[FILE_GET_EA_INFORMATION_HEADER_LEN
+            ..FILE_GET_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len()]
+            .copy_from_slice(EA_NFSV3ATTRIBUTES);
+        ea_list
     }
 
-    let value_offset = FILE_FULL_EA_INFORMATION_HEADER_LEN + name_len + 1;
-    let value = buffer.get(value_offset..value_offset + size_of::<Nfs3Attrs>())?;
-    let mut attrs = MaybeUninit::<Nfs3Attrs>::uninit();
-    unsafe {
-        ptr::copy_nonoverlapping(
-            value.as_ptr(),
-            attrs.as_mut_ptr().cast::<u8>(),
-            size_of::<Nfs3Attrs>(),
-        );
-        let attrs = attrs.assume_init();
+    fn nfs3_ea_buffer_len() -> usize {
+        FILE_FULL_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1 + size_of::<Nfs3Attrs>()
+    }
+
+    fn parse_uid_gid(buffer: &[u8]) -> Option<(u32, u32)> {
+        let name_len = buffer.get(5).copied()? as usize;
+        if name_len != EA_NFSV3ATTRIBUTES.len() {
+            return None;
+        }
+
+        let value_len = u16::from_le_bytes(buffer.get(6..8)?.try_into().ok()?) as usize;
+        if value_len < size_of::<Nfs3Attrs>() {
+            return None;
+        }
+
+        let value_offset = FILE_FULL_EA_INFORMATION_HEADER_LEN + name_len + 1;
+        let value = buffer.get(value_offset..value_offset + size_of::<Nfs3Attrs>())?;
+        let attrs = unsafe { ptr::read_unaligned(value.as_ptr().cast::<Nfs3Attrs>()) };
         Some((attrs.uid, attrs.gid))
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn nfs3_attrs(uid: u32, gid: u32) -> Nfs3Attrs {
+            Nfs3Attrs {
+                file_type: 0,
+                mode: 0,
+                nlink: 0,
+                uid,
+                gid,
+                reserved: 0,
+                size: 0,
+                used: 0,
+                rdev_specdata1: 0,
+                rdev_specdata2: 0,
+                fsid: 0,
+                fileid: 0,
+                atime: Nfs3AttrsTime {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+                mtime: Nfs3AttrsTime {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+                ctime: Nfs3AttrsTime {
+                    tv_sec: 0,
+                    tv_nsec: 0,
+                },
+            }
+        }
+
+        fn ea_buffer(uid: u32, gid: u32) -> Vec<u8> {
+            let attrs = nfs3_attrs(uid, gid);
+            let mut buffer = vec![0u8; nfs3_ea_buffer_len()];
+            buffer[5] = EA_NFSV3ATTRIBUTES.len() as u8;
+            buffer[6..8].copy_from_slice(&(size_of::<Nfs3Attrs>() as u16).to_le_bytes());
+            buffer[FILE_FULL_EA_INFORMATION_HEADER_LEN
+                ..FILE_FULL_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len()]
+                .copy_from_slice(EA_NFSV3ATTRIBUTES);
+
+            let value_offset = FILE_FULL_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1;
+            let attrs_bytes = unsafe {
+                std::slice::from_raw_parts(
+                    (&attrs as *const Nfs3Attrs).cast::<u8>(),
+                    size_of::<Nfs3Attrs>(),
+                )
+            };
+            buffer[value_offset..value_offset + attrs_bytes.len()].copy_from_slice(attrs_bytes);
+            buffer
+        }
+
+        #[test]
+        fn parse_uid_gid_from_nfs3_ea_buffer() {
+            assert_eq!(parse_uid_gid(&ea_buffer(1001, 1002)), Some((1001, 1002)));
+        }
+
+        #[test]
+        fn parse_uid_gid_rejects_wrong_ea_name_length() {
+            let mut buffer = ea_buffer(1001, 1002);
+            buffer[5] -= 1;
+
+            assert_eq!(parse_uid_gid(&buffer), None);
+        }
+
+        #[test]
+        fn parse_uid_gid_rejects_short_value() {
+            let mut buffer = ea_buffer(1001, 1002);
+            buffer[6..8].copy_from_slice(&(size_of::<Nfs3Attrs>() as u16 - 1).to_le_bytes());
+
+            assert_eq!(parse_uid_gid(&buffer), None);
+        }
     }
 }
 
