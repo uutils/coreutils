@@ -94,6 +94,7 @@ cp-error-failed-to-create-directory = Failed to create directory: { $error }
 cp-error-backup-format = cp: { $error }
   Try '{ $exec } --help' for more information.
 cp-error-setting-attributes = setting attributes for { $path }
+cp-error-write = write error
 
 # Debug enum strings
 cp-debug-enum-no = no
