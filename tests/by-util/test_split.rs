@@ -2075,5 +2075,5 @@ fn test_io_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
         .fails_with_code(1)
-        .stderr_contains("(os error 5)\n");
+        .stderr_is("split: Input/output error\n");
 }
