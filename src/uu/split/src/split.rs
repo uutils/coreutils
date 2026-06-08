@@ -1575,7 +1575,7 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
             if let Err(e) = io::copy(&mut reader, &mut writer) {
-                return Err(USimpleError::new(1, format!("{}", strip_errno(&e))));
+                return Err(USimpleError::new(1, strip_errno(&e).clone()));
             }
             Ok(())
         }
