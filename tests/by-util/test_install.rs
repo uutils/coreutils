@@ -105,10 +105,6 @@ fn test_install_ancestors_mode_directories() {
     let target_dir = "ancestor1/ancestor2/target_dir";
     let directories_arg = "-d";
     let mode_arg = "--mode=200";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     ucmd.args(&[mode_arg, directories_arg, target_dir])
         .succeeds()
@@ -118,8 +114,10 @@ fn test_install_ancestors_mode_directories() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.dir_exists(target_dir));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
+    // GNU install zeros umask at startup and creates ancestor dirs at exactly
+    // 0755 (DEFAULT_MODE). --mode applies only to the final target.
+    assert_eq!(0o40_755_u32, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(0o40_755_u32, at.metadata(ancestor2).permissions().mode());
 
     // Expected mode only on the target_dir.
     assert_eq!(0o40_200_u32, at.metadata(target_dir).permissions().mode());
@@ -134,10 +132,6 @@ fn test_install_ancestors_mode_directories_with_file() {
     let directories_arg = "-D";
     let mode_arg = "--mode=200";
     let file = "file";
-    let probe = "probe";
-
-    at.mkdir(probe);
-    let default_perms = at.metadata(probe).permissions().mode();
 
     at.touch(file);
 
@@ -149,8 +143,10 @@ fn test_install_ancestors_mode_directories_with_file() {
     assert!(at.dir_exists(ancestor2));
     assert!(at.file_exists(target_file));
 
-    assert_eq!(default_perms, at.metadata(ancestor1).permissions().mode());
-    assert_eq!(default_perms, at.metadata(ancestor2).permissions().mode());
+    // GNU install zeros umask at startup and creates ancestor dirs at exactly
+    // 0755 (DEFAULT_MODE). --mode applies only to the final target.
+    assert_eq!(0o40_755_u32, at.metadata(ancestor1).permissions().mode());
+    assert_eq!(0o40_755_u32, at.metadata(ancestor2).permissions().mode());
 
     // Expected mode only on the target_file.
     assert_eq!(0o100_200_u32, at.metadata(target_file).permissions().mode());
