@@ -206,7 +206,7 @@ pub fn get_umask() -> u32 {
 ///
 /// GNU install calls umask(0) at startup so that directories and files are
 /// created with exact modes rather than umask-modified ones. Call this early
-/// in tools that need identical behaviour.
+/// in tools that need identical behavior.
 #[cfg(unix)]
 pub fn zero_umask() -> u32 {
     use rustix::fs::Mode;
