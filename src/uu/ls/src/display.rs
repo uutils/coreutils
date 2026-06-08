@@ -733,7 +733,7 @@ mod windows_nfs {
         let status = unsafe {
             NtQueryEaFile(
                 handle.0,
-                &mut iosb,
+                &raw mut iosb,
                 buffer.as_mut_ptr().cast(),
                 buffer.len() as u32,
                 1,
