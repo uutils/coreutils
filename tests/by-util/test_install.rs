@@ -2818,3 +2818,30 @@ fn test_install_proc_self_mem_as_dst() {
         .fails()
         .stderr_contains("cannot remove");
 }
+
+#[test]
+fn test_install_backup_nil_same_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_install_backup_numbering_file";
+
+    at.write(file, "content");
+
+    let methods = [
+        "none", "off", "numbered", "t", "existing", "nil", "simple", "never",
+    ];
+
+    for method in &methods {
+        scene
+            .ucmd()
+            .args(&[
+                format!("--backup={method}"),
+                file.to_string(),
+                file.to_string(),
+            ])
+            .fails()
+            .stderr_contains("are the same file");
+        assert_eq!(at.read(file), "content");
+    }
+}

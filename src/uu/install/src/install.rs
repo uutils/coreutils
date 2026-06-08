@@ -771,6 +771,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return copy_files_into_dir(sources, &target, b);
         }
 
+        if b.backup_mode.ne(&BackupMode::None)
+            && let Ok(to_abs) = target.canonicalize()
+        {
+            if source.canonicalize()? == to_abs {
+                return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+            }
+        }
+
         if target.is_file() || is_new_file_path(&target) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
