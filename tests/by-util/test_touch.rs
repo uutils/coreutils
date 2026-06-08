@@ -803,6 +803,29 @@ fn test_touch_fifo() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
+fn test_touch_dash_updates_stdout_file() {
+    // `touch -` must update the times of the file open as stdout (fd 1), even
+    // when it is read-only, and set them to "now" rather than a 1970 sentinel.
+    use std::fs::File;
+    use std::time::SystemTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("c");
+    // Age the file so the update to "now" is detectable.
+    let old = FileTime::from_unix_time(1_000_000, 0);
+    filetime::set_file_times(at.plus("c"), old, old).unwrap();
+
+    let file = File::open(at.plus("c")).unwrap();
+    ucmd.set_stdout(file).arg("-").succeeds();
+
+    let mtime = at.metadata("c").modified().unwrap();
+    let age = SystemTime::now().duration_since(mtime).unwrap();
+    assert!(age.as_secs() < 60, "touch - left mtime stale: {age:?}");
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
     let file = "no-file/";
