@@ -790,6 +790,19 @@ fn test_touch_system_fails() {
 }
 
 #[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
+fn test_touch_fifo() {
+    // touch must not hang on a reader-less FIFO and must update its times.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-d", "2020-01-01 00:00:00", "fifo"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("fifo"));
+}
+
+#[test]
 #[cfg(not(target_os = "windows"))]
 fn test_touch_trailing_slash() {
     let file = "no-file/";

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime DATETIME UTIME futimens
-// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT
+// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT ENXIO RDONLY utimensat
 
 pub mod error;
 
@@ -606,15 +606,54 @@ fn update_times(
     }
 
     #[cfg(unix)]
-    {
+    if !is_stdout {
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if !is_stdout && try_futimens_via_write_fd(path, atime, mtime).is_ok() {
+        if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
             return Ok(());
         }
+        // The write-FD approach fails on special files such as FIFOs (the
+        // write-only open returns ENXIO when there is no reader). Set the times
+        // by path with utimensat, which never opens the file and so never
+        // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
+        // would hang on a reader-less FIFO.
+        return set_times_by_path(path, atime, mtime);
     }
 
     set_file_times(path, atime, mtime)
         .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+}
+
+#[cfg(unix)]
+/// Build a rustix `Timestamps` from the access and modification `FileTime`s,
+/// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
+fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+    Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    }
+}
+
+#[cfg(unix)]
+/// Set file times by path using `utimensat`, following symlinks.
+///
+/// This never opens the file, so it does not block on special files such as
+/// FIFOs.
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+    let timestamps = build_timestamps(atime, mtime);
+    rustix::fs::utimensat(
+        rustix::fs::CWD,
+        path,
+        &timestamps,
+        rustix::fs::AtFlags::empty(),
+    )
+    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 #[cfg(unix)]
