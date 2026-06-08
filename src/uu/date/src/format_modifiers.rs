@@ -38,6 +38,13 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
 
+/// Upper bound on the field width we will allocate for. Anything wider is
+/// rejected as `FieldWidthTooLarge` instead of being handed to the allocator.
+/// A huge request (e.g. `%6666666666666D`) would otherwise abort the process
+/// under a sanitizer before `try_reserve` could fail gracefully, and OOM
+/// elsewhere.
+const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
+
 /// Error type for format modifier operations
 #[derive(Debug)]
 pub enum FormatError {
@@ -67,6 +74,13 @@ impl fmt::Display for FormatError {
 impl From<jiff::Error> for FormatError {
     fn from(e: jiff::Error) -> Self {
         Self::JiffError(e)
+    }
+}
+
+fn field_width_too_large(width: usize, specifier: &str) -> FormatError {
+    FormatError::FieldWidthTooLarge {
+        width,
+        specifier: specifier.to_string(),
     }
 }
 
@@ -422,6 +436,9 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         None if underscore_flag || pad_char != default_pad => get_default_width(specifier),
         None => 0,
     };
+    if effective_width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(effective_width, specifier));
+    }
 
     // When the requested width is narrower than the default formatted width, GNU first removes default padding and then reapplies the requested width.
     if effective_width > 0 && effective_width < result.len() {
@@ -491,19 +508,16 @@ fn try_alloc_padded(
     width: usize,
     specifier: &str,
 ) -> Result<String, FormatError> {
-    let target_len =
-        current_len
-            .checked_add(padding)
-            .ok_or_else(|| FormatError::FieldWidthTooLarge {
-                width,
-                specifier: specifier.to_string(),
-            })?;
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, specifier));
+    }
+
+    let target_len = current_len
+        .checked_add(padding)
+        .ok_or_else(|| field_width_too_large(width, specifier))?;
     let mut s = String::new();
     s.try_reserve(target_len)
-        .map_err(|_| FormatError::FieldWidthTooLarge {
-            width,
-            specifier: specifier.to_string(),
-        })?;
+        .map_err(|_| field_width_too_large(width, specifier))?;
     Ok(s)
 }
 
@@ -866,6 +880,29 @@ mod tests {
             err,
             FormatError::FieldWidthTooLarge { width, specifier }
             if width == usize::MAX && specifier == "Y"
+        ));
+    }
+
+    #[test]
+    fn test_try_alloc_padded_rejects_width_above_supported_max() {
+        // A target length exactly at the cap is allowed; one byte over is rejected.
+        assert!(try_alloc_padded(0, MAX_FORMAT_WIDTH, MAX_FORMAT_WIDTH, "Y").is_ok());
+        let err = try_alloc_padded(1, 1, MAX_FORMAT_WIDTH + 1, "s").unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width, specifier }
+            if width == MAX_FORMAT_WIDTH + 1 && specifier == "s"
+        ));
+    }
+
+    #[test]
+    fn test_apply_modifiers_rejects_width_above_review_cap() {
+        let width = u16::MAX as usize + 1;
+        let err = apply_modifiers("00", &spec("", Some(width), "S")).unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width: rejected, specifier }
+            if rejected == width && specifier == "S"
         ));
     }
 

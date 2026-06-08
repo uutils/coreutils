@@ -235,8 +235,8 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         // which we need to avoid here.
         // All directory-ish paths match "*/", except ".", "..", "*/.", and "*/..".
         let path_bytes = path.as_os_str().as_encoded_bytes();
-        let looks_like_dir = path_bytes == [b'.']
-            || path_bytes == [b'.', b'.']
+        let looks_like_dir = path_bytes == *b"."
+            || path_bytes == *b".."
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);

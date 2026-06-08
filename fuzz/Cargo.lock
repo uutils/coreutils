@@ -2066,6 +2066,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
+ "rustix",
  "thiserror",
  "uucore",
 ]

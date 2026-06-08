@@ -53,20 +53,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    match Settings::from(&matches, obs_lines.as_deref()) {
-        Ok(settings) => {
-            // When using --filter, we write to a child process's stdin which may
-            // close early. Disable SIGPIPE so we get EPIPE errors instead of
-            // being terminated, allowing graceful handling of broken pipes.
-            #[cfg(unix)]
-            if settings.filter.is_some() {
-                let _ = uucore::signals::disable_pipe_errors();
-            }
-            split(&settings)
+    let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        if e.requires_usage() {
+            UUsageError::new(1, format!("{e}"))
+        } else {
+            USimpleError::new(1, format!("{e}"))
         }
-        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
-        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
+    })?;
+
+    // When using --filter, we write to a child process's stdin which may
+    // close early. Disable SIGPIPE so we get EPIPE errors instead of
+    // being terminated, allowing graceful handling of broken pipes.
+    #[cfg(unix)]
+    if settings.filter.is_some() {
+        let _ = uucore::signals::disable_pipe_errors();
     }
+
+    split(&settings)
 }
 
 /// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
@@ -549,7 +552,7 @@ impl Settings {
             ));
         }
 
-        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), &self.input, filename, is_new)
     }
 }
 
@@ -1539,6 +1542,8 @@ fn split(settings: &Settings) -> UResult<()> {
         let r = File::open(Path::new(&settings.input)).map_err_context(
             || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
@@ -1549,11 +1554,9 @@ fn split(settings: &Settings) -> UResult<()> {
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
-            // split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
-            // kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
@@ -1570,48 +1573,32 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
+    }
+}
+
+fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
+    match io::copy(reader, writer) {
+        Ok(_) => Ok(()),
+        // TODO Since the writer object controls the creation of
+        // new files, we need to rely on the `io::Result`
+        // returned by its `write()` method to communicate any
+        // errors to this calling scope. If a new file cannot be
+        // created because we have exceeded the number of
+        // allowable filenames, we use `ErrorKind::Other` to
+        // indicate that. A special error message needs to be
+        // printed in that case.
+        Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
+        Err(e) => Err(uio_error!(
+            e,
+            "{}",
+            translate!("split-error-input-output-error")
+        )),
     }
 }

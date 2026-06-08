@@ -21,6 +21,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 memchr = { workspace = true }
+rustix = { workspace = true }
 uucore = { workspace = true, features = ["fs", "parser-size"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }

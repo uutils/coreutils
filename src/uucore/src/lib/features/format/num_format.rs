@@ -413,7 +413,7 @@ fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64
 
     // In the unlikely case we had an overflow, correct for that.
     if digits.len() == precision + 1 {
-        debug_assert!(&digits[precision..] == "0");
+        debug_assert_eq!(&digits[precision..], "0");
         digits.truncate(precision);
         p -= 1;
     }
