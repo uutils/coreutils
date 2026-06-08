@@ -10,7 +10,9 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+#[cfg(not(unix))]
+use filetime::set_file_times;
+use filetime::{FileTime, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -606,7 +608,21 @@ fn update_times(
     }
 
     #[cfg(unix)]
-    if !is_stdout {
+    {
+        if is_stdout {
+            // `touch -` operates on whatever file is open as stdout (fd 1),
+            // even when it was opened read-only. Use futimens on the fd
+            // directly: it preserves the UTIME_NOW sentinel, while
+            // filetime::set_file_times would normalize it into a literal
+            // 1970 timestamp.
+            let timestamps = build_timestamps(atime, mtime);
+            return futimens(std::io::stdout(), &timestamps)
+                .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+                .map_err_context(
+                    || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+                );
+        }
+
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
         if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
             return Ok(());
@@ -616,11 +632,15 @@ fn update_times(
         // by path with utimensat, which never opens the file and so never
         // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
         // would hang on a reader-less FIFO.
-        return set_times_by_path(path, atime, mtime);
+        set_times_by_path(path, atime, mtime)
     }
 
-    set_file_times(path, atime, mtime)
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+    #[cfg(not(unix))]
+    {
+        set_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        )
+    }
 }
 
 #[cfg(unix)]
