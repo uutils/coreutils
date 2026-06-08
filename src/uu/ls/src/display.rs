@@ -853,7 +853,7 @@ mod windows_nfs {
             let value_offset = FILE_FULL_EA_INFORMATION_HEADER_LEN + EA_NFSV3ATTRIBUTES.len() + 1;
             let attrs_bytes = unsafe {
                 std::slice::from_raw_parts(
-                    (&attrs as *const Nfs3Attrs).cast::<u8>(),
+                    (&raw const attrs).cast::<u8>(),
                     size_of::<Nfs3Attrs>(),
                 )
             };
