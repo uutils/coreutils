@@ -1984,13 +1984,13 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file .
 /// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
     }
-    Ok(backup_path.into())
+    Ok(())
 }
 
 /// Decide whether source and destination files are the same and
