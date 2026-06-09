@@ -2874,6 +2874,7 @@ fn test_copy_dir_symlink() {
     at.symlink_dir("dir", "dir-link");
     ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
     assert_eq!(at.resolve_link("copy"), "dir");
+    assert!(at.plus("copy").is_dir());
 }
 
 #[test]

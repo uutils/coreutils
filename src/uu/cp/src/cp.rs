@@ -13,6 +13,8 @@ use std::fs::{self, Metadata, OpenOptions, Permissions};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
@@ -1934,6 +1936,8 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
+    #[cfg(windows)] source_type_hint: Option<&Path>,
+    #[cfg(not(windows))] _source_type_hint: Option<&Path>,
     #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
     #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
@@ -1959,7 +1963,13 @@ fn symlink_file(
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
+        let create_symlink = if source_type_hint.is_some_and(source_is_directory_for_symlink) {
+            std::os::windows::fs::symlink_dir
+        } else {
+            std::os::windows::fs::symlink_file
+        };
+
+        create_symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
                 e,
                 translate!("cp-error-cannot-create-symlink",
@@ -1975,6 +1985,20 @@ fn symlink_file(
         }
         Ok(())
     }
+}
+
+#[cfg(windows)]
+fn source_is_directory_for_symlink(source: &Path) -> bool {
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+
+    source.symlink_metadata().is_ok_and(|metadata| {
+        let file_type = metadata.file_type();
+        if file_type.is_symlink() {
+            metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
+        } else {
+            file_type.is_dir()
+        }
+    })
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -2322,7 +2346,7 @@ fn handle_copy_mode(
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
             }
-            symlink_file(source, dest, symlinked_files)?;
+            symlink_file(source, dest, Some(source), symlinked_files)?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -2886,7 +2910,7 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         delete_path(dest, options)?;
     }
-    symlink_file(&link, dest, symlinked_files)?;
+    symlink_file(&link, dest, Some(source), symlinked_files)?;
     copy_attributes(
         source,
         dest,
