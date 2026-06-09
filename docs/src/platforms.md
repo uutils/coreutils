@@ -27,7 +27,7 @@ The platforms in tier 1 and the platforms that we test in CI are listed below.
 | **FreeBSD**      | `x86_64-unknown-freebsd` |
 | **OpenBSD**      | `x86_64-unknown-openbsd` |
 | **Android**      | `x86_64-linux-android`     |
-| **wasm32**      | `wasm32-wasip1`     |
+| **wasm32**      | `wasm32-wasip1` <br> `wasm32-wasip2` |
 
 The platforms in tier 2 are more vague, but include:
 
