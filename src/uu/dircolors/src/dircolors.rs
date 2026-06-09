@@ -310,7 +310,8 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        parse_glob::from_str(pat).unwrap().matches(self)
+        // An invalid glob never matches (GNU ignores it); don't unwrap the Err.
+        parse_glob::from_str(pat).is_ok_and(|glob| glob.matches(self))
     }
 }
 
