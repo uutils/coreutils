@@ -435,6 +435,17 @@ fn test_touch_no_dereference() {
     assert_eq!(mtime, start_of_year);
 }
 
+// Touching a FIFO must not block: setting times must not open the pipe
+// (which would wait for a writer). Regression test for that hang.
+#[test]
+#[cfg(unix)]
+fn test_touch_fifo_no_hang() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("fifo").succeeds().no_output();
+    assert!(at.is_fifo("fifo"));
+}
+
 #[test]
 fn test_touch_reference() {
     let scenario = TestScenario::new(util_name!());
