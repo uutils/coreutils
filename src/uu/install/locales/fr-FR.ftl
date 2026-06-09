@@ -33,6 +33,7 @@ install-error-backup-failed = impossible de sauvegarder { $from } vers { $to }
 install-error-install-failed = impossible d'installer { $from } vers { $to }: { $error }
 install-error-strip-failed = échec du programme strip : { $error }
 install-error-strip-abnormal = le processus strip s'est terminé anormalement - code de sortie : { $code }
+install-error-strip-terminated = le processus strip s'est terminé anormalement
 install-error-metadata-failed = erreur de métadonnées
 install-error-invalid-user = utilisateur invalide : { $user }
 install-error-invalid-group = groupe invalide : { $group }
