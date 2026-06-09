@@ -171,8 +171,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             MissingHandling::Normal,
             ResolveMode::Logical,
         )
-        .unwrap()
-        .to_str()
+        // A NEWROOT that does not resolve is by definition not old `/`, so treat
+        // an Err as a non-match instead of unwrapping it.
+        .ok()
+        .as_deref()
+        .and_then(|p| p.to_str())
             != Some("/")
     {
         return Err(UUsageError::new(
