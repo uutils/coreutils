@@ -97,6 +97,8 @@ jobs:
       shell: bash
       run: |
         set -x
+        # Check that uutils does not break Ubuntu
+        make INSTALL="sudo install" PREFIX=/usr PROFILE=release install
         DESTDIR=/tmp/ make PROFILE=release install
         # Check that the utils are present
         test -f /tmp/usr/local/bin/tty
