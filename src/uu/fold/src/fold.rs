@@ -70,7 +70,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     1,
                     translate!("fold-error-illegal-width", "width" => inp_width.quote()),
                 ));
-            },
+            }
             Ok(parsed_width) => parsed_width,
             Err(e) => {
                 return Err(USimpleError::new(
