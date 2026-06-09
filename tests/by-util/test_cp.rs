@@ -2874,6 +2874,16 @@ fn test_copy_dir_symlink() {
     at.symlink_dir("dir", "dir-link");
     ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
     assert_eq!(at.resolve_link("copy"), "dir");
+}
+
+#[test]
+#[cfg(windows)]
+fn test_copy_windows_dir_symlink_preserves_directory_type() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dir-link");
+    ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy"), "dir");
     assert!(at.plus("copy").is_dir());
 }
 
