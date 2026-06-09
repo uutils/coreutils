@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
 use thiserror::Error;
@@ -86,8 +86,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(reader, &mut g)?;
     }
 
-    g.run_tsort();
-    Ok(())
+    g.run_tsort()
 }
 
 pub fn uu_app() -> Command {
@@ -260,7 +259,7 @@ impl Graph {
     }
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) {
+    fn run_tsort(&mut self) -> UResult<()> {
         let mut independent_nodes_queue: VecDeque<Sym> = self
             .nodes
             .iter()
@@ -277,10 +276,10 @@ impl Graph {
         independent_nodes_queue
             .make_contiguous()
             .sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
-
+        let mut out = BufWriter::new(io::stdout().lock());
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            println!("{}", self.get_node_name(v));
+            writeln!(out, "{}", self.get_node_name(v))?;
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -295,6 +294,7 @@ impl Graph {
                 }
             }
         }
+        Ok(())
     }
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
         self.nodes.get(&sym).map(|data| data.predecessor_count)
