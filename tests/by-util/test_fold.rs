@@ -1033,3 +1033,12 @@ fn test_character_mode_special_chars() {
             .stdout_is(expected);
     }
 }
+
+#[test]
+fn test_width_zero() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("fold: illegal width value\n");
+}
