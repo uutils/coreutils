@@ -3192,6 +3192,21 @@ fn test_cp_fifo() {
     assert_eq!(permission, "prwx-wx--x".to_string());
 }
 
+// `cp -a` preserves timestamps; setting them must not open the FIFO (which
+// would block forever waiting for a writer). Regression test for that hang.
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_fifo_no_hang() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.arg("-a")
+        .arg("fifo")
+        .arg("fifo_copy")
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("fifo_copy"));
+}
+
 #[rstest]
 #[case::recursive("-R")]
 #[case::archive("-a")]

@@ -1887,11 +1887,10 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
-        if dest.is_symlink() {
-            filetime::set_symlink_file_times(dest, atime, mtime)?;
-        } else {
-            filetime::set_file_times(dest, atime, mtime)?;
-        }
+        // Use uucore's path-based setter rather than `filetime::set_file_times`,
+        // which opens the destination first and so blocks forever on a FIFO with
+        // no writer, hanging `cp -a` on a named pipe.
+        uucore::fs::set_file_times(dest, atime, mtime, !dest.is_symlink())?;
 
         Ok(())
     })?;
