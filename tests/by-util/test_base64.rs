@@ -285,3 +285,14 @@ fn test_read_error() {
         .fails()
         .stderr_is("base64: read error: Input/output error\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_base64_file_with_trailing_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "b");
+
+    ucmd.arg("a/")
+        .fails()
+        .stderr_only("base64: a/: Not a directory\n");
+}
