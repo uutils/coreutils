@@ -10,7 +10,7 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+use filetime::FileTime;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -600,7 +600,7 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        return set_symlink_file_times(path, atime, mtime).map_err_context(
+        return uucore::fs::set_file_times(path, atime, mtime, false).map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         );
     }
@@ -613,7 +613,9 @@ fn update_times(
         }
     }
 
-    set_file_times(path, atime, mtime)
+    // Path-based (never opens the target, unlike `filetime::set_file_times`),
+    // so it does not block on a FIFO with no writer.
+    uucore::fs::set_file_times(path, atime, mtime, true)
         .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 

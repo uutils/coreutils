@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport utimensat FDCWD
 
 use filetime::FileTime;
 #[cfg(all(unix, not(target_os = "redox")))]
