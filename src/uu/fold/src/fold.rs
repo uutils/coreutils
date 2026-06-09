@@ -64,6 +64,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let width = match poss_width {
+        Some(inp_width) if inp_width == "0" => {
+            return Err(USimpleError::new(
+                1,
+                translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+            ));
+        }
         Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
             USimpleError::new(
                 1,
