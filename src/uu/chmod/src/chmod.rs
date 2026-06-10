@@ -774,6 +774,7 @@ impl Chmoder {
     }
 
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
+        // fs::set_permissions calls chmod which we need for the gnu test chmod/only-op.sh
         if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
                 show_error!(
