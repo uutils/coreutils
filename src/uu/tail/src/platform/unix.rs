@@ -36,12 +36,5 @@ impl Drop for ProcessChecker {
 }
 
 pub fn supports_pid_checks(pid: Pid) -> bool {
-    let Some(pid) = RustixPid::from_raw(pid) else {
-        return false;
-    };
-    match test_kill_process(pid) {
-        Ok(()) => true,
-        Err(rustix::io::Errno::NOSYS) => false,
-        Err(_) => true,
-    }
+    RustixPid::from_raw(pid).is_some_and(|p| test_kill_process(p) != Err(rustix::io::Errno::NOSYS))
 }
