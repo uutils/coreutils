@@ -2,7 +2,7 @@ Index: gnu/tests/env/env-S.pl
 ===================================================================
 --- gnu.orig/tests/env/env-S.pl
 +++ gnu/tests/env/env-S.pl
-@@ -200,10 +200,10 @@ my @Tests =
+@@ -216,15 +216,15 @@ my @Tests =
 
       # Test Error Conditions
       ['err1', q[-S'"\\c"'], {EXIT=>125},
@@ -21,7 +21,9 @@ Index: gnu/tests/env/env-S.pl
 -      {ERR=>"$prog: invalid sequence '\\q' in -S\n"}],
 +      {ERR=>"$prog: invalid sequence '\\q' in -S at position 4\n"}],
       ['err6', q[-S'A=$B'], {EXIT=>125},
-@@ -218,12 +218,18 @@ my @Tests =
+       {ERR=>"$prog: only \${VARNAME} expansion is supported, error at: \$B\n"}],
+      ['err7', q[-S'A=${B'], {EXIT=>125},
+@@ -239,13 +239,17 @@ my @Tests =
 
       # Test incorrect shebang usage (extraneous whitespace).
       ['err_sp2', q['-v -S cat -n'], {EXIT=>125},
