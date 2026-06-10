@@ -45,12 +45,3 @@ pub fn supports_pid_checks(pid: Pid) -> bool {
         Err(_) => true,
     }
 }
-
-//pub fn stdin_is_bad_fd() -> bool {
-// FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
-// this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
-// see also: https://github.com/uutils/coreutils/issues/2873
-// (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-// unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
-//false
-//}
