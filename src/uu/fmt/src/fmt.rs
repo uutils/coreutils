@@ -141,10 +141,10 @@ impl FmtOptions {
                 (0, 0)
             }
             (Some(w), None) => {
-              let g = match w.checked_mul(DEFAULT_GOAL_TO_WIDTH_RATIO) {
-                Some(result) => (result / 100).max(1),
-                None => { Err(FmtError::InvalidWidth(w.to_string())) }?,
-              };
+                let g = match w.checked_mul(DEFAULT_GOAL_TO_WIDTH_RATIO) {
+                    Some(result) => (result / 100).max(1),
+                    None => { Err(FmtError::InvalidWidth(w.to_string())) }?,
+                };
                 (w, g)
             }
             (None, Some(g)) => {
