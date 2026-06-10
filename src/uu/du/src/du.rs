@@ -938,8 +938,10 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            // Keep every entry: duplicates are handled later via inode tracking
-            // (which -l disables), matching GNU. Missing files must each report.
+            // Do not deduplicate here: GNU du processes every entry and
+            // relies on inode-based deduplication during traversal (which is
+            // disabled by --count-links). Deduplicating by name would, e.g.,
+            // collapse repeated missing files into a single error.
             paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
@@ -1035,16 +1037,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         read_files_from(file_from)?
     } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
-        let files = files.map(PathBuf::from);
-        if count_links {
-            files.collect()
-        } else {
-            // Deduplicate while preserving order
-            let mut seen = HashSet::default();
-            files
-                .filter(|path| seen.insert(path.clone()))
-                .collect::<Vec<_>>()
-        }
+        // Do not deduplicate by name: GNU du processes every operand and relies
+        // on inode-based deduplication during traversal (disabled by
+        // --count-links), so repeated missing files are reported once each.
+        files.map(PathBuf::from).collect()
     } else {
         vec![PathBuf::from(".")]
     };
