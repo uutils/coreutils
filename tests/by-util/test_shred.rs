@@ -446,3 +446,15 @@ fn test_shred_trailing_slash_on_file() {
         .fails()
         .stderr_contains("Not a directory");
 }
+
+#[test]
+fn test_shred_trailing_slash_on_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("d/")
+        .fails()
+        .stderr_contains("Is a directory");
+}

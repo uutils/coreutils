@@ -42,7 +42,8 @@ shred-invalid-number-of-passes = invalid number of passes: {$passes}
 shred-cannot-open-random-source = cannot open random source: {$source}
 shred-invalid-file-size = invalid file size: {$size}
 shred-no-such-file-or-directory = {$file}: No such file or directory
-shred-failed-to-open-writing-not-dir = failed to open for writing: Not a directory
+shred-failed-to-open-for-writing-not-a-directory = {$file}: failed to open for writing: Not a directory
+shred-failed-to-open-for-writing-is-a-directory = {$file}: failed to open for writing: Is a directory
 shred-not-a-file = {$file}: Not a file
 
 # Option help text

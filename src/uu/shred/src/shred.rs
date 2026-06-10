@@ -625,12 +625,22 @@ fn wipe_file(
 ) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
-    if !path.is_file() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-failed-to-open-writing-not-dir"),
-        ));
+
+    if path_str.as_encoded_bytes().ends_with(b"/") {
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
+            ));
+        }
+        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
+            ));
+        }
     }
+
     if !path.exists() {
         return Err(USimpleError::new(
             1,
