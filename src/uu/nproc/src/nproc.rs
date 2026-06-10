@@ -56,12 +56,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         available_parallelism()
     };
 
-    cores = std::cmp::min(limit, cores);
-    if cores <= ignore {
-        cores = 1;
-    } else {
-        cores -= ignore;
-    }
+    cores = cores.saturating_sub(ignore).clamp(1, limit);
     //discard error about stdout flush
     stdout()
         .lock()
