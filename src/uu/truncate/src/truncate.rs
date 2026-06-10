@@ -229,12 +229,9 @@ fn file_truncate(
     // 2. The size of the file to be truncated if no reference has been provided.
     let actual_reference_size = reference_size.unwrap_or(file_size);
 
-    let Some(truncate_size) = mode.to_size(actual_reference_size) else {
-        return Err(USimpleError::new(
-            1,
-            translate!("truncate-error-division-by-zero"),
-        ));
-    };
+    let truncate_size = mode
+        .to_size(actual_reference_size)
+        .ok_or_else(|| USimpleError::new(1, translate!("truncate-error-division-by-zero")))?;
 
     do_file_truncate(path, !no_create, truncate_size)
 }

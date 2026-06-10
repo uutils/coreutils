@@ -2185,13 +2185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         translate!(
                             "sort-maximum-batch-size-rlimit",
                             "rlimit" => {
-                                let Some(rlimit) = fd_soft_limit() else {
-                                    return Err(UUsageError::new(
-                                        2,
-                                        translate!("sort-failed-fetch-rlimit"),
-                                    ));
-                                };
-                                rlimit
+                                fd_soft_limit().ok_or_else(|| {
+                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
+                                })?
                             }
                         )
                     }

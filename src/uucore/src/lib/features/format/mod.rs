@@ -377,11 +377,8 @@ impl<F: Formatter<T>, T> Format<F, T> {
             }
         }
 
-        let Some(spec) = spec else {
-            return Err(FormatError::NeedAtLeastOneSpec(
-                format_string.as_ref().to_vec(),
-            ));
-        };
+        let spec =
+            spec.ok_or_else(|| FormatError::NeedAtLeastOneSpec(format_string.as_ref().to_vec()))?;
 
         let formatter = F::try_from_spec(spec)?;
 

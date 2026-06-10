@@ -445,9 +445,9 @@ fn construct_extended_big_decimal(
 
         // powi "only" supports i64 values. Just overflow/underflow if the value provided
         // is > 2**64 or < 2**-64.
-        let Some(exponent) = exponent.to_i64() else {
-            return Err(make_error(exponent.is_positive(), negative));
-        };
+        let exponent = exponent
+            .to_i64()
+            .ok_or_else(|| make_error(exponent.is_positive(), negative))?;
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
         let base: BigDecimal = 2.into();
