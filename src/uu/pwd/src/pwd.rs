@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use uucore::format_usage;
 
 use uucore::display::println_verbatim;
+#[cfg(windows)]
+use uucore::display::strip_windows_verbatim_prefix;
 use uucore::error::{FromIo, UResult};
 use uucore::show_error;
 
@@ -135,11 +137,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // With the right extension trait we can remove it non-lossily, but
     // we print it lossily anyway, so no reason to bother.
     #[cfg(windows)]
-    let cwd = cwd
-        .to_string_lossy()
-        .strip_prefix(r"\\?\")
-        .map(Into::into)
-        .unwrap_or(cwd);
+    let cwd = {
+        let path = cwd.to_string_lossy();
+        strip_windows_verbatim_prefix(&path).unwrap_or(cwd)
+    };
 
     println_verbatim(cwd)
         .map_err_context(|| translate!("pwd-error-failed-to-print-current-directory"))?;
