@@ -763,7 +763,7 @@ fn build_options(
             msg: "invalid --length argument '0'".to_string(),
         });
     }
-    
+
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
