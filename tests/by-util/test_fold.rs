@@ -16,6 +16,24 @@ fn test_invalid_arg() {
 }
 
 #[test]
+fn test_zero_width_is_rejected() {
+    for arg in ["-w0", "-0"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("hello\n")
+            .fails_with_code(1)
+            .stderr_only("fold: illegal width value\n");
+    }
+    for mode in ["-c", "-b"] {
+        new_ucmd!()
+            .args(&[mode, "-w0"])
+            .pipe_in("hello\n")
+            .fails_with_code(1)
+            .stderr_only("fold: illegal width value\n");
+    }
+}
+
+#[test]
 fn test_default_80_column_wrap() {
     new_ucmd!()
         .arg("lorem_ipsum.txt")
