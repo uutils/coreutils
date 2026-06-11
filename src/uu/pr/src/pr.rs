@@ -808,7 +808,7 @@ fn build_options(
             msg: "invalid --page-width argument '0'".to_string(),
         });
     }
-    
+
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 
     let res = re_col.captures(free_args).map(|i| {
