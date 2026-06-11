@@ -596,20 +596,6 @@ fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
     sequence
 }
 
-/// Create compatible pass sequence using the standard algorithm
-fn create_compatible_sequence(
-    num_passes: usize,
-    random_source: Option<&RefCell<File>>,
-) -> UResult<Vec<PassType>> {
-    if random_source.is_some() {
-        // For deterministic behavior with random source file, use hardcoded sequence
-        create_test_compatible_sequence(num_passes, random_source)
-    } else {
-        // For system random, use standard algorithm
-        Ok(create_standard_pass_sequence(num_passes))
-    }
-}
-
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::cognitive_complexity)]
 fn wipe_file(
@@ -690,7 +676,7 @@ fn wipe_file(
         } else {
             // Use compatible sequence when using deterministic random source
             if random_source.is_some() {
-                pass_sequence = create_compatible_sequence(n_passes, random_source)?;
+                pass_sequence = create_test_compatible_sequence(n_passes, random_source)?;
             } else {
                 pass_sequence = create_standard_pass_sequence(n_passes);
             }
