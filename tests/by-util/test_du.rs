@@ -1365,6 +1365,23 @@ fn test_du_exclude() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_du_exclude_non_utf8_name() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    let mut name = std::ffi::OsString::from("d/");
+    name.push(OsStr::from_bytes(&[0xff, 0xfe]));
+    at.mkdir(name);
+
+    ts.ucmd().args(&["-L", "--exclude=zzz", "d"]).succeeds();
+}
+
+#[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
 #[cfg(not(target_os = "windows"))]
