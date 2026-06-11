@@ -1794,6 +1794,16 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
+fn test_files0_from_non_utf8_name() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in(vec![0xff_u8])
+        .fails_with_code(2)
+        .stderr_contains("sort: cannot read");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_files0_read_error() {
     new_ucmd!()
         .args(&["--files0-from", "."])
