@@ -10,30 +10,24 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Read, StdinLock};
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::{AsFd, AsRawFd};
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub trait WordCountable: AsFd + AsRawFd + Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
+    #[cfg(not(target_os = "wasi"))]
     fn inner_file(&mut self) -> Option<&mut File>;
 }
 
-#[cfg(all(not(unix), not(target_os = "wasi")))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 pub trait WordCountable: Read {
     type Buffered: BufRead;
     fn buffered(self) -> Self::Buffered;
     fn inner_file(&mut self) -> Option<&mut File>;
 }
 
-#[cfg(target_os = "wasi")]
-pub trait WordCountable: Read {
-    type Buffered: BufRead;
-    fn buffered(self) -> Self::Buffered;
-}
-
-#[cfg(not(target_os = "wasi"))]
 impl WordCountable for StdinLock<'_> {
     type Buffered = Self;
 
@@ -45,16 +39,6 @@ impl WordCountable for StdinLock<'_> {
     }
 }
 
-#[cfg(target_os = "wasi")]
-impl WordCountable for StdinLock<'_> {
-    type Buffered = Self;
-
-    fn buffered(self) -> Self::Buffered {
-        self
-    }
-}
-
-#[cfg(not(target_os = "wasi"))]
 impl WordCountable for File {
     type Buffered = BufReader<Self>;
 
@@ -64,14 +48,5 @@ impl WordCountable for File {
 
     fn inner_file(&mut self) -> Option<&mut File> {
         Some(self)
-    }
-}
-
-#[cfg(target_os = "wasi")]
-impl WordCountable for File {
-    type Buffered = BufReader<Self>;
-
-    fn buffered(self) -> Self::Buffered {
-        BufReader::new(self)
     }
 }

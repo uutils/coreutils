@@ -155,9 +155,19 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
 
     // Fall back on `read`, but without the overhead of counting words and lines.
 
-    let mut buf = [0_u8; BUF_SIZE];
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); BUF_SIZE];
+    // todo: avoid cost by 0-fill
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let mut buf = [0u8; BUF_SIZE];
     loop {
-        match handle.read(&mut buf) {
+        #[cfg(any(unix, target_os = "wasi"))]
+        let res = rustix::io::read(&handle, &mut buf)
+            .map(|f| f.0.len())
+            .map_err(io::Error::from);
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let res = handle.read(&mut buf);
+        match res {
             Ok(0) => return (byte_count, None),
             Ok(n) => byte_count += n,
             Err(e) if e.kind() == ErrorKind::Interrupted => (),
