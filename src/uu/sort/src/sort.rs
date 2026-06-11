@@ -39,8 +39,6 @@ use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::ops::Range;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -2027,7 +2025,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-
+            if line.as_slice() == STDIN_FILE.as_bytes() {
+                return Err(SortError::MinusInStdIn.into());
+            }
             if line.is_empty() {
                 return Err(SortError::ZeroLengthFileName {
                     file: files0_from,
@@ -2035,26 +2035,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 }
                 .into());
             }
-
-            let f: OsString = {
-                #[cfg(unix)]
-                {
-                    OsStr::from_bytes(&line).to_os_string()
-                }
-                #[cfg(not(unix))]
-                {
-                    OsString::from(String::from_utf8_lossy(&line).into_owned())
-                }
-            };
-
-            match f.to_str() {
-                Some(s) if s == STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
-                }
-                _ => {}
-            }
-
-            files.push(f);
+            files.push(uucore::os_string_from_vec(line)?);
         }
 
         if files.is_empty() {
