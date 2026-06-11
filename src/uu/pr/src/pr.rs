@@ -550,27 +550,41 @@ fn build_options(
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
+            let invalid = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
             let parse_result = i.parse::<usize>();
 
             let separator = if parse_result.is_err() {
-                i[0..1].to_string()
+                match i.chars().next() {
+                    Some(c) if c.is_ascii() => c.to_string(),
+                    Some(_) | None => return Err(invalid(i)),
+                }
             } else {
                 NumberingMode::default().separator
             };
 
             let width = match parse_result {
                 Ok(res) => res,
-                Err(_) => i[1..]
+                Err(_) => i
+                    .get(1..)
+                    .unwrap_or_default()
                     .parse::<usize>()
                     .unwrap_or(NumberingMode::default().width),
             };
 
-            NumberingMode {
+            Ok(NumberingMode {
                 width,
                 separator,
                 first_number,
-            }
+            })
         })
+        .transpose()?
         .or_else(|| {
             if matches.contains_id(options::NUMBER_LINES) {
                 Some(NumberingMode::default())
@@ -601,6 +615,8 @@ fn build_options(
                             input_char: TAB,
                             width,
                         })
+                    } else if !c.is_ascii() {
+                        Err(invalid(s))
                     } else if s.len() > 1 {
                         let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
                         if width <= 0 {
