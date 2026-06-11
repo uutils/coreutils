@@ -14,6 +14,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::show_if_err;
 use uucore::translate;
 
 use uucore::parser::parse_size::{ParseSizeError, Parser, allow_list_with_all_suffixes};
@@ -284,8 +285,10 @@ fn truncate(
         ));
     }
 
+    // Process every file: a failure on one (e.g. a directory) must not
+    // prevent the remaining files from being truncated.
     for filename in filenames {
-        file_truncate(no_create, reference_size, &mode, filename)?;
+        show_if_err!(file_truncate(no_create, reference_size, &mode, filename));
     }
 
     Ok(())

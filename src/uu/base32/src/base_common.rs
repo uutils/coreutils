@@ -62,16 +62,7 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    let path = Path::new(name);
-
-                    if !path.exists() {
-                        return Err(USimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
-                        ));
-                    }
-
-                    Some(path.to_owned())
+                    Some(Path::new(name).to_owned())
                 }
             }
             None => None,

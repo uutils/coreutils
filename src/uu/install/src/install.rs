@@ -97,6 +97,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
+    #[error("{}", translate!("install-error-strip-terminated"))]
+    StripTerminated,
+
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
@@ -405,7 +408,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            // When using -o500 option and there's no user with uid 500 on the system
+            // usr2uid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with uid 500 in the same situation
+            // so just return the supplied owner as uid if it's an integer value
+            Err(_) => match owner.parse::<u32>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            },
         }
     };
 
@@ -419,7 +429,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match grp2gid(&group) {
             Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            // When using -g500 option and there's no group with gid 500 on the system
+            // grp2gid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with gid 500 in the same situation
+            // so just return the supplied group as gid if it's an integer value
+            Err(_) => match group.parse::<u32>() {
+                Ok(g) => Some(g),
+                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            },
         }
     };
 
@@ -1010,9 +1027,14 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
-                )
+                // A signal-terminated strip has no exit code; report GNU's
+                // "strip process terminated abnormally" instead of unwrapping None.
+                return Err(match status.code() {
+                    Some(code) => InstallError::StripProgramFailed(
+                        translate!("install-error-strip-abnormal", "code" => code),
+                    ),
+                    None => InstallError::StripTerminated,
+                }
                 .into());
             }
         }

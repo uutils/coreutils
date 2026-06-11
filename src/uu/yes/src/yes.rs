@@ -24,9 +24,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
-
-    match exec(buffer) {
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
+    repeat_content_to_capacity(&mut buffer);
+    match exec(&buffer) {
         Ok(()) => Ok(()),
         // On Windows, silently handle broken pipe since there's no SIGPIPE
         #[cfg(windows)]
@@ -96,9 +96,7 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     loop {
         stdout.write_all(bytes)?;
@@ -106,41 +104,32 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
     use uucore::io::RawWriter;
     use uucore::pipes::{pipe, splice, tee};
 
-    let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
     let stdout = rustix::stdio::stdout();
     // improve throughput
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
-    // don't show any error from fast-path and fallback to write for proper message
+    // GNU catches all strace injections for zero-copy syscalls except for 1st one (checking support of it)
+    // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
+    // but it is slower than mixing splice even it reduces syscalls...
+    let bytes_len = bytes.len();
     if let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
+        && let Ok((broker_read, broker_write)) = pipe::<true>()
+        && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
     {
-        // tee() cannot control offset. But omit splice if it is possible
-        if safe_partial_send {
-            // fails if stdout is not a pipe
-            while tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {}
-        }
-        if let Ok((broker_read, broker_write)) = pipe::<true>() {
-            'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-            {
-                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
-                while remain > 0 {
-                    if let Ok(s) = splice(&broker_read, &stdout, remain) {
-                        remain -= s;
-                    } else {
-                        // avoid output breakage with reduced remain even if it would not happen
-                        RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
-                        break 'splice;
-                    }
-                }
+        // fallback from tee() is possible since we did not send anything to stdout yet
+        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
+            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
+            while remain > 0 {
+                remain -= splice(&broker_read, &stdout, remain)?;
             }
         }
     }
+
     // fallback
     let mut stdout = RawWriter(stdout);
     loop {

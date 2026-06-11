@@ -90,12 +90,6 @@ fn test_failed() {
 }
 
 #[test]
-fn test_failed_2() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[FILE1]).fails();
-}
-
-#[test]
 fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", FILE1]).fails();
@@ -402,6 +396,19 @@ fn test_no_such_dir() {
         .fails()
         .no_stdout()
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
+}
+
+/// Test that truncate processes every file even if one fails.
+#[test]
+fn test_continue_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "0", "a", "dir", "b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("dir");
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
 }
 
 /// Test that truncate with a relative size less than 0 is not an error.

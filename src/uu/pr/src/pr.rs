@@ -550,27 +550,41 @@ fn build_options(
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
+            let invalid = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
             let parse_result = i.parse::<usize>();
 
             let separator = if parse_result.is_err() {
-                i[0..1].to_string()
+                match i.chars().next() {
+                    Some(c) if c.is_ascii() => c.to_string(),
+                    Some(_) | None => return Err(invalid(i)),
+                }
             } else {
                 NumberingMode::default().separator
             };
 
             let width = match parse_result {
                 Ok(res) => res,
-                Err(_) => i[1..]
+                Err(_) => i
+                    .get(1..)
+                    .unwrap_or_default()
                     .parse::<usize>()
                     .unwrap_or(NumberingMode::default().width),
             };
 
-            NumberingMode {
+            Ok(NumberingMode {
                 width,
                 separator,
                 first_number,
-            }
+            })
         })
+        .transpose()?
         .or_else(|| {
             if matches.contains_id(options::NUMBER_LINES) {
                 Some(NumberingMode::default())
@@ -582,22 +596,45 @@ fn build_options(
     let expand_tabs = matches
         .get_one::<String>(options::EXPAND_TABS)
         .map(|s| {
-            s.chars().next().map_or(Ok(ExpandTabsOptions::default()), |c| {
-                if c.is_ascii_digit() {
-                    s
-                        .parse()
-                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => s), translate!("pr-try-help-message")) })
-                        .map(|width| ExpandTabsOptions{input_char: TAB, width})
-                } else if s.len() > 1 {
-                    s[1..]
-                        .parse()
-                        .map_err(|_e| PrError::EncounteredErrors { msg: format!("{}\n{}", translate!("pr-error-invalid-expand-tab-argument", "arg" => &s[1..]), translate!("pr-try-help-message")) })
-                        .map(|width| ExpandTabsOptions{input_char: c, width})
-                } else {
-                    Ok(ExpandTabsOptions{input_char: c, width: 8})
-                }
-            })
-        }).transpose()?;
+            s.chars()
+                .next()
+                .map_or(Ok(ExpandTabsOptions::default()), |c| {
+                    let invalid = |arg: &str| PrError::EncounteredErrors {
+                        msg: format!(
+                            "{}\n{}",
+                            translate!("pr-error-invalid-expand-tab-argument", "arg" => arg),
+                            translate!("pr-try-help-message")
+                        ),
+                    };
+                    if c.is_ascii_digit() {
+                        let width: i32 = s.parse().map_err(|_e| invalid(s))?;
+                        if width <= 0 {
+                            return Err(invalid(s));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: TAB,
+                            width,
+                        })
+                    } else if !c.is_ascii() {
+                        Err(invalid(s))
+                    } else if s.len() > 1 {
+                        let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
+                        if width <= 0 {
+                            return Err(invalid(&s[1..]));
+                        }
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width,
+                        })
+                    } else {
+                        Ok(ExpandTabsOptions {
+                            input_char: c,
+                            width: 8,
+                        })
+                    }
+                })
+        })
+        .transpose()?;
 
     let double_space = matches.get_flag(options::DOUBLE_SPACE);
 
@@ -751,6 +788,12 @@ fn build_options(
     let column_width =
         parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
 
+    if column_width == 0 {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --width argument '0'".to_string(),
+        });
+    }
+
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
@@ -759,6 +802,12 @@ fn build_options(
             None => None,
         }
     };
+
+    if page_width == Some(0) {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --page-width argument '0'".to_string(),
+        });
+    }
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 

@@ -94,7 +94,7 @@ fn tee(options: &Options) -> Result<()> {
         return Ok(());
     }
 
-    // We cannot use std::io::copy here as it doesn't flush the output buffer
+    // don't use io::copy since content of 1 read should be immediately written for posix requirement
     let res = match output.copy_unbuffered() {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
