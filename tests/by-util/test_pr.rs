@@ -930,3 +930,19 @@ fn test_zero_expand_tab_width() {
         .fails_with_code(1)
         .stderr_only(expected);
 }
+
+#[test]
+fn test_zero_column_width() {
+    new_ucmd!()
+        .args(&["-w", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --width argument '0'\n");
+}
+
+#[test]
+fn test_zero_page_width() {
+    new_ucmd!()
+        .args(&["-W", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --page-width argument '0'\n");
+}
