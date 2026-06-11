@@ -962,3 +962,11 @@ fn test_zero_pages() {
         .fails_with_code(1)
         .stderr_is("pr: invalid --pages argument '0'\n");
 }
+
+#[test]
+fn test_negative_expand_tabs() {
+    new_ucmd!()
+        .arg("-e=-1")
+        .fails_with_code(1)
+        .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\n");
+}
