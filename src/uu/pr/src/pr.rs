@@ -787,13 +787,13 @@ fn build_options(
 
     let column_width =
         parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
-    
+
     if column_width == 0 {
         return Err(PrError::EncounteredErrors {
             msg: "invalid --width argument '0'".to_string(),
         });
     }
-    
+
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
