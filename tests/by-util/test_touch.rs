@@ -1107,6 +1107,10 @@ fn test_touch_device_files() {
 // check in util/check-safe-traversal.sh.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_does_not_truncate_symlink_target() {
     use std::os::unix::fs::symlink;
 
@@ -1122,6 +1126,10 @@ fn test_touch_does_not_truncate_symlink_target() {
 // Touching a dangling symlink creates its target as an empty file, like GNU.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_through_dangling_symlink_creates_target() {
     use std::os::unix::fs::symlink;
 
