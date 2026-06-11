@@ -54,6 +54,34 @@ fn test_invalid_flag() {
 }
 
 #[test]
+fn test_expand_tabs_multibyte_char_is_rejected() {
+    for arg in ["-e€", "-e€3"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-e' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_multibyte_separator_is_rejected() {
+    for arg in ["-n€", "-n€5"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_empty_value_is_rejected() {
+    new_ucmd!()
+        .args(&["--number-lines=", "test_one_page.log"])
+        .fails_with_code(1)
+        .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
