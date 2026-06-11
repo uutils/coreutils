@@ -662,7 +662,7 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     let out = stdout();
 
     // First, check that stdout is a fifo and return true if it's not the case
-    let stat = fstat(out.as_fd())?;
+    let stat = fstat(&out)?;
     if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
         return Ok(true);
     }

@@ -931,6 +931,21 @@ fn test_bytewise_fold_at_read_buffer_boundary() {
 }
 
 #[test]
+fn test_continue_after_missing_file() {
+    // A nonexistent operand must not abort the run: the surrounding files are
+    // still folded, the error is reported on stderr, and the exit status is 1.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("first.txt", "hello\n");
+    ts.fixtures.write("third.txt", "world\n");
+
+    ts.ucmd()
+        .args(&["first.txt", "absent.txt", "third.txt"])
+        .fails_with_code(1)
+        .stdout_is("hello\nworld\n")
+        .stderr_is("fold: absent.txt: No such file or directory\n");
+}
+
+#[test]
 fn test_obsolete_syntax() {
     new_ucmd!()
         .arg("-5")
@@ -1032,4 +1047,13 @@ fn test_character_mode_special_chars() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[test]
+fn test_width_zero() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("fold: illegal width value\n");
 }

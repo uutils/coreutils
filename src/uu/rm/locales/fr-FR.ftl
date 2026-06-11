@@ -36,6 +36,8 @@ rm-progress-removing = Suppression
 # Messages d'erreur
 rm-error-missing-operand = opérande manquant
   Essayez '{$util_name} --help' pour plus d'informations.
+rm-hint-dash-file = Essayez '{$util_name} ./{$path}' pour supprimer le fichier {$file}.
+  Essayez '{$util_name} --help' pour plus d'informations.
 rm-error-cannot-remove-no-such-file = impossible de supprimer {$file} : Aucun fichier ou répertoire de ce type
 rm-error-cannot-remove-permission-denied = impossible de supprimer {$file} : Permission refusée
 rm-error-cannot-remove-is-directory = impossible de supprimer {$file} : C'est un répertoire

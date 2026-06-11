@@ -21,7 +21,7 @@ doctest = false
 [dependencies]
 thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "parser"] }
+uucore = { workspace = true, features = ["fs", "parser", "quoting-style"] }
 fluent = { workspace = true }
 indicatif = { workspace = true }
 

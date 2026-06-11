@@ -254,3 +254,12 @@ fn test_colorterm_empty_with_wildcard() {
         .succeeds()
         .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
 }
+
+#[test]
+fn test_invalid_term_glob() {
+    new_ucmd!()
+        .pipe_in("TERM [\nDIR 01;34\n")
+        .args(&["-b", "-"])
+        .succeeds()
+        .stdout_only("LS_COLORS='';\nexport LS_COLORS\n");
+}
