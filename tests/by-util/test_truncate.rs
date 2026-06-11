@@ -90,12 +90,6 @@ fn test_failed() {
 }
 
 #[test]
-fn test_failed_2() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[FILE1]).fails();
-}
-
-#[test]
 fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", FILE1]).fails();
