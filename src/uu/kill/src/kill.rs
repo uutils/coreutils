@@ -224,7 +224,7 @@ fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
 // rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
 // raw `libc::kill` for any value its safe constructor doesn't recognize.
 fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
-    let sig = i32::try_from(sig).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+    let sig = i32::try_from(sig).map_err(|_| rustix::io::Errno::INVAL)?;
     // SAFETY: plain FFI call; `kill` has no memory-safety preconditions.
     if unsafe { libc::kill(pid as libc::pid_t, sig) } == 0 {
         Ok(())

@@ -24,7 +24,6 @@ half = { workspace = true }
 rustix = { workspace = true, features = ["stdio"] }
 uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
-libc.workspace = true
 
 [[bin]]
 name = "od"

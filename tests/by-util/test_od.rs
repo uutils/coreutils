@@ -22,7 +22,7 @@ static ALPHA_OUT: &str = "
         ";
 
 fn erange_message() -> String {
-    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+    let err: std::io::Error = rustix::io::Errno::RANGE.into();
     let msg = err.to_string();
     msg.split(" (os error").next().unwrap_or(&msg).to_string()
 }

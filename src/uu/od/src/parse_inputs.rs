@@ -86,7 +86,7 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
                 Err(e) => {
                     // If it's an overflow error, propagate it
                     // Otherwise, treat it as a filename
-                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                    let err = std::io::Error::from(rustix::io::Errno::RANGE);
                     let msg = err.to_string();
                     let expected_msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
 
@@ -209,7 +209,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
             if let Some(result) = i.checked_mul(multiply) {
                 Ok(result)
             } else {
-                let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                let err = std::io::Error::from(rustix::io::Errno::RANGE);
                 let msg = err.to_string();
                 // Strip "(os error N)" if present to match Perl's $!
                 let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
@@ -222,7 +222,7 @@ pub fn parse_offset_operand(s: &str) -> Result<u64, String> {
             use std::num::IntErrorKind;
             match e.kind() {
                 IntErrorKind::PosOverflow => {
-                    let err = std::io::Error::from_raw_os_error(libc::ERANGE);
+                    let err = std::io::Error::from(rustix::io::Errno::RANGE);
                     let msg = err.to_string();
                     let msg = msg.split(" (os error").next().unwrap_or(&msg).to_string();
                     Err(msg)

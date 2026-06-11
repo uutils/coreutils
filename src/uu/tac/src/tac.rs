@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap SIGBUS
+// spell-checker:ignore (ToDO) sbytes slen dlen memmem memmap Mmap mmap BADF SIGBUS
 
 mod error;
 
@@ -345,7 +345,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
             if uucore::signals::stdin_was_closed() {
                 let e: Box<dyn UError> = TacError::ReadError(
                     OsString::from("-"),
-                    std::io::Error::from_raw_os_error(libc::EBADF),
+                    std::io::Error::from(rustix::io::Errno::BADF),
                 )
                 .into();
                 show!(e);
