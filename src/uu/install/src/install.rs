@@ -97,6 +97,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
+    #[error("{}", translate!("install-error-strip-terminated"))]
+    StripTerminated,
+
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
@@ -1046,9 +1049,14 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
-                )
+                // A signal-terminated strip has no exit code; report GNU's
+                // "strip process terminated abnormally" instead of unwrapping None.
+                return Err(match status.code() {
+                    Some(code) => InstallError::StripProgramFailed(
+                        translate!("install-error-strip-abnormal", "code" => code),
+                    ),
+                    None => InstallError::StripTerminated,
+                }
                 .into());
             }
         }

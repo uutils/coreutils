@@ -13,6 +13,7 @@ use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
@@ -64,12 +65,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let width = match poss_width {
-        Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
-            )
-        })?,
+        Some(inp_width) => match inp_width.parse::<usize>() {
+            Ok(0) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+                ));
+            }
+            Ok(parsed_width) => parsed_width,
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
+                ));
+            }
+        },
         None => 80,
     };
 
@@ -155,7 +165,14 @@ fn fold(
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
+            // Like GNU, report the error but keep processing the remaining files.
+            match File::open(Path::new(filename)) {
+                Ok(f) => file_buf = f,
+                Err(e) => {
+                    show!(e.map_err_context(|| filename.to_string()));
+                    continue;
+                }
+            }
             &mut file_buf as &mut dyn Read
         });
 

@@ -12,8 +12,6 @@ use std::io::{self, ErrorKind, Read};
 
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
-#[cfg(unix)]
-use std::os::fd::{AsFd, AsRawFd};
 #[cfg(windows)]
 use std::os::windows::fs::MetadataExt;
 #[cfg(windows)]
@@ -30,7 +28,7 @@ const BUF_SIZE: usize = 64 * 1024;
 /// caller will fall back to a simpler method.
 #[inline]
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn count_bytes_using_splice(fd: &impl AsFd) -> Result<usize, usize> {
+fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<usize, usize> {
     use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
     let null_file = uucore::pipes::dev_null().ok_or(0_usize)?;
     let mut byte_count = 0;
@@ -69,8 +67,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
 
     #[cfg(unix)]
     {
-        let fd = handle.as_fd();
-        if let Ok(stat) = rustix::fs::fstat(fd) {
+        if let Ok(stat) = rustix::fs::fstat(&handle) {
             // If the file is regular, then the `st_size` should hold
             // the file's size in bytes.
             // If stat.st_size = 0 then
@@ -109,7 +106,7 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
             // However, the raw file descriptor in this situation would be equal to `0`
             // for STDIN in both invocations.
             // Therefore we cannot rely of `st_size` here and should fall back on full read.
-            if fd.as_raw_fd() > 0
+            if handle.as_raw_fd() > 0
                 && (stat.st_mode as libc::mode_t & libc::S_IFREG) != 0
                 && stat.st_size > 0
             {
