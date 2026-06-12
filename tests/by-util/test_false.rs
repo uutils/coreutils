@@ -28,6 +28,17 @@ fn test_help() {
 }
 
 #[test]
+fn test_help_starts_with_usage() {
+    // GNU's `false --help` starts with a "Usage:" line; ensure ours does too.
+    let result = new_ucmd!().args(&["--help"]).fails();
+    assert!(
+        result
+            .stdout_str()
+            .starts_with("Usage: false [ignored command line arguments]")
+    );
+}
+
+#[test]
 fn test_short_options() {
     for option in ["-h", "-V"] {
         new_ucmd!().arg(option).fails().no_output();
