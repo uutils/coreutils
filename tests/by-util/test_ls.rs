@@ -2335,15 +2335,17 @@ fn test_ls_time_styles() {
         .stdout_matches(&re_custom_format_recent)
         .stdout_matches(&re_custom_format_old);
 
-    //+FORMAT_RECENT\nFORMAT_OLD
+    //+FORMAT_OLD\nFORMAT_RECENT: FORMAT1 applies to old files, FORMAT2 to recent files.
+    let re_custom_format_recent_2 =
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test\n").unwrap();
     let re_custom_format_old =
-        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}--\d{2} test-old\n").unwrap();
+        Regex::new(r"[a-z-]* \d* [\w.]* [\w.]* \d* \d{4}__\d{2} test-old\n").unwrap();
     scene
         .ucmd()
         .arg("-l")
         .arg("--time-style=+%Y__%M\n%Y--%M")
         .succeeds()
-        .stdout_matches(&re_custom_format_recent)
+        .stdout_matches(&re_custom_format_recent_2)
         .stdout_matches(&re_custom_format_old);
 
     // Also fails due to not having full clap support for time_styles
@@ -2471,13 +2473,13 @@ fn test_ls_time_recent_future() {
         .succeeds()
         .stdout_matches(&re_iso_old);
 
-    // Also test that we can set a format that varies for recent of older files.
-    //+FORMAT_RECENT\nFORMAT_OLD
+    // A two-line format assigns FORMAT1 to old files and FORMAT2 to recent files.
+    //+FORMAT_OLD\nFORMAT_RECENT
     f.set_modified(SystemTime::now()).unwrap();
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("RECENT");
 
@@ -2487,11 +2489,11 @@ fn test_ls_time_recent_future() {
     scene
         .ucmd()
         .arg("-l")
-        .arg("--time-style=+RECENT\nOLD")
+        .arg("--time-style=+OLD\nRECENT")
         .succeeds()
         .stdout_contains("OLD");
 
-    // RECENT format is still used if no "OLD" one provided.
+    // The single format is used for all files when no second one is provided.
     scene
         .ucmd()
         .arg("-l")
