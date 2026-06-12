@@ -105,14 +105,43 @@ enum Padding {
 /// uu_stat::pad_and_print("1", false, 5, Padding::Zero) == "00001";
 /// ```
 /// currently only supports '0' & ' ' as the padding character
-/// because the format specification of print! does not support general
-/// fill characters.
+/// because those are the padding modes exposed by stat's format flags.
 fn pad_and_print(result: &str, left: bool, width: usize, padding: Padding) {
-    match (left, padding) {
-        (false, Padding::Zero) => print!("{result:0>width$}"),
-        (false, Padding::Space) => print!("{result:>width$}"),
-        (true, Padding::Zero) => print!("{result:0<width$}"),
-        (true, Padding::Space) => print!("{result:<width$}"),
+    let mut stdout = std::io::stdout().lock();
+    write_padded_str(&mut stdout, result, left, width, padding).unwrap();
+}
+
+fn write_padded_str<W: Write>(
+    mut writer: W,
+    result: &str,
+    left: bool,
+    width: usize,
+    padding: Padding,
+) -> Result<(), std::io::Error> {
+    let padding_byte = match padding {
+        Padding::Zero => b'0',
+        Padding::Space => b' ',
+    };
+    let padding_needed = width.saturating_sub(result.chars().count());
+
+    if !left {
+        write_padding(&mut writer, padding_needed, padding_byte)?;
+    }
+    writer.write_all(result.as_bytes())?;
+    if left {
+        write_padding(&mut writer, padding_needed, padding_byte)?;
+    }
+    Ok(())
+}
+
+fn zero_pad_to(s: &str, width: usize) -> String {
+    if s.len() >= width {
+        s.to_string()
+    } else {
+        let mut padded = String::with_capacity(width);
+        padded.extend(std::iter::repeat_n('0', width - s.len()));
+        padded.push_str(s);
+        padded
     }
 }
 
@@ -142,22 +171,26 @@ fn write_padded_bytes<W: Write>(
     };
 
     if left_pad > 0 {
-        write_padding(&mut writer, left_pad)?;
+        write_padding(&mut writer, left_pad, b' ')?;
     }
     writer.write_all(display_bytes)?;
     if right_pad > 0 {
-        write_padding(&mut writer, right_pad)?;
+        write_padding(&mut writer, right_pad, b' ')?;
     }
 
     Ok(())
 }
 
-/// write padding based on a writer W and n size
-/// writer is genric to be any buffer like: `std::io::stdout`
+/// write padding bytes based on a writer W and n size
+/// writer is generic to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
-    for _ in 0..n {
-        writer.write_all(b" ")?;
+fn write_padding<W: Write>(writer: &mut W, n: usize, byte: u8) -> Result<(), std::io::Error> {
+    let buffer = [byte; 1024];
+    let mut remaining = n;
+    while remaining > 0 {
+        let count = remaining.min(buffer.len());
+        writer.write_all(&buffer[..count])?;
+        remaining -= count;
     }
     Ok(())
 }
@@ -584,7 +617,7 @@ fn print_integer(
     let extended = match precision {
         Precision::NotSpecified => format!("{prefix}{arg}"),
         Precision::NoNumber => format!("{prefix}{arg}"),
-        Precision::Number(p) => format!("{prefix}{arg:0>p$}"),
+        Precision::Number(p) => format!("{prefix}{}", zero_pad_to(&arg, p)),
     };
     pad_and_print(&extended, flags.left, width, padding_char);
 }
@@ -666,7 +699,7 @@ fn print_unsigned(
     let s = match precision {
         Precision::NotSpecified => s,
         Precision::NoNumber => s,
-        Precision::Number(p) => format!("{s:0>p$}").into(),
+        Precision::Number(p) => zero_pad_to(&s, p).into(),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -688,10 +721,11 @@ fn print_unsigned_oct(
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0" } else { "" };
+    let num = format!("{num:o}");
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:o}"),
-        Precision::NoNumber => format!("{prefix}{num:o}"),
-        Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
+        Precision::NotSpecified => format!("{prefix}{num}"),
+        Precision::NoNumber => format!("{prefix}{num}"),
+        Precision::Number(p) => format!("{prefix}{}", zero_pad_to(&num, p)),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -713,10 +747,11 @@ fn print_unsigned_hex(
     padding_char: Padding,
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
+    let num = format!("{num:x}");
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:x}"),
-        Precision::NoNumber => format!("{prefix}{num:x}"),
-        Precision::Number(p) => format!("{prefix}{num:0>p$x}"),
+        Precision::NotSpecified => format!("{prefix}{num}"),
+        Precision::NoNumber => format!("{prefix}{num}"),
+        Precision::Number(p) => format!("{prefix}{}", zero_pad_to(&num, p)),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
@@ -1448,7 +1483,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{quote_file_name, write_padded_bytes, write_padding};
+    use crate::{Padding, quote_file_name, write_padded_bytes, write_padded_str, write_padding};
 
     use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
 
@@ -1596,8 +1631,23 @@ mod tests {
     #[test]
     fn test_print_padding() {
         let mut buffer = Vec::new();
-        write_padding(&mut buffer, 5).unwrap();
+        write_padding(&mut buffer, 5, b' ').unwrap();
         assert_eq!(&buffer, b"     ");
+
+        let mut buffer = Vec::new();
+        write_padding(&mut buffer, 5, b'0').unwrap();
+        assert_eq!(&buffer, b"00000");
+    }
+
+    #[test]
+    fn test_write_padded_str_counts_chars() {
+        let mut buffer = Vec::new();
+        write_padded_str(&mut buffer, "é", false, 3, Padding::Space).unwrap();
+        assert_eq!(std::str::from_utf8(&buffer).unwrap(), "  é");
+
+        let mut buffer = Vec::new();
+        write_padded_str(&mut buffer, "é", true, 3, Padding::Zero).unwrap();
+        assert_eq!(std::str::from_utf8(&buffer).unwrap(), "é00");
     }
 
     #[test]

@@ -583,6 +583,28 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_printf_large_width_and_precision_do_not_panic() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.touch("f");
+
+    for (format, expected_len) in [
+        ("%111111.1d", 111_111),
+        ("%111111.1f", 111_111),
+        ("%.100000d", 100_000),
+        ("%.100000f", 100_000),
+        ("%.111111s", 111_111),
+        ("%.111111a", 111_111),
+    ] {
+        ts.ucmd()
+            .arg(format!("--printf={format}"))
+            .arg("f")
+            .succeeds()
+            .no_stderr()
+            .stdout_check(|stdout| stdout.len() == expected_len);
+    }
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
