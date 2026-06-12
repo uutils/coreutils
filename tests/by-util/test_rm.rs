@@ -220,6 +220,39 @@ fn test_one_file_system_same_device() {
 }
 
 #[test]
+fn test_preserve_root_all_same_device() {
+    // Refusing to cross a device boundary needs a mount point (root
+    // privileges); without one, --preserve-root=all must remove the tree as
+    // usual since it stays on a single device.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_preserve_root_all_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--preserve-root=all")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_rejects_unknown_value() {
+    new_ucmd!()
+        .arg("--preserve-root=bogus")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_contains("invalid value 'bogus'");
+}
+
+#[test]
 fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";

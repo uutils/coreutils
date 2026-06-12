@@ -24,7 +24,7 @@ rm-help-one-file-system = when removing a hierarchy recursively, skip any direct
   system different from that of the corresponding command line argument (NOT
   IMPLEMENTED)
 rm-help-no-preserve-root = do not treat '/' specially
-rm-help-preserve-root = do not remove '/' (default)
+rm-help-preserve-root = do not remove '/' (default); with 'all', reject any command line argument on a separate device from its parent
 rm-help-recursive = remove directories and their contents recursively
 rm-help-dir = remove empty directories
 rm-help-verbose = explain what is being done
@@ -46,6 +46,7 @@ rm-error-dangerous-recursive-operation-same-as-root = it is dangerous to operate
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
 rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
 rm-error-skipping-different-device = skipping {$file}, since it's on a different device
+rm-error-and-preserve-root-all-in-effect = and --preserve-root=all is in effect
 rm-error-cannot-remove = cannot remove {$file}
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
 
