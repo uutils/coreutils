@@ -11,7 +11,7 @@ use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{IsTerminal, stdin};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -271,11 +271,13 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    let initial_mode = match fs::symlink_metadata(path) {
+    let (initial_mode, root_dev) = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
-        Ok(metadata) => metadata.permissions().mode(),
+        // root_dev is the tree-root device, captured once and compared against
+        // every subdirectory for --one-file-system (not recomputed per level).
+        Ok(metadata) => (metadata.permissions().mode(), metadata.dev()),
         Err(e) => {
             return show_removal_error(e, path);
         }
@@ -301,7 +303,7 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options);
+    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev);
 
     // After processing all children, remove the directory itself
     if error {
@@ -338,7 +340,12 @@ pub fn safe_remove_dir_recursive(
 }
 
 #[cfg(not(target_os = "redox"))]
-pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    path: &Path,
+    dir_fd: &DirFd,
+    options: &Options,
+    root_dev: u64,
+) -> bool {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
@@ -372,6 +379,15 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
+            if options.one_fs && entry_stat.st_dev as u64 != root_dev {
+                show_error!(
+                    "{}",
+                    translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
+                );
+                error = true;
+                continue;
+            }
+
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
                 && !is_dir_empty(&entry_path)
@@ -404,7 +420,8 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
+            let child_error =
+                safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options, root_dev);
             error |= child_error;
 
             // Ask user permission if needed for this subdirectory
@@ -431,7 +448,12 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
 }
 
 #[cfg(target_os = "redox")]
-pub fn safe_remove_dir_recursive_impl(_path: &Path, _dir_fd: &DirFd, _options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    _path: &Path,
+    _dir_fd: &DirFd,
+    _options: &Options,
+    _root_dev: u64,
+) -> bool {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
     true // Return error
