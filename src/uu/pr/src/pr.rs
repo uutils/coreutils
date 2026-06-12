@@ -621,6 +621,8 @@ fn build_options(
                         let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
                         if width <= 0 {
                             return Err(invalid(&s[1..]));
+                        } else if s.starts_with('-') {
+                            return Err(invalid(s));
                         }
                         Ok(ExpandTabsOptions {
                             input_char: c,
