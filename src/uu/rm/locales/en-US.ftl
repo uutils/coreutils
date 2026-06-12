@@ -45,6 +45,7 @@ rm-error-dangerous-recursive-operation = it is dangerous to operate recursively 
 rm-error-dangerous-recursive-operation-same-as-root = it is dangerous to operate recursively on '{$path}' (same as '/')
 rm-error-use-no-preserve-root = use --no-preserve-root to override this failsafe
 rm-error-refusing-to-remove-directory = refusing to remove '.' or '..' directory: skipping {$path}
+rm-error-skipping-different-device = skipping {$file}, since it's on a different device
 rm-error-cannot-remove = cannot remove {$file}
 rm-error-may-not-abbreviate-no-preserve-root = you may not abbreviate the --no-preserve-root option
 
