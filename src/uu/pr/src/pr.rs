@@ -703,9 +703,17 @@ fn build_options(
 
     let invalid_pages_map = |i: String| {
         let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
-        i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
+        let parsed_value = i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
             msg: format!("invalid --pages argument {}", unparsed_value.quote()),
-        })
+        });
+
+        match parsed_value {
+            Ok(0) => Err(PrError::EncounteredErrors {
+                msg: "invalid --pages argument '0'".to_string(),
+            }),
+            Ok(res) => Ok(res),
+            Err(e) => Err(e),
+        }
     };
 
     let res = matches
@@ -749,6 +757,12 @@ fn build_options(
 
     let page_length =
         parse_usize(matches, options::PAGE_LENGTH).unwrap_or(Ok(default_lines_per_page))?;
+
+    if page_length == 0 {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --length argument '0'".to_string(),
+        });
+    }
 
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
