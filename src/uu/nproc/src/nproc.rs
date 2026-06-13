@@ -121,10 +121,15 @@ fn num_cpus_all() -> usize {
 fn available_parallelism() -> usize {
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    match unsafe { libc::sched_getscheduler(0) } {
-        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
-        _ => thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get), // include fallback for error
+    {
+        let scheduler = unsafe { libc::sched_getscheduler(0) };
+
+        if matches!(
+            scheduler,
+            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE
+        ) {
+            return num_cpus_all();
+        }
     }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
