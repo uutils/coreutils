@@ -301,16 +301,7 @@ pub fn localized_help_template_usage_first(util_name: &str) -> clap::builder::St
 /// Determine whether colored output should be used, based on the same
 /// environment variables and TTY checks as `configure_localized_command`.
 fn detect_colors_enabled() -> bool {
-    use std::io::IsTerminal;
-
-    if std::env::var("NO_COLOR").is_ok() {
-        false
-    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
-        true
-    } else {
-        IsTerminal::is_terminal(&std::io::stdout())
-            && std::env::var("TERM").unwrap_or_default() != "dumb"
-    }
+    clap_localization::should_use_color_for_stream(&std::io::stdout())
 }
 
 /// Create a localized help template with explicit color control

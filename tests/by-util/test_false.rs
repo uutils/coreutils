@@ -30,7 +30,8 @@ fn test_help() {
 #[test]
 fn test_help_starts_with_usage() {
     // GNU's `false --help` starts with a "Usage:" line; ensure ours does too.
-    let result = new_ucmd!().args(&["--help"]).fails();
+    // NO_COLOR avoids ANSI styling so the raw stdout comparison is stable.
+    let result = new_ucmd!().env("NO_COLOR", "1").args(&["--help"]).fails();
     assert!(
         result
             .stdout_str()
