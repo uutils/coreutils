@@ -43,36 +43,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
-    } else {
+    } else if let Ok(threads) = env::var("OMP_NUM_THREADS") {
         // OMP_NUM_THREADS doesn't have an impact on --all
-        match env::var("OMP_NUM_THREADS") {
-            // Uses the OpenMP variable to force the number of threads
-            // If the parsing fails, returns the number of CPU
-            Ok(threads) => {
-                // In some cases, OMP_NUM_THREADS can be "x,y,z"
-                // In this case, only take the first one (like GNU)
-                // If OMP_NUM_THREADS=0, rejects the value
-                match threads.split_terminator(',').next() {
-                    None => available_parallelism(),
-                    Some(s) => match s.trim().parse() {
-                        Ok(0) | Err(_) => available_parallelism(),
-                        Ok(n) => n,
-                    },
-                }
-            }
-            // the variable 'OMP_NUM_THREADS' doesn't exist
-            // fallback to the regular CPU detection
-            Err(_) => {
-                // ignore quota under some schedulers
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                match unsafe { libc::sched_getscheduler(0) } {
-                    libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
-                    _ => available_parallelism(), // include fallback for error
-                }
-                #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                available_parallelism()
-            }
+        // Uses the OpenMP variable to force the number of threads
+        // If the parsing fails, returns the number of CPU
+        // In some cases, OMP_NUM_THREADS can be "x,y,z"
+        // In this case, only take the first one (like GNU)
+        // If OMP_NUM_THREADS=0, rejects the value
+        match threads.split_terminator(',').next() {
+            None => available_parallelism(),
+            Some(s) => match s.trim().parse() {
+                Ok(0) | Err(_) => available_parallelism(),
+                Ok(n) => n,
+            },
         }
+    } else {
+        // the variable 'OMP_NUM_THREADS' doesn't exist
+        // fallback to the regular CPU detection
+        // ignore quota under some schedulers
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        match unsafe { libc::sched_getscheduler(0) } {
+            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
+            _ => available_parallelism(), // include fallback for error
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        available_parallelism()
     };
 
     cores = std::cmp::min(limit, cores);
