@@ -188,28 +188,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
             ));
         }
-        match File::open(path) {
-            Ok(f) => {
-                let fin = BufReader::new(f);
-                result = parse(
-                    fin.lines().map_while(Result::ok),
-                    &out_format,
-                    &path.to_string_lossy(),
-                );
-            }
-            Err(e) => {
-                return Err(USimpleError::new(1, format!("{}: {e}", path.maybe_quote())));
-            }
-        }
+        let file = File::open(path)
+            .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
+        let fin = BufReader::new(file);
+        result = parse(
+            fin.lines().map_while(Result::ok),
+            &out_format,
+            &path.to_string_lossy(),
+        );
     }
 
-    match result {
-        Ok(s) => {
-            writeln!(stdout(), "{s}")?;
-            Ok(())
-        }
-        Err(s) => Err(USimpleError::new(1, s)),
-    }
+    let string = result.map_err(|s| USimpleError::new(1, s))?;
+    writeln!(stdout(), "{string}")?;
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
