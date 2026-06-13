@@ -47,6 +47,9 @@ selinux = { workspace = true, optional = true }
 exacl = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs"] }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [[bin]]
 name = "cp"
 path = "src/main.rs"
