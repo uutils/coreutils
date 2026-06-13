@@ -98,17 +98,25 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
     // pre-generate page caches for splice
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
-    loop {
-        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(Ok(())),
-            Ok(n) => {
-                if drain_pipe(pipe_rd, dest, n)?.is_err() {
-                    return Ok(Err(()));
-                }
+    // check support of splice and fallback
+    match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(0) => return Ok(Ok(())),
+        Ok(n) => {
+            if drain_pipe(pipe_rd, dest, n)?.is_err() {
+                return Ok(Err(()));
             }
-            Err(_) => return Ok(Err(())),
+        }
+        Err(_) => return Ok(Err(())),
+    }
+    // GNU catches all strace injections for except for 1st one
+    while let mut n @ 1.. =
+        splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE).map_err(std::io::Error::from)?
+    {
+        while n > 0 {
+            n -= splice(&pipe_rd, dest, n)?;
         }
     }
+    Ok(Ok(()))
 }
 
 /// splice `n` bytes with read/write fallback
