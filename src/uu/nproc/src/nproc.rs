@@ -60,13 +60,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         // the variable 'OMP_NUM_THREADS' doesn't exist
         // fallback to the regular CPU detection
-        // ignore quota under some schedulers
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        match unsafe { libc::sched_getscheduler(0) } {
-            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
-            _ => available_parallelism(), // include fallback for error
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
         available_parallelism()
     };
 
@@ -126,5 +119,12 @@ fn num_cpus_all() -> usize {
 /// In some cases, [`thread::available_parallelism`]() may return an Err
 /// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
+    // ignore quota under some schedulers
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    match unsafe { libc::sched_getscheduler(0) } {
+        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
+        _ => thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get), // include fallback for error
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
