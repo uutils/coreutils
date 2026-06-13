@@ -19,19 +19,14 @@ static OPT_IGNORE: &str = "ignore";
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    let ignore = match matches.get_one::<String>(OPT_IGNORE) {
-        Some(numstr) => match numstr.trim().parse::<usize>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
-                ));
-            }
-        },
-        None => 0,
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides '0' by default")]
+    let numstr = matches.get_one::<String>(OPT_IGNORE).unwrap();
+    let ignore = numstr.trim().parse::<usize>().map_err(|e| {
+        USimpleError::new(
+            1,
+            translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
+        )
+    })?;
 
     let limit = match env::var("OMP_THREAD_LIMIT") {
         // Uses the OpenMP variable to limit the number of threads
@@ -111,6 +106,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
+                .default_value("0")
                 .help(translate!("nproc-help-ignore")),
         )
 }
