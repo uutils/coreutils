@@ -329,7 +329,7 @@ where
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
-            if lines == n + 1 {
+            if lines > n {
                 input.rewind()?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
