@@ -9,6 +9,7 @@
 use clap::{
     Arg, ArgAction, Command,
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
+    value_parser,
 };
 use lscolors::Colorable;
 #[cfg(unix)]
@@ -216,6 +217,7 @@ pub fn uu_app() -> Command {
             .long(options::format::TAB_SIZE)
             .env("TABSIZE")
             .value_name("COLS")
+            .value_parser(value_parser!(usize))
             .help(translate!("ls-help-assume-tab-stops")),
     )
     .arg(
