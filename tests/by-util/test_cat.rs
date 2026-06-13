@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore NOFILE nonewline cmdline
+// spell-checker:ignore NOFILE nonewline cmdline strace
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use rlimit::Resource;
@@ -10,9 +10,13 @@ use rlimit::Resource;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::fs::read_to_string;
+#[cfg(target_os = "linux")]
+use std::process::Command;
 use std::process::Stdio;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+#[cfg(target_os = "linux")]
+use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
 #[cfg(not(windows))]
 use uutests::util::vec_of_size;
@@ -83,6 +87,71 @@ fn test_no_options_big_input() {
         assert_eq!(data.len(), data2.len());
         new_ucmd!().pipe_in(data).succeeds().stdout_is_bytes(&data2);
     }
+}
+
+#[cfg(target_os = "linux")]
+fn require_strace_splice_injection() -> Result<(), String> {
+    let output = Command::new("strace")
+        .args([
+            "-o",
+            "/dev/null",
+            "-e",
+            "inject=splice:error=EIO:when=3",
+            "true",
+        ])
+        .output()
+        .map_err(|e| format!("requires strace: {e}"))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!(
+            "requires strace splice injection support: {}",
+            stderr.trim()
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn assert_cat_splice_error(when: usize, expected_stderr: &str) {
+    let scene = TestScenario::new(util_name!());
+    let input_name = "splice-input";
+    let file = File::create(scene.fixtures.plus(input_name)).unwrap();
+    // The file must be large enough to require at least four splice syscalls:
+    // read from input, write to stdout, read again, write again.
+    file.set_len(3 * 1024 * 1024).unwrap();
+    drop(file);
+
+    let inject = format!("inject=splice:error=EIO:when={when}");
+    let dev_null = OpenOptions::new().write(true).open("/dev/null").unwrap();
+
+    scene
+        .cmd("strace")
+        .arg("-o")
+        .arg("/dev/null")
+        .arg("-e")
+        .arg(inject.as_str())
+        .arg(&scene.bin_path)
+        .arg("cat")
+        .arg(input_name)
+        .set_stdout(dev_null)
+        .fails()
+        .stderr_is(expected_stderr);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_splice_input_error_is_diagnosed() {
+    unwrap_or_return!(require_strace_splice_injection());
+    assert_cat_splice_error(3, "cat: splice-input: Input/output error\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_splice_output_error_is_diagnosed() {
+    unwrap_or_return!(require_strace_splice_injection());
+    assert_cat_splice_error(4, "cat: write error: Input/output error\n");
 }
 
 #[test]

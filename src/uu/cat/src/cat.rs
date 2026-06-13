@@ -80,6 +80,10 @@ enum CatError {
     /// Wrapper around `io::Error`
     #[error("{}", strip_errno(.0))]
     Io(#[from] io::Error),
+    /// Error while writing to stdout. GNU reports these without an input path.
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("write error: {}", strip_errno(.0))]
+    WriteIo(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -103,6 +107,18 @@ type CatResult<T> = Result<T, CatError>;
 impl From<rustix::io::Errno> for CatError {
     fn from(value: rustix::io::Errno) -> Self {
         Self::Io(value.into())
+    }
+}
+
+impl CatError {
+    /// Format errors after all inputs have been processed, preserving GNU's
+    /// distinction between input-specific failures and stdout failures.
+    fn for_path(&self, path: &OsString) -> String {
+        match self {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            Self::WriteIo(_) => self.to_string(),
+            _ => format!("{}: {self}", path.maybe_quote()),
+        }
     }
 }
 
@@ -409,7 +425,7 @@ where
 
     for path in files {
         if let Err(err) = cat_path(path, options, &mut state) {
-            error_messages.push(format!("{}: {err}", path.maybe_quote()));
+            error_messages.push(err.for_path(path));
         }
     }
     if state.skipped_carriage_return {
@@ -473,23 +489,107 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
     }
 }
 
-/// Writes handle to stdout with no configuration. This allows a
-/// simple memory copy.
+/// Writes handle to stdout with no output transformations.
+///
+/// The Linux/Android fast path tries zero-copy output first, then falls back to
+/// read/write if zero-copy is unsupported for the involved file descriptors.
 fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok()
-        && !uucore::pipes::might_fuse(&handle.reader)
     {
-        return Ok(());
+        match splice_copy(&handle.reader, &mut stdout)? {
+            SpliceCopy::Complete if !uucore::pipes::might_fuse(&handle.reader) => {
+                return Ok(());
+            }
+            SpliceCopy::Complete | SpliceCopy::Fallback => {}
+        }
     }
 
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
     print_unbuffered(handle, stdout)
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+enum SpliceCopy {
+    Complete,
+    Fallback,
+}
+
+/// Copy with `splice` while keeping input and output errors distinguishable.
+///
+/// `splice` can fail because a file descriptor pair does not support zero-copy
+/// at all. That is a fallback condition only before bytes have reached stdout.
+/// Once a splice has succeeded, later splice errors are real I/O failures and
+/// must be diagnosed like GNU `cat` does.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_copy(source: &impl AsFd, dest: &mut impl AsFd) -> CatResult<SpliceCopy> {
+    let Ok((mut pipe_rd, pipe_wr)) = uucore::pipes::pipe::<false>() else {
+        return Ok(SpliceCopy::Fallback);
+    };
+    let mut copied_with_splice = false;
+
+    loop {
+        let bytes_read =
+            match uucore::pipes::splice(source, &pipe_wr, uucore::pipes::MAX_ROOTLESS_PIPE_SIZE) {
+                Ok(0) => return Ok(SpliceCopy::Complete),
+                Ok(n) => n,
+                Err(_) if !copied_with_splice => return Ok(SpliceCopy::Fallback),
+                Err(err) => return Err(CatError::Io(err.into())),
+            };
+
+        let mut remaining = bytes_read;
+        while remaining > 0 {
+            match uucore::pipes::splice(&pipe_rd, &*dest, remaining) {
+                Ok(0) if !copied_with_splice => {
+                    drain_pipe_and_fallback(&mut pipe_rd, dest, remaining)?;
+                    return Ok(SpliceCopy::Fallback);
+                }
+                Ok(0) => {
+                    return Err(CatError::WriteIo(ErrorKind::WriteZero.into()));
+                }
+                Ok(n) => {
+                    copied_with_splice = true;
+                    remaining -= n;
+                }
+                Err(_) if !copied_with_splice => {
+                    // Nothing has reached stdout yet, so preserve the bytes in
+                    // the broker pipe and let the normal writer finish them.
+                    drain_pipe_and_fallback(&mut pipe_rd, dest, remaining)?;
+                    return Ok(SpliceCopy::Fallback);
+                }
+                Err(err) => return Err(write_error_from_errno(err)),
+            }
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn drain_pipe_and_fallback(
+    pipe_rd: &mut io::PipeReader,
+    dest: &mut impl AsFd,
+    len: usize,
+) -> CatResult<()> {
+    let mut drain = Vec::with_capacity(len);
+    pipe_rd.take(len as u64).read_to_end(&mut drain)?;
+    uucore::io::RawWriter(&mut *dest)
+        .write_all(&drain)
+        .map_err(write_error)?;
+    Ok(())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn write_error_from_errno(error: rustix::io::Errno) -> CatError {
+    write_error(error.into())
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn write_error(error: io::Error) -> CatError {
+    handle_broken_pipe(&error);
+    CatError::WriteIo(error)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
@@ -713,8 +813,7 @@ fn write_end_of_line<W: Write>(
 }
 
 fn handle_broken_pipe(error: &io::Error) {
-    // SIGPIPE is not available on Windows.
-    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+    if error.kind() == ErrorKind::BrokenPipe {
         std::process::exit(13);
     }
 }
