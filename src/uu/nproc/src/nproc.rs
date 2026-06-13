@@ -3,12 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS SCHED getscheduler nprocs numstr sched sysconf
+// spell-checker:ignore (ToDO) NPROCESSORS SCHED getscheduler nprocs sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
 use std::{env, thread};
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -19,14 +18,8 @@ static OPT_IGNORE: &str = "ignore";
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    #[allow(clippy::unwrap_used, reason = "clap provides '0' by default")]
-    let numstr = matches.get_one::<String>(OPT_IGNORE).unwrap();
-    let ignore = numstr.trim().parse::<usize>().map_err(|e| {
-        USimpleError::new(
-            1,
-            translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
-        )
-    })?;
+    #[allow(clippy::unwrap_used, reason = "clap provides 0 by default")]
+    let ignore = *matches.get_one::<usize>(OPT_IGNORE).unwrap();
 
     let limit = match env::var("OMP_THREAD_LIMIT") {
         // Uses the OpenMP variable to limit the number of threads
@@ -95,6 +88,9 @@ pub fn uu_app() -> Command {
                 .long(OPT_IGNORE)
                 .value_name("N")
                 .default_value("0")
+                .value_parser(|s: &str| -> Result<usize, String> {
+                    s.trim().parse::<usize>().map_err(|e| e.to_string())
+                })
                 .help(translate!("nproc-help-ignore")),
         )
 }
