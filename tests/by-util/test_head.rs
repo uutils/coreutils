@@ -872,6 +872,24 @@ fn test_value_too_large() {
 }
 
 #[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_all_but_last_lines() {
     new_ucmd!()
         .args(&["-n", "-15", "lorem_ipsum.txt"])
