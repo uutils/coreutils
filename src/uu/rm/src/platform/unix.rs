@@ -412,7 +412,11 @@ pub fn safe_remove_dir_recursive_impl(
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
-            if options.one_fs && entry_stat.st_dev as u64 != root_dev {
+            // st_dev's type varies by platform (i32 on macOS, u64 on Linux).
+            #[allow(clippy::unnecessary_cast)]
+            let entry_dev = entry_stat.st_dev as u64;
+
+            if options.one_fs && entry_dev != root_dev {
                 show_error!(
                     "{}",
                     translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
@@ -424,7 +428,7 @@ pub fn safe_remove_dir_recursive_impl(
             // --preserve-root=all compares against the immediate parent rather
             // than the tree root, so a mount nested anywhere in the tree is
             // caught even when --one-file-system is not in effect.
-            if options.preserve_root_all && entry_stat.st_dev as u64 != parent_dev {
+            if options.preserve_root_all && entry_dev != parent_dev {
                 show_preserve_root_all_skip(&entry_path);
                 error = true;
                 continue;
@@ -467,7 +471,7 @@ pub fn safe_remove_dir_recursive_impl(
                 &child_dir_fd,
                 options,
                 root_dev,
-                entry_stat.st_dev as u64,
+                entry_dev,
             );
             error |= child_error;
 
