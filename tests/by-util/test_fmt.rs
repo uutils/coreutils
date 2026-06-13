@@ -428,3 +428,11 @@ fn test_fmt_invalid_utf8() {
         .succeeds()
         .stdout_is_bytes(b"=\xA0=\n");
 }
+
+#[test]
+fn test_fmt_width_multiplication_overflow() {
+    new_ucmd!()
+        .args(&["-w", "267672676527678256"])
+        .fails_with_code(1)
+        .stderr_is("fmt: invalid width: '267672676527678256'\n");
+}

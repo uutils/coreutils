@@ -19,19 +19,14 @@ static OPT_IGNORE: &str = "ignore";
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    let ignore = match matches.get_one::<String>(OPT_IGNORE) {
-        Some(numstr) => match numstr.trim().parse::<usize>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
-                ));
-            }
-        },
-        None => 0,
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides '0' by default")]
+    let numstr = matches.get_one::<String>(OPT_IGNORE).unwrap();
+    let ignore = numstr.trim().parse::<usize>().map_err(|e| {
+        USimpleError::new(
+            1,
+            translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
+        )
+    })?;
 
     let limit = match env::var("OMP_THREAD_LIMIT") {
         // Uses the OpenMP variable to limit the number of threads
@@ -48,36 +43,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
-    } else {
+    } else if let Ok(threads) = env::var("OMP_NUM_THREADS") {
         // OMP_NUM_THREADS doesn't have an impact on --all
-        match env::var("OMP_NUM_THREADS") {
-            // Uses the OpenMP variable to force the number of threads
-            // If the parsing fails, returns the number of CPU
-            Ok(threads) => {
-                // In some cases, OMP_NUM_THREADS can be "x,y,z"
-                // In this case, only take the first one (like GNU)
-                // If OMP_NUM_THREADS=0, rejects the value
-                match threads.split_terminator(',').next() {
-                    None => available_parallelism(),
-                    Some(s) => match s.trim().parse() {
-                        Ok(0) | Err(_) => available_parallelism(),
-                        Ok(n) => n,
-                    },
-                }
-            }
-            // the variable 'OMP_NUM_THREADS' doesn't exist
-            // fallback to the regular CPU detection
-            Err(_) => {
-                // ignore quota under some schedulers
-                #[cfg(any(target_os = "linux", target_os = "android"))]
-                match unsafe { libc::sched_getscheduler(0) } {
-                    libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
-                    _ => available_parallelism(), // include fallback for error
-                }
-                #[cfg(not(any(target_os = "linux", target_os = "android")))]
-                available_parallelism()
-            }
+        // Uses the OpenMP variable to force the number of threads
+        // If the parsing fails, returns the number of CPU
+        // In some cases, OMP_NUM_THREADS can be "x,y,z"
+        // In this case, only take the first one (like GNU)
+        // If OMP_NUM_THREADS=0, rejects the value
+        match threads.split_terminator(',').next() {
+            None => available_parallelism(),
+            Some(s) => match s.trim().parse() {
+                Ok(0) | Err(_) => available_parallelism(),
+                Ok(n) => n,
+            },
         }
+    } else {
+        // the variable 'OMP_NUM_THREADS' doesn't exist
+        // fallback to the regular CPU detection
+        // ignore quota under some schedulers
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        match unsafe { libc::sched_getscheduler(0) } {
+            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
+            _ => available_parallelism(), // include fallback for error
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        available_parallelism()
     };
 
     cores = std::cmp::min(limit, cores);
@@ -111,6 +101,7 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
+                .default_value("0")
                 .help(translate!("nproc-help-ignore")),
         )
 }

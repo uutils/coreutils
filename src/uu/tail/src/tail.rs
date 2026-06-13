@@ -221,7 +221,6 @@ fn tail_file(
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
-    use std::os::fd::AsFd;
     use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 
     let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
@@ -233,9 +232,9 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(file.as_fd())?;
+        let flags = fcntl_getfl(&file)?;
         let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(file.as_fd(), new_flags)?;
+        fcntl_setfl(&file, new_flags)?;
 
         Ok(file)
     } else {

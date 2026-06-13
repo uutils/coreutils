@@ -24,14 +24,14 @@ use crate::{
 // only applies `O_NOFOLLOW` to the *source* open. The destination is
 // followed if it is a pre-existing symlink, matching GNU cp -d/-P which
 // only forbid dereferencing on the source side.
-fn fs_copy<P, Q>(source: P, dest: Q, source_nofollow: bool) -> std::io::Result<u64>
+fn fs_copy<P, Q>(source: P, dest: Q, source_nofollow: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
-    std::io::copy(&mut src, &mut dst)
+    std::io::copy(&mut src, &mut dst).map(|_| ())
 }
 
 /// The fallback behavior for [`clone`] on failed system call.
@@ -66,7 +66,6 @@ enum CopyMethod {
 /// Use the Linux `ioctl_ficlone` API to do a copy-on-write clone.
 ///
 /// `fallback` controls what to do if the system call fails.
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn clone<P>(source: P, dest: P, fallback: CloneFallback, nofollow: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -76,7 +75,7 @@ where
     if ioctl_ficlone(dst_file, src_file).is_err() {
         return match fallback {
             CloneFallback::Error => Err(std::io::Error::last_os_error()),
-            CloneFallback::FSCopy => fs_copy(source, dest, nofollow).map(|_| ()),
+            CloneFallback::FSCopy => fs_copy(source, dest, nofollow),
             CloneFallback::SparseCopy => sparse_copy(source, dest, nofollow),
             CloneFallback::SparseCopyWithoutHole => {
                 sparse_copy_without_hole(source, dest, nofollow)
@@ -89,7 +88,6 @@ where
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
 /// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
 /// data, its size, no of blocks it has allocated in disk)
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn check_for_data(source: &Path, nofollow: bool) -> Result<(bool, u64, u64), std::io::Error> {
     let mut src_file = open_source(source, nofollow)?;
     let metadata = src_file.metadata()?;
@@ -107,7 +105,6 @@ fn check_for_data(source: &Path, nofollow: bool) -> Result<(bool, u64, u64), std
     Ok((has_data, size, blocks))
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
 fn check_sparse_detection(source: &Path, nofollow: bool) -> Result<bool, std::io::Error> {
@@ -121,7 +118,6 @@ fn check_sparse_detection(source: &Path, nofollow: bool) -> Result<bool, std::io
 
 /// Optimized [`sparse_copy`] doesn't create holes for large sequences of zeros in non `sparse_files`
 /// Used when `--sparse=auto`
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy_without_hole<P>(source: P, dest: P, nofollow: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -156,7 +152,6 @@ where
 }
 /// Perform a sparse copy from one file to another.
 /// Creates a holes for large sequences of zeros in `non_sparse_files`, used for `--sparse=always`
-#[cfg(any(target_os = "linux", target_os = "android"))]
 fn sparse_copy<P>(source: P, dest: P, nofollow: bool) -> std::io::Result<()>
 where
     P: AsRef<Path>,
@@ -185,7 +180,6 @@ where
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
 /// Checks whether an existing destination is a fifo
 fn check_dest_is_fifo(dest: &Path) -> bool {
     // If our destination file exists and its a fifo , we do a standard copy .
@@ -256,7 +250,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_always(source, dest, nofollow);
@@ -266,7 +260,7 @@ pub(crate) fn copy_on_write(
                 }
 
                 match copy_method {
-                    CopyMethod::FSCopy => fs_copy(source, dest, nofollow).map(|_| ()),
+                    CopyMethod::FSCopy => fs_copy(source, dest, nofollow),
                     _ => sparse_copy(source, dest, nofollow),
                 }
             }
@@ -276,13 +270,13 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let result = handle_reflink_never_sparse_never(source, nofollow);
                 if let Ok(debug) = result {
                     copy_debug = debug;
                 }
-                fs_copy(source, dest, nofollow).map(|_| ())
+                fs_copy(source, dest, nofollow)
             }
         }
         (ReflinkMode::Never, SparseMode::Auto) => {
@@ -290,7 +284,7 @@ pub(crate) fn copy_on_write(
 
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_never_sparse_auto(source, dest, nofollow);
@@ -303,7 +297,7 @@ pub(crate) fn copy_on_write(
                     CopyMethod::SparseCopyWithoutHole => {
                         sparse_copy_without_hole(source, dest, nofollow)
                     }
-                    _ => fs_copy(source, dest, nofollow).map(|_| ()),
+                    _ => fs_copy(source, dest, nofollow),
                 }
             }
         }
@@ -312,7 +306,7 @@ pub(crate) fn copy_on_write(
             // SparseMode::Always
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_always(source, dest, nofollow);
@@ -332,7 +326,7 @@ pub(crate) fn copy_on_write(
             copy_debug.reflink = OffloadReflinkDebug::No;
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Avoided;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let result = handle_reflink_auto_sparse_never(source, nofollow);
                 if let Ok(debug) = result {
@@ -345,7 +339,7 @@ pub(crate) fn copy_on_write(
         (ReflinkMode::Auto, SparseMode::Auto) => {
             if source_is_stream {
                 copy_debug.offload = OffloadReflinkDebug::Unsupported;
-                copy_stream(source, dest, nofollow).map(|_| ())
+                copy_stream(source, dest, nofollow)
             } else {
                 let mut copy_method = CopyMethod::Default;
                 let result = handle_reflink_auto_sparse_auto(source, dest, nofollow);

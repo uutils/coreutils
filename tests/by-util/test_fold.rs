@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fullwidth refgh tefgh nefgh
+// spell-checker:ignore fullwidth refgh tefgh nefgh unflushed
 
 use bytecount::count;
 use unicode_width::UnicodeWidthChar;
@@ -891,6 +891,10 @@ fn test_bytewise_carriage_return_is_not_word_boundary() {
 }
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: killing the wasmtime process discards the unflushed output buffer, so the streamed bytes never reach stdout"
+)]
 #[test]
 fn test_bytewise_read_from_pseudo_device() {
     let mut child = new_ucmd!().arg("-b").arg("/dev/zero").run_no_wait();
@@ -903,6 +907,42 @@ fn test_bytewise_read_from_pseudo_device() {
         .with_all_output()
         .stdout_contains_bytes(b"\x00\x0a")
         .no_stderr();
+}
+
+/// A fold boundary that lands exactly on the read-buffer boundary must still
+/// insert the fold newline. The streaming reader fills at most `BufReader`
+/// capacity per call, so folding at `width == capacity` is the case where the
+/// byte following the fold point is not yet buffered.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_bytewise_fold_at_read_buffer_boundary() {
+    let width = buf_reader_capacity();
+    let input = vec![b'a'; width * 2];
+
+    let mut expected = vec![b'a'; width];
+    expected.push(b'\n');
+    expected.extend(std::iter::repeat_n(b'a', width));
+
+    new_ucmd!()
+        .args(&["-b", &format!("-w{width}")])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes(expected);
+}
+
+#[test]
+fn test_continue_after_missing_file() {
+    // A nonexistent operand must not abort the run: the surrounding files are
+    // still folded, the error is reported on stderr, and the exit status is 1.
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write("first.txt", "hello\n");
+    ts.fixtures.write("third.txt", "world\n");
+
+    ts.ucmd()
+        .args(&["first.txt", "absent.txt", "third.txt"])
+        .fails_with_code(1)
+        .stdout_is("hello\nworld\n")
+        .stderr_is("fold: absent.txt: No such file or directory\n");
 }
 
 #[test]
@@ -1007,4 +1047,13 @@ fn test_character_mode_special_chars() {
             .succeeds()
             .stdout_is(expected);
     }
+}
+
+#[test]
+fn test_width_zero() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("0")
+        .fails_with_code(1)
+        .stderr_is("fold: illegal width value\n");
 }

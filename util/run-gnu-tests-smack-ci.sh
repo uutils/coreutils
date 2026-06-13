@@ -21,7 +21,7 @@ sudo apt-get install -y --no-install-recommends linux-image-generic
 sudo install -Dvm644 "$(ls -1 /boot/vmlinuz-*-generic | head -n 1)" "$QEMU_DIR/kernel/vmlinuz"
 
 # Setup busybox
-curl -L -o b.tar.gz https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/busybox-static-1.37.0-r30.apk
+curl -L -o b.tar.gz https://dl-cdn.alpinelinux.org/alpine/latest-stable/main/x86_64/busybox-static-1.37.0-r31.apk
 tar -xf b.tar.gz
 install -Dvm755 bin/busybox.static "$QEMU_DIR/rootfs/bin/busybox"
 (cd "$QEMU_DIR/rootfs/bin" && ./busybox --list | xargs -I{} ln -sf busybox {} 2>/dev/null)
