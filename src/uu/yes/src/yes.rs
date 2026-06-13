@@ -119,14 +119,19 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
         && p_write.write_all(bytes).is_ok()
         && let Ok((broker_read, broker_write)) = pipe::<true>()
         && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
+        && let Ok(drained) = splice(&broker_read, &stdout, bytes_len)
     {
-        // fallback from tee() is possible since we did not send anything to stdout yet
-        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
-            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
+        let mut remain = bytes_len - drained;
+        'splice: loop {
             while remain > 0 {
                 remain -= splice(&broker_read, &stdout, remain)?;
             }
+            // fallback from tee() is possible since we did not send anything to stdout yet
+            let Ok(tee_len) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) else {
+                break 'splice;
+            };
+            debug_assert!(tee_len == bytes_len, "splice should cleanup pipe");
+            remain = tee_len;
         }
     }
 
