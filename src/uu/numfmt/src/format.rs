@@ -533,6 +533,12 @@ fn consider_suffix(
 
     // check if rounding pushed us into the next base
     if v.abs() >= bases[1] {
+        // Rounding promoted the value to the next base. When already at the
+        // largest base there is no suffix above it, so the value is too large
+        // to represent (rather than indexing `suffixes` out of bounds).
+        if i >= suffixes.len() {
+            return Err(translate!("numfmt-error-number-too-big"));
+        }
         Ok((v / bases[1], Some((suffixes[i], with_i))))
     } else {
         Ok((v, Some((suffixes[i - 1], with_i))))
