@@ -102,6 +102,6 @@ fn test_filename_ends_with_slash() {
     at.touch("a");
 
     ucmd.arg("a/")
-        .fails_with_code(2)
+        .fails_with_code(1)
         .stderr_is("sum: a/: Not a directory\n");
 }
