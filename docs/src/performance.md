@@ -41,6 +41,8 @@ hyperfine \
   "{ls} -R ."
 ```
 
+For Ubuntu 25.10 and other distributions that use uutils by default, replace `bin/ls` with `bin/gnuls`. Also:
+
 ```
 # to improve the reproducibility of the results:
 taskset -c 0

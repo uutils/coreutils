@@ -45,7 +45,7 @@ fn infallible_gid2grp(gid: u32) -> String {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -80,9 +80,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("groups")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("groups"))
         .about(translate!("groups-about"))
         .override_usage(format_usage(&translate!("groups-usage")))
         .infer_long_args(true)

@@ -3,7 +3,6 @@ name = "uu_shred"
 description = "shred ~ (uutils) hide former FILE contents with repeated overwrites"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/shred"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/shred.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

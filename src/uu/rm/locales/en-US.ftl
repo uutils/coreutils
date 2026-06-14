@@ -36,6 +36,8 @@ rm-progress-removing = Removing
 # Error messages
 rm-error-missing-operand = missing operand
   Try '{$util_name} --help' for more information.
+rm-hint-dash-file = Try '{$util_name} ./{$path}' to remove the file {$file}.
+  Try '{$util_name} --help' for more information.
 rm-error-cannot-remove-no-such-file = cannot remove {$file}: No such file or directory
 rm-error-cannot-remove-permission-denied = cannot remove {$file}: Permission denied
 rm-error-cannot-remove-is-directory = cannot remove {$file}: Is a directory

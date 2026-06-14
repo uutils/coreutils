@@ -16,8 +16,11 @@ use uucore::translate;
 
 use uucore::{format_usage, show};
 
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut checksum: u16 = 0;
     loop {
@@ -41,7 +44,7 @@ fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
 }
 
 fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut ret = 0u32;
 
@@ -86,6 +89,8 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
             ));
         }
         let f = File::open(path).map_err_context(String::new)?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Box::new(f) as Box<dyn Read>)
     }
 }
@@ -137,9 +142,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("sum")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("sum"))
         .override_usage(format_usage(&translate!("sum-usage")))
         .about(translate!("sum-about"))
         .infer_long_args(true)

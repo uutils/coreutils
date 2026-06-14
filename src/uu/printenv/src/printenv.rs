@@ -17,7 +17,7 @@ static OPT_NULL: &str = "null";
 
 static ARG_VARIABLES: &str = "variables";
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
@@ -53,7 +53,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("printenv")
         .version(uucore::crate_version!())
         .about(translate!("printenv-about"))
         .override_usage(format_usage(&translate!("printenv-usage")))

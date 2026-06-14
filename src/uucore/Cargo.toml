@@ -4,7 +4,6 @@
 name = "uucore"
 description = "uutils ~ 'core' uutils code library (cross-platform)"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore"
-authors.workspace = true
 categories.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -36,6 +35,8 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-zoneinfo",
   "tzdb-concatenated",
 ] }
+rustc-hash = { workspace = true }
+rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -60,13 +61,13 @@ md-5 = { workspace = true, optional = true }
 sha1 = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 sha3 = { workspace = true, optional = true }
+shake = { workspace = true, optional = true }
 blake2b_simd = { workspace = true, optional = true }
 blake3 = { workspace = true, optional = true }
 sm3 = { workspace = true, optional = true }
-crc-fast = { workspace = true, optional = true }
+crc-fast = { workspace = true, optional = true, features = ["std"] }
 bigdecimal = { workspace = true, optional = true }
 num-traits = { workspace = true, optional = true }
-selinux = { workspace = true, optional = true }
 
 # icu stuff
 icu_calendar = { workspace = true, optional = true, features = [
@@ -89,8 +90,13 @@ jiff-icu = { workspace = true, optional = true }
 fluent = { workspace = true }
 fluent-syntax = { workspace = true }
 unic-langid = { workspace = true }
-fluent-bundle = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = [
@@ -104,9 +110,6 @@ nix = { workspace = true, features = [
 ] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
-
-[dev-dependencies]
-tempfile = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
@@ -138,7 +141,7 @@ extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
 fs = ["dunce", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
-fsxattr = ["xattr", "itertools"]
+fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
 feat_systemd_logind = ["utmpx", "libc"]
@@ -170,12 +173,13 @@ parser-num = ["extendedbigdecimal", "num-traits"]
 parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
-pipes = []
+pipes = ["fs"]
 process = ["libc"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
 ringbuffer = []
+safe-copy = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
@@ -188,6 +192,7 @@ sum = [
   "sha1",
   "sha2",
   "sha3",
+  "shake",
   "blake2b_simd",
   "blake3",
   "sm3",

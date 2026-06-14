@@ -115,7 +115,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             .cloned()
             .unwrap_or_else(|| OsString::from("\n")),
         equal_width: matches.get_flag(OPT_EQUAL_WIDTH),
-        format: matches.get_one::<String>(OPT_FORMAT).map(|s| s.as_str()),
+        format: matches.get_one::<String>(OPT_FORMAT).map(String::as_str),
     };
 
     if options.equal_width && options.format.is_some() {
@@ -228,7 +228,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("seq")
         .trailing_var_arg(true)
         .infer_long_args(true)
         .version(uucore::crate_version!())

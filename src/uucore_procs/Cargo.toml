@@ -4,7 +4,6 @@ description = "uutils ~ 'uucore' proc-macros"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uucore_procs"
 keywords = ["cross-platform", "proc-macros", "uucore", "uutils"]
 # categories = ["os"]
-authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
@@ -13,6 +12,8 @@ version.workspace = true
 
 [lib]
 proc-macro = true
+test = false
+doctest = false
 
 [dependencies]
 proc-macro2 = "1.0.81"

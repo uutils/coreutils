@@ -3,8 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-
+#[cfg(target_os = "linux")]
+use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+
+#[test]
+fn test_version() {
+    new_ucmd!()
+        .arg("--version")
+        .succeeds()
+        .no_stderr()
+        .stdout_is(format!("base32 {}\n", uucore::crate_version!()));
+}
 
 #[test]
 fn test_encode() {
@@ -158,4 +168,15 @@ fn test_encode_large_input_is_buffered() {
         .pipe_in(input)
         .succeeds()
         .stdout_contains("BIFAUCQK"); // spell-checker:disable-line
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_base32_file_with_trailing_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "b");
+
+    ucmd.arg("a/")
+        .fails()
+        .stderr_only("base32: a/: Not a directory\n");
 }

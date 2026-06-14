@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
-use std::io::{self, IsTerminal, stdin};
+use std::io::{self, IsTerminal, Write, stdin};
 use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -22,6 +22,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
@@ -203,7 +204,9 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
+    let matches = uu_app()
+        .try_get_matches_from(args.iter())
+        .map_err(|e| handle_parse_error(e, &args))?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -293,8 +296,40 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
+/// Turn a clap parsing error into a `UError`, reproducing GNU's hint when an
+/// unknown `-foo` option is actually the name of an existing file: it suggests
+/// `rm ./-foo` so the name is treated as a path.
+fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
+    let dash_file = args.iter().skip(1).find(|a| {
+        os_str_as_bytes(a).is_ok_and(|b| b.len() >= 2 && b[0] == b'-')
+            && fs::symlink_metadata(a).is_ok()
+    });
+    if let (true, Some(file)) = (e.exit_code() != 0, dash_file) {
+        // The path is shell-escaped (quoted only if needed), the file name is
+        // always quoted, matching GNU's two quoting styles.
+        let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let _ = writeln!(
+            io::stderr(),
+            "{}",
+            translate!(
+                "rm-hint-dash-file",
+                "util_name" => uucore::execution_phrase(),
+                "path" => path.to_string_lossy(),
+                "file" => quoted.to_string_lossy()
+            )
+        );
+        return 1.into();
+    }
+    // Otherwise defer to the standard clap handling (incl. `--help`/`--version`).
+    match uucore::clap_localization::handle_clap_result(uu_app(), args.iter()) {
+        Ok(_) => 1.into(),
+        Err(e) => e,
+    }
+}
+
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("rm")
         .version(uucore::crate_version!())
         .about(translate!("rm-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -876,21 +911,71 @@ fn prompt_file_permission_readonly(path: &Path, options: &Options, metadata: &Me
     }
 }
 
-/// Checks if the path is referring to current or parent directory , if it is referring to current or any parent directory in the file tree e.g  '/../..' , '../..'
+/// Checks if the path is referring to current or parent directory.
+///
+/// Strips trailing separators, then checks if the last component is "." or "..".
+///
+/// Examples:
+/// - ".", "./" -> true
+/// - "..", "../" -> true
+/// - "foo/.", "foo/.." -> true
+/// - "foo/bar" -> false
 fn path_is_current_or_parent_directory(path: &Path) -> bool {
-    let path_str = os_str_as_bytes(path.as_os_str());
-    let dir_separator = MAIN_SEPARATOR as u8;
-    if let Ok(path_bytes) = path_str {
-        return path_bytes == ([b'.'])
-            || path_bytes == ([b'.', dir_separator])
-            || path_bytes == ([b'.', b'.'])
-            || path_bytes == ([b'.', b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.'])
-            || path_bytes.ends_with(&[dir_separator, b'.', dir_separator])
-            || path_bytes.ends_with(&[dir_separator, b'.', b'.', dir_separator]);
+    let Ok(bytes) = os_str_as_bytes(path.as_os_str()) else {
+        return false;
+    };
+
+    // Strip all trailing separators
+    let trimmed = match bytes.iter().rposition(|&b| !is_separator(b)) {
+        Some(i) => &bytes[..=i],
+        None => return false, // all separators or empty
+    };
+
+    // Extract the last component (after the last separator)
+    let last = match trimmed.iter().rposition(|&b| is_separator(b)) {
+        Some(i) => &trimmed[i + 1..],
+        None => trimmed,
+    };
+
+    last == b"." || last == b".."
+}
+
+fn is_separator(b: u8) -> bool {
+    b == MAIN_SEPARATOR as u8 || cfg!(windows) && b == b'/'
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_path_is_current_or_parent_directory() {
+        // Current directory
+        assert!(path_is_current_or_parent_directory(Path::new(".")));
+        assert!(path_is_current_or_parent_directory(Path::new("./")));
+        assert!(path_is_current_or_parent_directory(Path::new(".//")));
+
+        // Parent directory
+        assert!(path_is_current_or_parent_directory(Path::new("..")));
+        assert!(path_is_current_or_parent_directory(Path::new("../")));
+        assert!(path_is_current_or_parent_directory(Path::new("..//")));
+
+        // Nested paths ending in dot/dotdot
+        assert!(path_is_current_or_parent_directory(Path::new("d/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/./")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/..")));
+        assert!(path_is_current_or_parent_directory(Path::new("d/../")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/.")));
+        assert!(path_is_current_or_parent_directory(Path::new("a/b/..")));
+
+        // Not current/parent directory
+        assert!(!path_is_current_or_parent_directory(Path::new("file")));
+        assert!(!path_is_current_or_parent_directory(Path::new(".hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("..hidden")));
+        assert!(!path_is_current_or_parent_directory(Path::new("dir/file")));
+        assert!(!path_is_current_or_parent_directory(Path::new("...")));
     }
-    false
 }
 
 // For directories finding if they are writable or not is a hassle. In Unix we can use the built-in rust crate to check mode bits. But other os don't have something similar afaik

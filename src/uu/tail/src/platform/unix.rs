@@ -4,11 +4,11 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) stdlib, ISCHR, GETFD
-// spell-checker:ignore (options) EPERM, ENOSYS
+// spell-checker:ignore (options) EPERM, ENOSYS, NOSYS
 
-use std::io::Error;
+use rustix::process::{Pid as RustixPid, test_kill_process};
 
-pub type Pid = libc::pid_t;
+pub type Pid = i32;
 
 pub struct ProcessChecker {
     pid: Pid,
@@ -19,10 +19,15 @@ impl ProcessChecker {
         Self { pid: process_id }
     }
 
-    // Borrowing mutably to be aligned with Windows implementation
-    #[allow(clippy::wrong_self_convention)]
-    pub fn is_dead(&mut self) -> bool {
-        unsafe { libc::kill(self.pid, 0) != 0 && get_errno() != libc::EPERM }
+    pub fn is_dead(&self) -> bool {
+        let Some(pid) = RustixPid::from_raw(self.pid) else {
+            return true;
+        };
+        match test_kill_process(pid) {
+            Ok(()) => false,
+            Err(rustix::io::Errno::PERM) => false,
+            Err(_) => true,
+        }
     }
 }
 
@@ -31,19 +36,5 @@ impl Drop for ProcessChecker {
 }
 
 pub fn supports_pid_checks(pid: Pid) -> bool {
-    unsafe { !(libc::kill(pid, 0) != 0 && get_errno() == libc::ENOSYS) }
+    RustixPid::from_raw(pid).is_some_and(|p| test_kill_process(p) != Err(rustix::io::Errno::NOSYS))
 }
-
-#[inline]
-fn get_errno() -> i32 {
-    Error::last_os_error().raw_os_error().unwrap()
-}
-
-//pub fn stdin_is_bad_fd() -> bool {
-// FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
-// this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
-// see also: https://github.com/uutils/coreutils/issues/2873
-// (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-// unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
-//false
-//}

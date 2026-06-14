@@ -6,14 +6,20 @@
 // spell-checker:ignore (ToDO) signalname pids killpg
 
 use clap::{Arg, ArgAction, Command};
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
-use std::io::Error;
+use rustix::process::{
+    Pid, Signal, kill_current_process_group, kill_process, kill_process_group,
+    test_kill_current_process_group, test_kill_process, test_kill_process_group,
+};
+use std::cmp::Ordering;
+use std::io;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
-use uucore::signals::{ALL_SIGNALS, signal_by_name_or_value, signal_name_by_value};
+use uucore::signals::{
+    signal_by_name_or_value, signal_list_name_by_value, signal_list_value_by_name_or_number,
+    signal_number_upper_bound,
+};
 use uucore::{format_usage, show};
 
 // When the -l option is selected, the program displays the type of signal related to a certain
@@ -65,18 +71,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 15_usize //SIGTERM
             };
 
-            let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from EXIT
-            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
-            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
-                None
-            } else {
-                let sig = (sig as i32)
-                    .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
-                Some(sig)
-            };
-
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
                 Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
@@ -97,9 +91,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("kill")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("kill"))
         .about(translate!("kill-about"))
         .override_usage(format_usage(&translate!("kill-usage")))
         .infer_long_args(true)
@@ -143,7 +137,7 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         let slice = args[1].as_str();
         if let Some(signal) = slice.strip_prefix('-') {
             // With '-', a signal name must start with an uppercase char
-            if signal.chars().next().is_some_and(|c| c.is_lowercase()) {
+            if signal.chars().next().is_some_and(char::is_lowercase) {
                 return None;
             }
             // Check if it is a valid signal
@@ -159,34 +153,44 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
 }
 
 fn table() {
-    for (idx, signal) in ALL_SIGNALS.iter().enumerate() {
-        println!("{idx: >#2} {signal}");
+    for signal_value in 0..=signal_number_upper_bound() {
+        if let Some(signal_name) = signal_list_name_by_value(signal_value) {
+            println!("{signal_value: >#2} {signal_name}");
+        }
     }
 }
 
-fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    // Closure used to track the last 8 bits of the signal value
-    // when the -l option is passed only the lower 8 bits are important
-    // or the value is in range [128, 159]
-    // Example: kill -l 143 => TERM because 143 = 15 + 128
-    // Example: kill -l 2304 => EXIT
-    let lower_8_bits = |x: usize| x & 0xff;
-    let option_num_parse = signal_name_or_value.parse::<usize>().ok();
+fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
+    // `kill -l` also accepts wait-status-like values and decodes the signal
+    // number from the low 8 bits.
+    let lower_8_bits = signal_value & 0xff;
+    if lower_8_bits <= signal_number_upper_bound() {
+        return Some(lower_8_bits);
+    }
 
-    for (value, &signal) in ALL_SIGNALS.iter().enumerate() {
-        if signal.eq_ignore_ascii_case(signal_name_or_value)
-            || format!("SIG{signal}").eq_ignore_ascii_case(signal_name_or_value)
-        {
-            println!("{value}");
-            return Ok(());
-        } else if signal_name_or_value == value.to_string()
-            || option_num_parse.is_some_and(|signal_value| lower_8_bits(signal_value) == value)
-            || option_num_parse.is_some_and(|signal_value| signal_value == value + OFFSET)
-        {
-            println!("{signal}");
+    signal_value
+        .checked_sub(OFFSET)
+        .filter(|value| *value <= signal_number_upper_bound())
+}
+
+fn print_signal(signal_name_or_value: &str) -> UResult<()> {
+    if let Ok(signal_value) = signal_name_or_value.parse::<usize>() {
+        // GNU kill accepts plain signal numbers, values masked to the low 8 bits,
+        // and exit statuses that encode `128 + signal`.
+        if let Some(signal_value) = normalize_list_signal_value(signal_value) {
+            println!(
+                "{}",
+                signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
+            );
             return Ok(());
         }
     }
+
+    if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
+        println!("{signal_value}");
+        return Ok(());
+    }
+
     Err(USimpleError::new(
         1,
         translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
@@ -194,8 +198,10 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
 }
 
 fn print_signals() {
-    for signal in ALL_SIGNALS {
-        println!("{signal}");
+    for signal_value in 0..=signal_number_upper_bound() {
+        if let Some(signal_name) = signal_list_name_by_value(signal_value) {
+            println!("{signal_name}");
+        }
     }
 }
 
@@ -208,6 +214,22 @@ fn list(signals: &Vec<String>) {
                 uucore::show!(e);
             }
         }
+    }
+}
+
+fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
+    result.map_err(io::Error::from)
+}
+
+// rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
+// raw `libc::kill` for any value its safe constructor doesn't recognize.
+fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
+    let sig = i32::try_from(sig).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+    // SAFETY: plain FFI call; `kill` has no memory-safety preconditions.
+    if unsafe { libc::kill(pid as libc::pid_t, sig) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 
@@ -235,13 +257,46 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Option<Signal>, pids: &[i32]) {
+fn kill(sig: usize, pids: &[i32]) {
+    // Standard named signals use rustix's typed API; anything its safe
+    // constructor doesn't recognize (realtime/reserved) falls back to libc.
+    let named = (sig != 0)
+        .then(|| i32::try_from(sig).ok().and_then(Signal::from_named_raw))
+        .flatten();
     for &pid in pids {
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(
-                Error::from_raw_os_error(e as i32)
-                    .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
-            );
+        let result = match pid.cmp(&0) {
+            Ordering::Equal => match named {
+                _ if sig == 0 => rustix_to_io(test_kill_current_process_group()),
+                Some(s) => rustix_to_io(kill_current_process_group(s)),
+                None => raw_kill(0, sig),
+            },
+            Ordering::Greater => {
+                let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process(pid)),
+                    Some(s) => rustix_to_io(kill_process(pid, s)),
+                    None => raw_kill(pid.as_raw_nonzero().get(), sig),
+                }
+            }
+            Ordering::Less => {
+                let Some(abs_pid) = pid.checked_neg() else {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("kill-error-sending-signal", "pid" => pid),
+                    ));
+                    continue;
+                };
+                let pid =
+                    Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process_group(pid)),
+                    Some(s) => rustix_to_io(kill_process_group(pid, s)),
+                    None => raw_kill(-pid.as_raw_nonzero().get(), sig),
+                }
+            }
+        };
+        if let Err(e) = result {
+            show!(e.map_err_context(|| translate!("kill-error-sending-signal", "pid" => pid)));
         }
     }
 }

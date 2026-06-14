@@ -29,7 +29,6 @@ env-error-expected-brace-or-colon = Caractère inattendu : '{ $char }', accolade
 env-error-cannot-specify-null-with-command = impossible de spécifier --null (-0) avec une commande
 env-error-invalid-signal = { $signal } : signal invalide
 
-env-error-config-file = { $file } : { $error }
 env-error-variable-name-issue = problème de nom de variable (à { $position }) : { $error }
 env-error-generic = Erreur : { $error }
 env-error-no-such-file = { $program } : Aucun fichier ou répertoire de ce type
@@ -38,7 +37,7 @@ env-error-cannot-unset = impossible de supprimer '{ $name }' : Argument invalide
 env-error-cannot-unset-invalid = impossible de supprimer { $name } : Argument invalide
 env-error-must-specify-command-with-chdir = doit spécifier une commande avec --chdir (-C)
 env-error-cannot-change-directory = impossible de changer de répertoire vers { $directory } : { $error }
-env-error-argv0-not-supported = --argv0 n'est actuellement pas supporté sur cette plateforme
+env-error-argv0-not-supported = --argv0 n'est actuellement pas pris en charge sur cette plateforme
 env-error-permission-denied = { $program } : Permission refusée
 env-error-unknown = erreur inconnue : { $error }
 env-error-failed-set-signal-action = échec de la définition de l'action du signal pour le signal { $signal } : { $error }

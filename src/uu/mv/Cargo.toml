@@ -3,7 +3,6 @@ name = "uu_mv"
 description = "mv ~ (uutils) move (rename) SOURCE to DESTINATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/mv"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,17 +16,22 @@ workspace = true
 
 [lib]
 path = "src/mv.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
+nix = { workspace = true }
+rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "fs",
   "fsxattr",
+  "perms",
+  "safe-copy",
   "update-control",
 ] }
 fluent = { workspace = true }
@@ -41,6 +45,8 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
+
 
 [features]
 selinux = ["uucore/selinux"]

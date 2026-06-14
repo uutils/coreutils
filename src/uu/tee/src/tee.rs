@@ -3,52 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use clap::{Arg, ArgAction, Command, builder::PossibleValue};
+// spell-checker:ignore nopipe
+
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Read, Result, Write, stderr, stdin, stdout};
+use std::io::{Error, ErrorKind, Result, Write, stderr};
 use std::path::PathBuf;
 use uucore::display::Quotable;
-use uucore::error::UResult;
-use uucore::format_usage;
-use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 
-// spell-checker:ignore nopipe
+mod cli;
+pub use crate::cli::uu_app;
+use crate::cli::{Options, OutputErrorMode, options};
 
 #[cfg(target_os = "linux")]
 use uucore::signals::ensure_stdout_not_broken;
 #[cfg(unix)]
 use uucore::signals::{disable_pipe_errors, ignore_interrupts};
-
-mod options {
-    pub const APPEND: &str = "append";
-    pub const IGNORE_INTERRUPTS: &str = "ignore-interrupts";
-    pub const FILE: &str = "file";
-    pub const IGNORE_PIPE_ERRORS: &str = "ignore-pipe-errors";
-    pub const OUTPUT_ERROR: &str = "output-error";
-}
-
-#[allow(dead_code)]
-struct Options {
-    append: bool,
-    ignore_interrupts: bool,
-    ignore_pipe_errors: bool,
-    files: Vec<OsString>,
-    output_error: Option<OutputErrorMode>,
-}
-
-#[derive(Clone, Debug)]
-enum OutputErrorMode {
-    /// Diagnose write error on any output
-    Warn,
-    /// Diagnose write error on any output that is not a pipe
-    WarnNoPipe,
-    /// Exit upon write error on any output
-    Exit,
-    /// Exit upon write error on any output that is not a pipe
-    ExitNoPipe,
-}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -57,24 +29,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let append = matches.get_flag(options::APPEND);
     let ignore_interrupts = matches.get_flag(options::IGNORE_INTERRUPTS);
     let ignore_pipe_errors = matches.get_flag(options::IGNORE_PIPE_ERRORS);
-    let output_error = if matches.contains_id(options::OUTPUT_ERROR) {
-        match matches
-            .get_one::<String>(options::OUTPUT_ERROR)
-            .map(String::as_str)
-        {
-            Some("warn") => Some(OutputErrorMode::Warn),
-            // If no argument is specified for --output-error,
-            // defaults to warn-nopipe
-            None | Some("warn-nopipe") => Some(OutputErrorMode::WarnNoPipe),
-            Some("exit") => Some(OutputErrorMode::Exit),
-            Some("exit-nopipe") => Some(OutputErrorMode::ExitNoPipe),
-            _ => unreachable!(),
-        }
-    } else if ignore_pipe_errors {
-        Some(OutputErrorMode::WarnNoPipe)
-    } else {
-        None
-    };
+    let output_error = matches
+        .get_one::<String>(options::OUTPUT_ERROR)
+        .map(|s| match s.as_str() {
+            "warn" => OutputErrorMode::Warn,
+            "warn-nopipe" => OutputErrorMode::WarnNoPipe,
+            "exit" => OutputErrorMode::Exit,
+            "exit-nopipe" => OutputErrorMode::ExitNoPipe,
+            _ => unreachable!("clap excluded it"),
+        })
+        .or_else(|| ignore_pipe_errors.then_some(OutputErrorMode::WarnNoPipe));
 
     let files = matches
         .get_many::<OsString>(options::FILE)
@@ -90,68 +54,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     tee(&options).map_err(|_| 1.into())
-}
-
-pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("tee-about"))
-        .override_usage(format_usage(&translate!("tee-usage")))
-        .after_help(translate!("tee-after-help"))
-        .infer_long_args(true)
-        // Since we use value-specific help texts for "--output-error", clap's "short help" and "long help" differ.
-        // However, this is something that the GNU tests explicitly test for, so we *always* show the long help instead.
-        .disable_help_flag(true)
-        .arg(
-            Arg::new("--help")
-                .short('h')
-                .long("help")
-                .help(translate!("tee-help-help"))
-                .action(ArgAction::HelpLong),
-        )
-        .arg(
-            Arg::new(options::APPEND)
-                .long(options::APPEND)
-                .short('a')
-                .help(translate!("tee-help-append"))
-                .action(ArgAction::SetTrue)
-                .overrides_with(options::APPEND),
-        )
-        .arg(
-            Arg::new(options::IGNORE_INTERRUPTS)
-                .long(options::IGNORE_INTERRUPTS)
-                .short('i')
-                .help(translate!("tee-help-ignore-interrupts"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::FILE)
-                .action(ArgAction::Append)
-                .value_hint(clap::ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
-        .arg(
-            Arg::new(options::IGNORE_PIPE_ERRORS)
-                .short('p')
-                .help(translate!("tee-help-ignore-pipe-errors"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(options::OUTPUT_ERROR)
-                .long(options::OUTPUT_ERROR)
-                .require_equals(true)
-                .num_args(0..=1)
-                .value_parser(ShortcutValueParser::new([
-                    PossibleValue::new("warn").help(translate!("tee-help-output-error-warn")),
-                    PossibleValue::new("warn-nopipe")
-                        .help(translate!("tee-help-output-error-warn-nopipe")),
-                    PossibleValue::new("exit").help(translate!("tee-help-output-error-exit")),
-                    PossibleValue::new("exit-nopipe")
-                        .help(translate!("tee-help-output-error-exit-nopipe")),
-                ]))
-                .help(translate!("tee-help-output-error")),
-        )
 }
 
 fn tee(options: &Options) -> Result<()> {
@@ -178,22 +80,22 @@ fn tee(options: &Options) -> Result<()> {
         0,
         NamedWriter {
             name: translate!("tee-standard-output").into(),
-            inner: Box::new(stdout()),
+            #[cfg(any(unix, target_os = "wasi"))]
+            inner: Writer::Stdout(uucore::io::RawWriter(rustix::stdio::stdout())),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            inner: Writer::Stdout(std::io::stdout()),
         },
     );
 
-    let mut output = MultiWriter::new(writers, options.output_error.clone());
-    let input = &mut NamedReader {
-        inner: Box::new(stdin()) as Box<dyn Read>,
-    };
+    let mut output = MultiWriter::new(writers, options.output_error);
 
     #[cfg(target_os = "linux")]
     if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
         return Ok(());
     }
 
-    // We cannot use std::io::copy here as it doesn't flush the output buffer
-    let res = match copy(input, &mut output) {
+    // don't use io::copy since content of 1 read should be immediately written for posix requirement
+    let res = match output.copy_unbuffered() {
         // ErrorKind::Other is raised by MultiWriter when all writers
         // have exited, so that copy will abort. It's equivalent to
         // success of this part (if there was an error that should
@@ -203,50 +105,10 @@ fn tee(options: &Options) -> Result<()> {
         _ => Ok(()),
     };
 
-    if had_open_errors || res.is_err() || output.flush().is_err() || output.error_occurred() {
+    if had_open_errors || res.is_err() || output.error_occurred() {
         Err(Error::from(ErrorKind::Other))
     } else {
         Ok(())
-    }
-}
-
-/// Copies all bytes from the input buffer to the output buffer.
-///
-/// Returns the number of written bytes.
-fn copy(mut input: impl Read, mut output: impl Write) -> Result<usize> {
-    // The implementation for this function is adopted from the generic buffer copy implementation from
-    // the standard library:
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/io/copy.rs#L271-L297
-
-    // Use buffer size from std implementation:
-    // https://github.com/rust-lang/rust/blob/2feb91181882e525e698c4543063f4d0296fcf91/library/std/src/sys/io/mod.rs#L44
-    // spell-checker:ignore espidf
-    const DEFAULT_BUF_SIZE: usize = if cfg!(target_os = "espidf") {
-        512
-    } else {
-        8 * 1024
-    };
-
-    let mut buffer = [0u8; DEFAULT_BUF_SIZE];
-    let mut len = 0;
-
-    loop {
-        let received = match input.read(&mut buffer) {
-            Ok(bytes_count) => bytes_count,
-            Err(e) if e.kind() == ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e),
-        };
-
-        if received == 0 {
-            return Ok(len);
-        }
-
-        output.write_all(&buffer[0..received])?;
-
-        // We need to flush the buffer here to comply with POSIX requirement that
-        // `tee` does not buffer the input.
-        output.flush()?;
-        len += received;
     }
 }
 
@@ -267,7 +129,7 @@ fn open(
     };
     match mode.write(true).create(true).open(path.as_path()) {
         Ok(file) => Some(Ok(NamedWriter {
-            inner: Box::new(file),
+            inner: Writer::File(file),
             name: name.clone(),
         })),
         Err(f) => {
@@ -284,142 +146,133 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
+    aborted: Option<Error>,
 }
 
 impl MultiWriter {
+    /// Copies all bytes from the input buffer to the output buffer
+    /// without buffering which is POSIX requirement.
+    pub fn copy_unbuffered(&mut self) -> Result<()> {
+        // todo: support splice() and tee() fast-path at here
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        use std::io::Read as _;
+        const BUF_SIZE: usize = 32 * 1024;
+        #[cfg(any(unix, target_os = "wasi"))]
+        let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); BUF_SIZE];
+        // todo: avoid cost by 0-fill keeping throughput
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let mut buf = [0u8; BUF_SIZE];
+
+        let input = std::io::stdin();
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        let mut input = input;
+        loop {
+            #[cfg(any(unix, target_os = "wasi"))]
+            let res = rustix::io::read(&input, &mut buf)
+                .map(|f| f.0)
+                .map_err(Error::from);
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            let res = input.read(&mut buf).map(|n| &buf[..n]);
+            match res {
+                Ok([]) => return Ok(()), // end of file
+                Ok(slice) => self.write_flush(slice)?,
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                Err(e) => {
+                    let _ = writeln!(
+                        stderr(),
+                        "tee: {}",
+                        translate!("tee-error-stdin", "error" => strip_errno(&e))
+                    );
+                    return Err(e);
+                }
+            }
+        }
+    }
+
     fn new(writers: Vec<NamedWriter>, output_error_mode: Option<OutputErrorMode>) -> Self {
         Self {
             writers,
             output_error_mode,
             ignored_errors: 0,
+            aborted: None,
         }
     }
 
     fn error_occurred(&self) -> bool {
         self.ignored_errors != 0
     }
+
+    fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
+        let mode = self.output_error_mode;
+        self.writers
+            .retain_mut(|writer| match writer.inner.write_all(buf) {
+                Ok(()) => true,
+                Err(e) => {
+                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
+                        self.aborted.get_or_insert(e);
+                    }
+                    false
+                }
+            });
+        match self.aborted.take() {
+            Some(e) => Err(e),
+            // This error kind will never be raised by std, so we can use it for termination when all writers exited
+            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
+            None => Ok(()),
+        }
+    }
 }
 
 fn process_error(
-    mode: Option<&OutputErrorMode>,
-    f: Error,
+    mode: Option<OutputErrorMode>,
+    e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
 ) -> Result<()> {
-    match mode {
-        Some(OutputErrorMode::Warn) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            *ignored_errors += 1;
-            Ok(())
-        }
-        Some(OutputErrorMode::WarnNoPipe) | None => {
-            if f.kind() != ErrorKind::BrokenPipe {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                *ignored_errors += 1;
-            }
-            Ok(())
-        }
-        Some(OutputErrorMode::Exit) => {
-            let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-            Err(f)
-        }
-        Some(OutputErrorMode::ExitNoPipe) => {
-            if f.kind() == ErrorKind::BrokenPipe {
-                Ok(())
-            } else {
-                let _ = writeln!(stderr(), "{}: {f}", writer.name.maybe_quote());
-                Err(f)
-            }
-        }
+    let ignore_pipe = matches!(
+        mode,
+        None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
+    );
+
+    if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
+        return Ok(());
+    }
+    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
+        Err(e)
+    } else {
+        *ignored_errors += 1;
+        Ok(())
     }
 }
 
-impl Write for MultiWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            let result = writer.write_all(buf);
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
-            }
-        });
-        self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else if self.writers.is_empty() {
-            // This error kind will never be raised by the standard
-            // library, so we can use it for early termination of
-            // `copy`
-            Err(Error::from(ErrorKind::Other))
-        } else {
-            Ok(buf.len())
-        }
-    }
+enum Writer {
+    File(std::fs::File),
+    // remove buffering for posix requirement and improve throughput
+    #[cfg(any(unix, target_os = "wasi"))]
+    Stdout(uucore::io::RawWriter<rustix::fd::BorrowedFd<'static>>),
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    Stdout(std::io::Stdout),
+}
 
-    fn flush(&mut self) -> Result<()> {
-        let mut aborted = None;
-        let mode = self.output_error_mode.clone();
-        let mut errors = 0;
-        self.writers.retain_mut(|writer| {
-            let result = writer.flush();
-            match result {
-                Err(f) => {
-                    if let Err(e) = process_error(mode.as_ref(), f, writer, &mut errors) {
-                        if aborted.is_none() {
-                            aborted = Some(e);
-                        }
-                    }
-                    false
-                }
-                _ => true,
+impl Writer {
+    pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+        match self {
+            // File does not have line buffering
+            Self::File(f) => f.write_all(buf),
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::Stdout(s) => s.write_all(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
+            Self::Stdout(s) => {
+                s.write_all(buf)?;
+                // needs unsafe to remove buffering... flush after write_all to keep overhead minimal
+                s.flush()
             }
-        });
-        self.ignored_errors += errors;
-        if let Some(e) = aborted {
-            Err(e)
-        } else {
-            Ok(())
         }
     }
 }
 
 struct NamedWriter {
-    inner: Box<dyn Write>,
+    inner: Writer,
     pub name: OsString,
-}
-
-impl Write for NamedWriter {
-    fn write(&mut self, buf: &[u8]) -> Result<usize> {
-        self.inner.write(buf)
-    }
-
-    fn flush(&mut self) -> Result<()> {
-        self.inner.flush()
-    }
-}
-
-struct NamedReader {
-    inner: Box<dyn Read>,
-}
-
-impl Read for NamedReader {
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-        match self.inner.read(buf) {
-            Err(f) => {
-                let _ = writeln!(stderr(), "{}", translate!("tee-error-stdin", "error" => f));
-                Err(f)
-            }
-            okay => okay,
-        }
-    }
 }

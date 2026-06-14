@@ -12,10 +12,12 @@ use uucore::format_usage;
 
 use uucore::display::println_verbatim;
 use uucore::error::{FromIo, UResult};
+use uucore::show_error;
 
 use uucore::translate;
 const OPT_LOGICAL: &str = "logical";
 const OPT_PHYSICAL: &str = "physical";
+const ARG_OPERANDS: &str = "operands";
 
 fn physical_path() -> io::Result<PathBuf> {
     // std::env::current_dir() is a thin wrapper around libc::getcwd().
@@ -107,9 +109,15 @@ fn logical_path() -> io::Result<PathBuf> {
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    // GNU pwd ignores any non-option operands but warns about them.
+    if matches.contains_id(ARG_OPERANDS) {
+        show_error!("{}", translate!("pwd-ignoring-non-option-arguments"));
+    }
+
     // if POSIXLY_CORRECT is set, we want to a logical resolution.
     // This produces a different output when doing mkdir -p a/b && ln -s a/b c && cd c && pwd
     // We should get c in this case instead of a/b at the end of the path
@@ -139,9 +147,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pwd")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pwd"))
         .about(translate!("pwd-about"))
         .override_usage(format_usage(&translate!("pwd-usage")))
         .infer_long_args(true)
@@ -159,5 +167,11 @@ pub fn uu_app() -> Command {
                 .overrides_with(OPT_LOGICAL)
                 .help(translate!("pwd-help-physical"))
                 .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(ARG_OPERANDS)
+                .action(ArgAction::Append)
+                .num_args(1..)
+                .hide(true),
         )
 }

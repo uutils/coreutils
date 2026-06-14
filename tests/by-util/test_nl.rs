@@ -4,10 +4,12 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore binvalid finvalid hinvalid iinvalid linvalid nabcabc nabcabcabc ninvalid vinvalid winvalid dabc näää févr
+
 use uutests::{at_and_ucmd, new_ucmd, util::TestScenario, util_name};
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_paths() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -208,6 +210,7 @@ fn test_number_separator() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_number_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -410,6 +413,19 @@ fn test_default_body_numbering_multiple_files_and_stdin() {
         .pipe_in("b")
         .succeeds()
         .stdout_is("     1\ta\n     2\tb\n     3\tc\n");
+}
+
+#[test]
+fn test_default_body_numbering_multiple_files_with_non_existing_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a.txt", "a");
+    at.write("b.txt", "b");
+
+    ucmd.args(&["a.txt", "non_existing", "b.txt"])
+        .fails_with_code(1)
+        .stdout_is("     1\ta\n     2\tb\n")
+        .stderr_is("nl: non_existing: No such file or directory\n");
 }
 
 #[test]
@@ -629,6 +645,7 @@ fn test_section_delimiter() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_section_delimiter_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -695,6 +712,7 @@ fn test_one_char_section_delimiter() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_one_byte_section_delimiter() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -67,6 +67,16 @@ fn test_kill_list_all_signals() {
         .stdout_contains("EXIT");
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_list_contains_realtime_signals() {
+    new_ucmd!()
+        .arg("-l")
+        .succeeds()
+        .stdout_contains("RTMIN")
+        .stdout_contains("RTMAX");
+}
+
 #[test]
 fn test_kill_list_final_new_line() {
     let re = Regex::new("\\n$").unwrap();
@@ -83,6 +93,16 @@ fn test_kill_list_all_signals_as_table() {
         .stdout_contains("TERM")
         .stdout_contains("HUP")
         .stdout_contains("EXIT");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_table_contains_realtime_signals() {
+    new_ucmd!()
+        .arg("-t")
+        .succeeds()
+        .stdout_contains("RTMIN")
+        .stdout_contains("RTMAX");
 }
 
 #[test]
@@ -116,6 +136,16 @@ fn test_kill_list_one_signal_from_number() {
         .arg("9")
         .succeeds()
         .stdout_only("KILL\n");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_list_rtmax_from_name() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("RTMAX")
+        .succeeds()
+        .stdout_only(format!("{}\n", libc::SIGRTMAX()));
 }
 
 #[test]
@@ -385,6 +415,50 @@ fn test_kill_with_list_lower_bits_unrecognized() {
     new_ucmd!().arg("-l").arg("384").fails();
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_with_list_unnamed_signal_numbers() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("32")
+        .succeeds()
+        .stdout_only("32\n");
+    new_ucmd!()
+        .arg("-l")
+        .arg("33")
+        .succeeds()
+        .stdout_only("33\n");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_with_list_all_signal_numbers_up_to_last_named_signal() {
+    let last_signal_name = new_ucmd!()
+        .arg("-l")
+        .succeeds()
+        .stdout_str()
+        .lines()
+        .last()
+        .unwrap()
+        .to_string();
+
+    let last_signal_number: usize = new_ucmd!()
+        .arg("-l")
+        .arg("--")
+        .arg(&last_signal_name)
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
+
+    let args = std::iter::once(String::from("--"))
+        .chain((0..=last_signal_number).map(|signal| signal.to_string()))
+        .collect::<Vec<_>>();
+
+    new_ucmd!().arg("-l").args(&args).succeeds();
+}
+
 #[test]
 fn test_kill_with_signal_and_table() {
     let target = Target::new();
@@ -418,4 +492,50 @@ fn test_kill_signal_only_no_pid() {
         .arg("-TERM")
         .fails()
         .stderr_contains("no process ID specified");
+}
+
+#[test]
+fn test_kill_signal_zero_process() {
+    let target = Target::new();
+    // kill -0 should succeed for a running process (signal 0 = existence check)
+    new_ucmd!()
+        .arg("-0")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+}
+
+#[test]
+fn test_kill_signal_zero_new_form() {
+    let target = Target::new();
+    // kill -s 0 should also work
+    new_ucmd!()
+        .arg("-s")
+        .arg("0")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+}
+
+#[test]
+fn test_kill_signal_zero_nonexistent() {
+    // kill -0 with a nonexistent PID should fail
+    new_ucmd!().arg("-0").arg("999999999").fails();
+}
+
+#[test]
+fn test_kill_signal_zero_current_process_group() {
+    // kill -0 0 should succeed (checks current process group)
+    new_ucmd!().arg("-0").arg("0").succeeds();
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_realtime_signal() {
+    let mut target = Target::new();
+    // kill -s RTMIN should send SIGRTMIN and terminate the process
+    new_ucmd!()
+        .arg("-s")
+        .arg("RTMIN")
+        .arg(format!("{}", target.pid()))
+        .succeeds();
+    assert_eq!(target.wait_for_signal(), Some(libc::SIGRTMIN()));
 }

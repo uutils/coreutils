@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
+// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -21,12 +21,20 @@ fn test_invalid_input() {
         .fails_with_code(1)
         .stderr_contains("tr: extra operand '<'");
     #[cfg(unix)]
-    new_ucmd!()
-        .args(&["1", "1"])
-        // will test "tr 1 1 < ."
-        .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
-        .fails_with_code(1)
-        .stderr_contains("tr: read error: Is a directory");
+    {
+        let cmd = new_ucmd!()
+            .args(&["1", "1"])
+            // will test "tr 1 1 < ."
+            .set_stdin(std::process::Stdio::from(std::fs::File::open(".").unwrap()))
+            .fails_with_code(1);
+        if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+            // On WASI the fluent translation key may appear instead of the
+            // translated text, but the OS error string is still present.
+            cmd.stderr_contains("Is a directory");
+        } else {
+            cmd.stderr_contains("tr: read error: Is a directory");
+        }
+    }
 }
 
 #[test]
@@ -63,6 +71,38 @@ fn test_delete() {
         .pipe_in("aBcD")
         .succeeds()
         .stdout_is("BD");
+}
+
+#[test]
+fn test_delete_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'\t', b'\n']);
+
+    new_ucmd!()
+        .args(&["-d", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'\t', b'\n']);
+}
+
+#[test]
+fn test_delete_complement_graph_and_print_match_gnu() {
+    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    new_ucmd!()
+        .args(&["-d", "-c", "[:graph:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b'A', b'!']);
+
+    new_ucmd!()
+        .args(&["-d", "-c", "[:print:]"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is_bytes([b' ', b'A', b'!']);
 }
 
 #[test]
@@ -339,6 +379,15 @@ fn test_truncate_with_set1_shorter_than_set2() {
         .pipe_in("abcde")
         .succeeds()
         .stdout_is("xycde");
+}
+
+#[test]
+fn test_truncate_applies_before_complement_with_class() {
+    new_ucmd!()
+        .args(&["-ct", "[:digit:]", "X"])
+        .pipe_in("A")
+        .fails()
+        .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");
 }
 
 #[test]
@@ -1186,6 +1235,15 @@ fn check_against_gnu_tr_tests_empty_cc() {
 }
 
 #[test]
+fn check_against_gnu_tr_tests_invalid_cc() {
+    new_ucmd!()
+        .args(&["[:fooclass:]", "x"])
+        .pipe_in("")
+        .fails()
+        .stderr_is("tr: invalid character class 'fooclass'\n");
+}
+
+#[test]
 fn check_against_gnu_tr_tests_repeat_set1() {
     new_ucmd!()
         .args(&["[a*]", "a"])
@@ -1455,6 +1513,7 @@ fn check_complement_set2_too_big() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_truncate_non_utf8_set() {
     let stdin = b"\x01amp\xfe\xff";
     let set1 = OsStr::from_bytes(b"a\xfe\xffz"); // spell-checker:disable-line
@@ -1546,6 +1605,7 @@ fn test_non_digit_repeat() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_octal_escape_ambiguous_followed_by_non_utf8() {
     // This case does not trigger the panic
     let set1 = OsStr::from_bytes(b"\\501a");
@@ -1580,6 +1640,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no pipe/signal support")]
 fn test_broken_pipe_no_error() {
     new_ucmd!()
         .args(&["e", "a"])
@@ -1588,20 +1649,19 @@ fn test_broken_pipe_no_error() {
         .fails_silently();
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
-    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
-    use nix::unistd::write;
+    use std::io::Write as _;
 
-    let (fd1, fd2) = socketpair(
-        AddressFamily::Unix,
-        SockType::Stream,
+    let (fd1, fd2) = rustix::net::socketpair(
+        rustix::net::AddressFamily::UNIX,
+        rustix::net::SocketType::STREAM,
+        rustix::net::SocketFlags::empty(),
         None,
-        SockFlag::empty(),
     )
     .unwrap();
-    write(fd1, b"::").unwrap();
+    std::fs::File::from(fd1).write_all(b"::").unwrap();
     new_ucmd!()
         .args(&[":", ";"])
         .set_stdin(fd2)

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1008,6 +1008,22 @@ fn test_unreadable_and_nonempty_dir() {
 
 #[cfg(not(windows))]
 #[test]
+fn test_recursive_remove_unreadable_subdir() {
+    // Regression test for https://github.com/uutils/coreutils/issues/10966
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("foo/bar");
+    at.touch("foo/bar/baz");
+    at.set_mode("foo/bar", 0o0000);
+
+    let result = ucmd.args(&["-r", "-f", "foo"]).fails();
+    result.stderr_contains("Permission denied");
+    result.stderr_contains("foo/bar");
+
+    at.set_mode("foo/bar", 0o0755);
+}
+
+#[cfg(not(windows))]
+#[test]
 fn test_inaccessible_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("dir");
@@ -1360,4 +1376,245 @@ fn test_preserve_root_literal_root() {
         .fails()
         .stderr_contains("it is dangerous to operate recursively on '/'")
         .stderr_contains("use --no-preserve-root to override this failsafe");
+}
+
+// Regression tests for Issue #9749: rm -rf ./ and variants silently delete
+// current directory contents
+
+/// Test edge cases for dot/dotdot protection with multiple slashes
+#[test]
+#[cfg(not(windows))]
+fn test_dot_protection_multiple_slashes() {
+    // Test various patterns with multiple slashes - each in a fresh scenario
+    let test_cases = ["./", ".//", ".///", ".//./", "../", "..//", "..//../"];
+
+    for case in &test_cases {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        at.mkdir("d");
+        at.touch("file1");
+        at.touch("d/file2");
+
+        let result = ts.ucmd().arg("-rf").arg(case).fails();
+
+        // Verify error message - either dot protection or root protection
+        // depending on temp directory structure
+        let stderr = result.stderr_str();
+        assert!(
+            stderr.contains("refusing to remove") || stderr.contains("dangerous to operate"),
+            "Expected error message for rm -rf {case}, got: {stderr}"
+        );
+
+        // CRITICAL: Verify no files were silently deleted (the #9749 bug)
+        assert!(
+            at.dir_exists("d"),
+            "Directory 'd' should exist after rm -rf {case}"
+        );
+        assert!(
+            at.file_exists("file1"),
+            "file1 should exist after rm -rf {case}"
+        );
+        assert!(
+            at.file_exists("d/file2"),
+            "d/file2 should exist after rm -rf {case}"
+        );
+    }
+}
+
+/// Test dot/dotdot protection in deeply nested paths
+#[test]
+#[cfg(not(windows))]
+fn test_dot_protection_nested_paths() {
+    let test_cases = [
+        "a/b/c/.",
+        "a/b/c/./",
+        "a/b/c/..",
+        "a/b/c/../",
+        "a/b/.",
+        "a/b/../",
+    ];
+
+    for case in &test_cases {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        at.mkdir_all("a/b/c");
+        at.touch("a/b/c/file");
+        at.touch("rootfile");
+
+        let result = ts.ucmd().arg("-rf").arg(case).fails();
+        result.stderr_contains("refusing to remove");
+
+        // Verify structure is intact
+        assert!(
+            at.dir_exists("a/b/c"),
+            "a/b/c should exist after rm -rf {case}"
+        );
+        assert!(
+            at.file_exists("a/b/c/file"),
+            "a/b/c/file should exist after rm -rf {case}"
+        );
+        assert!(
+            at.file_exists("rootfile"),
+            "rootfile should exist after rm -rf {case}"
+        );
+    }
+}
+
+/// Test that normal files/directories with dots in names are NOT protected
+#[test]
+fn test_normal_files_with_dots_not_protected() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch(".hidden");
+    at.touch("..double_hidden");
+    at.touch("file.txt");
+    at.mkdir("dir.with.dots");
+    at.touch("dir.with.dots/file");
+
+    // These should succeed (not be blocked)
+    ts.ucmd().arg("-f").arg(".hidden").succeeds();
+    ts.ucmd().arg("-f").arg("..double_hidden").succeeds();
+    ts.ucmd().arg("-f").arg("file.txt").succeeds();
+    ts.ucmd().arg("-rf").arg("dir.with.dots").succeeds();
+
+    assert!(!at.file_exists(".hidden"));
+    assert!(!at.file_exists("..double_hidden"));
+    assert!(!at.file_exists("file.txt"));
+    assert!(!at.dir_exists("dir.with.dots"));
+}
+
+/// Test mixed valid and invalid arguments
+///
+/// When rm encounters a dot/directory protection error, it should:
+/// 1. Process arguments in order
+/// 2. Continue with remaining arguments after reporting the error
+/// 3. Report the error
+#[test]
+#[cfg(not(windows))]
+fn test_mixed_valid_and_dot_arguments() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("deleteme");
+    at.touch("deleteme/file");
+    at.mkdir("d"); // Create directory for dot test
+    at.touch("keepme");
+
+    let result = ts
+        .ucmd()
+        .arg("-rf")
+        .arg("deleteme")
+        .arg("d/.") // This should be refused (in a subdir)
+        .arg("keepme")
+        .fails();
+
+    // Should have deleted deleteme
+    assert!(!at.dir_exists("deleteme"));
+
+    // Should have refused to remove d/.
+    result.stderr_contains("refusing to remove");
+
+    // keepme should also be deleted (rm continues after errors)
+    assert!(!at.file_exists("keepme"));
+}
+
+/// Test Windows-specific edge cases
+#[test]
+#[cfg(windows)]
+fn test_dot_protection_windows_edge_cases() {
+    // Test Windows backslash patterns - each in a fresh scenario
+    let test_cases = [".\\", ".\\\\", "..\\", "..\\\\", "d\\.\\", "d\\..\\"];
+
+    for case in &test_cases {
+        let ts = TestScenario::new(util_name!());
+        let at = &ts.fixtures;
+
+        at.mkdir("d");
+        at.touch("file1");
+        at.touch("d\\file2");
+
+        let result = ts.ucmd().arg("-rf").arg(case).fails();
+        result.stderr_contains("refusing to remove");
+
+        // Verify no files were deleted
+        assert!(
+            at.dir_exists("d"),
+            "Directory 'd' should exist after rm -rf {case}",
+        );
+        assert!(
+            at.file_exists("file1"),
+            "file1 should exist after rm -rf {case}",
+        );
+    }
+}
+
+/// Test symlink targets that resolve to . or ..
+///
+/// Note: Symlinks to . or .. are handled differently than direct paths.
+/// The symlink itself is removed, but the target (current/parent dir) is not.
+/// This test verifies symlinks can be removed without affecting the actual directories.
+#[cfg(unix)]
+#[test]
+fn test_symlink_to_dot_protection() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("subdir");
+    at.touch("subdir/file");
+    at.touch("topfile");
+
+    // Create symlinks pointing to . and ..
+    at.symlink_dir(".", "subdir/dot_link");
+    at.symlink_dir("..", "subdir/dotdot_link");
+
+    // Remove the symlinks themselves (without trailing slash they are just links)
+    ts.ucmd().arg("-f").arg("subdir/dot_link").succeeds();
+    ts.ucmd().arg("-f").arg("subdir/dotdot_link").succeeds();
+
+    // Verify symlinks are gone but directories still exist
+    assert!(!at.symlink_exists("subdir/dot_link"));
+    assert!(!at.symlink_exists("subdir/dotdot_link"));
+    assert!(at.dir_exists("subdir"));
+    assert!(at.file_exists("subdir/file"));
+    assert!(at.file_exists("topfile"));
+}
+
+#[test]
+fn test_dash_hint_shown_for_existing_dash_file() {
+    // A dash-prefixed name that exists is parsed as an option; rm should point
+    // the user at the `./` workaround instead of silently failing.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("-z");
+    let result = ucmd.arg("-z").fails_with_code(1);
+    result.stderr_contains("./-z' to remove the file '-z'.");
+    result.stderr_contains("--help' for more information.");
+    assert!(at.file_exists("-z"));
+}
+
+#[test]
+fn test_dash_hint_absent_without_matching_file() {
+    // When no such file is on disk there is nothing to suggest, so the hint
+    // line must be omitted entirely.
+    new_ucmd!()
+        .arg("-q")
+        .fails_with_code(1)
+        .stderr_does_not_contain("to remove the file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_dash_hint_is_shell_escaped() {
+    // Awkward characters in the name (here a tab and a quote) must be escaped so
+    // the printed command can be pasted into a shell verbatim.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let name = "-a\tb'c";
+    at.touch(name);
+    ucmd.arg(name)
+        .fails_with_code(1)
+        .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }

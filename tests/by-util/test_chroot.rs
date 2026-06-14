@@ -290,6 +290,15 @@ fn test_chroot_skip_chdir_not_root() {
 }
 
 #[test]
+fn test_chroot_skip_chdir_nonexistent() {
+    new_ucmd!()
+        .arg("--skip-chdir")
+        .arg("/nonexistent/sub")
+        .fails_with_code(125)
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'");
+}
+
+#[test]
 fn test_chroot_skip_chdir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -325,5 +334,45 @@ fn test_chroot_extra_arg() {
         );
     } else {
         print!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+fn test_chroot_userspec_does_not_set_gid_with_uid() {
+    use uucore::entries::{usr2gid, usr2uid};
+
+    let ts = TestScenario::new(util_name!());
+    if let Ok(uid) = usr2uid("sync") {
+        if let Ok(gid) = usr2gid("sync") {
+            if gid == uid {
+                println!("Test skipped; requires sync user to have uid != gid");
+                return;
+            }
+            // Ubuntu has a sync user whose gid is 65534 per default
+            if let Ok(result) = run_ucmd_as_root(&ts, &["--userspec=sync", "/", "id", "-g"]) {
+                result.success().no_stderr().stdout_is(format!("{gid}\n"));
+            } else {
+                println!("Test skipped; requires root user");
+            }
+        } else {
+            println!("Test skipped; requires 'sync' user");
+        }
+    } else {
+        println!("Test skipped; requires 'sync' user");
+    }
+}
+
+#[test]
+fn test_chroot_userspec_unknown_uid() {
+    let ts = TestScenario::new(util_name!());
+    if let Ok(result) =
+        run_ucmd_as_root(&ts, &["--userspec=99999", "--groups=root", "/", "id", "-g"])
+    {
+        result
+            .failure()
+            .code_is(125)
+            .stderr_is("chroot: no group specified for unknown uid: 99999\n");
+    } else {
+        println!("Test skipped; requires root user");
     }
 }

@@ -28,13 +28,15 @@ rm-help-preserve-root = ne pas supprimer '/' (par défaut)
 rm-help-recursive = supprimer les répertoires et leur contenu récursivement
 rm-help-dir = supprimer les répertoires vides
 rm-help-verbose = expliquer ce qui est fait
-rm-help-progress = afficher une barre de progression. Note : cette fonctionnalité n'est pas supportée par GNU coreutils.
+rm-help-progress = afficher une barre de progression. Note : cette fonctionnalité n'est pas prise en charge par GNU coreutils.
 
 # Messages de progression
 rm-progress-removing = Suppression
 
 # Messages d'erreur
 rm-error-missing-operand = opérande manquant
+  Essayez '{$util_name} --help' pour plus d'informations.
+rm-hint-dash-file = Essayez '{$util_name} ./{$path}' pour supprimer le fichier {$file}.
   Essayez '{$util_name} --help' pour plus d'informations.
 rm-error-cannot-remove-no-such-file = impossible de supprimer {$file} : Aucun fichier ou répertoire de ce type
 rm-error-cannot-remove-permission-denied = impossible de supprimer {$file} : Permission refusée

@@ -30,16 +30,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("sleep-error-missing-operand", "program" => uucore::execution_phrase()),
             )
         })?
-        .map(|s| s.as_str())
+        .map(String::as_str)
         .collect::<Vec<_>>();
 
     sleep(&numbers)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("sleep")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("sleep"))
         .about(translate!("sleep-about"))
         .after_help(translate!("sleep-after-help"))
         .override_usage(format_usage(&translate!("sleep-usage")))
@@ -65,7 +65,7 @@ fn sleep(args: &[&str]) -> UResult<()> {
                 None
             }
         })
-        .fold(Duration::ZERO, |acc, n| acc.saturating_add(n));
+        .fold(Duration::ZERO, Duration::saturating_add);
 
     if arg_error {
         return Err(UUsageError::new(1, ""));

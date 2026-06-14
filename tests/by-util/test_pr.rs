@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) Sdivide
+// spell-checker:ignore (ToDO) Sdivide ading
 
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
@@ -51,6 +51,34 @@ fn test_invalid_flag() {
         .arg("--invalid-argument")
         .fails_with_code(1)
         .no_stdout();
+}
+
+#[test]
+fn test_expand_tabs_multibyte_char_is_rejected() {
+    for arg in ["-e€", "-e€3"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-e' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_multibyte_separator_is_rejected() {
+    for arg in ["-n€", "-n€5"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_empty_value_is_rejected() {
+    new_ucmd!()
+        .args(&["--number-lines=", "test_one_page.log"])
+        .fails_with_code(1)
+        .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
 }
 
 #[test]
@@ -755,4 +783,190 @@ fn test_merge_one_long_one_short() {
     ucmd.args(&["-l", "11", "-m", "f", "g"])
         .succeeds()
         .stdout_matches(&regex);
+}
+
+#[test]
+fn test_simple_expand_tab() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+
+    let output_regex = Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap();
+
+    new_ucmd!()
+        .arg("-e")
+        .pipe_in("hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n")
+        .succeeds()
+        .stdout_matches(&output_regex);
+}
+
+#[test]
+fn test_simple_expand_tab_with_digit_argument() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-e2", Regex::new(&format!("{page_1_beginning}hello world\nabc def\n  leading\ntrail \n8chars00  \n")).unwrap()),
+        ("-e3", Regex::new(&format!("{page_1_beginning}hello world\nabc   def\n   leading\ntrail \n8chars00 \n")).unwrap()),
+        ("-e8", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-e10", Regex::new(&format!("{page_1_beginning}hello     world\nabc       def\n          leading\ntrail     \n8chars00  \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_char_argument() {
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-ea", Regex::new(&format!("{page_1_beginning}hello   world\n        bc      def\n        le      ding\ntr      il      \n8ch     rs00    \n")).unwrap()),
+        ("-ee", Regex::new(&format!("{page_1_beginning}h       llo     world\nabc     d       f\n        l       ading\ntrail   \n8chars00        \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+#[test]
+fn test_simple_expand_tab_with_both_arguments() {
+    // test different variations of what char to expand
+    // a2, e3, t10
+    let whitespace = " ".repeat(50);
+    let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
+    let page_1_beginning = format!("\n\n{datetime_pattern}{whitespace}Page 1\n\n\n");
+    let input = "hello\tworld\nabc\tdef\n\tleading\ntrail\t\n8chars00\t\n";
+
+    let test_cases = vec![
+        ("-ea2", Regex::new(&format!("{page_1_beginning}hello   world\n  bc    def\n        le  ding\ntr  il  \n8ch rs00        \n")).unwrap()),
+        ("-ee3", Regex::new(&format!("{page_1_beginning}h  llo  world\nabc     d   f\n        l   ading\ntrail   \n8chars00        \n")).unwrap()),
+        ("-et10", Regex::new(&format!("{page_1_beginning}hello   world\nabc     def\n        leading\n          rail  \n8chars00        \n")).unwrap()),
+    ];
+    for (arg, output_regex) in test_cases {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in(input)
+            .succeeds()
+            .stdout_matches(&output_regex);
+    }
+}
+
+/* cSpell:disable */
+#[test]
+fn test_invalid_expand_tab_arguments() {
+    let test_file_path = "empty_test_file";
+
+    let test_cases = vec![
+        // incorrect argument
+        ("-esdgjiojiosdgjiogd", "dgjiojiosdgjiogd"),
+        // 2 non digit parameter
+        ("-eab", "b"),
+        // non digit after first digit
+        ("-e1a", "1a"),
+        // non digit after first digit after allowed input char
+        ("-ea1a", "1a"),
+        // > i32 max
+        ("-e2147483648", "2147483648"),
+        // > i32 max after allowed input char
+        ("-ea2147483648", "2147483648"),
+    ];
+
+    for (arg, error_msg_field) in test_cases {
+        new_ucmd!()
+            .args(&[arg, test_file_path])
+            .fails()
+            .stderr_contains(format!("pr: '-e' extra characters or invalid number in the argument: ‘{error_msg_field}’\nTry 'pr --help' for more information."));
+    }
+}
+/* cSpell:enable */
+
+#[test]
+fn test_expand_tab_does_not_consume_next_argument() {
+    let test_file_path = "empty_test_file";
+    new_ucmd!().args(&["-e", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea", test_file_path]).succeeds();
+    new_ucmd!().args(&["-ea1", test_file_path]).succeeds();
+}
+
+#[test]
+fn test_zero_columns() {
+    new_ucmd!()
+        .arg("--column=0")
+        .fails_with_code(1)
+        .stderr_contains("pr: invalid --column argument '0'");
+}
+
+#[test]
+fn test_zero_columns_shortcut() {
+    new_ucmd!()
+        .arg("-0")
+        .fails_with_code(1)
+        .stderr_contains("pr: invalid --column argument '0'");
+}
+
+#[test]
+fn test_zero_expand_tab_width() {
+    let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
+    new_ucmd!()
+        .arg("-e0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+    new_ucmd!()
+        .arg("-eX0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+}
+
+#[test]
+fn test_zero_column_width() {
+    new_ucmd!()
+        .args(&["-w", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --width argument '0'\n");
+}
+
+#[test]
+fn test_zero_page_width() {
+    new_ucmd!()
+        .args(&["-W", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_zero_length() {
+    new_ucmd!()
+        .args(&["-l", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --length argument '0'\n");
+}
+
+#[test]
+fn test_zero_pages() {
+    new_ucmd!()
+        .args(&["--pages", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --pages argument '0'\n");
+}
+
+#[test]
+fn test_negative_expand_tabs() {
+    new_ucmd!()
+        .arg("-e=-1")
+        .fails_with_code(1)
+        .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
 }

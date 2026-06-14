@@ -3,7 +3,6 @@ name = "uu_test"
 description = "test ~ (uutils) evaluate comparison and file type expressions"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/test"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/test.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

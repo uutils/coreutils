@@ -2,17 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore libc's setpriority
+// spell-checker:ignore getpriority setpriority
 use uutests::new_ucmd;
 
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
-    // Test that the nice command with no arguments returns the default nice
-    // value, which we determine by querying libc's `nice` in our own process.
-    new_ucmd!()
-        .succeeds()
-        .stdout_is(format!("{}\n", unsafe { libc::nice(0) }));
+    // Test that the nice command with no arguments returns the default nice value
+    let nice = rustix::process::getpriority_process(None).unwrap();
+    new_ucmd!().succeeds().stdout_is(format!("{nice}\n"));
 }
 
 #[test]

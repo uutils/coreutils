@@ -5,6 +5,7 @@
 
 // spell-checker:ignore hashset Addrs addrs
 
+use std::io::{Write, stdout};
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 use std::net::ToSocketAddrs;
 use std::str;
@@ -37,10 +38,8 @@ mod wsa {
     pub(super) struct WsaHandle(());
 
     pub(super) fn start() -> io::Result<WsaHandle> {
-        let err = unsafe {
-            let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
-            WSAStartup(0x0202, data.as_mut_ptr())
-        };
+        let mut data = std::mem::MaybeUninit::<WSADATA>::uninit();
+        let err = unsafe { WSAStartup(0x0202, data.as_mut_ptr()) };
         if err == 0 {
             Ok(WsaHandle(()))
         } else {
@@ -50,15 +49,13 @@ mod wsa {
 
     impl Drop for WsaHandle {
         fn drop(&mut self) {
-            unsafe {
-                // This possibly returns an error but we can't handle it
-                let _err = WSACleanup();
-            }
+            // This possibly returns an error but we can't handle it
+            let _ = unsafe { WSACleanup() };
         }
     }
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -74,7 +71,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("hostname")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("hostname-about"))
@@ -164,7 +161,7 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         }
         let len = output.len();
         if len > 0 {
-            println!("{}", &output[0..len - 1]);
+            writeln!(stdout(), "{}", &output[0..len - 1])?;
         }
 
         Ok(())
@@ -173,17 +170,17 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
             let mut it = hostname.char_indices().filter(|&ci| ci.1 == '.');
             if let Some(ci) = it.next() {
                 if matches.get_flag(OPT_SHORT) {
-                    println!("{}", &hostname[0..ci.0]);
+                    writeln!(stdout(), "{}", &hostname[0..ci.0])?;
                 } else {
-                    println!("{}", &hostname[ci.0 + 1..]);
+                    writeln!(stdout(), "{}", &hostname[ci.0 + 1..])?;
                 }
             } else if matches.get_flag(OPT_SHORT) {
-                println!("{hostname}");
+                writeln!(stdout(), "{hostname}")?;
             }
             return Ok(());
         }
 
-        println!("{hostname}");
+        writeln!(stdout(), "{hostname}")?;
 
         Ok(())
     }

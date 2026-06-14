@@ -51,7 +51,7 @@ dd-after-help = ### Opérandes
     - noxfer : Afficher les statistiques de volume finales, mais pas les statistiques de performance.
     - none : N'afficher aucune statistique.
 
-    L'affichage des statistiques de performance est aussi déclenché par le signal INFO (quand supporté),
+    L'affichage des statistiques de performance est aussi déclenché par le signal INFO (quand pris en charge),
     ou le signal USR1. Définir la variable d'environnement POSIXLY_CORRECT à n'importe quelle valeur
     (y compris une valeur vide) fera ignorer le signal USR1.
 

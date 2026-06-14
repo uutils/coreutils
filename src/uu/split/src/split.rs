@@ -14,7 +14,7 @@ use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
@@ -53,20 +53,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (args, obs_lines) = handle_obsolete(args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    match Settings::from(&matches, obs_lines.as_deref()) {
-        Ok(settings) => {
-            // When using --filter, we write to a child process's stdin which may
-            // close early. Disable SIGPIPE so we get EPIPE errors instead of
-            // being terminated, allowing graceful handling of broken pipes.
-            #[cfg(unix)]
-            if settings.filter.is_some() {
-                let _ = uucore::signals::disable_pipe_errors();
-            }
-            split(&settings)
+    let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        if e.requires_usage() {
+            UUsageError::new(1, format!("{e}"))
+        } else {
+            USimpleError::new(1, format!("{e}"))
         }
-        Err(e) if e.requires_usage() => Err(UUsageError::new(1, format!("{e}"))),
-        Err(e) => Err(USimpleError::new(1, format!("{e}"))),
+    })?;
+
+    // When using --filter, we write to a child process's stdin which may
+    // close early. Disable SIGPIPE so we get EPIPE errors instead of
+    // being terminated, allowing graceful handling of broken pipes.
+    #[cfg(unix)]
+    if settings.filter.is_some() {
+        let _ = uucore::signals::disable_pipe_errors();
     }
+
+    split(&settings)
 }
 
 /// Extract obsolete shorthand (if any) for specifying lines in following scenarios (and similar)
@@ -234,7 +237,7 @@ fn handle_preceding_options(
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("split")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("split-about"))
@@ -540,16 +543,16 @@ impl Settings {
 
     fn instantiate_current_writer(
         &self,
-        filename: &str,
+        filename: &OsStr,
         is_new: bool,
     ) -> io::Result<BufWriter<Box<dyn Write>>> {
-        if platform::paths_refer_to_same_file(&self.input, filename.as_ref()) {
+        if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
             ));
         }
 
-        platform::instantiate_current_writer(self.filter.as_deref(), filename, is_new)
+        platform::instantiate_current_writer(self.filter.as_deref(), &self.input, filename, is_new)
     }
 }
 
@@ -920,7 +923,7 @@ impl Write for LineChunkWriter<'_> {
 
 /// Output file parameters
 struct OutFile {
-    filename: String,
+    filename: OsString,
     maybe_writer: Option<BufWriter<Box<dyn Write>>>,
     is_new: bool,
 }
@@ -974,7 +977,7 @@ impl ManageOutFiles for OutFiles {
             let maybe_writer = if is_writer_optional {
                 None
             } else {
-                let instantiated = settings.instantiate_current_writer(filename.as_str(), true);
+                let instantiated = settings.instantiate_current_writer(&filename, true);
                 // If there was an error instantiating the writer for a file,
                 // it could be due to hitting the system limit of open files,
                 // so record it as None and let [`get_writer`] function handle closing/re-opening
@@ -1011,7 +1014,7 @@ impl ManageOutFiles for OutFiles {
         // might "steel" the freed fd and open a file on its side. Then it would be beneficial
         // if split would be able to close another fd before cancellation.
         'loop1: loop {
-            let filename_to_open = self[idx].filename.as_str();
+            let filename_to_open = &self[idx].filename;
             let file_to_open_is_new = self[idx].is_new;
             let maybe_writer =
                 settings.instantiate_current_writer(filename_to_open, file_to_open_is_new);
@@ -1028,16 +1031,16 @@ impl ManageOutFiles for OutFiles {
             // Could have hit system limit for open files.
             // Try to close one previously instantiated writer first
             for (i, out_file) in self.iter_mut().enumerate() {
-                if i != idx {
-                    if let Some(writer) = out_file.maybe_writer.as_mut() {
-                        writer.flush()?;
-                        out_file.maybe_writer = None;
-                        out_file.is_new = false;
-                        count += 1;
+                if i != idx
+                    && let Some(writer) = out_file.maybe_writer.as_mut()
+                {
+                    writer.flush()?;
+                    out_file.maybe_writer = None;
+                    out_file.is_new = false;
+                    count += 1;
 
-                        // And then try to instantiate the writer again
-                        continue 'loop1;
-                    }
+                    // And then try to instantiate the writer again
+                    continue 'loop1;
                 }
             }
 
@@ -1156,7 +1159,7 @@ where
         out_files = OutFiles::init(num_chunks, settings, false)?;
     }
 
-    let buf = &mut Vec::new();
+    let mut buf = Vec::with_capacity((chunk_size_base + 1) as usize);
     for i in 1_u64..=num_chunks {
         let chunk_size = chunk_size_base + (chunk_size_reminder > i - 1) as u64;
         buf.clear();
@@ -1175,7 +1178,7 @@ where
                 }
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(buf);
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf);
 
             match n_bytes_read {
                 Ok(n_bytes) => {
@@ -1191,13 +1194,13 @@ where
 
             if let Some(chunk_number) = kth_chunk {
                 if i == chunk_number {
-                    stdout_writer.write_all(buf)?;
+                    stdout_writer.write_all(&buf)?;
                     break;
                 }
             } else {
                 let idx = (i - 1) as usize;
                 let writer = out_files.get_writer(idx, settings)?;
-                writer.write_all(buf)?;
+                writer.write_all(&buf)?;
             }
         } else {
             break;
@@ -1331,11 +1334,8 @@ where
         if settings.elide_empty_files && skipped > 0 && kth_chunk.is_none() {
             chunk_number -= skipped as u64;
         }
-
-        if let Some(kth) = kth_chunk {
-            if chunk_number > kth {
-                break;
-            }
+        if kth_chunk.is_some_and(|k| chunk_number > k) {
+            break;
         }
     }
     Ok(())
@@ -1542,6 +1542,8 @@ fn split(settings: &Settings) -> UResult<()> {
         let r = File::open(Path::new(&settings.input)).map_err_context(
             || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
         Box::new(r) as Box<dyn Read>
     };
     let mut reader = if let Some(c) = settings.io_blksize {
@@ -1552,11 +1554,9 @@ fn split(settings: &Settings) -> UResult<()> {
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
-            // split_into_n_chunks_by_byte(settings, &mut reader, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, None)
         }
         Strategy::Number(NumberType::KthBytes(chunk_number, num_chunks)) => {
-            // kth_chunks_by_byte(settings, &mut reader, chunk_number, num_chunks)
             n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
@@ -1573,48 +1573,32 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            match io::copy(&mut reader, &mut writer) {
-                Ok(_) => Ok(()),
-                Err(e) => match e.kind() {
-                    // TODO Since the writer object controls the creation of
-                    // new files, we need to rely on the `io::Result`
-                    // returned by its `write()` method to communicate any
-                    // errors to this calling scope. If a new file cannot be
-                    // created because we have exceeded the number of
-                    // allowable filenames, we use `ErrorKind::Other` to
-                    // indicate that. A special error message needs to be
-                    // printed in that case.
-                    ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-                    _ => Err(uio_error!(
-                        e,
-                        "{}",
-                        translate!("split-error-input-output-error")
-                    )),
-                },
-            }
+            copy(&mut reader, &mut writer)
         }
         Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
+    }
+}
+
+fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
+    match io::copy(reader, writer) {
+        Ok(_) => Ok(()),
+        // TODO Since the writer object controls the creation of
+        // new files, we need to rely on the `io::Result`
+        // returned by its `write()` method to communicate any
+        // errors to this calling scope. If a new file cannot be
+        // created because we have exceeded the number of
+        // allowable filenames, we use `ErrorKind::Other` to
+        // indicate that. A special error message needs to be
+        // printed in that case.
+        Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
+        Err(e) => Err(uio_error!(
+            e,
+            "{}",
+            translate!("split-error-input-output-error")
+        )),
     }
 }

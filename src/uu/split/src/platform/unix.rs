@@ -3,11 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
+use uucore::display::Quotable;
 use uucore::error::USimpleError;
 use uucore::fs;
 use uucore::fs::FileInformation;
@@ -45,12 +46,12 @@ struct WithEnvVarSet {
     /// Env var key
     previous_var_key: String,
     /// Previous value set to this key
-    previous_var_value: std::result::Result<String, env::VarError>,
+    previous_var_value: Option<OsString>,
 }
 impl WithEnvVarSet {
     /// Save previous value assigned to key, set key=value
-    fn new(key: &str, value: &str) -> Self {
-        let previous_env_value = env::var(key);
+    fn new(key: &str, value: &OsStr) -> Self {
+        let previous_env_value = env::var_os(key);
         unsafe {
             env::set_var(key, value);
         }
@@ -64,7 +65,7 @@ impl WithEnvVarSet {
 impl Drop for WithEnvVarSet {
     /// Restore previous value now that this is being dropped by context
     fn drop(&mut self) {
-        if let Ok(ref prev_value) = self.previous_var_value {
+        if let Some(prev_value) = &self.previous_var_value {
             unsafe {
                 env::set_var(&self.previous_var_key, prev_value);
             }
@@ -82,7 +83,7 @@ impl FilterWriter {
     ///
     /// * `command` - The shell command to execute
     /// * `filepath` - Path of the output file (forwarded to command as $FILE)
-    fn new(command: &str, filepath: &str) -> Result<Self> {
+    fn new(command: &str, filepath: &OsStr) -> Result<Self> {
         // set $FILE, save previous value (if there was one)
         let _with_env_var_set = WithEnvVarSet::new("FILE", filepath);
 
@@ -127,36 +128,33 @@ impl Drop for FilterWriter {
 /// Instantiate either a file writer or a "write to shell process's stdin" writer
 pub fn instantiate_current_writer(
     filter: Option<&str>,
-    filename: &str,
+    input: &OsStr,
+    filename: &OsStr,
     is_new: bool,
 ) -> Result<BufWriter<Box<dyn Write>>> {
     match filter {
         None => {
             let file = if is_new {
-                // create new file
-                std::fs::OpenOptions::new()
-                    .write(true)
-                    .create(true)
-                    .truncate(true)
-                    .open(Path::new(&filename))
-                    .map_err(|e| match e.kind() {
-                        ErrorKind::IsADirectory => Error::other(
-                            translate!("split-error-is-a-directory", "dir" => filename),
-                        ),
-                        _ => Error::other(
-                            translate!("split-error-unable-to-open-file", "file" => filename),
-                        ),
-                    })?
+                create_or_truncate_output_file(input, filename)?
             } else {
                 // re-open file that we previously created to append to it
-                std::fs::OpenOptions::new()
+                let file = std::fs::OpenOptions::new()
                     .append(true)
-                    .open(Path::new(&filename))
+                    .open(Path::new(filename))
                     .map_err(|_| {
-                        Error::other(
-                            translate!("split-error-unable-to-reopen-file", "file" => filename),
-                        )
-                    })?
+                        Error::other(translate!(
+                            "split-error-unable-to-reopen-file",
+                            "file" => filename.quote()
+                        ))
+                    })?;
+
+                if input_and_output_refer_to_same_file(input, &file) {
+                    return Err(Error::other(
+                        translate!("split-error-would-overwrite-input", "file" => filename.quote()),
+                    ));
+                }
+
+                file
             };
             Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
         }
@@ -167,6 +165,54 @@ pub fn instantiate_current_writer(
     }
 }
 
+fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std::fs::File> {
+    match std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(Path::new(filename))
+    {
+        Ok(file) => Ok(file),
+        Err(e) if e.kind() == ErrorKind::AlreadyExists => {
+            let file = std::fs::OpenOptions::new()
+                .write(true)
+                .open(Path::new(filename))
+                .map_err(|err| open_file_error(filename, err.kind()))?;
+
+            if input_and_output_refer_to_same_file(input, &file) {
+                return Err(Error::other(
+                    translate!("split-error-would-overwrite-input", "file" => filename.quote()),
+                ));
+            }
+
+            file.set_len(0)
+                .map_err(|err| open_file_error(filename, err.kind()))?;
+            Ok(file)
+        }
+        Err(e) => Err(open_file_error(filename, e.kind())),
+    }
+}
+
+fn open_file_error(filename: &OsStr, kind: ErrorKind) -> Error {
+    match kind {
+        ErrorKind::IsADirectory => {
+            Error::other(translate!("split-error-is-a-directory", "dir" => filename.quote()))
+        }
+        _ => {
+            Error::other(translate!("split-error-unable-to-open-file", "file" => filename.quote()))
+        }
+    }
+}
+
+fn input_and_output_refer_to_same_file(input: &OsStr, output: &std::fs::File) -> bool {
+    let input_info = if input == "-" {
+        FileInformation::from_file(&std::io::stdin())
+    } else {
+        FileInformation::from_path(Path::new(input), true)
+    };
+
+    fs::infos_refer_to_same_file(input_info, FileInformation::from_file(output))
+}
+
 pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {
     // We have to take symlinks and relative paths into account.
     let p1 = if p1 == "-" {
@@ -175,4 +221,43 @@ pub fn paths_refer_to_same_file(p1: &OsStr, p2: &OsStr) -> bool {
         FileInformation::from_path(Path::new(p1), true)
     };
     fs::infos_refer_to_same_file(p1, FileInformation::from_path(Path::new(p2), true))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::instantiate_current_writer;
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn reopened_writer_rejects_symlink_swapped_to_input() {
+        let tmp = std::env::temp_dir().join(format!(
+            "uutils-split-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time before unix epoch")
+                .as_nanos()
+        ));
+        fs::create_dir_all(&tmp).expect("failed to create temp dir");
+
+        let input = tmp.join("input.txt");
+        let output = tmp.join("xaa");
+        fs::write(&input, b"input\n").expect("failed to write input");
+        symlink(&input, &output).expect("failed to create output symlink");
+
+        let Err(err) =
+            instantiate_current_writer(None, input.as_os_str(), output.as_os_str(), false)
+        else {
+            panic!("re-opened writer should reject swapped symlink");
+        };
+        assert!(
+            err.to_string()
+                .contains("split-error-would-overwrite-input"),
+            "unexpected error: {err}"
+        );
+
+        fs::remove_dir_all(&tmp).expect("failed to cleanup temp dir");
+    }
 }

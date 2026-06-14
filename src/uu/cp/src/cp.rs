@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO
+// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -10,25 +10,25 @@ use std::ffi::OsString;
 use std::fmt::Display;
 use std::fs::{self, Metadata, OpenOptions, Permissions};
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::copy_xattrs;
+use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
+#[cfg(unix)]
+use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, UUsageError, set_exit_code};
-#[cfg(unix)]
-use uucore::fs::make_fifo;
+use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
@@ -446,11 +446,18 @@ impl Display for SparseDebug {
 /// This function prints the debug information of a file copy operation if
 /// no hard link or symbolic link is required, and data copy is required.
 /// It prints the debug information of the offload, reflink, and sparse detection actions.
-fn show_debug(copy_debug: &CopyDebug) {
-    println!(
-        "{}",
-        translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
-    );
+fn show_debug(copy_debug: &CopyDebug) -> io::Result<()> {
+    use std::io::Write;
+
+    let debug_string = translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection);
+
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+
+    stdout.write_all(debug_string.as_bytes())?;
+    stdout.flush()?;
+
+    Ok(())
 }
 
 static EXIT_ERR: i32 = 1;
@@ -519,7 +526,7 @@ pub fn uu_app() -> Command {
         options::ATTRIBUTES_ONLY,
         options::COPY_CONTENTS,
     ];
-    Command::new(uucore::util_name())
+    Command::new("cp")
         .version(uucore::crate_version!())
         .about(translate!("cp-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -896,11 +903,11 @@ impl Attributes {
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
         context: {
-            #[cfg(feature = "feat_selinux")]
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             {
                 Preserve::Yes { required: false }
             }
-            #[cfg(not(feature = "feat_selinux"))]
+            #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
             {
                 Preserve::No { explicit: false }
             }
@@ -919,13 +926,15 @@ impl Attributes {
         xattr: Preserve::No { explicit: false },
     };
 
-    // TODO: ownership is required if the user is root, for non-root users it's not required.
+    // xattr is intentionally NOT in DEFAULT — GNU `cp -p` only preserves
+    // mode, ownership, and timestamps. Default xattr preservation leaks
+    // capability / SELinux labels into copies and fails hard on filesystems
+    // without xattr support. See issue #9704.
     pub const DEFAULT: Self = Self {
         #[cfg(unix)]
         ownership: Preserve::Yes { required: true },
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
-        xattr: Preserve::Yes { required: true },
         ..Self::NONE
     };
 
@@ -1054,10 +1063,10 @@ impl Options {
             .get_one::<PathBuf>(options::TARGET_DIRECTORY)
             .cloned();
 
-        if let Some(dir) = &target_dir {
-            if !dir.is_dir() {
-                return Err(CpError::NotADirectory(dir.clone()));
-            }
+        if let Some(dir) = &target_dir
+            && !dir.is_dir()
+        {
+            return Err(CpError::NotADirectory(dir.clone()));
         }
         // cp follows POSIX conventions for overriding options such as "-a",
         // "-d", "--preserve", and "--no-preserve". We can use clap's
@@ -1132,16 +1141,14 @@ impl Options {
                 options::PRESERVE => {
                     attributes = attributes.union(&Attributes::parse_iter(val.into_iter())?);
                 }
-                options::NO_PRESERVE => {
-                    if !val.is_empty() {
-                        attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
-                    }
+                options::NO_PRESERVE if !val.is_empty() => {
+                    attributes = attributes.diff(&Attributes::parse_iter(val.into_iter())?);
                 }
                 _ => (),
             }
         }
 
-        #[cfg(not(feature = "selinux"))]
+        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
@@ -1158,6 +1165,21 @@ impl Options {
         } else {
             None
         };
+
+        // -Z/--context conflicts with explicit --preserve=context but overrides implicit (from -a)
+        if set_selinux_context || context.is_some() {
+            match attributes.context {
+                Preserve::Yes { required: true } => {
+                    return Err(CpError::Error(translate!(
+                        "cp-error-selinux-context-conflict"
+                    )));
+                }
+                Preserve::Yes { required: false } => {
+                    attributes.context = Preserve::No { explicit: false };
+                }
+                Preserve::No { .. } => {}
+            }
+        }
 
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
@@ -1344,7 +1366,7 @@ fn show_error_if_needed(error: &CpError) {
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) => {
-            show_error!("{context}: {}", uucore::error::strip_errno(io_err));
+            show_error!("{context}: {}", strip_errno(io_err));
         }
         _ => {
             show_error!("{error}");
@@ -1387,7 +1409,7 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 )
                 .unwrap(),
             )
-            .with_message(uucore::util_name());
+            .with_message("cp");
         pb.tick();
         Some(pb)
     } else {
@@ -1550,7 +1572,13 @@ fn copy_source(
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
                 if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
-                    copy_attributes(&src, y, &options.attributes, false)?;
+                    copy_attributes(
+                        &src,
+                        y,
+                        &options.attributes,
+                        false,
+                        options.set_selinux_context,
+                    )?;
                 }
             }
         }
@@ -1597,7 +1625,7 @@ fn file_mode_for_interactive_overwrite(
 
                         Some((
                             format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode, false),
+                            uucore::fs::display_permissions_unix(mode as u32, false),
                         ))
                     }
                 }
@@ -1671,12 +1699,27 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<(
     Ok(())
 }
 
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> CopyResult<()> {
+    if !uucore::selinux::is_selinux_enabled() {
+        return Ok(());
+    }
+
+    match uucore::selinux::set_selinux_security_context(path, context) {
+        Ok(()) => Ok(()),
+        Err(uucore::selinux::SeLinuxError::OperationNotSupported) => Ok(()),
+        Err(e) => Err(CpError::Error(
+            translate!("cp-error-selinux-error", "error" => e),
+        )),
+    }
+}
+
 /// Copies extended attributes (xattrs) from `source` to `dest`, ensuring that `dest` is temporarily
 /// user-writable if needed and restoring its original permissions afterward. This avoids "Operation
 /// not permitted" errors on read-only files. Returns an error if permission or metadata operations fail,
 /// or if xattr copying fails.
 #[cfg(all(unix, not(target_os = "android")))]
-fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
+fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1692,7 +1735,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 
     // Perform the xattr copy and capture any potential error,
     // so we can restore permissions before returning.
-    let copy_xattrs_result = copy_xattrs(source, dest);
+    let copy_xattrs_result = if skip_selinux {
+        // When -Z is used, skip copying security.selinux xattr so that
+        // the default context can be set instead of preserving from source
+        copy_xattrs_skip_selinux(source, dest)
+    } else {
+        copy_xattrs(source, dest)
+    };
 
     // Restore read-only if we changed it.
     if was_readonly {
@@ -1713,11 +1762,15 @@ fn copy_extended_attrs(source: &Path, dest: &Path) -> CopyResult<()> {
 }
 
 /// Copy the specified attributes from one path to another.
+/// If `skip_selinux_xattr` is true, the security.selinux xattr will not be copied
+/// (used when -Z is specified to set the default context instead).
+#[allow(unused_variables)]
 pub(crate) fn copy_attributes(
     source: &Path,
     dest: &Path,
     attributes: &Attributes,
     dest_is_freshly_created_dir: bool,
+    skip_selinux_xattr: bool,
 ) -> CopyResult<()> {
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
@@ -1731,6 +1784,14 @@ pub(crate) fn copy_attributes(
     } else {
         attributes.mode
     };
+
+    // Track whether `chown` to the source's uid succeeded. If it did not
+    // (typical case: non-root user copying a root-owned setuid file), the
+    // mode preservation below must strip setuid/setgid so the destination
+    // does not give the copying user elevated privileges via the copy.
+    // Matches GNU cp. See issue #9750.
+    #[cfg(unix)]
+    let ownership_preserved = std::cell::Cell::new(true);
 
     // Ownership must be changed first to avoid interfering with mode change.
     #[cfg(unix)]
@@ -1764,6 +1825,7 @@ pub(crate) fn copy_attributes(
         // gnu compatibility: cp doesn't report an error if it fails to set the ownership,
         // and will fall back to changing only the gid if possible.
         if try_chown(Some(dest_uid)).is_err() {
+            ownership_preserved.set(false);
             let _ = try_chown(None);
         }
         Ok(())
@@ -1776,13 +1838,37 @@ pub(crate) fn copy_attributes(
         // do nothing, since every symbolic link has the same
         // permissions.
         if !dest.is_symlink() {
-            fs::set_permissions(dest, source_metadata.permissions())
+            #[cfg(unix)]
+            let source_perms = {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = source_metadata.permissions();
+                if !ownership_preserved.get() {
+                    // GNU cp strips setuid (04000) and setgid (02000) when
+                    // ownership could not be preserved. Keep the sticky bit
+                    // (01000) and all rwx bits.
+                    let mode = perms.mode() & !0o6000;
+                    perms.set_mode(mode);
+                }
+                perms
+            };
+            #[cfg(not(unix))]
+            let source_perms = source_metadata.permissions();
+
+            fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // FIXME: Implement this for windows as well
             #[cfg(feature = "feat_acl")]
             exacl::getfacl(source, None)
                 .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
                 .map_err(|err| CpError::Error(err.to_string()))?;
+            // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
+            // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
+            // so we keep ACL parity with GNU without preserving user xattrs
+            // (which are intentionally excluded from the default -p set per
+            // issue #9704). Best-effort: ignore failures on filesystems that
+            // do not support ACL xattrs.
+            #[cfg(all(unix, not(target_os = "android")))]
+            copy_acls(source, dest);
         }
 
         Ok(())
@@ -1822,9 +1908,10 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.xattr, || -> CopyResult<()> {
         #[cfg(all(unix, not(target_os = "android")))]
         {
-            copy_extended_attrs(source, dest)?;
+            copy_extended_attrs(source, dest, skip_selinux_xattr)?;
         }
         #[cfg(not(all(unix, not(target_os = "android"))))]
+        #[allow(unused_variables)]
         {
             // The documentation for GNU cp states:
             //
@@ -1847,9 +1934,19 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(not(windows))]
+    #[cfg(target_os = "wasi")]
+    {
+        Err(CpError::IoErrContext(
+            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
+            translate!("cp-error-cannot-create-symlink",
+                       "dest" => get_filename(dest).unwrap_or("?").quote(),
+                       "source" => get_filename(source).unwrap_or("?").quote()),
+        ))
+    }
+    #[cfg(not(any(windows, target_os = "wasi")))]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
@@ -1871,10 +1968,13 @@ fn symlink_file(
             )
         })?;
     }
-    if let Ok(file_info) = FileInformation::from_path(dest, false) {
-        symlinked_files.insert(file_info);
+    #[cfg(not(target_os = "wasi"))]
+    {
+        if let Ok(file_info) = FileInformation::from_path(dest, false) {
+            symlinked_files.insert(file_info);
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -1884,13 +1984,13 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file .
 /// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
     }
-    Ok(backup_path.into())
+    Ok(())
 }
 
 /// Decide whether source and destination files are the same and
@@ -1936,14 +2036,10 @@ fn is_forbidden_to_copy_to_same_file(
     }
     // If source and dest are both the same symlink but with different names, then allow the copy.
     // This can occur, for example, if source and dest are both hardlinks to the same symlink.
-    if dest_is_symlink
+    !(dest_is_symlink
         && source_is_symlink
         && source.file_name() != dest.file_name()
-        && !options.dereference
-    {
-        return false;
-    }
-    true
+        && !options.dereference)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -2151,10 +2247,7 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!(
-                "{}",
-                translate!("cp-verbose-created-directory", "source" => x.display(), "dest" => y.display())
-            );
+            println!("{} -> {}", x.display(), y.display());
         }
     }
 
@@ -2180,13 +2273,8 @@ fn handle_copy_mode(
     source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     source_in_command_line: bool,
-    source_is_fifo: bool,
-    source_is_socket: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
-    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<PerformedAction> {
-    let source_is_symlink = source_metadata.is_symlink();
-
     match options.copy_mode {
         CopyMode::Link => {
             if dest.exists() {
@@ -2220,13 +2308,10 @@ fn handle_copy_mode(
                 dest,
                 options,
                 context,
-                source_is_symlink,
-                source_is_fifo,
-                source_is_socket,
+                source_metadata,
                 symlinked_files,
+                source_in_command_line,
                 created_parent_dirs,
-                #[cfg(unix)]
-                source_is_stream,
             )?;
         }
         CopyMode::SymLink => {
@@ -2244,13 +2329,10 @@ fn handle_copy_mode(
                             dest,
                             options,
                             context,
-                            source_is_symlink,
-                            source_is_fifo,
-                            source_is_socket,
+                            source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
-                            #[cfg(unix)]
-                            source_is_stream,
                         )?;
                     }
                     UpdateMode::None => {
@@ -2281,13 +2363,10 @@ fn handle_copy_mode(
                             dest,
                             options,
                             context,
-                            source_is_symlink,
-                            source_is_fifo,
-                            source_is_socket,
+                            source_metadata,
                             symlinked_files,
+                            source_in_command_line,
                             created_parent_dirs,
-                            #[cfg(unix)]
-                            source_is_stream,
                         )?;
                     }
                 }
@@ -2297,13 +2376,10 @@ fn handle_copy_mode(
                     dest,
                     options,
                     context,
-                    source_is_symlink,
-                    source_is_fifo,
-                    source_is_socket,
+                    source_metadata,
                     symlinked_files,
+                    source_in_command_line,
                     created_parent_dirs,
-                    #[cfg(unix)]
-                    source_is_stream,
                 )?;
             }
         }
@@ -2348,8 +2424,7 @@ fn calculate_dest_permissions(
             let mode = handle_no_preserve_mode(options, permissions.mode());
 
             // Apply umask
-            use uucore::mode::get_umask;
-            let mode = mode & !get_umask();
+            let mode = mode & !uucore::mode::get_umask();
             permissions.set_mode(mode);
             permissions
         }
@@ -2535,15 +2610,6 @@ fn copy_file(
         context,
     );
 
-    #[cfg(unix)]
-    let source_is_fifo = source_metadata.file_type().is_fifo();
-    #[cfg(unix)]
-    let source_is_socket = source_metadata.file_type().is_socket();
-    #[cfg(not(unix))]
-    let source_is_fifo = false;
-    #[cfg(not(unix))]
-    let source_is_socket = false;
-
     let source_is_stream = is_stream(&source_metadata);
 
     let performed_action = handle_copy_mode(
@@ -2554,11 +2620,7 @@ fn copy_file(
         &source_metadata,
         symlinked_files,
         source_in_command_line,
-        source_is_fifo,
-        source_is_socket,
         created_parent_dirs,
-        #[cfg(unix)]
-        source_is_stream,
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
@@ -2576,33 +2638,44 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    if options.dereference(source_in_command_line) {
+    let copy_attributes_result = if options.dereference(source_in_command_line) {
         // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
         // fall back to the original source path
         let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(&src_for_attrs, dest, &options.attributes, false)?;
+        copy_attributes(
+            &src_for_attrs,
+            dest,
+            &options.attributes,
+            false,
+            options.set_selinux_context,
+        )
     } else if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
+        Ok(())
     } else {
-        copy_attributes(source, dest, &options.attributes, false)?;
-    }
+        copy_attributes(
+            source,
+            dest,
+            &options.attributes,
+            false,
+            options.set_selinux_context,
+        )
+    };
+
+    // GNU cp truncates the destination when a required attribute cannot be preserved
+    copy_attributes_result.inspect_err(|_| {
+        fs::File::create(dest).map(|f| f.set_len(0)).ok();
+    })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-    if options.set_selinux_context && uucore::selinux::is_selinux_enabled() {
-        // Set the given selinux permissions on the copied file.
-        if let Err(e) =
-            uucore::selinux::set_selinux_security_context(dest, options.context.as_ref())
-        {
-            return Err(CpError::Error(
-                translate!("cp-error-selinux-error", "error" => e),
-            ));
-        }
+    if options.set_selinux_context {
+        set_selinux_context(dest, options.context.as_ref())?;
     }
 
     // Skip tracking copied files when using --link mode since hard link
@@ -2689,12 +2762,10 @@ fn copy_helper(
     dest: &Path,
     options: &Options,
     context: &str,
-    source_is_symlink: bool,
-    source_is_fifo: bool,
-    source_is_socket: bool,
+    source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
+    #[cfg_attr(not(unix), allow(unused_variables))] source_in_command_line: bool,
     created_parent_dirs: &mut HashSet<PathBuf>,
-    #[cfg(unix)] source_is_stream: bool,
 ) -> CopyResult<()> {
     if options.parents {
         let parent = dest.parent().unwrap_or(dest);
@@ -2707,15 +2778,31 @@ fn copy_helper(
         return Err(CpError::NotADirectory(dest.to_path_buf()));
     }
 
-    if source_is_socket && options.recursive && !options.copy_contents {
-        #[cfg(unix)]
-        copy_socket(dest, options.overwrite, options.debug)?;
-    } else if source_is_fifo && options.recursive && !options.copy_contents {
-        #[cfg(unix)]
-        copy_fifo(dest, options.overwrite, options.debug)?;
-    } else if source_is_symlink {
+    #[cfg(unix)]
+    if options.recursive && !options.copy_contents {
+        let ft = source_metadata.file_type();
+        if ft.is_socket() {
+            return copy_socket(dest, options.overwrite, options.debug);
+        }
+        if ft.is_fifo() {
+            return copy_fifo(dest, options.overwrite, options.debug);
+        }
+        if ft.is_char_device() || ft.is_block_device() {
+            return copy_node(dest, source_metadata, options.overwrite, options.debug);
+        }
+    }
+
+    if source_metadata.is_symlink() {
         copy_link(source, dest, symlinked_files, options)?;
     } else {
+        // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
+        // In that case source_metadata was obtained via lstat, so a path swap
+        // to a symlink between lstat and open must be refused to close the
+        // TOCTOU window described in issue #10017. In deref mode cp
+        // intentionally follows symlinks, matching GNU cp's behavior of
+        // applying O_NOFOLLOW here only with `-P`.
+        #[cfg(unix)]
+        let nofollow = !options.dereference(source_in_command_line);
         let copy_debug = copy_on_write(
             source,
             dest,
@@ -2723,11 +2810,14 @@ fn copy_helper(
             options.sparse_mode,
             context,
             #[cfg(unix)]
-            source_is_stream,
+            is_stream(source_metadata),
+            #[cfg(unix)]
+            nofollow,
         )?;
 
         if !options.attributes_only && options.debug {
-            show_debug(&copy_debug);
+            show_debug(&copy_debug)
+                .map_err(|e| CpError::IoErrContext(e, translate!("cp-error-write")))?;
         }
     }
 
@@ -2742,8 +2832,8 @@ fn copy_fifo(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult<(
         overwrite.verify(dest, debug)?;
         fs::remove_file(dest)?;
     }
-
-    make_fifo(dest)
+    // rustix::fs::mkfifoat is linux only
+    nix::unistd::mkfifo(dest, Mode::from_bits_truncate(0o666))
         .map_err(|_| translate!("cp-error-cannot-create-fifo", "path" => dest.quote()).into())
 }
 
@@ -2756,6 +2846,27 @@ fn copy_socket(dest: &Path, overwrite: OverwriteMode, debug: bool) -> CopyResult
 
     UnixListener::bind(dest)?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn copy_node(
+    dest: &Path,
+    source_metadata: &Metadata,
+    overwrite: OverwriteMode,
+    debug: bool,
+) -> CopyResult<()> {
+    if dest.exists() {
+        overwrite.verify(dest, debug)?;
+        fs::remove_file(dest)?;
+    }
+    let sflag = if source_metadata.file_type().is_char_device() {
+        SFlag::S_IFCHR
+    } else {
+        SFlag::S_IFBLK
+    };
+    let mode = Mode::from_bits_truncate(source_metadata.mode() as mode_t);
+    nix_mknod(dest, sflag, mode, source_metadata.rdev() as dev_t)
+        .map_err(|e| translate!("cp-error-cannot-create-special-file", "path" => dest.quote(), "error" => e.desc()).into())
 }
 
 fn copy_link(
@@ -2772,7 +2883,13 @@ fn copy_link(
         delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(source, dest, &options.attributes, false)
+    copy_attributes(
+        source,
+        dest,
+        &options.attributes,
+        false,
+        options.set_selinux_context,
+    )
 }
 
 /// Generate an error message if `target` is not the correct `target_type`

@@ -3,9 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) agroupthatdoesntexist auserthatdoesntexist cuuser groupname notexisting passgrp
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use uucore::process::geteuid;
+#[cfg(all(unix, not(target_os = "openbsd")))]
+use std::os::unix::fs::MetadataExt;
 use uutests::util::{CmdResult, TestScenario, is_ci, run_ucmd_as_root};
 use uutests::util_name;
 use uutests::{at_and_ucmd, new_ucmd};
@@ -149,7 +148,8 @@ fn test_chown_only_owner_colon() {
         .arg("--verbose")
         .arg(file1)
         .succeeds()
-        .stderr_contains("retained as");
+        .stderr_contains("retained as")
+        .stderr_contains("warning: '.' should be ':'");
 
     scene
         .ucmd()
@@ -158,6 +158,66 @@ fn test_chown_only_owner_colon() {
         .arg(file1)
         .fails()
         .stderr_contains("failed to change");
+}
+
+#[test]
+fn test_chown_dot_separator_warning() {
+    // test that using '.' as separator emits a warning
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    let file1 = "test_chown_dot_warn";
+    at.touch(file1);
+
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    // chown user. file should warn about '.' separator
+    scene
+        .ucmd()
+        .arg(format!("{user_name}."))
+        .arg(file1)
+        .succeeds()
+        .stderr_contains("warning: '.' should be ':'");
+
+    // chown user.group file should warn AND apply both owner and group
+    let result = scene
+        .ucmd()
+        .arg(format!("{user_name}.{group_name}"))
+        .arg("--verbose")
+        .arg(file1)
+        .run();
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.stderr_contains("warning: '.' should be ':'");
+    // "retained as" on Linux, "changed ownership" on BSDs (group inherited from parent dir)
+    assert!(
+        result.stderr_str().contains("retained as")
+            || result.stderr_str().contains("changed ownership"),
+        "expected verbose ownership output, got: {}",
+        result.stderr_str()
+    );
+
+    // chown user: file should not warn
+    scene
+        .ucmd()
+        .arg(format!("{user_name}:"))
+        .arg(file1)
+        .succeeds()
+        .stderr_does_not_contain("warning");
 }
 
 #[test]
@@ -458,7 +518,7 @@ fn test_chown_only_user_id_nonexistent_user() {
     let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &["12345", "f"]) {
-        result.success().no_stdout().no_stderr();
+        result.success().no_output();
     } else {
         print!("Test skipped; requires root user");
     }
@@ -494,7 +554,7 @@ fn test_chown_only_group_id() {
     }
     result.stderr_contains("retained as");
 
-    // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_macos"
+    // Apparently on CI "macos-latest, x86_64-apple-darwin, feat_os_unix"
     // the process has the rights to change from runner:staff to runner:wheel
     #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
     // FreeBSD user on CI is part of wheel group
@@ -526,7 +586,7 @@ fn test_chown_only_group_id_nonexistent_group() {
     let at = &ts.fixtures;
     at.touch("f");
     if let Ok(result) = run_ucmd_as_root(&ts, &[":12345", "f"]) {
-        result.success().no_stdout().no_stderr();
+        result.success().no_output();
     } else {
         print!("Test skipped; requires root user");
     }
@@ -689,7 +749,7 @@ fn test_root_preserve() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_big_p() {
-    if geteuid() != 0 {
+    if !rustix::process::geteuid().is_root() {
         new_ucmd!()
             .arg("-RP")
             .arg("bin")
@@ -837,4 +897,135 @@ fn test_chown_reference_file() {
         .succeeds()
         .stderr_contains("ownership of 'b' retained as")
         .no_stdout();
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "openbsd")))]
+fn test_chown_no_dereference_symlink_to_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    at.mkdir("dir");
+    at.symlink_dir("dir", "link_to_dir");
+
+    let link_meta_before = std::fs::symlink_metadata(at.plus("link_to_dir")).unwrap();
+    let link_ctime_before = (link_meta_before.ctime(), link_meta_before.ctime_nsec());
+
+    let dir_meta_before = std::fs::metadata(at.plus("dir")).unwrap();
+    let dir_ctime_before = (dir_meta_before.ctime(), dir_meta_before.ctime_nsec());
+
+    scene
+        .ucmd()
+        .arg("--no-dereference")
+        .arg(&user_name)
+        .arg("link_to_dir")
+        .succeeds();
+
+    let link_meta_after = std::fs::symlink_metadata(at.plus("link_to_dir")).unwrap();
+    let link_ctime_after = (link_meta_after.ctime(), link_meta_after.ctime_nsec());
+
+    let dir_meta_after = std::fs::metadata(at.plus("dir")).unwrap();
+    let dir_ctime_after = (dir_meta_after.ctime(), dir_meta_after.ctime_nsec());
+
+    assert_ne!(
+        link_ctime_before, link_ctime_after,
+        "link's ctime should have advanced"
+    );
+    assert_eq!(
+        dir_ctime_before, dir_ctime_after,
+        "dir's ctime should not have changed"
+    );
+}
+
+#[test]
+fn test_chown_symlink_cycles() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    at.mkdir_all("a/b/c");
+    at.symlink_dir("a", "a/b/c/d");
+
+    let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("a").run();
+
+    if cfg!(target_os = "macos") || cfg!(target_os = "openbsd") || cfg!(target_os = "android") {
+        result
+            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+            ));
+    } else {
+        result
+            .success()
+            .stderr_contains(format!("ownership of 'a' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c' retained as {user_name}"))
+            .stderr_contains(format!("ownership of 'a/b/c/d' retained as {user_name}"))
+            .stderr_does_not_contain(format!("ownership of 'a/b/c/d/b' retained as {user_name}"))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c' retained as {user_name}"
+            ))
+            .stderr_does_not_contain(format!(
+                "ownership of 'a/b/c/d/b/c/d' retained as {user_name}"
+            ));
+    }
+}
+
+#[test]
+fn test_chown_symlink_two_links_same_dir() {
+    // Two symlinks pointing at the same directory is NOT a cycle: neither link is
+    // an ancestor of the other, so the target's contents must be visited through
+    // *both* links. This guards the backtracking in the linux safe-traversal
+    // cycle detection against false positives.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let result = scene.cmd("whoami").run();
+    if skipping_test_is_okay(&result, "whoami: cannot find name for user ID") {
+        return;
+    }
+    let user_name = String::from(result.stdout_str().trim());
+    assert!(!user_name.is_empty());
+
+    // cSpell:disable
+    at.mkdir_all("base/realdir");
+    at.touch("base/realdir/file");
+    at.symlink_dir("base/realdir", "base/link1");
+    at.symlink_dir("base/realdir", "base/link2");
+
+    let result = scene.ucmd().arg("-vRL").arg(&user_name).arg("base").run();
+
+    // Only linux uses the safe-traversal cycle detection that this test exercises;
+    // other platforms fall back to walkdir with its own loop handling.
+    if cfg!(target_os = "linux") {
+        result
+            .success()
+            .stderr_contains(format!(
+                "ownership of 'base/realdir/file' retained as {user_name}"
+            ))
+            .stderr_contains(format!(
+                "ownership of 'base/link1/file' retained as {user_name}"
+            ))
+            .stderr_contains(format!(
+                "ownership of 'base/link2/file' retained as {user_name}"
+            ));
+    }
+    // cSpell:enable
 }

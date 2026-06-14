@@ -102,7 +102,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
-    let mut sets_iter = sets.iter().map(|c| c.as_os_str());
+    let mut sets_iter = sets.iter().map(OsString::as_os_str);
     let (set1, set2) = Sequence::solve_set_characters(
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
@@ -148,9 +148,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("tr")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tr"))
         .about(translate!("tr-about"))
         .override_usage(format_usage(&translate!("tr-usage")))
         .after_help(translate!("tr-after-help"))

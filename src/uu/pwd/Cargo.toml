@@ -3,7 +3,6 @@ name = "uu_pwd"
 description = "pwd ~ (uutils) display current working directory"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/pwd"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/pwd.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

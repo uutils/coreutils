@@ -13,6 +13,7 @@ use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
+use uucore::show;
 use uucore::translate;
 
 const TAB_WIDTH: usize = 8;
@@ -64,12 +65,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let width = match poss_width {
-        Some(inp_width) => inp_width.parse::<usize>().map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
-            )
-        })?,
+        Some(inp_width) => match inp_width.parse::<usize>() {
+            Ok(0) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+                ));
+            }
+            Ok(parsed_width) => parsed_width,
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
+                ));
+            }
+        },
         None => 80,
     };
 
@@ -82,7 +92,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("fold")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("fold-usage")))
@@ -155,7 +165,14 @@ fn fold(
             stdin_buf = stdin();
             &mut stdin_buf as &mut dyn Read
         } else {
-            file_buf = File::open(Path::new(filename)).map_err_context(|| filename.to_string())?;
+            // Like GNU, report the error but keep processing the remaining files.
+            match File::open(Path::new(filename)) {
+                Ok(f) => file_buf = f,
+                Err(e) => {
+                    show!(e.map_err_context(|| filename.to_string()));
+                    continue;
+                }
+            }
             &mut file_buf as &mut dyn Read
         });
 
@@ -194,64 +211,63 @@ fn fold_file_bytewise<T: Read, W: Write>(
     let mut line = Vec::new();
 
     loop {
-        if file
-            .read_until(NL, &mut line)
-            .map_err_context(|| translate!("fold-error-readline"))?
-            == 0
-        {
+        // Pull bytes from the reader until we have strictly more than `width`
+        // buffered (enough to know whether content follows a width-driven fold)
+        // or we reach EOF. Reading at most `width` bytes ahead keeps memory
+        // bounded even on endless streams like /dev/zero, where the old
+        // read_until(NL, ..) would buffer forever waiting for a newline.
+        while line.len() <= width {
+            let buf = file
+                .fill_buf()
+                .map_err_context(|| translate!("fold-error-readline"))?;
+            if buf.is_empty() {
+                break;
+            }
+            let len = buf.len();
+            line.extend_from_slice(buf);
+            file.consume(len);
+        }
+
+        // EOF with a tail shorter than (or equal to) `width`: no width/space
+        // fold can apply, so emit it verbatim (newlines inside are preserved).
+        if line.len() <= width {
+            if line.is_empty() {
+                break;
+            }
+            output.write_all(&line)?;
             break;
         }
 
-        if line == [NL] {
-            output.write_all(&[NL])?;
-            line.truncate(0);
+        // We have a full `width`-byte chunk plus at least one lookahead byte.
+        let chunk = &line[..width];
+
+        // An existing newline within the chunk ends the line naturally; the
+        // newline is part of the slice, so no extra newline is emitted.
+        if let Some(end) = chunk.iter().position(|c| *c == NL).map(|i| i + 1) {
+            output.write_all(&line[..end])?;
+            line.drain(..end);
             continue;
         }
 
-        let len = line.len();
-        let mut i = 0;
+        // No newline: with -s, break after the last whitespace (excluding CR);
+        // otherwise hard-wrap at `width`.
+        let end = if spaces {
+            chunk
+                .iter()
+                .rposition(|c| c.is_ascii_whitespace() && *c != CR)
+                .map_or(width, |i| i + 1)
+        } else {
+            width
+        };
 
-        while i < len {
-            let width = if len - i >= width { width } else { len - i };
-            let slice = {
-                let slice = &line[i..i + width];
-                if spaces && i + width < len {
-                    match slice
-                        .iter()
-                        .enumerate()
-                        .rev()
-                        .find(|(_, c)| c.is_ascii_whitespace() && **c != CR)
-                    {
-                        Some((m, _)) => &slice[..=m],
-                        None => slice,
-                    }
-                } else {
-                    slice
-                }
-            };
-
-            // Don't duplicate trailing newlines: if the slice is "\n", the
-            // previous iteration folded just before the end of the line and
-            // has already printed this newline.
-            if slice == [NL] {
-                break;
-            }
-
-            i += slice.len();
-
-            let at_eol = i >= len;
-
-            if at_eol {
-                output.write_all(slice)?;
-            } else {
-                output.write_all(slice)?;
-                output.write_all(&[NL])?;
-            }
+        output.write_all(&line[..end])?;
+        // Width/space-driven fold: insert a newline unless the next byte is
+        // already a newline (it is emitted on the next pass).
+        if line[end] != NL {
+            output.write_all(&[NL])?;
         }
-
-        line.truncate(0);
+        line.drain(..end);
     }
-
     Ok(())
 }
 

@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
+// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
 
 mod error;
 #[cfg(unix)]
@@ -15,8 +16,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-use std::collections::HashMap;
-use std::collections::HashSet;
+use rustc_hash::FxHashMap;
+use rustc_hash::FxHashSet;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -39,15 +40,13 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
-#[cfg(unix)]
-use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
     are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
 };
 #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
 use uucore::fsxattr;
-#[cfg(feature = "selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::set_selinux_security_context;
 use uucore::translate;
 use uucore::update_control;
@@ -226,7 +225,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mv")
         .version(uucore::crate_version!())
         .about(translate!("mv-about"))
         .help_template(uucore::localized_help_template(uucore::util_name()))
@@ -360,7 +359,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
             .map(|p| p.components().as_path().to_owned())
             .collect::<Vec<PathBuf>>()
     } else {
-        paths.map(|p| p.to_owned()).collect::<Vec<PathBuf>>()
+        paths.map(ToOwned::to_owned).collect::<Vec<PathBuf>>()
     }
 }
 
@@ -575,7 +574,8 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
 #[allow(clippy::cognitive_complexity)]
 fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) -> UResult<()> {
     // remember the moved destinations for further usage
-    let mut moved_destinations: HashSet<PathBuf> = HashSet::with_capacity(files.len());
+    let mut moved_destinations: FxHashSet<PathBuf> =
+        FxHashSet::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     // Create hardlink tracking context
     #[cfg(unix)]
     let (mut hardlink_tracker, hardlink_scanner) = {
@@ -770,7 +770,7 @@ fn rename(
         rename_with_fallback(from, to, display_manager, opts.verbose, None, None)?;
     }
 
-    #[cfg(feature = "selinux")]
+    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     if let Some(ref context) = opts.context {
         set_selinux_security_context(to, Some(context))
             .map_err(|e| io::Error::other(e.to_string()))?;
@@ -820,6 +820,8 @@ fn rename_with_fallback(
         const EXDEV: i32 = windows_sys::Win32::Foundation::ERROR_NOT_SAME_DEVICE as _;
         #[cfg(unix)]
         const EXDEV: i32 = libc::EXDEV as _;
+        #[cfg(target_os = "wasi")]
+        const EXDEV: i32 = 18; // POSIX EXDEV value
 
         // We will only copy if:
         // 1. Files are on different devices (EXDEV error)
@@ -882,7 +884,9 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to).and_then(|_| fs::remove_file(from))
+    // rustix::fs::mkfifoat is linux only
+    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+    fs::remove_file(from)
 }
 
 #[cfg(not(unix))]
@@ -899,12 +903,92 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to)?;
+
+    // On AlreadyExists, fall through to atomic temp-and-rename so the
+    // destination is replaced rather than the call failing.
+    match unix::fs::symlink(&path_symlink_points_to, to) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            #[cfg(not(target_os = "redox"))]
+            create_symlink_replace(&path_symlink_points_to, to)?;
+            #[cfg(target_os = "redox")]
+            {
+                fs::remove_file(to)?;
+                unix::fs::symlink(&path_symlink_points_to, to)?;
+            }
+        }
+        Err(e) => return Err(e),
+    }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = copy_xattrs_if_supported(from, to);
+        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
+    let _ = preserve_ownership(from, to);
     fs::remove_file(from)
+}
+
+/// Create a symlink at `to`, atomically replacing any existing entry via
+/// a temp-name + `renameat(2)` so observers never see `to` missing.
+///
+/// Mirrors GNU's `force_symlinkat` in `force-link.c`: open the parent
+/// directory once and operate via `*at` syscalls so a concurrent rename
+/// of the parent cannot redirect the operation, and pick the temp name
+/// from `/dev/urandom` so it is unguessable to other users in that
+/// directory.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
+    use io::Read;
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, symlinkat, unlinkat};
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+    // drawn from a 62-char alphabet. Modulo bias on a 256→62 mapping is
+    // ~3% per slot — irrelevant for an 8-char unguessability budget.
+    const ALPHABET: &[u8; 62] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = to
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination path"))?;
+
+    let dir_fd = openat(
+        CWD,
+        parent,
+        OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )?;
+
+    let mut urandom = fs::File::open("/dev/urandom")?;
+
+    for _ in 0..32 {
+        let mut tmp_bytes = *b"Cu------";
+        let mut raw = [0u8; 6];
+        urandom.read_exact(&mut raw)?;
+        for (slot, byte) in tmp_bytes[2..].iter_mut().zip(raw) {
+            *slot = ALPHABET[(byte as usize) % ALPHABET.len()];
+        }
+        let tmp = OsStr::from_bytes(&tmp_bytes);
+
+        match symlinkat(target, &dir_fd, tmp) {
+            Ok(()) => {
+                if let Err(e) = renameat(&dir_fd, tmp, &dir_fd, basename) {
+                    let _ = unlinkat(&dir_fd, tmp, AtFlags::empty());
+                    return Err(io::Error::from(e));
+                }
+                return Ok(());
+            }
+            Err(e) if e == rustix::io::Errno::EXIST => {}
+            Err(e) => return Err(io::Error::from(e)),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique temp name in destination directory",
+    ))
 }
 
 #[cfg(windows)]
@@ -925,13 +1009,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     }
 }
 
-#[cfg(not(any(windows, unix)))]
-fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    let path_symlink_points_to = fs::read_link(from)?;
-    Err(io::Error::new(
-        io::ErrorKind::Other,
-        translate!("mv-error-no-symlink-support"),
-    ))
+#[cfg(target_os = "wasi")]
+fn rename_symlink_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::other(translate!("mv-error-no-symlink-support")))
 }
 
 fn rename_dir_fallback(
@@ -967,7 +1047,7 @@ fn rename_dir_fallback(
     };
 
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| HashMap::new());
+    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1006,9 +1086,11 @@ fn copy_dir_contents(
     // Create the destination directory
     fs::create_dir_all(to)?;
 
-    // Recursively copy contents
     #[cfg(unix)]
     {
+        // Preserve ownership (uid/gid) of the top-level directory
+        let _ = preserve_ownership(from, to);
+
         if let (Some(tracker), Some(scanner)) = (hardlink_tracker, hardlink_scanner) {
             copy_dir_contents_recursive(
                 from,
@@ -1038,6 +1120,20 @@ fn copy_dir_contents_recursive(
     progress_bar: Option<&ProgressBar>,
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
+    // Helper closure to print verbose messages
+    let print_verbose = |from: &Path, to: &Path| {
+        if verbose {
+            let message =
+                translate!("mv-verbose-renamed", "from" => from.quote(), "to" => to.quote());
+            match display_manager {
+                Some(pb) => pb.suspend(|| {
+                    println!("{message}");
+                }),
+                None => println!("{message}"),
+            }
+        }
+    };
+
     let entries = fs::read_dir(from_dir)?;
 
     for entry in entries {
@@ -1050,20 +1146,35 @@ fn copy_dir_contents_recursive(
             pb.set_message(from_path.to_string_lossy().to_string());
         }
 
-        if from_path.is_dir() {
-            // Recursively copy subdirectory
+        if from_path.is_symlink() {
+            // Handle symlinks first, before checking is_dir() which follows symlinks.
+            // This prevents symlinks to directories from being expanded into full copies.
+            #[cfg(unix)]
+            {
+                copy_file_with_hardlinks_helper(
+                    &from_path,
+                    &to_path,
+                    hardlink_tracker,
+                    hardlink_scanner,
+                )?;
+            }
+            #[cfg(not(unix))]
+            {
+                rename_symlink_fallback(&from_path, &to_path)?;
+            }
+
+            print_verbose(&from_path, &to_path);
+        } else if from_path.is_dir() {
+            // Recursively copy subdirectory (only real directories, not symlinks)
             fs::create_dir_all(&to_path)?;
 
-            // Print verbose message for directory
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
+            // Preserve ownership (uid/gid) of the subdirectory
+            #[cfg(unix)]
+            {
+                let _ = preserve_ownership(&from_path, &to_path);
             }
+
+            print_verbose(&from_path, &to_path);
 
             copy_dir_contents_recursive(
                 &from_path,
@@ -1089,25 +1200,11 @@ fn copy_dir_contents_recursive(
             }
             #[cfg(not(unix))]
             {
-                if from_path.is_symlink() {
-                    // Copy a symlink file (no-follow).
-                    rename_symlink_fallback(&from_path, &to_path)?;
-                } else {
-                    // Copy a regular file.
-                    fs::copy(&from_path, &to_path)?;
-                }
+                // Symlinks are already handled above, so this is always a regular file
+                fs::copy(&from_path, &to_path)?;
             }
 
-            // Print verbose message for file
-            if verbose {
-                let message = translate!("mv-verbose-renamed", "from" => from_path.quote(), "to" => to_path.quote());
-                match display_manager {
-                    Some(pb) => pb.suspend(|| {
-                        println!("{message}");
-                    }),
-                    None => println!("{message}"),
-                }
-            }
+            print_verbose(&from_path, &to_path);
         }
 
         if let Some(pb) = progress_bar {
@@ -1140,15 +1237,23 @@ fn copy_file_with_hardlinks_helper(
 
     if from.is_symlink() {
         // Copy a symlink file (no-follow).
+        // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
+    } else if is_fifo(from.symlink_metadata()?.file_type()) {
+        // rustix::fs::mkfifoat is linux only
+        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     } else {
         // Copy a regular file.
         fs::copy(from, to)?;
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = copy_xattrs_if_supported(from, to);
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
+        // Preserve ownership (uid/gid) from the source
+        let _ = preserve_ownership(from, to);
     }
 
     Ok(())
@@ -1188,14 +1293,41 @@ fn rename_file_fallback(
         }
     }
 
-    // Regular file copy
-    fs::copy(from, to)
-        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-
-    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
+    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
+    // step to a different inode.
+    #[cfg(unix)]
     {
-        let _ = copy_xattrs_if_supported(from, to);
+        use std::fs::Permissions;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use uucore::safe_copy::{create_dest_restrictive, open_source};
+        let src_file = open_source(from, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let src_mode = src_file
+            .metadata()
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
+            .mode()
+            & 0o7777;
+        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        io::copy(&mut &src_file, &mut dst_file)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
+        #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+        {
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
+        }
+
+        // chown before chmod: chown(2) clears setuid/setgid for non-root,
+        // so the final mode must be applied last to preserve those bits.
+        let _ = preserve_ownership(from, to);
+        let _ = dst_file.set_permissions(Permissions::from_mode(src_mode));
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::copy(from, to)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     }
 
     fs::remove_file(from)
@@ -1203,16 +1335,41 @@ fn rename_file_fallback(
     Ok(())
 }
 
-/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
-/// These errors indicate the filesystem doesn't support extended attributes,
-/// which is acceptable when moving files across filesystems.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
-    match fsxattr::copy_xattrs(from, to) {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
-        Err(e) => Err(e),
+/// Preserve ownership (uid/gid) from source to destination.
+/// Uses lchown so it works on symlinks without following them.
+/// Errors are silently ignored for non-root users who cannot chown.
+#[cfg(unix)]
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+    use std::os::unix::fs::MetadataExt;
+
+    let source_meta = from.symlink_metadata()?;
+    let uid = source_meta.uid();
+    let gid = source_meta.gid();
+
+    let dest_meta = to.symlink_metadata()?;
+    let dest_uid = dest_meta.uid();
+    let dest_gid = dest_meta.gid();
+
+    // Only chown if ownership actually differs
+    if uid != dest_uid || gid != dest_gid {
+        use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
+        // Use follow=false so lchown is used (works on symlinks)
+        // Silently ignore errors: non-root users typically cannot chown to
+        // arbitrary uid, matching GNU mv behavior which also uses best-effort.
+        let _ = wrap_chown(
+            to,
+            &dest_meta,
+            Some(uid),
+            Some(gid),
+            false,
+            Verbosity {
+                groups_only: false,
+                level: VerbosityLevel::Silent,
+            },
+        );
     }
+
+    Ok(())
 }
 
 fn is_empty_dir(path: &Path) -> bool {
@@ -1243,14 +1400,13 @@ fn is_writable(path: &Path) -> (bool, Option<u32>) {
 
 #[cfg(unix)]
 fn get_interactive_prompt(to: &Path, cached_mode: Option<u32>) -> String {
-    use libc::mode_t;
     // Use cached mode if available, otherwise fetch it
     let mode = cached_mode.or_else(|| to.metadata().ok().map(|m| m.permissions().mode()));
     if let Some(mode) = mode {
         let file_mode = mode & 0o777;
         // Check if file is not writable by user
         if (mode & 0o200) == 0 {
-            let perms = display_permissions_unix(mode as mode_t, false);
+            let perms = display_permissions_unix(mode, false);
             let mode_info = format!("{file_mode:04o} ({perms})");
             return translate!("mv-prompt-overwrite-mode", "target" => to.quote(), "mode_info" => mode_info);
         }

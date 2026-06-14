@@ -319,7 +319,7 @@ impl BytesChunkBuffer {
         Ok(())
     }
 
-    pub fn print(&self, writer: &mut impl Write) -> UResult<()> {
+    pub fn write(&self, writer: &mut impl Write) -> UResult<()> {
         for chunk in &self.chunks {
             writer.write_all(chunk.get_buffer())?;
         }

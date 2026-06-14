@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat seekable oconv canonicalized fadvise Fadvise FADV DONTNEED ESPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -16,10 +16,6 @@ mod progress;
 use crate::bufferedoutput::BufferedOutput;
 use blocks::conv_block_unblock_helper;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::FcntlArg;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::OFlag;
 use parseargs::Parser;
 use progress::ProgUpdateType;
 use progress::{ProgUpdate, ReadStat, StatusLevel, WriteStat, gen_prog_updater};
@@ -35,8 +31,6 @@ use std::ffi::OsString;
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use std::os::fd::AsFd;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::os::unix::fs::OpenOptionsExt;
 #[cfg(unix)]
@@ -54,16 +48,11 @@ use std::time::{Duration, Instant};
 
 use clap::{Arg, Command};
 use gcd::Gcd;
-#[cfg(target_os = "linux")]
-use nix::{
-    errno::Errno,
-    fcntl::{PosixFadviseAdvice, posix_fadvise},
-};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
 
@@ -184,13 +173,15 @@ impl Num {
 /// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
 /// Returns the total number of bytes actually read.
 fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    let mut buf = vec![0u8; buf_size];
+    // todo: consider splice()ing to /dev/null on Linux
+    let mut buf = Vec::new();
+    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
     let mut total = 0u64;
     let mut remaining = n;
-
     while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64) as usize;
-        match reader.read(&mut buf[..to_read]) {
+        let to_read = cmp::min(remaining, buf_size as u64);
+        buf.clear();
+        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
             Ok(0) => break, // EOF
             Ok(bytes_read) => {
                 total += bytes_read as u64;
@@ -255,17 +246,17 @@ impl Source {
             }
             #[cfg(unix)]
             Self::StdinFile(f) => {
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 // Get file length before seeking to avoid race condition
                 let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
@@ -314,15 +305,17 @@ impl Source {
     /// source. This function informs the kernel that the specified
     /// portion of the source is no longer needed. If not possible,
     /// then this function returns an error.
-    #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                use rustix::fs::{Advice::DontNeed, fadvise};
+                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            // fadvise for nonseekable returns this error. We manually do that...
+            _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
 }
@@ -358,7 +351,7 @@ struct Input<'a> {
 impl<'a> Input<'a> {
     /// Instantiate this struct with stdin as a source.
     fn new_stdin(settings: &'a Settings) -> UResult<Self> {
-        #[cfg(not(unix))]
+        #[cfg(windows)]
         let mut src = {
             let f = File::from(io::stdin().as_handle().try_clone_to_owned()?);
             let is_file = if let Ok(metadata) = f.metadata() {
@@ -377,17 +370,21 @@ impl<'a> Input<'a> {
                 Source::Stdin(io::stdin())
             }
         };
+        #[cfg(all(not(unix), not(windows)))]
+        let mut src = Source::Stdin(io::stdin());
         #[cfg(unix)]
         let mut src = Source::stdin_as_file();
         #[cfg(unix)]
-        if let Source::StdinFile(f) = &src {
-            if settings.iflags.directory && !f.metadata()?.is_dir() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dd-error-not-directory", "file" => "standard input"),
-                ));
-            }
+        if let Source::StdinFile(f) = &src
+            && settings.iflags.directory
+            && !f.metadata()?.is_dir()
+        {
+            return Err(USimpleError::new(
+                1,
+                translate!("dd-error-not-directory", "file" => "standard input"),
+            ));
         }
+
         if settings.skip > 0 {
             src.skip(settings.skip, settings.ibs)?;
         }
@@ -495,9 +492,12 @@ impl Input<'_> {
     /// the input file is no longer needed. If not possible, then this
     /// function prints an error message to stderr and sets the exit
     /// status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
+    fn discard_cache(&self, offset: u64, len: u64) {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -510,11 +510,7 @@ impl Input<'_> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO: Is there a way to discard filesystem cache on other targets?
     }
 
     /// Fills a given buffer.
@@ -567,7 +563,7 @@ impl Input<'_> {
                     bytes_total += rlen;
                     reads_partial += 1;
                     let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding.into_iter());
+                    buf.splice(base_idx + rlen..next_blk, padding);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -654,17 +650,17 @@ impl Dest {
             Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
             Self::File(f, _) => {
                 #[cfg(unix)]
-                if let Ok(Some(len)) = try_get_len_of_block_device(f) {
-                    if len < n {
-                        // GNU compatibility:
-                        // this case prints the stats but sets the exit code to 1
-                        show_error!(
-                            "{}",
-                            translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
-                        );
-                        set_exit_code(1);
-                        return Ok(len);
-                    }
+                if let Ok(Some(len)) = try_get_len_of_block_device(f)
+                    && len < n
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-seek-invalid", "output" => "standard output")
+                    );
+                    set_exit_code(1);
+                    return Ok(len);
                 }
                 f.seek(SeekFrom::Current(n.try_into().unwrap()))
             }
@@ -684,7 +680,15 @@ impl Dest {
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
-                f.set_len(pos)
+                // `set_len()` can fail with EINVAL on special outputs such as
+                // `/dev/null`; GNU `dd` ignores that. But on a regular file a
+                // truncate failure (e.g. ENOSPC, read-only fs) means silent data
+                // loss, so the error must surface there.
+                match f.set_len(pos) {
+                    Ok(()) => Ok(()),
+                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
+                    Err(_) => Ok(()),
+                }
             }
             _ => Ok(()),
         }
@@ -696,14 +700,16 @@ impl Dest {
     /// destination. This function informs the kernel that the
     /// specified portion of the destination is no longer needed. If
     /// not possible, then this function returns an error.
-    #[cfg(target_os = "linux")]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) -> nix::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
         match self {
             Self::File(f, _) => {
-                let advice = PosixFadviseAdvice::POSIX_FADV_DONTNEED;
-                posix_fadvise(f.as_fd(), offset, len, advice)
+                use rustix::fs::{Advice::DontNeed, fadvise};
+                fadvise(f, offset, std::num::NonZeroU64::new(len), DontNeed)?;
+                Ok(())
             }
-            _ => Err(Errno::ESPIPE), // "Illegal seek"
+            // fadvise for nonseekable returns this error. We manually do that...
+            _ => Err(rustix::io::Errno::SPIPE.into()),
         }
     }
 }
@@ -717,31 +723,33 @@ fn is_sparse(buf: &[u8]) -> bool {
 /// This follows GNU dd behavior for partial block writes with O_DIRECT.
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) -> io::Result<usize> {
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
+    use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
 
-    // Get current flags using nix
-    let oflags = match fcntl(&mut *f, FcntlArg::F_GETFL) {
-        Ok(flags) => OFlag::from_bits_retain(flags),
-        Err(_) => return Err(original_error),
+    // Get current flags
+    let Ok(oflags) = fcntl_getfl(&*f) else {
+        return Err(original_error);
     };
 
     // If O_DIRECT is set, try removing it temporarily
-    if oflags.contains(OFlag::O_DIRECT) {
-        let flags_without_direct = oflags - OFlag::O_DIRECT;
+    if oflags.contains(OFlags::DIRECT) {
+        let flags_without_direct = oflags & !OFlags::DIRECT;
 
-        // Remove O_DIRECT flag using nix
-        if fcntl(&mut *f, FcntlArg::F_SETFL(flags_without_direct)).is_err() {
+        // Remove O_DIRECT flag
+        if fcntl_setfl(&*f, flags_without_direct).is_err() {
             return Err(original_error);
         }
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
-        // Restore O_DIRECT flag using nix (GNU doesn't restore it, but we'll be safer)
+        // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl(&mut *f, FcntlArg::F_SETFL(oflags)) {
+        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
             // Just log the error, don't fail the whole operation
-            show_error!("Failed to restore O_DIRECT flag: {os_err}");
+            show_error!(
+                "Failed to restore O_DIRECT flag: {}",
+                io::Error::from(os_err)
+            );
         }
 
         write_result
@@ -888,10 +896,11 @@ impl<'a> Output<'a> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         #[cfg(any(target_os = "linux", target_os = "android"))]
         if let Some(libc_flags) = make_linux_oflags(&settings.oflags) {
-            nix::fcntl::fcntl(
-                fx.as_raw().as_fd(),
-                FcntlArg::F_SETFL(OFlag::from_bits_retain(libc_flags)),
-            )?;
+            rustix::fs::fcntl_setfl(
+                fx.as_raw(),
+                rustix::fs::OFlags::from_bits_retain(libc_flags as _),
+            )
+            .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
         Self::prepare_file(fx.into_file(), settings)
@@ -933,9 +942,12 @@ impl<'a> Output<'a> {
     /// the output file is no longer needed. If not possible, then
     /// this function prints an error message to stderr and sets the
     /// exit status code to 1.
-    #[cfg_attr(not(target_os = "linux"), allow(clippy::unused_self, unused_variables))]
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
-        #[cfg(target_os = "linux")]
+    #[cfg_attr(
+        not(any(target_os = "linux", target_os = "android", target_os = "freebsd")),
+        allow(clippy::unused_self, unused_variables)
+    )]
+    fn discard_cache(&self, offset: u64, len: u64) {
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         {
             let file = self
                 .settings
@@ -948,11 +960,7 @@ impl<'a> Output<'a> {
                 )
             );
         }
-        #[cfg(not(target_os = "linux"))]
-        {
-            // TODO Is there a way to discard filesystem cache on
-            // these other operating systems?
-        }
+        // TODO Is there a way to discard filesystem cache on other targets?
     }
 
     /// writes a block of data. optionally retries when first try didn't complete
@@ -1040,7 +1048,7 @@ enum BlockWriter<'a> {
 }
 
 impl BlockWriter<'_> {
-    fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    fn discard_cache(&self, offset: u64, len: u64) {
         match self {
             Self::Unbuffered(o) => o.discard_cache(offset, len),
             Self::Buffered(o) => o.discard_cache(offset, len),
@@ -1062,17 +1070,15 @@ impl BlockWriter<'_> {
     }
 
     /// Truncate the file to the final cursor location.
-    fn truncate(&mut self) {
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
+    ///
+    /// Errors are suppressed for special outputs (e.g. `/dev/null`) but
+    /// propagated for regular files, so a failed truncate does not silently
+    /// leave stale data behind. See [`Dest::truncate`].
+    fn truncate(&mut self) -> io::Result<()> {
         match self {
-            Self::Unbuffered(o) => o.truncate().ok(),
-            Self::Buffered(o) => o.truncate().ok(),
-        };
+            Self::Unbuffered(o) => o.truncate(),
+            Self::Buffered(o) => o.truncate(),
+        }
     }
 
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
@@ -1166,10 +1172,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         );
     }
 
-    // Create a common buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = vec![BUF_INIT_BYTE; bsize];
-
     // Spawn a timer thread to provide a scheduled signal indicating when we
     // should send an update of our progress to the reporting thread.
     //
@@ -1177,10 +1179,14 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     let alarm = Alarm::with_interval(Duration::from_secs(1));
 
     #[cfg(target_os = "linux")]
-    if let Err(e) = install_sigusr1_handler() {
-        if i.settings.status != Some(StatusLevel::None) {
-            eprintln!("{}\n\t{e}", translate!("dd-warning-signal-handler"));
-        }
+    if let Err(e) = install_sigusr1_handler()
+        && i.settings.status != Some(StatusLevel::None)
+    {
+        let _ = writeln!(
+            io::stderr(),
+            "{}\n\t{e}",
+            translate!("dd-warning-signal-handler")
+        );
     }
 
     // Index in the input file where we are reading bytes and in
@@ -1201,6 +1207,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
+    // Create a common empty buffer with a capacity of the block size.
+    // This is the max size needed.
+    let mut buf = Vec::new();
+    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+
     // The main read/write loop.
     //
     // Each iteration reads blocks from the input and writes
@@ -1217,7 +1228,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
-                i.discard_cache(read_offset.try_into().unwrap(), 0);
+                i.discard_cache(read_offset, 0);
             }
             if output_nocache || output_direct {
                 o.discard_cache(write_offset.try_into().unwrap(), 0);
@@ -1232,8 +1243,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // TODO Better error handling for overflowing `offset` and `len`.
         let read_len = rstat_update.bytes_total;
         if input_nocache {
-            let offset = read_offset.try_into().unwrap();
-            let len = read_len.try_into().unwrap();
+            let offset = read_offset;
+            let len = read_len;
             i.discard_cache(offset, len);
         }
         read_offset += read_len;
@@ -1298,7 +1309,7 @@ fn finalize<T>(
 
     // Truncate the file to the final cursor location.
     if truncate {
-        output.truncate();
+        output.truncate()?;
     }
 
     // Print the final read/write statistics.
@@ -1366,6 +1377,7 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
     // ------------------------------------------------------------------
     // Read
     // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
+    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
     buf.resize(bsize, BUF_INIT_BYTE);
 
     let mut rstat = match i.settings.iconv.sync {
@@ -1495,12 +1507,7 @@ fn try_get_len_of_block_device(file: &mut File) -> io::Result<Option<u64>> {
 /// Decide whether the named file is a named pipe, also known as a FIFO.
 #[cfg(unix)]
 fn is_fifo(filename: &str) -> bool {
-    if let Ok(metadata) = std::fs::metadata(filename) {
-        if metadata.file_type().is_fifo() {
-            return true;
-        }
-    }
-    false
+    std::fs::metadata(filename).is_ok_and(|m| m.file_type().is_fifo())
 }
 
 #[uucore::main]
@@ -1535,7 +1542,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("dd")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("dd-about"))
@@ -1619,6 +1626,41 @@ mod tests {
         assert_eq!(res % m, 0);
 
         assert_eq!(res, m);
+    }
+
+    // a failed truncate on a regular file must surface as an
+    // error instead of being silently swallowed (which would hide data loss).
+    #[cfg(unix)]
+    #[test]
+    fn truncate_propagates_error_on_regular_file() {
+        use crate::{Density, Dest};
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("regular");
+        std::fs::File::create(&path)
+            .unwrap()
+            .write_all(b"hello world")
+            .unwrap();
+
+        // Open read-only so `set_len()` fails with EINVAL on a regular file.
+        let f = OpenOptions::new().read(true).open(&path).unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.truncate().is_err());
+    }
+
+    // truncate failures on special outputs (e.g. `/dev/null`)
+    // are still suppressed, matching GNU `dd of=/dev/null`.
+    #[cfg(unix)]
+    #[test]
+    fn truncate_suppresses_error_on_special_file() {
+        use crate::{Density, Dest};
+        use std::fs::OpenOptions;
+
+        let f = OpenOptions::new().write(true).open("/dev/null").unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.truncate().is_ok());
     }
 
     #[test]

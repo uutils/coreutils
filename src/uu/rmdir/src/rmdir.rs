@@ -15,7 +15,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, set_exit_code, strip_errno};
 use uucore::translate;
 
-use uucore::{format_usage, show_error, util_name};
+use uucore::{format_usage, show_error};
 
 static OPT_IGNORE_FAIL_NON_EMPTY: &str = "ignore-fail-on-non-empty";
 static OPT_PARENTS: &str = "parents";
@@ -114,7 +114,7 @@ fn remove_single(path: &Path, opts: Opts) -> Result<(), Error<'_>> {
     if opts.verbose {
         println!(
             "{}",
-            translate!("rmdir-verbose-removing-directory", "util_name" => util_name(), "path" => path.quote())
+            translate!("rmdir-verbose-removing-directory", "util_name" => "rmdir", "path" => path.quote())
         );
     }
     remove_dir(path).map_err(|error| Error { error, path })
@@ -152,22 +152,14 @@ const PERHAPS_EMPTY_CODES: &[i32] = &[
 ];
 
 fn dir_not_empty(error: &io::Error, path: &Path) -> bool {
-    if let Some(code) = error.raw_os_error() {
-        if NOT_EMPTY_CODES.contains(&code) {
-            return true;
-        }
+    error.raw_os_error().is_some_and(|code| {
+        NOT_EMPTY_CODES.contains(&code)
         // If --ignore-fail-on-non-empty is used then we want to ignore all errors
         // for non-empty directories, even if the error was e.g. because there's
         // no permission. So we do an additional check.
-        if PERHAPS_EMPTY_CODES.contains(&code) {
-            if let Ok(mut iterator) = read_dir(path) {
-                if iterator.next().is_some() {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+            || PERHAPS_EMPTY_CODES.contains(&code)
+                && read_dir(path).is_ok_and(|mut iter| iter.next().is_some())
+    })
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -178,9 +170,9 @@ struct Opts {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(util_name())
+    Command::new("rmdir")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(util_name()))
+        .help_template(uucore::localized_help_template("rmdir"))
         .about(translate!("rmdir-about"))
         .override_usage(format_usage(&translate!("rmdir-usage")))
         .infer_long_args(true)

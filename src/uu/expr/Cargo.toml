@@ -3,7 +3,6 @@ name = "uu_expr"
 description = "expr ~ (uutils) display the value of EXPRESSION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/expr"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/expr.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
@@ -27,6 +27,14 @@ uucore = { workspace = true, features = ["i18n-collator"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
+
 [[bin]]
 name = "expr"
 path = "src/main.rs"
+
+[[bench]]
+name = "expr_bench"
+harness = false

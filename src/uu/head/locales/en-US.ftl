@@ -2,8 +2,8 @@ head-about = Print the first 10 lines of each FILE to standard output.
   With more than one FILE, precede each with a header giving the file name.
   With no FILE, or when FILE is -, read standard input.
 
-  Mandatory arguments to long flags are mandatory for short flags too.
-head-usage = head [FLAG]... [FILE]...
+  Mandatory arguments to long options are mandatory for short options too.
+head-usage = head [OPTION]... [FILE]...
 
 # Help messages
 head-help-bytes = print the first NUM bytes of each file;

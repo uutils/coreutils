@@ -46,6 +46,12 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
+// This is an allocation guard, not a semantic suffix limit. 4096 is around the
+// common full-path limit and is already far above typical filename-component
+// limits, so realistic suffix lengths stay accepted while pathological values
+// cannot request attacker-sized filename buffers.
+const MAX_SUFFIX_LENGTH: usize = 4096;
+
 /// The format to use for suffixes in the filename for each output chunk.
 #[derive(Clone, Copy)]
 pub enum SuffixType {
@@ -110,7 +116,7 @@ impl Suffix {
     ///   `-a N` or `--suffix-length=N`
     /// - OFF if suffix length is auto pre-calculated (auto-width)
     ///
-    /// Suffix auto-width: Determine if the the output file names suffix length should be automatically pre-calculated
+    /// Suffix auto-width: Determine if the output file names suffix length should be automatically pre-calculated
     /// based on number of files that need to written into, having number of files known upfront
     /// Suffix length auto pre-calculation rules:
     /// - Pre-calculate new suffix length when `-n`/`--number` option (N, K/N, l/N, l/K/N, r/N, r/K/N)
@@ -175,11 +181,13 @@ impl Suffix {
         let (mut length, is_length_cmd_opt) =
             if let Some(v) = matches.get_one::<String>(OPT_SUFFIX_LENGTH) {
                 // suffix length was specified in command line
-                (
-                    v.parse::<usize>()
-                        .map_err(|_| SuffixError::NotParsable(v.to_owned()))?,
-                    true,
-                )
+                let parsed_length = v
+                    .parse::<usize>()
+                    .map_err(|_| SuffixError::NotParsable(v.to_owned()))?;
+                if parsed_length > MAX_SUFFIX_LENGTH {
+                    return Err(SuffixError::NotParsable(v.to_owned()));
+                }
+                (parsed_length, true)
             } else {
                 // no suffix length option was specified in command line
                 // set to default value
@@ -334,7 +342,7 @@ impl<'a> FilenameIterator<'a> {
 }
 
 impl Iterator for FilenameIterator<'_> {
-    type Item = String;
+    type Item = OsString;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.first_iteration {
@@ -344,12 +352,10 @@ impl Iterator for FilenameIterator<'_> {
         }
         // The first and third parts are just taken directly from the
         // struct parameters unchanged.
-        Some(format!(
-            "{}{}{}",
-            self.prefix.to_string_lossy(),
-            self.number,
-            self.additional_suffix.to_string_lossy()
-        ))
+        let mut filename = self.prefix.to_os_string();
+        filename.push(self.number.to_string());
+        filename.push(self.additional_suffix);
+        Some(filename)
     }
 }
 
@@ -511,5 +517,30 @@ mod tests {
         };
         let it = FilenameIterator::new(std::ffi::OsStr::new("chunk_"), &suffix);
         assert!(it.is_err());
+    }
+    #[test]
+    #[cfg(unix)]
+    fn test_filename_iterator_preserves_non_utf8_bytes() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::{OsStrExt, OsStringExt};
+
+        let suffix = Suffix {
+            stype: SuffixType::Alphabetic,
+            length: 2,
+            start: 0,
+            auto_widening: false,
+            additional: std::ffi::OsString::from_vec(vec![0xFE]),
+        };
+
+        let mut it = FilenameIterator::new(OsStr::from_bytes(b"p\xFF"), &suffix)
+            .expect("valid fixed-width filename iterator");
+        assert_eq!(
+            it.next().expect("first chunk filename exists").into_vec(),
+            b"p\xFFaa\xFE".to_vec()
+        );
+        assert_eq!(
+            it.next().expect("second chunk filename exists").into_vec(),
+            b"p\xFFab\xFE".to_vec()
+        );
     }
 }

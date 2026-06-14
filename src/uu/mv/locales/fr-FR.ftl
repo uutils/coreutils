@@ -47,7 +47,7 @@ mv-help-target-directory = déplacer tous les arguments SOURCE dans RÉPERTOIRE
 mv-help-no-target-directory = traiter DEST comme un fichier normal
 mv-help-verbose = expliquer ce qui est fait
 mv-help-progress = Afficher une barre de progression.
-  Note : cette fonctionnalité n'est pas supportée par GNU coreutils.
+  Note : cette fonctionnalité n'est pas prise en charge par GNU coreutils.
 mv-help-debug = expliquer comment un fichier est copié. Implique -v
 
 # Messages verbeux

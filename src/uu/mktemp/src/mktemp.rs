@@ -23,7 +23,10 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
-use rand::Rng;
+use rand::{
+    RngExt as _, SeedableRng as _,
+    rngs::{self, SmallRng},
+};
 use tempfile::Builder;
 use thiserror::Error;
 
@@ -131,8 +134,10 @@ impl Options {
                 (tmpdir, OsString::from(template))
             }
             Some(template) => {
-                let tmpdir = if env::var(TMPDIR_ENV_VAR).is_ok() && matches.get_flag(OPT_T) {
-                    env::var_os(TMPDIR_ENV_VAR).map(|t| t.into())
+                let tmpdir = if let Some(tmpdir) = env::var_os(TMPDIR_ENV_VAR)
+                    && matches.get_flag(OPT_T)
+                {
+                    Some(PathBuf::from(tmpdir))
                 } else if tmpdir.is_some() {
                     tmpdir
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
@@ -276,6 +281,16 @@ impl Params {
             let prefix_str = prefix_path.to_string_lossy();
             if prefix_str.ends_with(MAIN_SEPARATOR) {
                 (prefix_path, String::new())
+            } else if prefix_from_template.ends_with("/.") || prefix_from_template == "." {
+                // Path normalizes trailing '.' away, making both parent() and file_name()
+                // return wrong results for hidden files like /tmp/.XXXXXXXX.
+                // Use prefix_from_template directly instead.
+                let directory = Path::new(&prefix_from_option)
+                    .join(&prefix_from_template[..prefix_from_template.len() - 1]); // strip trailing '.'
+
+                let prefix = ".".to_string();
+
+                (directory, prefix)
             } else {
                 let directory = match prefix_path.parent() {
                     None => PathBuf::new(),
@@ -364,33 +379,28 @@ impl ValueParserFactory for OptionalPathBufParser {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = args.collect();
-    let matches = match uu_app().try_get_matches_from(&args) {
-        Ok(m) => m,
-        Err(e) => {
-            use uucore::clap_localization::handle_clap_error_with_exit_code;
-            if e.kind() == clap::error::ErrorKind::UnknownArgument {
-                handle_clap_error_with_exit_code(e, 1);
-            }
-            if e.kind() == clap::error::ErrorKind::TooManyValues
-                && e.context().any(|(kind, val)| {
-                    kind == clap::error::ContextKind::InvalidArg
-                        && val == &clap::error::ContextValue::String("[template]".into())
-                })
+    let matches = uu_app().try_get_matches_from(&args).map_err(|e| {
+        use clap::error::{ContextKind, ContextValue, ErrorKind};
+        use uucore::clap_localization::handle_clap_error_with_exit_code;
+
+        match e.kind() {
+            ErrorKind::UnknownArgument => handle_clap_error_with_exit_code(e, 1),
+            ErrorKind::TooManyValues
+                if e.context().any(|(k, v)| {
+                    k == ContextKind::InvalidArg && v == &ContextValue::String("[template]".into())
+                }) =>
             {
-                return Err(UUsageError::new(
-                    1,
-                    translate!("mktemp-error-too-many-templates"),
-                ));
+                UUsageError::new(1, translate!("mktemp-error-too-many-templates"))
             }
-            return Err(e.into());
+            _ => e.into(),
         }
-    };
+    })?;
 
     // Parse command-line options into a format suitable for the
     // application logic.
     let options = Options::from(&matches);
 
-    if env::var("POSIXLY_CORRECT").is_ok() {
+    if env::var_os("POSIXLY_CORRECT").is_some() {
         // If POSIXLY_CORRECT was set, template MUST be the last argument.
         if matches.contains_id(ARG_TEMPLATE) {
             // Template argument was provided, check if was the last one.
@@ -429,9 +439,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("mktemp")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("mktemp"))
         .about(translate!("mktemp-about"))
         .override_usage(format_usage(&translate!("mktemp-usage")))
         .infer_long_args(true)
@@ -508,7 +518,12 @@ fn dry_exec(tmpdir: &Path, prefix: &str, rand: usize, suffix: &str) -> PathBuf {
 
     // Randomize.
     let bytes = &mut buf[prefix.len()..prefix.len() + rand];
-    rand::rng().fill(bytes);
+    SmallRng::try_from_rng(&mut rngs::SysRng)
+        .unwrap_or_else(|_| {
+            //rand::rng panics if getrandom failed
+            SmallRng::seed_from_u64(bytes.as_ptr() as usize as u64)
+        })
+        .fill(bytes);
     for byte in bytes {
         *byte = match *byte % 62 {
             v @ 0..=9 => v + b'0',
@@ -541,7 +556,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
     // The directory is created with these permission at creation time, using mkdir(3) syscall.
     // This is not relevant on Windows systems. See: https://docs.rs/tempfile/latest/tempfile/#security
     // `fs` is not imported on Windows anyways.
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     builder.permissions(fs::Permissions::from_mode(0o700));
 
     match builder.tempdir_in(dir) {

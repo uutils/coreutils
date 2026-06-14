@@ -1,4 +1,4 @@
-# spell-checker:ignore dtolnay libsystemd libattr libcap gsub
+# spell-checker:ignore libsystemd libattr libcap gsub
 
 name: Check uudoc Documentation Generation
 
@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install/setup prerequisites
         shell: bash

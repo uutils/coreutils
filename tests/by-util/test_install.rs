@@ -2,11 +2,15 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined
+// spell-checker:ignore (words) helloworld nodir objdump n'source nconfined testdir
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
 use std::fs;
+#[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader};
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
@@ -15,7 +19,10 @@ use std::process;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 use uucore::selinux::get_getfattr_output;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -764,6 +771,7 @@ fn strip_source_file() -> &'static str {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
@@ -789,6 +797,7 @@ fn test_install_and_strip() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
@@ -877,8 +886,7 @@ fn test_install_on_invalid_link_at_destination() {
         .arg(src_dir.join("test.sh"))
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[cfg(all(unix, feature = "chmod"))]
@@ -906,8 +914,7 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
         .arg("/dev/null")
         .arg(dst_dir.join("test.sh"))
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -925,6 +932,26 @@ fn test_install_and_strip_with_invalid_program() {
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
+    assert!(!at.file_exists(STRIP_TARGET_FILE));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_signal_terminated_program() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src.sh", "kill -9 $$\n");
+    scene
+        .ucmd()
+        .args(&[
+            "-s",
+            "--strip-program",
+            "/bin/sh",
+            "src.sh",
+            STRIP_TARGET_FILE,
+        ])
+        .fails()
+        .stderr_only("install: strip process terminated abnormally\n");
     assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
@@ -2334,7 +2361,10 @@ fn test_install_no_target_basic() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2383,7 +2413,10 @@ fn test_selinux() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux_invalid_args() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2416,7 +2449,10 @@ fn test_selinux_invalid_args() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux_default_context() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2566,4 +2602,219 @@ fn test_install_normal_file_replaces_symlink() {
 
     // Verify sensitive file was NOT modified
     assert_eq!(at.read("sensitive"), "important data");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_symlink_in_path_is_followed() {
+    // Test that pre-existing symlinks in the path are followed (GNU coreutils behavior).
+    // install -D should traverse symlink components rather than replacing them.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("target");
+    at.write("source_file", "test content");
+
+    at.mkdir_all("testdir/a");
+    symlink(at.plus("target"), at.plus("testdir/a/b")).unwrap();
+
+    // install -D should follow the symlink and write into the symlink target
+    scene
+        .ucmd()
+        .arg("-D")
+        .arg(at.plus("source_file"))
+        .arg(at.plus("testdir/a/b/c/file"))
+        .succeeds();
+
+    // File must be written through the symlink, i.e. inside the real target dir
+    assert!(
+        at.plus("target/c/file").exists(),
+        "File should be written through the symlink into the real target directory"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/c/file")).unwrap(),
+        "test content"
+    );
+
+    // The symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("testdir/a/b").is_symlink(),
+        "Intermediate symlink should be preserved, not replaced with a real directory"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_follows_symlink_prefix() {
+    // Regression test for: install -D replaces symlink components instead of following them.
+    // Reproduces the exact scenario from the bug report: a symlinked install prefix
+    // (common in BOSH, Homebrew, Nix, stow) must be followed, not destroyed.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Simulate: ln -s /tmp/target /tmp/link
+    at.mkdir("target");
+    symlink(at.plus("target"), at.plus("link")).unwrap();
+
+    at.write("file.txt", "hello");
+
+    // install -D -m 644 file.txt link/subdir/file.txt
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("link/subdir/file.txt"))
+        .succeeds();
+
+    // GNU expected: /tmp/link remains a symlink, file written to /tmp/target/subdir/file.txt
+    assert!(
+        at.plus("link").is_symlink(),
+        "The symlinked prefix must remain a symlink"
+    );
+    assert!(
+        at.plus("target/subdir/file.txt").exists(),
+        "File must be written into the real target directory via the symlink"
+    );
+    assert_eq!(
+        fs::read_to_string(at.plus("target/subdir/file.txt")).unwrap(),
+        "hello"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_install_d_dangling_symlink_in_path_errors() {
+    // A dangling symlink as a path component must not be silently replaced with a
+    // real directory. GNU coreutils errors out in this case; we should too.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // Create a symlink pointing to a nonexistent target (dangling)
+    symlink(at.plus("nonexistent"), at.plus("dangling")).unwrap();
+    assert!(at.plus("dangling").is_symlink());
+
+    at.write("file.txt", "hello");
+
+    // install -D file.txt dangling/subdir/file.txt should fail
+    scene
+        .ucmd()
+        .args(&["-D", "-m", "644"])
+        .arg(at.plus("file.txt"))
+        .arg(at.plus("dangling/subdir/file.txt"))
+        .fails();
+
+    // The dangling symlink must not have been replaced with a real directory
+    assert!(
+        at.plus("dangling").is_symlink(),
+        "Dangling symlink must not be replaced with a real directory"
+    );
+    assert!(
+        !at.plus("nonexistent").exists(),
+        "The symlink target must not have been created"
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_set_owner_nonexistent_uid_and_gid() {
+    let file = File::open("/etc/login.defs").unwrap();
+    let reader = BufReader::new(file);
+    let mut uid_min: u32 = 0;
+    let mut uid_max: u32 = 0;
+    let mut gid_min: u32 = 0;
+    let mut gid_max: u32 = 0;
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line.starts_with("UID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("UID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_max = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_max = tokens[1].parse().unwrap();
+        }
+    }
+    let file = File::open("/etc/passwd").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut uids: Vec<u32> = vec![];
+    let mut gids: Vec<u32> = vec![];
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let tokens: Vec<&str> = line.split(':').collect();
+        let uid: u32 = tokens[2].parse().unwrap();
+        if (uid_min..=uid_max).contains(&uid) {
+            uids.push(uid);
+        }
+        let gid: u32 = tokens[3].parse().unwrap();
+        if (gid_min..=gid_max).contains(&gid) {
+            gids.push(gid);
+        }
+    }
+    uids.sort_unstable();
+
+    let next_uid = if let Some(uid) = uids.last() {
+        *uid + 1
+    } else {
+        uid_min
+    };
+
+    let next_gid = if let Some(gid) = gids.last() {
+        *gid + 1
+    } else {
+        gid_min
+    };
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(
+        &ts,
+        &[
+            format!("-o{next_uid}").as_str(),
+            format!("-g{next_gid}").as_str(),
+            "a",
+            "b",
+        ],
+    ) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_uid);
+        assert_eq!(metadata.gid(), next_gid);
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_proc_self_mem_as_dst() {
+    let scene = TestScenario::new(util_name!());
+    let src = "/dev/full";
+    let dest = "/proc/self/mem";
+
+    scene
+        .ucmd()
+        .args(&["-g", "0"])
+        .arg(src)
+        .arg(dest)
+        .fails()
+        .stderr_contains("cannot remove");
 }

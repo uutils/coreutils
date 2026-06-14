@@ -417,6 +417,7 @@ fn test_data() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n2\n");
@@ -432,6 +433,7 @@ fn test_non_utf8_delimiter() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_paste_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -445,4 +447,41 @@ fn test_paste_non_utf8_paths() {
         .arg(&filename2)
         .succeeds()
         .stdout_is("line1\tcol1\nline2\tcol2\n");
+}
+
+#[cfg(target_os = "linux")]
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
+    // Drop the read end so writes fail with EPIPE.
+    drop(read);
+    // Return the write end of the pipe
+    write
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_dev_zero_write_error_dev_full() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_dev_zero_closed_pipe() {
+    new_ucmd!()
+        .arg("/dev/zero")
+        .set_stdout(make_broken_pipe())
+        .run()
+        .fails_silently();
 }
