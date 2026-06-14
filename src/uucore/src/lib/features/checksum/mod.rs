@@ -253,6 +253,19 @@ impl TryFrom<usize> for ShaLength {
     }
 }
 
+/// Upper bound on the SHAKE (`shake128`/`shake256`) digest length, in bits.
+///
+/// SHAKE is an extendable-output function and has no inherent maximum, but
+/// `cksum` still has to materialize and hex-encode the whole digest in memory.
+/// Without a bound, a huge `--length` (e.g. `--length 10011111117721172727`)
+/// makes the output-buffer allocation abort the process instead of producing a
+/// clean error.
+///
+/// The value (2^31 bits = 256 MiB of digest) is intentionally generous, while
+/// staying strictly below `usize::MAX` on 32-bit targets so the bound check is
+/// always meaningful there rather than being optimized away.
+pub const MAX_SHAKE_OUTPUT_BITS: usize = 1 << 31;
+
 /// Stores a hash length in bits.
 #[derive(Debug, Clone, Copy)]
 pub struct HashLength {
@@ -455,6 +468,8 @@ pub enum ChecksumError {
     InvalidLength(String),
     #[error("maximum digest length for {} is 512 bits", .0.quote())]
     LengthTooBigForBlake(String),
+    #[error("maximum digest length for SHAKE is {MAX_SHAKE_OUTPUT_BITS} bits")]
+    ShakeLengthTooBig,
     #[error("length is not a multiple of 8")]
     LengthNotMultipleOf8,
     #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]

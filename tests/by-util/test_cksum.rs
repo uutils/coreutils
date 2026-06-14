@@ -3192,6 +3192,38 @@ fn test_shake128(#[case] args: &[&str], #[case] expected: &str) {
         .stdout_only(format!("SHAKE128-{bit_len} (-) = {expected}\n"));
 }
 
+#[test]
+fn test_shake_length_too_large() {
+    // An oversized --length must be rejected with a clean error instead of
+    // aborting the process while trying to allocate the output buffer.
+    // See GH issue #12869.
+    for algo in ["shake128", "shake256"] {
+        // Above the cap but within the 32-bit `usize` range, so the error is
+        // the same on 32- and 64-bit targets.
+        new_ucmd!()
+            .arg("-a")
+            .arg(algo)
+            .arg("--length")
+            .arg("3000000000")
+            .pipe_in("xxx")
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("maximum digest length for SHAKE is");
+
+        // The originally reported value (larger than u64) must also be handled
+        // gracefully. The exact error differs by pointer width (out-of-range vs.
+        // above the cap), so only assert a clean failure rather than an abort.
+        new_ucmd!()
+            .arg("-a")
+            .arg(algo)
+            .arg("--length")
+            .arg("10011111117721172727")
+            .pipe_in("xxx")
+            .fails_with_code(1)
+            .no_stdout();
+    }
+}
+
 #[rstest]
 #[case::default_length(
     &[],

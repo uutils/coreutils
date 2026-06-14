@@ -12,7 +12,7 @@ use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, o
 
 use uucore::checksum::compute::OutputFormat;
 use uucore::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, HashLength, parse_blake_length,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, MAX_SHAKE_OUTPUT_BITS, parse_blake_length,
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
@@ -58,12 +58,14 @@ fn maybe_sanitize_length(
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
         }
 
-        // SHAKE128 and SHAKE256 algorithms optionally take a bit length. No
-        // validation is performed on this length, any value is valid. If the
-        // given length is not a multiple of 8, the last byte of the output
-        // will have its extra bits set to zero.
+        // SHAKE128 and SHAKE256 algorithms optionally take a bit length. Any
+        // value up to `MAX_SHAKE_OUTPUT_BITS` is valid; larger requests are
+        // rejected instead of aborting the process when the (huge) output
+        // buffer fails to allocate. If the given length is not a multiple of 8,
+        // the last byte of the output will have its extra bits set to zero.
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
+            Ok(l) if l > MAX_SHAKE_OUTPUT_BITS => Err(ChecksumError::ShakeLengthTooBig.into()),
             Ok(l) => Ok(Some(HashLength::from_bits(l))),
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
