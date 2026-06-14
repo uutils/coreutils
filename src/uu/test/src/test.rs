@@ -10,6 +10,7 @@ mod parser;
 
 use clap::Command;
 use error::{ParseError, ParseResult};
+use num_bigint::BigInt;
 use parser::{Operator, Symbol, UnaryOperator, parse};
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -175,14 +176,16 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
 /// `b` is the left hand side
 /// `op` the operation (ex: -eq, -lt, etc)
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
-    // Parse the two inputs
-    let a: i128 = a
+    // Parse the two inputs. GNU `test` compares integers with arbitrary
+    // precision, so use `BigInt` instead of a fixed-width type to avoid
+    // rejecting values that do not fit in 128 bits.
+    let a: BigInt = a
         .to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
 
-    let b: i128 = b
+    let b: BigInt = b
         .to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
@@ -443,5 +446,21 @@ mod tests {
         let a = OsStr::new("42");
         let b = OsStr::new("42");
         assert!(!integers(a, b, OsStr::new("-ne")).unwrap());
+    }
+
+    #[test]
+    fn test_integer_op_arbitrary_precision() {
+        // GNU `test` accepts integers that do not fit in 128 bits.
+        let huge =
+            OsStr::new("16267277278126277227728782172782882627278282882172762677623672762783782");
+        assert!(integers(huge, huge, OsStr::new("-eq")).unwrap());
+        assert!(!integers(OsStr::new("1"), huge, OsStr::new("-eq")).unwrap());
+        assert!(integers(OsStr::new("1"), huge, OsStr::new("-lt")).unwrap());
+        assert!(integers(huge, OsStr::new("1"), OsStr::new("-gt")).unwrap());
+
+        let huge_neg =
+            OsStr::new("-16267277278126277227728782172782882627278282882172762677623672762783782");
+        assert!(integers(huge_neg, huge, OsStr::new("-lt")).unwrap());
+        assert!(integers(huge_neg, huge_neg, OsStr::new("-eq")).unwrap());
     }
 }
