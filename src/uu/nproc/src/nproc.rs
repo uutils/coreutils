@@ -30,20 +30,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
-    } else if let Ok(threads) = env::var("OMP_NUM_THREADS") {
+    } else if let Ok(threads) = env::var("OMP_NUM_THREADS")
+        && let Some(s) = threads.split_terminator(',').next()
+    {
         // OMP_NUM_THREADS doesn't have an impact on --all
         // Uses the OpenMP variable to force the number of threads
         // If the parsing fails, returns the number of CPU
         // In some cases, OMP_NUM_THREADS can be "x,y,z"
         // In this case, only take the first one (like GNU)
-        // If OMP_NUM_THREADS=0, rejects the value
-        match threads.split_terminator(',').next() {
-            None => available_parallelism(),
-            Some(s) => match s.trim().parse::<usize>() {
-                Ok(n @ 1..) => n,
-                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
-                _ => available_parallelism(),
-            },
+        // Non OMP_NUM_THREADS>0 cases are rejected
+        match s.trim().parse::<usize>() {
+            Ok(n @ 1..) => n,
+            Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
+            _ => available_parallelism(),
         }
     } else {
         // the variable 'OMP_NUM_THREADS' doesn't exist
