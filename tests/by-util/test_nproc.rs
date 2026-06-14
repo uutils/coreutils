@@ -82,6 +82,17 @@ fn test_nproc_ignore() {
 }
 
 #[test]
+fn test_nproc_ignore_overflow_is_clamped() {
+    // GNU clamps an out-of-range --ignore to "ignore everything", printing the
+    // minimum count of 1 rather than erroring. Regression test for #12862.
+    new_ucmd!()
+        .arg("--ignore")
+        .arg("99999999999999999999")
+        .succeeds()
+        .stdout_only("1\n");
+}
+
+#[test]
 fn test_nproc_ignore_all_omp() {
     let result = TestScenario::new(util_name!())
         .ucmd()
