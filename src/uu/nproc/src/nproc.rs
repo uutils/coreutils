@@ -84,7 +84,13 @@ pub fn uu_app() -> Command {
                 .value_name("N")
                 .default_value("0")
                 .value_parser(|s: &str| -> Result<usize, String> {
-                    s.trim().parse::<usize>().map_err(|e| e.to_string())
+                    match s.trim().parse::<usize>() {
+                        Ok(n) => Ok(n),
+                        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => {
+                            Ok(usize::MAX)
+                        }
+                        Err(e) => Err(e.to_string()),
+                    }
                 })
                 .help(translate!("nproc-help-ignore")),
         )
