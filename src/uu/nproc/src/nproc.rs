@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS SCHED getscheduler nprocs sched sysconf
+// spell-checker:ignore NPROCESSORS SCHED getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
@@ -99,6 +99,7 @@ pub fn uu_app() -> Command {
 fn num_cpus_all() -> usize {
     // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
     // However, we want to guarantee that `nproc --all` >= `nproc`.
+    // rustix::thread::sched_getaffinity is linux only
     unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
         .try_into()
         .ok()
@@ -117,15 +118,13 @@ fn num_cpus_all() -> usize {
 fn available_parallelism() -> usize {
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        let scheduler = unsafe { libc::sched_getscheduler(0) };
-
-        if matches!(
-            scheduler,
-            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE
-        ) {
-            return num_cpus_all();
-        }
+    if matches!(
+        unsafe { libc::sched_getscheduler(0) },
+        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE
+    ) {
+        // with affinity mask
+        return rustix::thread::sched_getcpu();
     }
+
     thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
