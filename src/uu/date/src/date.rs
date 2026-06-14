@@ -832,52 +832,61 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
     cache.get(abbrev).map(String::as_str)
 }
 
-/// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").
+/// Resolve a timezone abbreviation (e.g. "EST") to a [`TimeZone`].
 ///
-/// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
-/// Returns `None` if no abbreviation is detected or if parsing fails, indicating
-/// that standard parsing should be attempted.
+/// Returns `None` if `word` is not shaped like an abbreviation (2-5 ASCII
+/// uppercase letters) or is not a recognized abbreviation.
+fn resolve_tz_abbreviation(word: &str) -> Option<TimeZone> {
+    if word.len() < 2 || word.len() > 5 || !word.chars().all(|c| c.is_ascii_uppercase()) {
+        return None;
+    }
+
+    if let Some(&(_, offset_secs)) = FIXED_OFFSET_ABBREVIATIONS
+        .iter()
+        .find(|(abbr, _)| *abbr == word)
+    {
+        Offset::from_seconds(offset_secs).ok().map(TimeZone::fixed)
+    } else {
+        tz_abbrev_to_iana(word).and_then(|name| TimeZone::get(name).ok())
+    }
+}
+
+/// Attempts to parse a date string that ends with a timezone abbreviation
+/// (e.g. "10:30 EST").
+///
+/// If a trailing abbreviation is found and the rest of the string is a parsable
+/// date, returns `Some(Zoned)`. Returns `None` if no abbreviation is detected or
+/// if parsing fails, indicating that standard parsing should be attempted.
 fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
     let s = date_str.as_ref();
 
-    // Look for timezone abbreviation at the end of the string
-    // Pattern: ends with uppercase letters (2-5 chars)
-    if let Some(last_word) = s.split_whitespace().last() {
-        // Check if it's a potential timezone abbreviation (all uppercase, 2-5 chars)
-        if last_word.len() >= 2
-            && last_word.len() <= 5
-            && last_word.chars().all(|c| c.is_ascii_uppercase())
-        {
-            let tz = if let Some(&(_, offset_secs)) = FIXED_OFFSET_ABBREVIATIONS
-                .iter()
-                .find(|(abbr, _)| *abbr == last_word)
-            {
-                Offset::from_seconds(offset_secs).ok().map(TimeZone::fixed)
-            } else {
-                tz_abbrev_to_iana(last_word).and_then(|name| TimeZone::get(name).ok())
-            };
+    // Look for a timezone abbreviation at the end of the string.
+    let last_word = s.split_whitespace().last()?;
+    let tz = resolve_tz_abbreviation(last_word)?;
 
-            if let Some(tz) = tz {
-                let date_part = s.trim_end_matches(last_word).trim();
-                // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
-                if let Ok(parsed) = parse_datetime::parse_datetime_at_date(now.clone(), date_part) {
-                    let dt = parsed.datetime();
-                    if let Ok(zoned) = dt.to_zoned(tz) {
-                        // The trailing abbreviation only describes the *input*
-                        // timezone. For display, re-zone to the system timezone
-                        // (i.e. `now`'s zone, which is UTC under `-u`). This
-                        // matches GNU `date` and keeps this path consistent
-                        // with the generic `parse_datetime` fallback below,
-                        // which already re-zones via `to_zoned(now.time_zone())`.
-                        return Some(zoned.with_time_zone(now.time_zone().clone()));
-                    }
-                }
-            }
-        }
+    let date_part = s.trim_end_matches(last_word).trim();
+
+    // Reject inputs that specify a timezone twice, e.g. "EST EST" or "EST PST":
+    // GNU `date` considers these invalid. If what remains after stripping the
+    // trailing abbreviation is itself a bare timezone abbreviation, don't rescue
+    // it here; let the standard parser reject the whole string.
+    if date_part
+        .split_whitespace()
+        .last()
+        .is_some_and(|w| resolve_tz_abbreviation(w).is_some())
+    {
+        return None;
     }
 
-    // No abbreviation found or couldn't resolve, return original
-    None
+    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
+    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
+    let zoned = parsed.datetime().to_zoned(tz).ok()?;
+
+    // The trailing abbreviation only describes the *input* timezone. For display,
+    // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
+    // This matches GNU `date` and keeps this path consistent with the generic
+    // `parse_datetime` fallback, which already re-zones via `to_zoned(now.time_zone())`.
+    Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
 /// Parse a `String` into a `DateTime`.
