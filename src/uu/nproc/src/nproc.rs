@@ -39,9 +39,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If OMP_NUM_THREADS=0, rejects the value
         match threads.split_terminator(',').next() {
             None => available_parallelism(),
-            Some(s) => match s.trim().parse() {
-                Ok(0) | Err(_) => available_parallelism(),
-                Ok(n) => n,
+            Some(s) => match s.trim().parse::<usize>() {
+                Ok(n @ 1..) => n,
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
+                _ => available_parallelism(),
             },
         }
     } else {
