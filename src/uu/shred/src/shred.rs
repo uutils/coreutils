@@ -63,12 +63,12 @@ const PATTERNS: [Pattern; 22] = [
     Pattern::Single(b'\xFF'),
     Pattern::Single(b'\x55'),
     Pattern::Single(b'\xAA'),
-    Pattern::Multi([b'\x24', b'\x92', b'\x49']),
-    Pattern::Multi([b'\x49', b'\x24', b'\x92']),
-    Pattern::Multi([b'\x6D', b'\xB6', b'\xDB']),
-    Pattern::Multi([b'\x92', b'\x49', b'\x24']),
-    Pattern::Multi([b'\xB6', b'\xDB', b'\x6D']),
-    Pattern::Multi([b'\xDB', b'\x6D', b'\xB6']),
+    Pattern::Multi(*b"\x24\x92\x49"),
+    Pattern::Multi(*b"\x49\x24\x92"),
+    Pattern::Multi(*b"\x6D\xB6\xDB"),
+    Pattern::Multi(*b"\x92\x49\x24"),
+    Pattern::Multi(*b"\xB6\xDB\x6D"),
+    Pattern::Multi(*b"\xDB\x6D\xB6"),
     Pattern::Single(b'\x11'),
     Pattern::Single(b'\x22'),
     Pattern::Single(b'\x33'),
@@ -625,6 +625,22 @@ fn wipe_file(
 ) -> UResult<()> {
     // Get these potential errors out of the way first
     let path = Path::new(path_str);
+
+    if path_str.as_encoded_bytes().ends_with(b"/") {
+        if path.is_dir() {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-failed-to-open-for-writing-is-a-directory", "file" => path.maybe_quote()),
+            ));
+        }
+        if fs::metadata(path).is_err_and(|e| e.kind() == io::ErrorKind::NotADirectory) {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-failed-to-open-for-writing-not-a-directory", "file" => path.maybe_quote()),
+            ));
+        }
+    }
+
     if !path.exists() {
         return Err(USimpleError::new(
             1,

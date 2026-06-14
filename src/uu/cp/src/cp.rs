@@ -28,7 +28,7 @@ use thiserror::Error;
 
 use platform::copy_on_write;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, UUsageError, set_exit_code};
+use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
     FileInformation, MissingHandling, ResolveMode, are_hardlinks_to_same_file, canonicalize,
     get_filename, is_symlink_loop, normalize_path, path_ends_with_terminator,
@@ -446,11 +446,18 @@ impl Display for SparseDebug {
 /// This function prints the debug information of a file copy operation if
 /// no hard link or symbolic link is required, and data copy is required.
 /// It prints the debug information of the offload, reflink, and sparse detection actions.
-fn show_debug(copy_debug: &CopyDebug) {
-    println!(
-        "{}",
-        translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection)
-    );
+fn show_debug(copy_debug: &CopyDebug) -> io::Result<()> {
+    use std::io::Write;
+
+    let debug_string = translate!("cp-debug-copy-offload", "offload" => copy_debug.offload, "reflink" => copy_debug.reflink, "sparse" => copy_debug.sparse_detection);
+
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+
+    stdout.write_all(debug_string.as_bytes())?;
+    stdout.flush()?;
+
+    Ok(())
 }
 
 static EXIT_ERR: i32 = 1;
@@ -1359,7 +1366,7 @@ fn show_error_if_needed(error: &CpError) {
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
         CpError::IoErrContext(io_err, context) => {
-            show_error!("{context}: {}", uucore::error::strip_errno(io_err));
+            show_error!("{context}: {}", strip_errno(io_err));
         }
         _ => {
             show_error!("{error}");
@@ -1977,13 +1984,13 @@ fn context_for(src: &Path, dest: &Path) -> String {
 /// Implements a simple backup copy for the destination file .
 /// if `is_dest_symlink` flag is set to true dest will be renamed to `backup_path`
 /// TODO: for the backup, should this function be replaced by `copy_file(...)`?
-fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<PathBuf> {
+fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyResult<()> {
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
         fs::copy(dest, backup_path)?;
     }
-    Ok(backup_path.into())
+    Ok(())
 }
 
 /// Decide whether source and destination files are the same and
@@ -2029,14 +2036,10 @@ fn is_forbidden_to_copy_to_same_file(
     }
     // If source and dest are both the same symlink but with different names, then allow the copy.
     // This can occur, for example, if source and dest are both hardlinks to the same symlink.
-    if dest_is_symlink
+    !(dest_is_symlink
         && source_is_symlink
         && source.file_name() != dest.file_name()
-        && !options.dereference
-    {
-        return false;
-    }
-    true
+        && !options.dereference)
 }
 
 /// Back up, remove, or leave intact the destination file, depending on the options.
@@ -2813,7 +2816,8 @@ fn copy_helper(
         )?;
 
         if !options.attributes_only && options.debug {
-            show_debug(&copy_debug);
+            show_debug(&copy_debug)
+                .map_err(|e| CpError::IoErrContext(e, translate!("cp-error-write")))?;
         }
     }
 

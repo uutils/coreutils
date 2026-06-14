@@ -27,6 +27,7 @@ selinux = { workspace = true }
 thiserror = { workspace = true }
 libc = { workspace = true }
 fts-sys = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 fluent = { workspace = true }
 
 [[bin]]

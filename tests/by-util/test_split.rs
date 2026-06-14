@@ -915,6 +915,14 @@ fn test_suffix_length_req() {
 }
 
 #[test]
+fn test_large_suffix_length_is_rejected() {
+    new_ucmd!()
+        .args(&["-a", "66542562175252"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '66542562175252'\n");
+}
+
+#[test]
 fn test_verbose() {
     new_ucmd!()
         .args(&["-b", "5", "--verbose", "asciilowercase.txt"])

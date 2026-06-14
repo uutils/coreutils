@@ -1900,9 +1900,9 @@ dependencies = [
 
 [[package]]
 name = "memchr"
-version = "2.8.1"
+version = "2.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b947ae49db0d222b1dbc6b113ce7248a3fc3a6ca21b696717bfc000ba4484d8"
+checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "memmap2"
@@ -2470,9 +2470,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.12.3"
+version = "1.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
+checksum = "f1292b7759ae1cb9ec195452d1390a074f0cd8541ab7a5a8c31cd6db45d4a6ba"
 dependencies = [
  "aho-corasick",
  "memchr",
@@ -2499,9 +2499,9 @@ checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
 
 [[package]]
 name = "regex-syntax"
-version = "0.8.10"
+version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
+checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "relative-path"
@@ -3214,6 +3214,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
 ]
 
@@ -3272,6 +3273,7 @@ dependencies = [
  "fluent",
  "fts-sys",
  "libc",
+ "rustix",
  "selinux",
  "thiserror 2.0.18",
  "uucore",
@@ -3418,7 +3420,7 @@ dependencies = [
  "fluent",
  "gcd",
  "libc",
- "nix",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -3520,6 +3522,7 @@ name = "uu_expr"
 version = "0.9.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "num-bigint",
  "num-traits",
@@ -3662,7 +3665,8 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
 ]
 
@@ -3742,7 +3746,8 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
+ "rustix",
  "uucore",
 ]
 
@@ -3840,6 +3845,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "rustix",
  "uucore",
 ]
 
@@ -4133,6 +4139,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "rustix",
  "tempfile",
  "thiserror 2.0.18",
  "uucore",
@@ -4185,6 +4192,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
 ]
 

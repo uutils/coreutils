@@ -5208,6 +5208,7 @@ fn test_tabsize_option() {
 
     scene.ucmd().args(&["-T", "3"]).succeeds();
     scene.ucmd().args(&["--tabsize", "0"]).succeeds();
+    scene.ucmd().args(&["-T", "0xff"]).succeeds();
     scene.ucmd().arg("-T").fails();
 }
 

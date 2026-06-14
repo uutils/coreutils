@@ -30,7 +30,6 @@ ln-error-missing-destination = opérande de fichier de destination manquant apr�
 ln-error-extra-operand = opérande supplémentaire {$operand}
   Essayez « {$program} --help » pour plus d'informations.
 ln-error-could-not-update = Impossible de mettre à jour {$target} : {$error}
-ln-error-cannot-stat = impossible d'analyser {$path} : Aucun fichier ou répertoire de ce nom
 ln-error-will-not-overwrite = ne remplacera pas le fichier {$target} qui vient d'être créé par {$source}
 ln-prompt-replace = remplacer {$file} ?
 ln-cannot-backup = impossible de sauvegarder {$file}
