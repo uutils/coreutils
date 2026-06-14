@@ -20,19 +20,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     #[allow(clippy::unwrap_used, reason = "clap provides 0 by default")]
     let ignore = *matches.get_one::<usize>(OPT_IGNORE).unwrap();
-
-    let limit = match env::var("OMP_THREAD_LIMIT") {
-        // Uses the OpenMP variable to limit the number of threads
-        // If the parsing fails, returns the max size (so, no impact)
-        // If OMP_THREAD_LIMIT=0, rejects the value
-        Ok(threads) => match threads.parse() {
-            Ok(0) | Err(_) => usize::MAX,
-            Ok(n) => n,
-        },
-        // the variable 'OMP_THREAD_LIMIT' doesn't exist
-        // fallback to the max
-        Err(_) => usize::MAX,
-    };
+    // Uses the OpenMP variable to limit the number of threads
+    // Non OMP_THREAD_LIMIT>0 cases are rejected
+    let limit = env::var("OMP_THREAD_LIMIT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(usize::MAX);
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
