@@ -43,7 +43,7 @@ pub enum Mode {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let mut args = args.collect_ignore();
+    let mut args = args.collect_lossy();
     let obs_signal = handle_obsolete(&mut args);
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
