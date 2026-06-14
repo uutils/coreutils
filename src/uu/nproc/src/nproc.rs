@@ -6,8 +6,8 @@
 // spell-checker:ignore NPROCESSORS SCHED getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
+use std::env;
 use std::io::{Write, stdout};
-use std::{env, thread};
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -90,36 +90,44 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(unix)]
 fn num_cpus_all() -> usize {
-    // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-    // However, we want to guarantee that `nproc --all` >= `nproc`.
-    // rustix::thread::sched_getaffinity is linux only
-    unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
-        .try_into()
-        .ok()
-        .filter(|&n: &isize| n > 1)
-        .map_or_else(available_parallelism, |n| n as usize)
-}
-
-// Other platforms (e.g., windows), available_parallelism() directly.
-#[cfg(not(unix))]
-fn num_cpus_all() -> usize {
+    // sysconf returns 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace
+    // when SMT is enabled. So fallback to available_parallelism at here is not useful
+    #[cfg(unix)]
+    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }.max(1) as usize;
+    // not sure what we can do for non-unix...
+    #[cfg(not(unix))]
     available_parallelism()
 }
 
-/// In some cases, [`thread::available_parallelism`]() may return an Err
-/// In this case, we will return 1 (like GNU)
+// We cannot use std::thread::available_parallelism to mimic GNU's rounding...
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn cgroups2_quota() -> Option<usize> {
+    use std::fs::read_to_string;
+    let cgroups = read_to_string("/proc/self/cgroup").ok()?;
+    let path = cgroups.lines().next()?.split(':').nth(2)?;
+    let pair = read_to_string(format!("/sys/fs/cgroup{path}/cpu.max")).ok()?;
+    let mut pair = pair.split_whitespace();
+    // map the string "max" to None as we unwrap_or(usize::MAX) later
+    let quota = pair.next()?.parse::<usize>().ok()?;
+    let period = pair.next()?.parse::<usize>().ok()?;
+    debug_assert!(period > 0, "kernel should validate it");
+    // mimic GNU's rounding
+    Some(quota.saturating_add(period / 2) / period)
+}
+
 fn available_parallelism() -> usize {
+    // return all cores if sched_getaffinity syscall failed as same as GNU
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let affinity = rustix::thread::sched_getaffinity(None)
+        .map_or_else(|_| num_cpus_all(), |s| s.count() as usize);
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if matches!(
-        unsafe { libc::sched_getscheduler(0) },
-        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE
-    ) {
-        // with affinity mask
-        return rustix::thread::sched_getcpu();
+    match unsafe { libc::sched_getscheduler(0) } {
+        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => affinity,
+        // GNU has no quota if /proc is masked
+        _ => affinity.min(cgroups2_quota().unwrap_or(usize::MAX)),
     }
-
-    thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
