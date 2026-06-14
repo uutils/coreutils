@@ -10,7 +10,7 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-#[cfg(not(unix))]
+#[cfg(any(not(unix), target_os = "redox"))]
 use filetime::set_file_times;
 use filetime::{FileTime, set_symlink_file_times};
 use jiff::civil::Time;
@@ -659,7 +659,7 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "redox")))]
 /// Set file times by path using `utimensat`, following symlinks.
 ///
 /// This never opens the file, so it does not block on special files such as
@@ -674,6 +674,17 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
     )
     .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
     .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+}
+
+#[cfg(target_os = "redox")]
+/// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
+///
+/// Falls back to `filetime::set_file_times`; unlike on other unixes this may
+/// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
+/// edge case the `utimensat` path guards against does not arise here.
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+    set_file_times(path, atime, mtime)
+        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 #[cfg(unix)]
