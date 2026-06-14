@@ -90,21 +90,13 @@ pub fn uu_app() -> Command {
         )
 }
 
-#[cfg(unix)]
 fn num_cpus_all() -> usize {
-    // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-    // However, we want to guarantee that `nproc --all` >= `nproc`.
-    // rustix::thread::sched_getaffinity is linux only
-    unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
-        .try_into()
-        .ok()
-        .filter(|&n: &isize| n > 1)
-        .map_or_else(available_parallelism, |n| n as usize)
-}
-
-// Other platforms (e.g., windows), available_parallelism() directly.
-#[cfg(not(unix))]
-fn num_cpus_all() -> usize {
+    // sysconf returns 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace
+    // when SMT is enabled. So fallback to available_parallelism at here is not useful
+    #[cfg(unix)]
+    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }.max(1) as usize;
+    // not sure what we can do for non-unix...
+    #[cfg(not(unix))]
     available_parallelism()
 }
 
