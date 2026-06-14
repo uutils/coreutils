@@ -75,25 +75,43 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         Ok(Box::new(stdin()) as Box<dyn Read>)
     } else {
         let path = Path::new(name);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-            ));
-        }
+
         // Silent the warning as we want to the error message
-        if path.metadata().is_err() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
-            ));
+        match path.metadata() {
+            Ok(_) => {
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        translate!("sum-error-is-directory", "name" => name.maybe_quote()),
+                    ));
+                }
+                let f = File::open(path).map_err_context(String::new)?;
+                #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+                let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
+                Ok(Box::new(f) as Box<dyn Read>)
+            }
+            Err(err) => match err.kind() {
+                ErrorKind::NotFound => Err(USimpleError::new(
+                    2,
+                    translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
+                )),
+                _ => {
+                    if path.to_string_lossy().ends_with(['/', '\\']) {
+                        return Err(USimpleError::new(
+                            2,
+                            translate!("sum-error-not-a-directory", "name" => name.maybe_quote()),
+                        ));
+                    }
+                    let f = File::open(path).map_err_context(String::new)?;
+                    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+                    let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
+                    Ok(Box::new(f) as Box<dyn Read>)
+                }
+            },
         }
-        let f = File::open(path).map_err_context(String::new)?;
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-        Ok(Box::new(f) as Box<dyn Read>)
     }
 }
+
 
 mod options {
     pub static FILE: &str = "file";
