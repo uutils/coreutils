@@ -3845,6 +3845,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "rustix",
  "uucore",
 ]
 
