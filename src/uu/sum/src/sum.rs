@@ -112,7 +112,6 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
     }
 }
 
-
 mod options {
     pub static FILE: &str = "file";
     pub static BSD_COMPATIBLE: &str = "r";
