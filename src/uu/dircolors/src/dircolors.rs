@@ -163,44 +163,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             })?
     };
 
-    let result;
-    if files.is_empty() {
-        writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
-        return Ok(());
-    } else if files.len() > 1 {
-        return Err(UUsageError::new(
-            1,
-            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
-        ));
-    } else if files[0] == "-" {
-        let fin = BufReader::new(std::io::stdin());
-        // For example, for echo "owt 40;33"|dircolors -b -
-        result = parse(
-            fin.lines().map_while(Result::ok),
-            &out_format,
-            &files[0].to_string_lossy(),
-        );
-    } else {
-        let path = Path::new(&files[0]);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
-            ));
+    match files.as_slice() {
+        [] => {
+            writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
+            Ok(())
         }
-        let file = File::open(path)
-            .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
-        let fin = BufReader::new(file);
-        result = parse(
-            fin.lines().map_while(Result::ok),
-            &out_format,
-            &path.to_string_lossy(),
-        );
-    }
+        [_file_arg, extra, ..] => Err(UUsageError::new(
+            1,
+            translate!("dircolors-error-extra-operand", "operand" => extra.quote()),
+        )),
+        [file_arg] => {
+            let result = if *file_arg == "-" {
+                let fin = BufReader::new(std::io::stdin());
+                // For example, for echo "owt 40;33"|dircolors -b -
+                parse(fin.lines().map_while(Result::ok), &out_format, "-")
+            } else {
+                let path = Path::new(&file_arg);
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
+                let fin = BufReader::new(file);
+                parse(
+                    fin.lines().map_while(Result::ok),
+                    &out_format,
+                    &path.to_string_lossy(),
+                )
+            };
 
-    let string = result.map_err(|s| USimpleError::new(1, s))?;
-    writeln!(stdout(), "{string}")?;
-    Ok(())
+            let string = result.map_err(|s| USimpleError::new(1, s))?;
+            writeln!(stdout(), "{string}")?;
+            Ok(())
+        }
+    }
 }
 
 pub fn uu_app() -> Command {

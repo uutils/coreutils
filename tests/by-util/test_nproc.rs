@@ -48,6 +48,14 @@ fn test_nproc_all_omp() {
         .succeeds();
     let nproc_omp: u8 = result.stdout_str().trim().parse().unwrap();
     assert_eq!(nproc, nproc_omp);
+
+    // clamp overflow
+    #[cfg(target_pointer_width = "64")]
+    TestScenario::new(util_name!())
+        .ucmd()
+        .env("OMP_NUM_THREADS", "99999999999999999999")
+        .succeeds()
+        .stdout_only("18446744073709551615\n");
 }
 
 #[test]

@@ -3,12 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS SCHED getscheduler nprocs numstr sched sysconf
+// spell-checker:ignore NPROCESSORS SCHED getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{Write, stdout};
 use std::{env, thread};
-use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
 use uucore::translate;
@@ -19,27 +18,15 @@ static OPT_IGNORE: &str = "ignore";
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    #[allow(clippy::unwrap_used, reason = "clap provides '0' by default")]
-    let numstr = matches.get_one::<String>(OPT_IGNORE).unwrap();
-    let ignore = numstr.trim().parse::<usize>().map_err(|e| {
-        USimpleError::new(
-            1,
-            translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
-        )
-    })?;
-
-    let limit = match env::var("OMP_THREAD_LIMIT") {
-        // Uses the OpenMP variable to limit the number of threads
-        // If the parsing fails, returns the max size (so, no impact)
-        // If OMP_THREAD_LIMIT=0, rejects the value
-        Ok(threads) => match threads.parse() {
-            Ok(0) | Err(_) => usize::MAX,
-            Ok(n) => n,
-        },
-        // the variable 'OMP_THREAD_LIMIT' doesn't exist
-        // fallback to the max
-        Err(_) => usize::MAX,
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides 0 by default")]
+    let ignore = *matches.get_one::<usize>(OPT_IGNORE).unwrap();
+    // Uses the OpenMP variable to limit the number of threads
+    // Non OMP_THREAD_LIMIT>0 cases are rejected
+    let limit = env::var("OMP_THREAD_LIMIT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(usize::MAX);
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
@@ -52,21 +39,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // If OMP_NUM_THREADS=0, rejects the value
         match threads.split_terminator(',').next() {
             None => available_parallelism(),
-            Some(s) => match s.trim().parse() {
-                Ok(0) | Err(_) => available_parallelism(),
-                Ok(n) => n,
+            Some(s) => match s.trim().parse::<usize>() {
+                Ok(n @ 1..) => n,
+                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
+                _ => available_parallelism(),
             },
         }
     } else {
         // the variable 'OMP_NUM_THREADS' doesn't exist
         // fallback to the regular CPU detection
-        // ignore quota under some schedulers
-        #[cfg(any(target_os = "linux", target_os = "android"))]
-        match unsafe { libc::sched_getscheduler(0) } {
-            libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => num_cpus_all(),
-            _ => available_parallelism(), // include fallback for error
-        }
-        #[cfg(not(any(target_os = "linux", target_os = "android")))]
         available_parallelism()
     };
 
@@ -102,6 +83,9 @@ pub fn uu_app() -> Command {
                 .long(OPT_IGNORE)
                 .value_name("N")
                 .default_value("0")
+                .value_parser(|s: &str| -> Result<usize, String> {
+                    s.trim().parse::<usize>().map_err(|e| e.to_string())
+                })
                 .help(translate!("nproc-help-ignore")),
         )
 }
@@ -110,6 +94,7 @@ pub fn uu_app() -> Command {
 fn num_cpus_all() -> usize {
     // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
     // However, we want to guarantee that `nproc --all` >= `nproc`.
+    // rustix::thread::sched_getaffinity is linux only
     unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }
         .try_into()
         .ok()
@@ -126,5 +111,15 @@ fn num_cpus_all() -> usize {
 /// In some cases, [`thread::available_parallelism`]() may return an Err
 /// In this case, we will return 1 (like GNU)
 fn available_parallelism() -> usize {
+    // ignore quota under some schedulers
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if matches!(
+        unsafe { libc::sched_getscheduler(0) },
+        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE
+    ) {
+        // with affinity mask
+        return rustix::thread::sched_getcpu();
+    }
+
     thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
