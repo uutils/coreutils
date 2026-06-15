@@ -94,3 +94,14 @@ fn test_sum_non_utf8_paths() {
 
     ucmd.arg(&filename).succeeds();
 }
+
+#[test]
+fn test_filename_ends_with_slash() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("a");
+
+    ucmd.arg("a/")
+        .fails_with_code(1)
+        .stderr_is("sum: a/: Not a directory\n");
+}
