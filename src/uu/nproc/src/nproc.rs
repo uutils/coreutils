@@ -8,9 +8,10 @@
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::io::{Write, stdout};
-use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
-use uucore::translate;
+use uucore::{
+    error::{UResult, USimpleError, strip_errno},
+    format_usage, translate,
+};
 
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
@@ -46,10 +47,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
     //discard error about stdout flush
     stdout()
-        .lock()
         .write_all(format!("{cores}\n").as_bytes())
-        .map_err(|e| USimpleError::new(1, e.to_string()))?;
-    Ok(())
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
 }
 
 fn omp_num_threads() -> Option<usize> {
