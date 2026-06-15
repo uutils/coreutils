@@ -4477,6 +4477,7 @@ dependencies = [
  "digest 0.11.3",
  "dns-lookup",
  "dunce",
+ "filetime",
  "fluent",
  "fluent-syntax",
  "glob",

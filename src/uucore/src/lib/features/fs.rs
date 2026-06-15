@@ -5,8 +5,9 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport utimensat FDCWD
 
+use filetime::FileTime;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
@@ -900,6 +901,58 @@ pub fn minor(dev: libc::dev_t) -> libc::c_uint {
 pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
     let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
+}
+
+/// Build a rustix [`Timestamps`](rustix::fs::Timestamps) from an access and a
+/// modification [`FileTime`].
+#[cfg(all(unix, not(target_os = "redox")))]
+fn to_timestamps(atime: FileTime, mtime: FileTime) -> rustix::fs::Timestamps {
+    rustix::fs::Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    }
+}
+
+/// Set the access and modification times of `path` without opening it.
+///
+/// On Unix this uses a path-based `utimensat` (relative to `AT_FDCWD`), matching
+/// GNU. `filetime::set_file_times` instead opens the target first, which blocks
+/// forever on a FIFO that has no writer — hanging e.g. `cp -a` or `touch` on a
+/// named pipe. When `follow_symlinks` is false the times are set on a symlink
+/// itself rather than its target.
+pub fn set_file_times(
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+    follow_symlinks: bool,
+) -> IOResult<()> {
+    #[cfg(all(unix, not(target_os = "redox")))]
+    {
+        use rustix::fs::{AtFlags, CWD, utimensat};
+
+        let timestamps = to_timestamps(atime, mtime);
+        let flags = if follow_symlinks {
+            AtFlags::empty()
+        } else {
+            AtFlags::SYMLINK_NOFOLLOW
+        };
+        utimensat(CWD, path, &timestamps, flags)
+            .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    }
+    #[cfg(not(all(unix, not(target_os = "redox"))))]
+    {
+        if follow_symlinks {
+            filetime::set_file_times(path, atime, mtime)
+        } else {
+            filetime::set_symlink_file_times(path, atime, mtime)
+        }
+    }
 }
 
 #[cfg(test)]
