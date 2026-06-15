@@ -11,9 +11,9 @@ use uutests::util_name;
 
 use uucore::display::Quotable;
 
-use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[cfg(unix)]
@@ -1213,7 +1213,7 @@ fn test_mktemp_hidden_file_single_dot() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mktemp_cleanup_on_write_error() {
-    use std::fs::{read_dir, File};
+    use std::fs::{File, read_dir};
 
     // Simulate a write failure by directing stdout to /dev/full (Linux only).
     // Skip if /dev/full is unavailable, mirroring the GNU test's guard.
