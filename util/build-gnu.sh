@@ -153,8 +153,9 @@ else
         echo "strip t${i}.sh from Makefile and tests/local.mk"
         sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
-    # Remove LD_PRELOAD implementation of no-mtab-status-masked-proc. not compatible with our binary
-    sed -i '/tests\/df\/no-mtab-status.sh/ D' Makefile
+    # Remove LD_PRELOAD implementation if equivalent tests are available
+    sed -i '/tests\/df\/no-mtab-status.sh/ D' Makefile # no-mtab-status-masked-proc
+    sed -i '/tests\/nproc\/nproc-quota.sh/ D' Makefile # nproc-quota-systemd
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
