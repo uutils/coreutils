@@ -100,7 +100,6 @@ chroot
 cksum
 csplit
 dircolors
-hashsum
 hostid
 logname
 mkdir
