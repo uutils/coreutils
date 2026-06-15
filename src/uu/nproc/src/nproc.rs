@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore NPROCESSORS SCHED getaffinity getcpu getscheduler sched sysconf
+// spell-checker:ignore NPROCESSORS SCHED ONLN getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
@@ -90,10 +90,10 @@ pub fn uu_app() -> Command {
 }
 
 fn num_cpus_all() -> usize {
-    // sysconf returns 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace
-    // when SMT is enabled. So fallback to available_parallelism at here is not useful
+    // sysconf returns (hardcoded?) 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace.
+    // So fallback to available_parallelism at here is not useful
     #[cfg(unix)]
-    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }.max(1) as usize;
+    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) } as usize;
     // not sure what we can do for non-unix...
     #[cfg(not(unix))]
     available_parallelism()
@@ -116,10 +116,12 @@ fn cgroups2_quota() -> Option<usize> {
 }
 
 fn available_parallelism() -> usize {
-    // return all cores if sched_getaffinity syscall failed as same as GNU
+    // return all online cores if sched_getaffinity syscall failed as same as GNU
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let affinity = rustix::thread::sched_getaffinity(None)
-        .map_or_else(|_| num_cpus_all(), |s| s.count() as usize);
+    let affinity = rustix::thread::sched_getaffinity(None).map_or_else(
+        |_| unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) } as usize,
+        |s| s.count() as usize,
+    );
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
     match unsafe { libc::sched_getscheduler(0) } {
