@@ -6,3 +6,8 @@ true-about = Returns true, a successful exit status.
 
 true-help-text = Print help information
 true-version-text = Print version information
+
+true-usage = 
+    true [ignored command-line arguments]...
+false-usage = 
+    false [ignored command-line arguments]...

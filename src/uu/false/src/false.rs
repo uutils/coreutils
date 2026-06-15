@@ -35,6 +35,7 @@ pub fn uu_app() -> Command {
         .version(crate_version!())
         .help_template(uucore::localized_help_template("false"))
         .about(translate!("false-about"))
+        .override_usage(translate!("false-usage"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
         .disable_version_flag(true)
