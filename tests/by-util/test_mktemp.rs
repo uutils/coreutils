@@ -11,9 +11,9 @@ use uutests::util_name;
 
 use uucore::display::Quotable;
 
+use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::path::MAIN_SEPARATOR;
-use std::path::PathBuf;
 use tempfile::tempdir;
 
 #[cfg(unix)]
@@ -1207,5 +1207,44 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len(),
         "expected filename of length {}, got {filename}",
         template_name.len()
+    );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mktemp_cleanup_on_write_error() {
+    use std::fs::{read_dir, File};
+
+    // Simulate a write failure by directing stdout to /dev/full (Linux only).
+    // Skip if /dev/full is unavailable, mirroring the GNU test's guard.
+    let Ok(dev_full) = File::create("/dev/full") else {
+        return;
+    };
+
+    // Case 1: a temporary file is created, but printing its name fails.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("-p")
+        .arg("d")
+        .set_stdout(dev_full.try_clone().unwrap())
+        .fails()
+        .code_is(1);
+    assert!(
+        read_dir(at.plus("d")).unwrap().next().is_none(),
+        "mktemp left an orphaned temp file after a write error"
+    );
+
+    // Case 2: a temporary directory is created, but printing its name fails.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("d");
+    ucmd.arg("-p")
+        .arg("d")
+        .arg("-d")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1);
+    assert!(
+        read_dir(at.plus("d")).unwrap().next().is_none(),
+        "mktemp left an orphaned temp directory after a write error"
     );
 }
