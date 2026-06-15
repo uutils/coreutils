@@ -317,25 +317,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
-        if !form.starts_with('+') {
+    let format = if let Some(fmt) = matches.get_one::<String>(OPT_FORMAT) {
+        if !fmt.starts_with('+') {
             // if an optional Format String was found but the user has not provided an input date
             // GNU prints an invalid date Error
             if !matches!(date_source, DateSource::Human(_)) {
                 return Err(USimpleError::new(
                     1,
-                    translate!("date-error-invalid-date", "date" => form),
+                    translate!("date-error-invalid-date", "date" => fmt),
                 ));
             }
             // If the user did provide an input date with the --date flag and the Format String is
             // not starting with '+' GNU prints the missing '+' error message
             return Err(USimpleError::new(
                 1,
-                translate!("date-error-format-missing-plus", "arg" => form),
+                translate!("date-error-format-missing-plus", "arg" => fmt),
             ));
         }
-        let form = form[1..].to_string();
-        Format::Custom(form)
+        let fmt = fmt[1..].to_string();
+        Format::Custom(fmt)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
