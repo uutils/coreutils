@@ -24,11 +24,7 @@ pub mod options {
 }
 
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
-    if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
-        return false;
-    }
-
-    &target[0..maybe_prefix.len()] == maybe_prefix
+    maybe_prefix.len() >= min_match && target.starts_with(maybe_prefix)
 }
 
 /// Transform legacy arguments into a standardized form.
