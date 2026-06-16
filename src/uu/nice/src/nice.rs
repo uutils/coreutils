@@ -23,8 +23,6 @@ pub mod options {
     pub static COMMAND: &str = "COMMAND";
 }
 
-const NICE_BOUND_NO_OVERFLOW: i32 = 50;
-
 fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
     if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
         return false;
@@ -123,8 +121,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
         (Some(nstr), Some(cmd_iter)) => match nstr.parse::<i32>() {
             Ok(num) => (num, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => (NICE_BOUND_NO_OVERFLOW, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::NegOverflow => (-NICE_BOUND_NO_OVERFLOW, cmd_iter),
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => (i32::MAX, cmd_iter),
+            Err(e) if *e.kind() == IntErrorKind::NegOverflow => (i32::MIN, cmd_iter),
             Err(e) => {
                 return Err(USimpleError::new(
                     125,
@@ -139,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         (_, Some(cmd_iter)) => (10_i32, cmd_iter),
     };
 
-    niceness += adjustment;
+    niceness = niceness.saturating_add(adjustment);
     // We can't use `show_warning` because that will panic if stderr
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
