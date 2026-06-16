@@ -109,39 +109,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let mut niceness = match rustix::process::getpriority_process(None) {
-        Ok(p) => p,
-        Err(e) => {
-            return Err(USimpleError::new(125, format!("getpriority: {e}")));
-        }
-    };
-
-    let adjustment = if let Some(nstr) = matches.get_one::<String>(options::ADJUSTMENT) {
-        if !matches.contains_id(options::COMMAND) {
+    let mut niceness = rustix::process::getpriority_process(None)
+        .map_err(|e| USimpleError::new(125, format!("getpriority: {e}")))?;
+    let (adjustment, mut cmd_iter) = match (
+        matches.get_one::<String>(options::ADJUSTMENT),
+        matches.get_many::<String>(options::COMMAND),
+    ) {
+        (Some(_), None) => {
             return Err(UUsageError::new(
                 125,
                 translate!("nice-error-command-required-with-adjustment"),
             ));
         }
-        match nstr.parse::<i32>() {
-            Ok(num) => num,
-            Err(e) => match e.kind() {
-                IntErrorKind::PosOverflow => NICE_BOUND_NO_OVERFLOW,
-                IntErrorKind::NegOverflow => -NICE_BOUND_NO_OVERFLOW,
-                _ => {
-                    return Err(USimpleError::new(
-                        125,
-                        translate!("nice-error-invalid-number", "value" => nstr.clone(), "error" => e),
-                    ));
-                }
-            },
-        }
-    } else {
-        if !matches.contains_id(options::COMMAND) {
+        (Some(nstr), Some(cmd_iter)) => match nstr.parse::<i32>() {
+            Ok(num) => (num, cmd_iter),
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => (NICE_BOUND_NO_OVERFLOW, cmd_iter),
+            Err(e) if *e.kind() == IntErrorKind::NegOverflow => (-NICE_BOUND_NO_OVERFLOW, cmd_iter),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    125,
+                    translate!("nice-error-invalid-number", "value" => nstr, "error" => e),
+                ));
+            }
+        },
+        (_, None) => {
             writeln!(stdout(), "{niceness}")?;
             return Ok(());
         }
-        10_i32
+        (_, Some(cmd_iter)) => (10_i32, cmd_iter),
     };
 
     niceness += adjustment;
@@ -158,7 +153,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let mut cmd_iter = matches.get_many::<String>(options::COMMAND).unwrap();
     let cmd = cmd_iter.next().unwrap();
     let args: Vec<&String> = cmd_iter.collect();
 
