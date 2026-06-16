@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon abday langinfo uppercased
+// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -14,19 +14,7 @@ use jiff::civil::Date as JiffDate;
 use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
-#[cfg(any(
-    not(unix),
-    target_os = "android",
-    target_os = "cygwin",
-    target_os = "redox"
-))]
 use icu_datetime::DateTimeFormatter;
-#[cfg(any(
-    not(unix),
-    target_os = "android",
-    target_os = "cygwin",
-    target_os = "redox"
-))]
 use icu_datetime::fieldsets;
 #[cfg(all(
     unix,
@@ -128,76 +116,40 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
 
     // Format localized names.
-    #[cfg(all(
-        unix,
-        not(target_os = "android"),
-        not(target_os = "cygwin"),
-        not(target_os = "redox")
-    ))]
-    {
-        let month_idx = (iso_date.month().ordinal - 1) as usize;
-        let weekday_idx = iso_date.weekday() as usize % 7;
+    let name_locale = if locale.to_string().starts_with("th") {
+        icu_locale::locale!("en-US")
+    } else {
+        locale.clone()
+    };
+    let locale_prefs = name_locale.into();
 
-        if fmt.contains("%B") {
-            if let Some(months) = get_locale_month_names_long() {
-                fmt = fmt.replace("%B", &months[month_idx]);
-            }
-        }
-        if fmt.contains("%b") || fmt.contains("%h") {
-            if let Some(months) = get_locale_month_names_abbrev() {
-                let month_abbrev = &months[month_idx];
-                fmt = fmt.replace("%b", month_abbrev).replace("%h", month_abbrev);
-            }
-        }
-        if fmt.contains("%A") {
-            if let Some(days) = get_locale_weekday_names_long() {
-                fmt = fmt.replace("%A", &days[weekday_idx]);
-            }
-        }
-        if fmt.contains("%a") {
-            if let Some(days) = get_locale_weekday_names_abbrev() {
-                fmt = fmt.replace("%a", &days[weekday_idx]);
-            }
+    if fmt.contains("%B") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
+            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
         }
     }
-
-    #[cfg(any(
-        not(unix),
-        target_os = "android",
-        target_os = "cygwin",
-        target_os = "redox"
-    ))]
-    {
-        let locale_prefs = locale.clone().into();
-
-        if fmt.contains("%B") {
-            if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
-                fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
-            }
+    if fmt.contains("%b") || fmt.contains("%h") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
+            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+            // which when combined with locale format strings that also add periods after
+            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+            // The standard C/POSIX locale via nl_langinfo returns abbreviations
+            // WITHOUT trailing periods, so we strip them here for consistency.
+            let month_abbrev = f.format(&iso_date).to_string();
+            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+            fmt = fmt
+                .replace("%b", &month_abbrev)
+                .replace("%h", &month_abbrev);
         }
-        if fmt.contains("%b") || fmt.contains("%h") {
-            if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
-                // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-                // which when combined with locale format strings that also add periods after
-                // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-                // The standard C/POSIX locale via nl_langinfo returns abbreviations
-                // WITHOUT trailing periods, so we strip them here for consistency.
-                let month_abbrev = f.format(&iso_date).to_string();
-                let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-                fmt = fmt
-                    .replace("%b", &month_abbrev)
-                    .replace("%h", &month_abbrev);
-            }
+    }
+    if fmt.contains("%A") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
+            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
         }
-        if fmt.contains("%A") {
-            if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
-                fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
-            }
-        }
-        if fmt.contains("%a") {
-            if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
-                fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
-            }
+    }
+    if fmt.contains("%a") {
+        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
+            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
         }
     }
 
@@ -219,148 +171,6 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
                 return None;
             }
             get_locale_months_inner()
-        })
-        .as_ref()
-}
-
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "cygwin"),
-    not(target_os = "redox")
-))]
-fn load_locale_name_array<const N: usize>(items: [libc::nl_item; N]) -> Option<[String; N]> {
-    use std::ffi::CStr;
-
-    // SAFETY: setlocale and nl_langinfo are standard POSIX functions.
-    // We call setlocale(LC_TIME, "") to initialize from environment variables,
-    // then read the locale strings. This is called once per cache (via OnceLock)
-    // and cached, so the race window with other setlocale callers is minimal.
-    unsafe {
-        libc::setlocale(libc::LC_TIME, c"".as_ptr());
-    }
-
-    let mut names: [String; N] = std::array::from_fn(|_| String::new());
-    for (i, &item) in items.iter().enumerate() {
-        // SAFETY: nl_langinfo returns a valid C string pointer for valid nl_item values.
-        let ptr = unsafe { libc::nl_langinfo(item) };
-        if ptr.is_null() {
-            return None;
-        }
-        let name = unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned();
-        if name.is_empty() {
-            return None;
-        }
-        names[i] = name;
-    }
-
-    Some(names)
-}
-
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "cygwin"),
-    not(target_os = "redox")
-))]
-fn get_locale_month_names_long() -> Option<&'static [String; 12]> {
-    static LOCALE_MONTHS_LONG: OnceLock<Option<[String; 12]>> = OnceLock::new();
-
-    LOCALE_MONTHS_LONG
-        .get_or_init(|| {
-            load_locale_name_array([
-                libc::MON_1,
-                libc::MON_2,
-                libc::MON_3,
-                libc::MON_4,
-                libc::MON_5,
-                libc::MON_6,
-                libc::MON_7,
-                libc::MON_8,
-                libc::MON_9,
-                libc::MON_10,
-                libc::MON_11,
-                libc::MON_12,
-            ])
-        })
-        .as_ref()
-}
-
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "cygwin"),
-    not(target_os = "redox")
-))]
-fn get_locale_month_names_abbrev() -> Option<&'static [String; 12]> {
-    static LOCALE_MONTHS_ABBREV: OnceLock<Option<[String; 12]>> = OnceLock::new();
-
-    LOCALE_MONTHS_ABBREV
-        .get_or_init(|| {
-            load_locale_name_array([
-                libc::ABMON_1,
-                libc::ABMON_2,
-                libc::ABMON_3,
-                libc::ABMON_4,
-                libc::ABMON_5,
-                libc::ABMON_6,
-                libc::ABMON_7,
-                libc::ABMON_8,
-                libc::ABMON_9,
-                libc::ABMON_10,
-                libc::ABMON_11,
-                libc::ABMON_12,
-            ])
-        })
-        .as_ref()
-}
-
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "cygwin"),
-    not(target_os = "redox")
-))]
-fn get_locale_weekday_names_long() -> Option<&'static [String; 7]> {
-    static LOCALE_WEEKDAYS_LONG: OnceLock<Option<[String; 7]>> = OnceLock::new();
-
-    LOCALE_WEEKDAYS_LONG
-        .get_or_init(|| {
-            load_locale_name_array([
-                libc::DAY_1,
-                libc::DAY_2,
-                libc::DAY_3,
-                libc::DAY_4,
-                libc::DAY_5,
-                libc::DAY_6,
-                libc::DAY_7,
-            ])
-        })
-        .as_ref()
-}
-
-#[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "cygwin"),
-    not(target_os = "redox")
-))]
-fn get_locale_weekday_names_abbrev() -> Option<&'static [String; 7]> {
-    static LOCALE_WEEKDAYS_ABBREV: OnceLock<Option<[String; 7]>> = OnceLock::new();
-
-    LOCALE_WEEKDAYS_ABBREV
-        .get_or_init(|| {
-            load_locale_name_array([
-                libc::ABDAY_1,
-                libc::ABDAY_2,
-                libc::ABDAY_3,
-                libc::ABDAY_4,
-                libc::ABDAY_5,
-                libc::ABDAY_6,
-                libc::ABDAY_7,
-            ])
         })
         .as_ref()
 }
