@@ -124,5 +124,5 @@ fn test_nice_adj_negative() {
     new_ucmd!()
         .args(&["--adj", "-20", "true"])
         .succeeds()
-        .stdout_is("nice: warning: setpriority: Permission denied\n");
+        .stderr_is("nice: warning: setpriority: Permission denied\n");
 }
