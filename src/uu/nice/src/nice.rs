@@ -137,7 +137,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if let Err(e) = rustix::process::setpriority_process(None, new_niceness) {
         let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => strip_errno(&e.into()) );
 
-        if write!(std::io::stderr(), "{warning_msg}").is_err() {
+        if write!(std::io::stderr(), "{warning_msg}\n").is_err() {
             set_exit_code(125);
             return Ok(());
         }
