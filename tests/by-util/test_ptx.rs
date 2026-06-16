@@ -295,6 +295,14 @@ fn test_sentence_regexp_newlines_are_spaces() {
 }
 
 #[test]
+fn test_sentence_regexp_invalid_syntax_failure() {
+    new_ucmd!()
+        .args(&["-S", "^["])
+        .fails()
+        .stderr_contains("Invalid regexp");
+}
+
+#[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
