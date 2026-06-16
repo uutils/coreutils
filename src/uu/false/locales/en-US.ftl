@@ -7,5 +7,5 @@ false-about = Returns false, an unsuccessful exit status.
 false-help-text = Print help information
 false-version-text = Print version information
 
-false-usage = 
+false-usage =
     false [ignored command-line arguments]...
