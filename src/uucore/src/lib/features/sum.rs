@@ -443,7 +443,14 @@ macro_rules! impl_digest_shake {
             }
 
             fn result(&mut self) -> DigestOutput {
-                let mut bytes = vec![0; self.output_bits().div_ceil(8)];
+                let mut bytes = Vec::new();
+                // catch OOM
+                let len = self.output_bits().div_ceil(8);
+                if let Err(e) = bytes.try_reserve(len) {
+                    let _ = writeln!(std::io::stderr(), "{e}");
+                    std::process::exit(1); //todo: remove this exit. This rejects embedding uu_app to consumers.
+                }
+                bytes.resize(len, 0);
                 self.hash_finalize(&mut bytes);
                 DigestOutput::Vec(bytes)
             }
