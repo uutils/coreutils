@@ -2214,7 +2214,12 @@ fn test_date_thai_locale_solar_calendar() {
     assert_eq!(thai_ey_year, current_year);
 
     // GNU date keeps the locale month/day names here as well.
-    check_date("th_TH.UTF-8", "2026-06-14", "+%Y %EY %B %A", "2026 2026 June Sunday");
+    check_date(
+        "th_TH.UTF-8",
+        "2026-06-14",
+        "+%Y %EY %B %A",
+        "2026 2026 June Sunday",
+    );
 
     // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
     let iso_result = new_ucmd!()

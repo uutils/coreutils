@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fieldsets prefs febr abmon langinfo uppercased
+// spell-checker:ignore fieldsets prefs febr abmon abday langinfo uppercased
 
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
@@ -14,12 +14,27 @@ use jiff::civil::Date as JiffDate;
 use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
-use nix::libc;
-#[cfg(any(not(unix), target_os = "android", target_os = "cygwin", target_os = "redox"))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 use icu_datetime::DateTimeFormatter;
-#[cfg(any(not(unix), target_os = "android", target_os = "cygwin", target_os = "redox"))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 use icu_datetime::fieldsets;
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
+use nix::libc;
 
 use crate::i18n::get_locale_from_env;
 
@@ -113,7 +128,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     }
 
     // Format localized names.
-    #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+    #[cfg(all(
+        unix,
+        not(target_os = "android"),
+        not(target_os = "cygwin"),
+        not(target_os = "redox")
+    ))]
     {
         let month_idx = (iso_date.month().ordinal - 1) as usize;
         let weekday_idx = iso_date.weekday() as usize % 7;
@@ -126,9 +146,7 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
         if fmt.contains("%b") || fmt.contains("%h") {
             if let Some(months) = get_locale_month_names_abbrev() {
                 let month_abbrev = &months[month_idx];
-                fmt = fmt
-                    .replace("%b", month_abbrev)
-                    .replace("%h", month_abbrev);
+                fmt = fmt.replace("%b", month_abbrev).replace("%h", month_abbrev);
             }
         }
         if fmt.contains("%A") {
@@ -143,7 +161,12 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
         }
     }
 
-    #[cfg(any(not(unix), target_os = "android", target_os = "cygwin", target_os = "redox"))]
+    #[cfg(any(
+        not(unix),
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "redox"
+    ))]
     {
         let locale_prefs = locale.clone().into();
 
@@ -200,7 +223,12 @@ pub fn get_locale_months() -> Option<&'static [Vec<u8>; 12]> {
         .as_ref()
 }
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
 fn load_locale_name_array<const N: usize>(items: [libc::nl_item; N]) -> Option<[String; N]> {
     use std::ffi::CStr;
 
@@ -219,7 +247,9 @@ fn load_locale_name_array<const N: usize>(items: [libc::nl_item; N]) -> Option<[
         if ptr.is_null() {
             return None;
         }
-        let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned();
+        let name = unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned();
         if name.is_empty() {
             return None;
         }
@@ -229,7 +259,12 @@ fn load_locale_name_array<const N: usize>(items: [libc::nl_item; N]) -> Option<[
     Some(names)
 }
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
 fn get_locale_month_names_long() -> Option<&'static [String; 12]> {
     static LOCALE_MONTHS_LONG: OnceLock<Option<[String; 12]>> = OnceLock::new();
 
@@ -253,7 +288,12 @@ fn get_locale_month_names_long() -> Option<&'static [String; 12]> {
         .as_ref()
 }
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
 fn get_locale_month_names_abbrev() -> Option<&'static [String; 12]> {
     static LOCALE_MONTHS_ABBREV: OnceLock<Option<[String; 12]>> = OnceLock::new();
 
@@ -277,7 +317,12 @@ fn get_locale_month_names_abbrev() -> Option<&'static [String; 12]> {
         .as_ref()
 }
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
 fn get_locale_weekday_names_long() -> Option<&'static [String; 7]> {
     static LOCALE_WEEKDAYS_LONG: OnceLock<Option<[String; 7]>> = OnceLock::new();
 
@@ -296,7 +341,12 @@ fn get_locale_weekday_names_long() -> Option<&'static [String; 7]> {
         .as_ref()
 }
 
-#[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
 fn get_locale_weekday_names_abbrev() -> Option<&'static [String; 7]> {
     static LOCALE_WEEKDAYS_ABBREV: OnceLock<Option<[String; 7]>> = OnceLock::new();
 
