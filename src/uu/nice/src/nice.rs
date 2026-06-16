@@ -109,20 +109,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut niceness = rustix::process::getpriority_process(None)
         .map_err(|e| USimpleError::new(125, format!("getpriority: {e}")))?;
-    let (adjustment, mut cmd_iter) = match (
-        matches.get_one::<String>(options::ADJUSTMENT),
-        matches.get_many::<String>(options::COMMAND),
-    ) {
-        (Some(_), None) => {
+
+    let Some(mut cmd_iter) = matches.get_many::<String>(options::COMMAND) else {
+        if matches.contains_id(options::ADJUSTMENT) {
             return Err(UUsageError::new(
                 125,
                 translate!("nice-error-command-required-with-adjustment"),
             ));
         }
-        (Some(nstr), Some(cmd_iter)) => match nstr.parse::<i32>() {
-            Ok(num) => (num, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => (i32::MAX, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::NegOverflow => (i32::MIN, cmd_iter),
+
+        writeln!(stdout(), "{niceness}")?;
+        return Ok(());
+    };
+
+    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
+        None => 10,
+        Some(nstr) => match nstr.parse::<i32>() {
+            Ok(num) => num,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => i32::MAX,
+            Err(e) if *e.kind() == IntErrorKind::NegOverflow => i32::MIN,
             Err(e) => {
                 return Err(USimpleError::new(
                     125,
@@ -130,11 +135,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
         },
-        (_, None) => {
-            writeln!(stdout(), "{niceness}")?;
-            return Ok(());
-        }
-        (_, Some(cmd_iter)) => (10_i32, cmd_iter),
     };
 
     niceness = niceness.saturating_add(adjustment);
