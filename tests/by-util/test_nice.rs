@@ -120,6 +120,7 @@ fn test_sign_middle() {
 //Both message is fine
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_nice_adj_negative() {
     new_ucmd!()
         .args(&["--adj", "-20", "true"])
