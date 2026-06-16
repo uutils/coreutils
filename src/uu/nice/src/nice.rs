@@ -14,7 +14,7 @@ use std::process;
 
 use uucore::translate;
 use uucore::{
-    error::{UResult, USimpleError, UUsageError, set_exit_code},
+    error::{UResult, USimpleError, UUsageError, set_exit_code, strip_errno},
     format_usage, show_error,
 };
 
@@ -150,7 +150,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
     if let Err(e) = rustix::process::setpriority_process(None, niceness) {
-        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => e.to_string() );
+        let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => strip_errno(&e.into()) );
 
         if write!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
