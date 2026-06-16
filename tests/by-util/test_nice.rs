@@ -118,3 +118,11 @@ fn test_sign_middle() {
 //uu: "-2+4" is not a valid number: invalid digit found in string
 //gnu: invalid adjustment `-2+4'
 //Both message is fine
+
+#[test]
+fn test_nice_adj_negative() {
+    new_ucmd!()
+        .args(&["--adj", "-20", "true"])
+        .fails()
+        .std_err_is("nice: warning: setpriority: Permission denied\n");
+}
