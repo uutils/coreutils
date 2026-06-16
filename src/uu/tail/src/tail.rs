@@ -136,7 +136,7 @@ fn tail_file(
     if path.is_dir() {
         set_exit_code(1);
 
-        header_printer.print_input(input);
+        header_printer.print_input(input)?;
         let err_msg = translate!("tail-is-a-directory");
 
         show_error!(
@@ -168,7 +168,7 @@ fn tail_file(
             Ok(mut file) => {
                 let st = file.metadata()?;
                 let blksize_limit = uucore::fs::sane_blksize::sane_blksize_from_metadata(&st);
-                header_printer.print_input(input);
+                header_printer.print_input(input)?;
                 let mut reader;
                 if !settings.presume_input_pipe
                     && file.is_seekable(if input.is_stdin() { offset } else { 0 })
@@ -300,7 +300,7 @@ fn tail_stdin(
         )?;
     } else {
         // pipe
-        header_printer.print_input(input);
+        header_printer.print_input(input)?;
         if paths::stdin_is_bad_fd() {
             set_exit_code(1);
             show_error!(
