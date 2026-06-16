@@ -52,7 +52,7 @@ fn maybe_sanitize_length(
     match (algo_cli, input_length) {
         // No provided length is not a problem so far.
         (_, None) => Ok(None),
-        
+
         // For SHA2 and SHA3, if a length is provided, ensure it is correct.
         (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
@@ -65,11 +65,22 @@ fn maybe_sanitize_length(
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
             Ok(l) => {
-                if l > u32::MAX as usize {
-                    Err(ChecksumError::InvalidLength(len.into()).into()) 
-                } else {
-                    Ok(Some(HashLength::from_bits(l)))
+                const BITS_PER_BYTE: usize = 8;
+                const OOM_SAFETY_CUSHION_BYTES: usize = 65536;
+                let bytes_needed = l.div_ceil(BITS_PER_BYTE);
+
+                let mut test_buffer: Vec<u8> = Vec::new();
+
+                let safety_cushion = bytes_needed.saturating_add(OOM_SAFETY_CUSHION_BYTES);
+
+                if test_buffer.try_reserve(safety_cushion).is_err() {
+                    return Err(uucore::error::USimpleError::new(
+                        1,
+                        translate!("memory exhausted"),
+                    ));
                 }
+
+                Ok(Some(HashLength::from_bits(l)))
             }
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
@@ -121,7 +132,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if matches.get_flag(options::DEBUG) {
         print_cpu_debug_info();
     }
-
     checksum_main(algo_cli, length, matches, output_format)
 }
 
