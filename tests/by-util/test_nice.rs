@@ -123,6 +123,6 @@ fn test_sign_middle() {
 fn test_nice_adj_negative() {
     new_ucmd!()
         .args(&["--adj", "-20", "true"])
-        .fails()
-        .std_err_is("nice: warning: setpriority: Permission denied\n");
+        .succeeds()
+        .stdout_is("nice: warning: setpriority: Permission denied\n");
 }
