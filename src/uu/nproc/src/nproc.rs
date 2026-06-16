@@ -3,14 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore NPROCESSORS SCHED getaffinity getcpu getscheduler sched sysconf
+// spell-checker:ignore NPROCESSORS SCHED ONLN getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
 use std::env;
 use std::io::{Write, stdout};
-use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
-use uucore::translate;
+use uucore::{
+    error::{UResult, USimpleError, strip_errno},
+    format_usage, translate,
+};
 
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
@@ -30,25 +31,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
-    } else if let Ok(threads) = env::var("OMP_NUM_THREADS") {
+    } else {
         // OMP_NUM_THREADS doesn't have an impact on --all
         // Uses the OpenMP variable to force the number of threads
         // If the parsing fails, returns the number of CPU
-        // In some cases, OMP_NUM_THREADS can be "x,y,z"
-        // In this case, only take the first one (like GNU)
-        // If OMP_NUM_THREADS=0, rejects the value
-        match threads.split_terminator(',').next() {
-            None => available_parallelism(),
-            Some(s) => match s.trim().parse::<usize>() {
-                Ok(n @ 1..) => n,
-                Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => usize::MAX,
-                _ => available_parallelism(),
-            },
-        }
-    } else {
-        // the variable 'OMP_NUM_THREADS' doesn't exist
-        // fallback to the regular CPU detection
-        available_parallelism()
+        // Non OMP_NUM_THREADS>0 cases are rejected
+        omp_num_threads().unwrap_or_else(available_parallelism)
     };
 
     cores = std::cmp::min(limit, cores);
@@ -59,10 +47,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
     //discard error about stdout flush
     stdout()
-        .lock()
         .write_all(format!("{cores}\n").as_bytes())
-        .map_err(|e| USimpleError::new(1, e.to_string()))?;
-    Ok(())
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+}
+
+fn omp_num_threads() -> Option<usize> {
+    let threads = env::var("OMP_NUM_THREADS").ok()?;
+    let s = threads.split_terminator(',').next()?;
+    // In some cases, OMP_NUM_THREADS can be "x,y,z"
+    // In this case, only take the first one (like GNU)
+    match s.trim().parse::<usize>() {
+        Ok(n @ 1..) => Some(n),
+        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Some(usize::MAX),
+        _ => None,
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -84,17 +82,23 @@ pub fn uu_app() -> Command {
                 .value_name("N")
                 .default_value("0")
                 .value_parser(|s: &str| -> Result<usize, String> {
-                    s.trim().parse::<usize>().map_err(|e| e.to_string())
+                    match s.trim().parse::<usize>() {
+                        Ok(n) => Ok(n),
+                        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => {
+                            Ok(usize::MAX)
+                        }
+                        Err(e) => Err(e.to_string()),
+                    }
                 })
                 .help(translate!("nproc-help-ignore")),
         )
 }
 
 fn num_cpus_all() -> usize {
-    // sysconf returns 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace
-    // when SMT is enabled. So fallback to available_parallelism at here is not useful
+    // sysconf returns (hardcoded?) 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace.
+    // So fallback to available_parallelism at here is not useful
     #[cfg(unix)]
-    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) }.max(1) as usize;
+    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) } as usize;
     // not sure what we can do for non-unix...
     #[cfg(not(unix))]
     available_parallelism()
@@ -117,10 +121,12 @@ fn cgroups2_quota() -> Option<usize> {
 }
 
 fn available_parallelism() -> usize {
-    // return all cores if sched_getaffinity syscall failed as same as GNU
+    // return all online cores if sched_getaffinity syscall failed as same as GNU
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    let affinity = rustix::thread::sched_getaffinity(None)
-        .map_or_else(|_| num_cpus_all(), |s| s.count() as usize);
+    let affinity = rustix::thread::sched_getaffinity(None).map_or_else(
+        |_| unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) } as usize,
+        |s| s.count() as usize,
+    );
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
     match unsafe { libc::sched_getscheduler(0) } {

@@ -1075,6 +1075,27 @@ fn test_date_tz_abbreviation_us_timezones() {
 }
 
 #[test]
+fn test_date_double_timezone_is_invalid() {
+    // A date string that specifies a timezone twice is invalid, matching GNU.
+    // Regression test for issue #12875.
+    for input in ["EST EST", "EST PST", "2021-03-20 14:53:01 EST EST"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+
+    // A single trailing timezone abbreviation must still be accepted.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_date_tz_abbreviation_australian_timezones() {
     // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
     // This demonstrates uutils date going beyond GNU capabilities
