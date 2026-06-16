@@ -2189,7 +2189,7 @@ fn test_date_thai_locale_solar_calendar() {
         .parse()
         .unwrap();
 
-    // Since 1941, the year in the Thai solar calendar is the Gregorian year plus 543
+    // GNU date keeps %Y Gregorian in the Thai locale.
     let thai_year: i32 = new_ucmd!()
         .env("LC_ALL", "th_TH.UTF-8")
         .arg("+%Y")
@@ -2199,25 +2199,22 @@ fn test_date_thai_locale_solar_calendar() {
         .parse()
         .unwrap();
 
-    assert_eq!(thai_year, current_year + 543);
+    assert_eq!(thai_year, current_year);
 
-    // All months that have 31 days have names that end with "คม" (Thai characters)
-    let days_31_suffix = "\u{0E04}\u{0E21}"; // "คม" in Unicode
+    // GNU date keeps %EY Gregorian in the Thai locale.
+    let thai_ey_year: i32 = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%EY")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .parse()
+        .unwrap();
 
-    for month in ["01", "03", "05", "07", "08", "10", "12"] {
-        let month_result = new_ucmd!()
-            .env("LC_ALL", "th_TH.UTF-8")
-            .arg("--date")
-            .arg(format!("{current_year}-{month}-01"))
-            .arg("+%B")
-            .succeeds();
-        let month_name = month_result.stdout_str();
+    assert_eq!(thai_ey_year, current_year);
 
-        assert!(
-            month_name.trim().ends_with(days_31_suffix),
-            "Month {month} should end with 'คม', got: {month_name}"
-        );
-    }
+    // GNU date keeps the locale month/day names here as well.
+    check_date("th_TH.UTF-8", "2026-06-14", "+%Y %EY %B %A", "2026 2026 June Sunday");
 
     // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
     let iso_result = new_ucmd!()
@@ -2270,18 +2267,19 @@ fn test_locale_calendar_conversions() {
         check_date("fa_IR.UTF-8", d, "+%Y-%m-%d", e);
     }
 
-    // Thai Buddhist (year + 543, same month/day)
+    // Thai locale keeps Gregorian %Y and %EY under GNU-compatible behavior.
     for (d, e) in [
-        ("2026-01-01", "2569-01-01"),
-        ("2026-01-26", "2569-01-26"),
-        ("2026-06-15", "2569-06-15"),
-        ("2026-12-31", "2569-12-31"),
-        ("2025-01-01", "2568-01-01"),
-        ("2024-02-29", "2567-02-29"),
-        ("2000-01-01", "2543-01-01"),
-        ("1970-01-01", "2513-01-01"),
+        ("2026-01-01", "2026-01-01"),
+        ("2026-01-26", "2026-01-26"),
+        ("2026-06-15", "2026-06-15"),
+        ("2026-12-31", "2026-12-31"),
+        ("2025-01-01", "2025-01-01"),
+        ("2024-02-29", "2024-02-29"),
+        ("2000-01-01", "2000-01-01"),
+        ("1970-01-01", "1970-01-01"),
     ] {
         check_date("th_TH.UTF-8", d, "+%Y-%m-%d", e);
+        check_date("th_TH.UTF-8", d, "+%EY-%m-%d", e);
     }
 
     // Ethiopian (13 months, New Year on Sept 11)
