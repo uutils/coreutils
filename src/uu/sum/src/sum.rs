@@ -16,8 +16,11 @@ use uucore::translate;
 
 use uucore::{format_usage, show};
 
+// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
+const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut checksum: u16 = 0;
     loop {
@@ -41,7 +44,7 @@ fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
 }
 
 fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
-    let mut buf = [0; 4096];
+    let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut bytes_read = 0;
     let mut ret = 0u32;
 
@@ -72,20 +75,34 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         Ok(Box::new(stdin()) as Box<dyn Read>)
     } else {
         let path = Path::new(name);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-            ));
-        }
+
         // Silent the warning as we want to the error message
-        if path.metadata().is_err() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
-            ));
+        match path.metadata() {
+            Ok(_) => {
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-is-directory", "name" => name.maybe_quote()),
+                    ));
+                }
+            }
+            Err(err) => {
+                if err.kind() == ErrorKind::NotFound {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
+                    ));
+                } else if path.to_string_lossy().ends_with(['/', '\\']) {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-not-a-directory", "name" => name.maybe_quote()),
+                    ));
+                }
+            }
         }
         let f = File::open(path).map_err_context(String::new)?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Box::new(f) as Box<dyn Read>)
     }
 }

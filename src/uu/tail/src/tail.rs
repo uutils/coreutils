@@ -221,13 +221,9 @@ fn tail_file(
 fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
     use rustix::fs::{OFlags, fcntl_getfl, fcntl_setfl};
     use std::fs::OpenOptions;
-    use std::os::fd::AsFd;
     use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
 
-    let is_fifo = path
-        .metadata()
-        .ok()
-        .is_some_and(|m| m.file_type().is_fifo());
+    let is_fifo = path.metadata().is_ok_and(|m| m.file_type().is_fifo());
 
     if is_fifo && use_nonblock_for_fifo {
         let file = OpenOptions::new()
@@ -236,9 +232,9 @@ fn open_file(path: &Path, use_nonblock_for_fifo: bool) -> io::Result<File> {
             .open(path)?;
 
         // Clear O_NONBLOCK so reads block normally
-        let flags = fcntl_getfl(file.as_fd())?;
+        let flags = fcntl_getfl(&file)?;
         let new_flags = flags & !OFlags::NONBLOCK;
-        fcntl_setfl(file.as_fd(), new_flags)?;
+        fcntl_setfl(&file, new_flags)?;
 
         Ok(file)
     } else {
@@ -576,6 +572,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 }
 
 // Print the target section of the file
+// use zero-copy on Linux
 fn print_target_section<
     #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
     #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
@@ -586,12 +583,16 @@ fn print_target_section<
     let stdout = stdout();
     let mut stdout = stdout.lock();
     if let Some(limit) = limit {
-        let mut reader = file.take(limit);
-        io::copy(&mut reader, &mut stdout)?;
-    } else {
-        // zero-copy fast-path
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_broker(file, &mut stdout)? {
+        uucore::pipes::send_n_bytes(file, &mut stdout, limit)?;
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        {
+            let mut reader = file.take(limit);
+            io::copy(&mut reader, &mut stdout)?;
+        }
+    } else {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
             io::copy(file, &mut stdout)?;
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

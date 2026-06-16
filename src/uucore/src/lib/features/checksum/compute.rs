@@ -261,7 +261,15 @@ where
                 Box::new(stdin_buf) as Box<dyn io::Read>
             } else {
                 file_buf = match File::open(filepath) {
-                    Ok(file) => file,
+                    Ok(file) => {
+                        #[cfg(any(
+                            target_os = "linux",
+                            target_os = "android",
+                            target_os = "freebsd"
+                        ))]
+                        let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+                        file
+                    }
                     Err(err) => {
                         show!(err.map_err_context(|| filepath.to_string_lossy().into()));
                         continue;

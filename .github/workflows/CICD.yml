@@ -237,7 +237,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -301,7 +301,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -344,7 +344,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -367,7 +367,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { os , target , cargo-options , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
+          # - { os , target , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
@@ -394,6 +394,7 @@ jobs:
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -604,7 +605,7 @@ jobs:
         # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
-        cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
+        cargo tree --locked --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
     - name: Check
       shell: bash
       if: matrix.job.skip-publish != true && matrix.job.check-only == true
@@ -612,14 +613,14 @@ jobs:
         # expr breaks redox
         if [[ "${{ matrix.job.target }}" == *"redox"* ]]; then sed -i.b '/"expr",/d' Cargo.toml; fi
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} check \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+        --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true && matrix.job.check-only != true
       shell: bash
       run: |
         ## Test
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} \
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
@@ -629,7 +630,7 @@ jobs:
       run: |
         ## Build
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+        --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     # We don't want to have many duplicated long jobs at here
     # So we build individual binaries for few platforms until we deduplicate many release build for Linux
     - name: Build individual binaries
@@ -807,7 +808,7 @@ jobs:
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
 
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ${{ steps.run_test_cov.outputs.report }}
@@ -817,7 +818,7 @@ jobs:
         fail_ci_if_error: false
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -899,9 +900,27 @@ jobs:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
-    - name: Install strace
-      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Install strace and libselinux headers (needed to build chcon)
+      run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
     - name: Build utilities with safe traversal
-      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
+
+  test_toctou:
+    name: TOCTOU Security Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace
+      run: sudo apt-get update && sudo apt-get install -y strace
+    - name: Build utilities for TOCTOU checks
+      run: cargo build --profile=release-small -p uu_mkfifo -p uu_touch -p uu_head
+    - name: Run TOCTOU verification
+      run: ./util/check-toctou.sh

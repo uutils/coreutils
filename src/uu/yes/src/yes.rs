@@ -24,9 +24,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
-
-    match exec(buffer) {
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
+    repeat_content_to_capacity(&mut buffer);
+    match exec(&buffer) {
         Ok(()) => Ok(()),
         // On Windows, silently handle broken pipe since there's no SIGPIPE
         #[cfg(windows)]
@@ -56,29 +56,24 @@ pub fn uu_app() -> Command {
 /// create a buffer filled by words `i` separated by spaces.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+    #[cfg(unix)]
+    use std::os::unix::ffi::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
+
     let mut buf = Vec::with_capacity(BUF_SIZE);
     // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
     #[cfg(any(unix, target_os = "wasi"))]
-    {
-        #[cfg(unix)]
-        use std::os::unix::ffi::OsStrExt;
-        #[cfg(target_os = "wasi")]
-        use std::os::wasi::ffi::OsStrExt;
-
-        for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
-            buf.extend_from_slice(part);
-        }
+    for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
+        buf.extend_from_slice(part);
     }
-
     // But, on Windows, we must hop through a String.
     #[cfg(not(any(unix, target_os = "wasi")))]
-    {
-        for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-            let bytes = part
-                .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
-                .as_bytes();
-            buf.extend_from_slice(bytes);
-        }
+    for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
+        let bytes = part
+            .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
+            .as_bytes();
+        buf.extend_from_slice(bytes);
     }
 
     buf.push(b'\n');
@@ -101,9 +96,7 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     loop {
         stdout.write_all(bytes)?;
@@ -111,41 +104,34 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
+    use uucore::io::RawWriter;
     use uucore::pipes::{pipe, splice, tee};
 
-    const PAGE_SIZE: usize = 4096;
-    let aligned = PAGE_SIZE.is_multiple_of(bytes.len());
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
-    let mut stdout = io::stdout(); // no need to lock with zero-copy
+    let stdout = rustix::stdio::stdout();
     // improve throughput
-    let _ = rustix::pipe::fcntl_setpipe_size(&stdout, MAX_ROOTLESS_PIPE_SIZE);
-    // don't show any error from fast-path and fallback to write for proper message
-    if let Ok((p_read, mut p_write)) = pipe()
+    let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
+    // GNU catches all strace injections for zero-copy syscalls except for 1st one (checking support of it)
+    // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
+    // but it is slower than mixing splice even it reduces syscalls...
+    let bytes_len = bytes.len();
+    if let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
+        && let Ok((broker_read, broker_write)) = pipe::<true>()
+        && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
     {
-        if aligned && tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {
-            while let Ok(1..) = tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE) {}
-        } else if let Ok((broker_read, broker_write)) = pipe() {
-            // tee() cannot control offset and write to non-pipe
-            'hybrid: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-            {
-                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
-                while remain > 0 {
-                    if let Ok(s) = splice(&broker_read, &stdout, remain) {
-                        remain -= s;
-                    } else {
-                        // avoid output breakage with reduced remain even if it would not happen
-                        stdout.write_all(&bytes[bytes.len() - remain..])?;
-                        break 'hybrid;
-                    }
-                }
+        // fallback from tee() is possible since we did not send anything to stdout yet
+        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
+            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
+            while remain > 0 {
+                remain -= splice(&broker_read, &stdout, remain)?;
             }
         }
     }
+
     // fallback
-    let mut stdout = stdout.lock();
+    let mut stdout = RawWriter(stdout);
     loop {
         stdout.write_all(bytes)?;
     }

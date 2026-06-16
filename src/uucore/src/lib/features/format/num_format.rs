@@ -83,7 +83,7 @@ impl Formatter<i64> for SignedInt {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
         let s = if self.precision > 0 {
-            format!("{abs:0>width$}", width = self.precision)
+            zero_pad_to(&abs.to_string(), self.precision)
         } else {
             abs.to_string()
         };
@@ -153,7 +153,7 @@ impl Formatter<u64> for UnsignedInt {
             _ => "",
         };
 
-        s = format!("{prefix}{s:0>width$}", width = self.precision);
+        s = format!("{prefix}{}", zero_pad_to(&s, self.precision));
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
@@ -326,6 +326,23 @@ impl Formatter<&ExtendedBigDecimal> for Float {
     }
 }
 
+/// Left-pad `s` with `'0'` until it is at least `width` characters long.
+///
+/// Unlike `format!("{s:0>width$}")`, this does not feed `width` into the
+/// standard formatting machinery, which panics with "Formatting argument out
+/// of range" once the dynamic width exceeds `u16::MAX`. A large precision such
+/// as `%.100000d` is valid input for `printf`/`seq`, so it must not panic.
+fn zero_pad_to(s: &str, width: usize) -> String {
+    if s.len() >= width {
+        s.to_string()
+    } else {
+        let mut padded = String::with_capacity(width);
+        padded.extend(std::iter::repeat_n('0', width - s.len()));
+        padded.push_str(s);
+        padded
+    }
+}
+
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     if negative {
         String::from("-")
@@ -396,7 +413,7 @@ fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64
 
     // In the unlikely case we had an overflow, correct for that.
     if digits.len() == precision + 1 {
-        debug_assert!(&digits[precision..] == "0");
+        debug_assert_eq!(&digits[precision..], "0");
         digits.truncate(precision);
         p -= 1;
     }
@@ -1192,6 +1209,21 @@ mod test {
         let format = Format::<SignedInt, i64>::parse("% d").unwrap();
         assert_eq!(fmt(&format, 123i64), " 123");
         assert_eq!(fmt(&format, -123i64), "-123");
+    }
+
+    #[test]
+    fn format_int_large_precision() {
+        // A precision above u16::MAX must not panic in the formatter (#12572).
+        let format = Format::<SignedInt, i64>::parse("%.100000d").unwrap();
+        let s = fmt(&format, 1i64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("01"));
+        assert!(s.starts_with('0'));
+
+        let format = Format::<UnsignedInt, u64>::parse("%.100000x").unwrap();
+        let s = fmt(&format, 255u64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("0ff"));
     }
 
     #[test]

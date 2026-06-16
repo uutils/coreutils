@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree fadvise FADV
+//spell-checker:ignore TAOCP indegree FADV
 //spell-checker:ignore (libs) interner uclibc
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
@@ -10,7 +10,7 @@ use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, BufWriter, Write};
 use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
 use thiserror::Error;
@@ -76,34 +76,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(not(windows))]
         {
             file = File::open(input)?;
-
-            // advise the OS we will access the data sequentially if available.
-            #[cfg(any(
-                target_os = "linux",
-                target_os = "android",
-                target_os = "fuchsia",
-                target_env = "uclibc",
-                target_os = "freebsd",
-            ))]
-            {
-                use rustix::fs::{Advice, fadvise};
-                use std::os::unix::io::AsFd;
-
-                fadvise(
-                    file.as_fd(),
-                    0,    // offset 0 => from the start of the file
-                    None, // None => for the whole file
-                    Advice::Sequential,
-                )
-                .ok();
-            }
         }
+        // advise the OS we will access the data sequentially if available.
+        // offset 0 => from the start of the file. None => for the whole file.
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+
         let reader = BufReader::new(file);
         process_input(reader, &mut g)?;
     }
 
-    g.run_tsort();
-    Ok(())
+    g.run_tsort()
 }
 
 pub fn uu_app() -> Command {
@@ -276,7 +259,7 @@ impl Graph {
     }
 
     /// Implementation of algorithm T from TAOCP (Don. Knuth), vol. 1.
-    fn run_tsort(&mut self) {
+    fn run_tsort(&mut self) -> UResult<()> {
         let mut independent_nodes_queue: VecDeque<Sym> = self
             .nodes
             .iter()
@@ -293,10 +276,10 @@ impl Graph {
         independent_nodes_queue
             .make_contiguous()
             .sort_unstable_by(|a, b| self.get_node_name(*a).cmp(self.get_node_name(*b)));
-
+        let mut out = BufWriter::new(io::stdout().lock());
         while !self.nodes.is_empty() {
             let v = self.find_next_node(&mut independent_nodes_queue);
-            println!("{}", self.get_node_name(v));
+            writeln!(out, "{}", self.get_node_name(v))?;
             if let Some(node_to_process) = self.nodes.remove(&v) {
                 for successor_name in node_to_process.successor_tokens.into_iter().rev() {
                     // we reverse to match GNU tsort order
@@ -311,6 +294,7 @@ impl Graph {
                 }
             }
         }
+        Ok(())
     }
     pub fn indegree(&self, sym: Sym) -> Option<usize> {
         self.nodes.get(&sym).map(|data| data.predecessor_count)

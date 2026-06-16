@@ -39,7 +39,7 @@ impl<'a> BufferedOutput<'a> {
         }
     }
 
-    pub(crate) fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    pub(crate) fn discard_cache(&self, offset: u64, len: u64) {
         self.inner.discard_cache(offset, len);
     }
 

@@ -23,8 +23,10 @@ doctest = false
 clap = { workspace = true }
 rustix = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
-selinux = { workspace = true, optional = true }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [[bin]]
 name = "id"

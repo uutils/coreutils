@@ -948,6 +948,26 @@ fn test_du_h_precision() {
     }
 }
 
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_du_h_locale_decimal_separator() {
+    for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(8500)
+            .expect("cannot truncate test len to size");
+        ucmd.env("LC_ALL", locale)
+            .arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 #[cfg(feature = "touch")]
 #[test]

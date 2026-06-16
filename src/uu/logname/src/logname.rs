@@ -26,11 +26,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(userlogin) = get_userlogin() {
         writeln!(stdout(), "{userlogin}")?;
+        Ok(())
     } else {
         show_error!("{}", translate!("logname-error-no-login-name"));
+        Err(1.into())
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {

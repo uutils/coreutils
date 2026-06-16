@@ -297,6 +297,16 @@ fn test_numeric_with_trailing_invalid_chars() {
 }
 
 #[test]
+fn test_numeric_sort_rejects_leading_plus_sign() {
+    // GNU sort -n does not treat '+' as a number sign; lines sort lexicographically.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("+1\n+10\n+2\n")
+        .succeeds()
+        .stdout_is("+1\n+10\n+2\n");
+}
+
+#[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
         .arg("-z")
@@ -1093,6 +1103,34 @@ fn test_merge_interleaved() {
 }
 
 #[test]
+fn test_merge_preserves_long_lines() {
+    use std::fmt::Write;
+
+    const N_ROWS: usize = 3;
+    const LINE_LEN: usize = 32_000;
+    const LINE_VALUES: [&str; N_ROWS] = ["a", "b", "c"];
+    // Exercise merge reads where long lines span internal chunk boundaries.
+    let input = LINE_VALUES.into_iter().fold(
+        String::with_capacity(N_ROWS * (LINE_LEN + 1)),
+        |mut acc, value| {
+            writeln!(acc, "{}", value.repeat(LINE_LEN)).unwrap();
+            acc
+        },
+    );
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &input);
+
+    let result = ucmd.arg("-m").arg("long-lines.txt").succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert_eq!(stdout.len(), input.len());
+    assert_eq!(stdout.as_slice(), input.as_bytes());
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -1570,10 +1608,9 @@ fn test_wrong_args_exit_code() {
 #[test]
 #[cfg(unix)]
 fn test_tmp_files_deleted_on_sigint() {
-    use std::{fs::read_dir, time::Duration};
-
-    use nix::{sys::signal, unistd::Pid};
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{fs::read_dir, time::Duration};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
@@ -1609,7 +1646,7 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
-    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     // wait for `sort` to exit
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
@@ -2976,6 +3013,25 @@ fn test_consistent_sorting_with_i18n_collate() {
         .env("LC_ALL", "C")
         .arg("fix_i18n_collate_inconsistency_1.txt")
         .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation_weights() {
+    // Test for issue #12542
+    let input = "file10\nfile-10\n";
+    let expected_output = "file-10\nfile10\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected_output);
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
         .succeeds()
         .stdout_is(expected_output);
 }

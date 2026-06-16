@@ -119,19 +119,11 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
-                None => {
-                    return Ok(true);
-                }
-                _ => {
-                    return Err(ParseError::MissingArgument(op.quote().to_string()));
-                }
+                None => return Ok(true),
+                _ => return Err(ParseError::MissingArgument(op.quote().to_string())),
             };
 
-            Ok(if op == "-z" {
-                s.is_empty()
-            } else {
-                !s.is_empty()
-            })
+            Ok((op == "-z") == s.is_empty())
         }
         Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
             let op = op.to_str().unwrap();

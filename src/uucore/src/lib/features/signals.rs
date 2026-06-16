@@ -511,15 +511,16 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 /// Installs a signal handler. The handler must be async-signal-safe.
 #[cfg(unix)]
 pub fn install_signal_handler(
-    sig: Signal,
+    sig: i32,
     handler: extern "C" fn(std::os::raw::c_int),
 ) -> Result<(), Errno> {
+    let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
     let action = SigAction::new(
         SigHandler::Handler(handler),
         SaFlags::SA_RESTART,
         SigSet::empty(),
     );
-    unsafe { sigaction(sig, &action) }?;
+    unsafe { sigaction(signal, &action) }?;
     Ok(())
 }
 
@@ -661,7 +662,7 @@ pub fn ensure_stdout_not_broken() -> std::io::Result<bool> {
     let out = stdout();
 
     // First, check that stdout is a fifo and return true if it's not the case
-    let stat = fstat(out.as_fd())?;
+    let stat = fstat(&out)?;
     if !SFlag::from_bits_truncate(stat.st_mode).contains(SFlag::S_IFIFO) {
         return Ok(true);
     }

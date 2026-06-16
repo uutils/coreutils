@@ -54,6 +54,34 @@ fn test_invalid_flag() {
 }
 
 #[test]
+fn test_expand_tabs_multibyte_char_is_rejected() {
+    for arg in ["-e€", "-e€3"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-e' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_multibyte_separator_is_rejected() {
+    for arg in ["-n€", "-n€5"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_empty_value_is_rejected() {
+    new_ucmd!()
+        .args(&["--number-lines=", "test_one_page.log"])
+        .fails_with_code(1)
+        .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
@@ -888,4 +916,57 @@ fn test_zero_columns_shortcut() {
         .arg("-0")
         .fails_with_code(1)
         .stderr_contains("pr: invalid --column argument '0'");
+}
+
+#[test]
+fn test_zero_expand_tab_width() {
+    let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
+    new_ucmd!()
+        .arg("-e0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+    new_ucmd!()
+        .arg("-eX0")
+        .fails_with_code(1)
+        .stderr_only(expected);
+}
+
+#[test]
+fn test_zero_column_width() {
+    new_ucmd!()
+        .args(&["-w", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --width argument '0'\n");
+}
+
+#[test]
+fn test_zero_page_width() {
+    new_ucmd!()
+        .args(&["-W", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_zero_length() {
+    new_ucmd!()
+        .args(&["-l", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --length argument '0'\n");
+}
+
+#[test]
+fn test_zero_pages() {
+    new_ucmd!()
+        .args(&["--pages", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --pages argument '0'\n");
+}
+
+#[test]
+fn test_negative_expand_tabs() {
+    new_ucmd!()
+        .arg("-e=-1")
+        .fails_with_code(1)
+        .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
 }

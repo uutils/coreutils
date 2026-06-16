@@ -4,13 +4,15 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime DATETIME UTIME futimens
-// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS
+// spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT ENXIO RDONLY utimensat
 
 pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::{FileTime, set_file_times, set_symlink_file_times};
+#[cfg(any(not(unix), target_os = "redox"))]
+use filetime::set_file_times;
+use filetime::{FileTime, set_symlink_file_times};
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -23,9 +25,8 @@ use rustix::fs::Timestamps;
 use rustix::fs::futimens;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-#[cfg(unix)]
+use std::fs;
 use std::fs::OpenOptions;
-use std::fs::{self, File};
 use std::io::{Error, ErrorKind};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
@@ -436,6 +437,20 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     Ok(())
 }
 
+/// Create `path` if it does not exist, without ever truncating it.
+///
+/// Uses `O_CREAT` but deliberately not `O_TRUNC`: if an attacker plants a
+/// symlink at `path` in the window between the metadata check in
+/// [`touch_file`] and this open, the open follows it but must not zero the
+/// symlink's target. Matches GNU touch (issue #10019).
+fn create_without_truncate(path: &Path) -> std::io::Result<fs::File> {
+    OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+}
+
 /// Create or update the timestamp for a single file.
 ///
 /// # Arguments
@@ -486,7 +501,7 @@ fn touch_file(
             return Ok(());
         }
 
-        if let Err(e) = File::create(path) {
+        if let Err(e) = create_without_truncate(path) {
             // we need to check if the path is the path to a directory (ends with a separator)
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
@@ -594,12 +609,80 @@ fn update_times(
 
     #[cfg(unix)]
     {
+        if is_stdout {
+            // `touch -` operates on whatever file is open as stdout (fd 1),
+            // even when it was opened read-only. Use futimens on the fd
+            // directly: it preserves the UTIME_NOW sentinel, while
+            // filetime::set_file_times would normalize it into a literal
+            // 1970 timestamp.
+            let timestamps = build_timestamps(atime, mtime);
+            return futimens(std::io::stdout(), &timestamps)
+                .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+                .map_err_context(
+                    || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+                );
+        }
+
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if !is_stdout && try_futimens_via_write_fd(path, atime, mtime).is_ok() {
+        if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
             return Ok(());
         }
+        // The write-FD approach fails on special files such as FIFOs (the
+        // write-only open returns ENXIO when there is no reader). Set the times
+        // by path with utimensat, which never opens the file and so never
+        // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
+        // would hang on a reader-less FIFO.
+        set_times_by_path(path, atime, mtime)
     }
 
+    #[cfg(not(unix))]
+    {
+        set_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        )
+    }
+}
+
+#[cfg(unix)]
+/// Build a rustix `Timestamps` from the access and modification `FileTime`s,
+/// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
+fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+    Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    }
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+/// Set file times by path using `utimensat`, following symlinks.
+///
+/// This never opens the file, so it does not block on special files such as
+/// FIFOs.
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
+    let timestamps = build_timestamps(atime, mtime);
+    rustix::fs::utimensat(
+        rustix::fs::CWD,
+        path,
+        &timestamps,
+        rustix::fs::AtFlags::empty(),
+    )
+    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+}
+
+#[cfg(target_os = "redox")]
+/// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
+///
+/// Falls back to `filetime::set_file_times`; unlike on other unixes this may
+/// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
+/// edge case the `utimensat` path guards against does not arise here.
+fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
     set_file_times(path, atime, mtime)
         .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
@@ -980,5 +1063,35 @@ mod tests {
 
         assert_eq!(actual_atime, atime);
         assert_eq!(actual_mtime, mtime);
+    }
+
+    // The #10019 fix: the create-open must use O_CREAT without O_TRUNC. During
+    // the TOCTOU race the open lands on an *existing* file (the symlink's
+    // target), so opening an existing file must leave its contents intact. This
+    // deterministically distinguishes the fix from the old File::create, which
+    // used O_TRUNC and would zero the file here.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_does_not_truncate_existing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("victim");
+        std::fs::write(&path, b"do not truncate me").unwrap();
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"do not truncate me");
+    }
+
+    // The other half of the contract: when the path is missing it must be
+    // created (as an empty file), matching the old File::create behavior.
+    #[cfg(unix)]
+    #[test]
+    fn create_without_truncate_creates_missing_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("new");
+
+        super::create_without_truncate(&path).unwrap();
+
+        assert_eq!(std::fs::read(&path).unwrap(), b"");
     }
 }
