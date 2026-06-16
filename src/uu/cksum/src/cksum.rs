@@ -52,7 +52,7 @@ fn maybe_sanitize_length(
     match (algo_cli, input_length) {
         // No provided length is not a problem so far.
         (_, None) => Ok(None),
-
+        
         // For SHA2 and SHA3, if a length is provided, ensure it is correct.
         (Some(algo @ (AlgoKind::Sha2 | AlgoKind::Sha3)), Some(s_len)) => {
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
@@ -64,7 +64,13 @@ fn maybe_sanitize_length(
         // will have its extra bits set to zero.
         (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
             Ok(0) => Ok(None),
-            Ok(l) => Ok(Some(HashLength::from_bits(l))),
+            Ok(l) => {
+                if l > u32::MAX as usize {
+                    Err(ChecksumError::InvalidLength(len.into()).into()) 
+                } else {
+                    Ok(Some(HashLength::from_bits(l)))
+                }
+            }
             Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
         },
 
