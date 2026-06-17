@@ -257,11 +257,16 @@ enum Writer {
 
 impl Writer {
     pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+        #[cfg(any(unix, target_os = "wasi"))]
+        use uucore::io::AsFdExt as _;
         match self {
             // File does not have line buffering
+            #[cfg(any(unix, target_os = "wasi"))]
+            Self::File(f) => f.write_all_no_retry(buf),
+            #[cfg(not(any(unix, target_os = "wasi")))]
             Self::File(f) => f.write_all(buf),
             #[cfg(any(unix, target_os = "wasi"))]
-            Self::Stdout(s) => s.write_all(buf),
+            Self::Stdout(s) => s.0.write_all_no_retry(buf),
             #[cfg(not(any(unix, target_os = "wasi")))]
             Self::Stdout(s) => {
                 s.write_all(buf)?;

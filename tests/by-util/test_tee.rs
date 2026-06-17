@@ -697,6 +697,52 @@ mod linux_only {
         assert_eq!(at.read(file_out_b), content);
         assert!(result.stderr_str().contains("No space left on device"));
     }
+
+    #[test]
+    fn test_eintr_on_write_is_not_retried() {
+        use std::io::Write;
+        if std::process::Command::new("strace")
+            .arg("--version")
+            .output()
+            .is_err()
+        {
+            return;
+        }
+
+        let mut child = std::process::Command::new("strace")
+            .args([
+                "-o",
+                "/dev/null", // suppress strace's own output
+                "-e",
+                "inject=write:error=EINTR:when=1",
+                env!("CARGO_BIN_EXE_coreutils"),
+                "tee",
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("failed to spawn strace");
+
+        // Write something so tee actually calls write()
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(b"hello\n");
+            // drop stdin to send EOF
+        }
+
+        let result = child.wait_with_output().expect("failed to wait");
+
+        let stderr = String::from_utf8_lossy(&result.stderr);
+
+        assert!(
+            !result.status.success(),
+            "tee should have failed on EINTR but exited zero.\nstderr: {stderr}"
+        );
+        assert!(
+            stderr.contains("Interrupted system call"),
+            "expected 'Interrupted system call' in stderr, got: {stderr}"
+        );
+    }
 }
 
 // Additional cross-platform tee tests to cover GNU compatibility around --output-error
