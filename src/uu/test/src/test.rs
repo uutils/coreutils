@@ -97,10 +97,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Op(Operator::String(op))) => {
             let b = pop_literal!();
             let a = pop_literal!();
-            match op.to_string_lossy().as_ref() {
-                "!=" => Ok(a != b),
-                "<" => Ok(a < b),
-                ">" => Ok(a > b),
+            match op.as_encoded_bytes() {
+                b"!=" => Ok(a != b),
+                b"<" => Ok(a < b),
+                b">" => Ok(a > b),
                 _ => Ok(a == b),
             }
         }
