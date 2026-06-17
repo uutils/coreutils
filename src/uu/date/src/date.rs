@@ -418,8 +418,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // - Semantics: a pure decimal number denotes today's time-of-day (HH or HHMM).
             //   Examples: "0"/"00" => 00:00 today; "7"/"07" => 07:00 today; "0700" => 07:00 today.
             // For all other forms, fall back to the general parser.
-            let is_pure_digits =
-                !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
+            //
+            // GNU compatibility (Military timezone 'J' after a time):
+            // 'J' is local time, so "<digits>j"/"<digits>J" is the same time-of-day form
+            // as the bare "<digits>" input ("9j" == "9"). Strip it before the digit check.
+            let time_digits = input.strip_suffix(['j', 'J']).unwrap_or(input);
+            let is_pure_digits = !time_digits.is_empty()
+                && time_digits.len() <= 4
+                && time_digits.chars().all(|c| c.is_ascii_digit());
 
             let date = if is_empty_or_whitespace || is_military_j {
                 // Treat empty string or 'J' as midnight today (00:00:00) in local time
@@ -463,11 +469,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if is_pure_digits {
-                // Derive HH and MM from the input
-                let (hh_opt, mm_opt) = if input.len() <= 2 {
-                    (input.parse::<u32>().ok(), Some(0u32))
+                // Derive HH and MM from the digits
+                let (hh_opt, mm_opt) = if time_digits.len() <= 2 {
+                    (time_digits.parse::<u32>().ok(), Some(0u32))
                 } else {
-                    let (h, m) = input.split_at(input.len() - 2);
+                    let (h, m) = time_digits.split_at(time_digits.len() - 2);
                     (h.parse::<u32>().ok(), m.parse::<u32>().ok())
                 };
 

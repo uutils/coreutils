@@ -3017,4 +3017,23 @@ fn test_consistent_sorting_with_i18n_collate() {
         .stdout_is(expected_output);
 }
 
+#[test]
+fn test_sort_locale_punctuation_weights() {
+    // Test for issue #12542
+    let input = "file10\nfile-10\n";
+    let expected_output = "file-10\nfile10\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected_output);
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected_output);
+}
+
 /* spell-checker: enable */

@@ -550,27 +550,41 @@ fn build_options(
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
         .map(|i| {
+            let invalid = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
             let parse_result = i.parse::<usize>();
 
             let separator = if parse_result.is_err() {
-                i[0..1].to_string()
+                match i.chars().next() {
+                    Some(c) if c.is_ascii() => c.to_string(),
+                    Some(_) | None => return Err(invalid(i)),
+                }
             } else {
                 NumberingMode::default().separator
             };
 
             let width = match parse_result {
                 Ok(res) => res,
-                Err(_) => i[1..]
+                Err(_) => i
+                    .get(1..)
+                    .unwrap_or_default()
                     .parse::<usize>()
                     .unwrap_or(NumberingMode::default().width),
             };
 
-            NumberingMode {
+            Ok(NumberingMode {
                 width,
                 separator,
                 first_number,
-            }
+            })
         })
+        .transpose()?
         .or_else(|| {
             if matches.contains_id(options::NUMBER_LINES) {
                 Some(NumberingMode::default())
@@ -601,10 +615,14 @@ fn build_options(
                             input_char: TAB,
                             width,
                         })
+                    } else if !c.is_ascii() {
+                        Err(invalid(s))
                     } else if s.len() > 1 {
                         let width: i32 = s[1..].parse().map_err(|_e| invalid(&s[1..]))?;
                         if width <= 0 {
                             return Err(invalid(&s[1..]));
+                        } else if s.starts_with('-') {
+                            return Err(invalid(s));
                         }
                         Ok(ExpandTabsOptions {
                             input_char: c,
@@ -687,9 +705,17 @@ fn build_options(
 
     let invalid_pages_map = |i: String| {
         let unparsed_value = matches.get_one::<String>(options::PAGES).unwrap();
-        i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
+        let parsed_value = i.parse::<usize>().map_err(|_e| PrError::EncounteredErrors {
             msg: format!("invalid --pages argument {}", unparsed_value.quote()),
-        })
+        });
+
+        match parsed_value {
+            Ok(0) => Err(PrError::EncounteredErrors {
+                msg: "invalid --pages argument '0'".to_string(),
+            }),
+            Ok(res) => Ok(res),
+            Err(e) => Err(e),
+        }
     };
 
     let res = matches
@@ -734,6 +760,12 @@ fn build_options(
     let page_length =
         parse_usize(matches, options::PAGE_LENGTH).unwrap_or(Ok(default_lines_per_page))?;
 
+    if page_length == 0 {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --length argument '0'".to_string(),
+        });
+    }
+
     let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
@@ -772,6 +804,12 @@ fn build_options(
     let column_width =
         parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
 
+    if column_width == 0 {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --width argument '0'".to_string(),
+        });
+    }
+
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
@@ -780,6 +818,12 @@ fn build_options(
             None => None,
         }
     };
+
+    if page_width == Some(0) {
+        return Err(PrError::EncounteredErrors {
+            msg: "invalid --page-width argument '0'".to_string(),
+        });
+    }
 
     let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
 

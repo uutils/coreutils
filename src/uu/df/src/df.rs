@@ -273,11 +273,7 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
     // matching an existing mnt point, to avoid problematic
     // replacement when given inaccurate mount lists, seen with some
     // chroot environments for example.
-    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
-        return false;
-    }
-
-    true
+    !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
 /// Whether to prioritize given mount info over all others on the same device.
@@ -295,15 +291,8 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Get all currently mounted filesystems.
 ///
-/// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
-/// [`Options`] for more information.
+/// `opt` excludes certain filesystems from consideration; see [`Options`] for more information.
 fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
-    // Run a sync call before any operation if so instructed.
-    if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        rustix::fs::sync();
-    }
-
     let mut mounts = vec![];
     for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
@@ -450,6 +439,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
+
+    // Run a sync call before any operation if so instructed.
+    if opt.sync {
+        #[cfg(not(any(windows, target_os = "redox")))]
+        rustix::fs::sync();
+    }
+
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
