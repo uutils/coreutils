@@ -7,7 +7,7 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{Error, ErrorKind, Result, Write, stderr};
+use std::io::{self, Error, ErrorKind, Write, stderr};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
@@ -56,24 +56,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     tee(&options).map_err(|_| 1.into())
 }
 
-fn tee(options: &Options) -> Result<()> {
+fn tee(options: &Options) -> Result<(), ()> {
     #[cfg(unix)]
-    {
-        // ErrorKind::Other is raised by MultiWriter when all writers have exited.
-        // This is therefore just a clever way to stop all writers
-
-        if options.ignore_interrupts {
-            ignore_interrupts().map_err(|_| Error::from(ErrorKind::Other))?;
-        }
-        if options.output_error.is_some() {
-            disable_pipe_errors().map_err(|_| Error::from(ErrorKind::Other))?;
-        }
+    if options.ignore_interrupts {
+        ignore_interrupts().map_err(|_| ())?;
     }
+    #[cfg(unix)]
+    if options.output_error.is_some() {
+        disable_pipe_errors().map_err(|_| ())?;
+    }
+
     let mut writers: Vec<NamedWriter> = options
         .files
         .iter()
         .filter_map(|file| open(file, options.append, options.output_error.as_ref()))
-        .collect::<Result<Vec<NamedWriter>>>()?;
+        .collect::<io::Result<Vec<NamedWriter>>>()
+        .map_err(|_| ())?;
     let had_open_errors = writers.len() != options.files.len();
 
     writers.insert(
@@ -83,33 +81,25 @@ fn tee(options: &Options) -> Result<()> {
             #[cfg(any(unix, target_os = "wasi"))]
             inner: Writer::Stdout(uucore::io::RawWriter(rustix::stdio::stdout())),
             #[cfg(not(any(unix, target_os = "wasi")))]
-            inner: Writer::Stdout(std::io::stdout()),
+            inner: Writer::Stdout(io::stdout()),
         },
     );
 
     let mut output = MultiWriter::new(writers, options.output_error);
 
     #[cfg(target_os = "linux")]
-    if options.ignore_pipe_errors && !ensure_stdout_not_broken()? && output.writers.len() == 1 {
+    if options.ignore_pipe_errors
+        && !ensure_stdout_not_broken().map_err(|_| ())?
+        && output.writers.len() == 1
+    {
         return Ok(());
     }
 
     // don't use io::copy since content of 1 read should be immediately written for posix requirement
-    let res = match output.copy_unbuffered() {
-        // ErrorKind::Other is raised by MultiWriter when all writers
-        // have exited, so that copy will abort. It's equivalent to
-        // success of this part (if there was an error that should
-        // cause a failure from any writer, that error would have been
-        // returned instead).
-        Err(e) if e.kind() != ErrorKind::Other => Err(e),
-        _ => Ok(()),
-    };
-
-    if had_open_errors || res.is_err() || output.error_occurred() {
-        Err(Error::from(ErrorKind::Other))
-    } else {
-        Ok(())
+    if output.copy_unbuffered().is_err() || had_open_errors || output.error_occurred() {
+        return Err(());
     }
+    Ok(())
 }
 
 /// Tries to open the indicated file and return it. Reports an error if that's not possible.
@@ -119,7 +109,7 @@ fn open(
     name: &OsString,
     append: bool,
     output_error: Option<&OutputErrorMode>,
-) -> Option<Result<NamedWriter>> {
+) -> Option<io::Result<NamedWriter>> {
     let path = PathBuf::from(name);
     let mut options = OpenOptions::new();
     let mode = if append {
@@ -146,16 +136,16 @@ struct MultiWriter {
     writers: Vec<NamedWriter>,
     output_error_mode: Option<OutputErrorMode>,
     ignored_errors: usize,
-    aborted: Option<Error>,
+    aborted: bool,
 }
 
 impl MultiWriter {
     /// Copies all bytes from the input buffer to the output buffer
     /// without buffering which is POSIX requirement.
-    pub fn copy_unbuffered(&mut self) -> Result<()> {
+    pub fn copy_unbuffered(&mut self) -> Result<(), ()> {
         // todo: support splice() and tee() fast-path at here
         #[cfg(not(any(unix, target_os = "wasi")))]
-        use std::io::Read as _;
+        use io::Read as _;
         const BUF_SIZE: usize = 32 * 1024;
         #[cfg(any(unix, target_os = "wasi"))]
         let mut buf = [std::mem::MaybeUninit::<u8>::uninit(); BUF_SIZE];
@@ -163,7 +153,7 @@ impl MultiWriter {
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut buf = [0u8; BUF_SIZE];
 
-        let input = std::io::stdin();
+        let input = io::stdin();
         #[cfg(not(any(unix, target_os = "wasi")))]
         let mut input = input;
         loop {
@@ -183,8 +173,12 @@ impl MultiWriter {
                         "tee: {}",
                         translate!("tee-error-stdin", "error" => strip_errno(&e))
                     );
-                    return Err(e);
+                    return Err(());
                 }
+            }
+            if self.writers.is_empty() {
+                // all writers exited
+                return Ok(());
             }
         }
     }
@@ -194,7 +188,7 @@ impl MultiWriter {
             writers,
             output_error_mode,
             ignored_errors: 0,
-            aborted: None,
+            aborted: false,
         }
     }
 
@@ -202,24 +196,22 @@ impl MultiWriter {
         self.ignored_errors != 0
     }
 
-    fn write_flush(&mut self, buf: &[u8]) -> Result<()> {
+    fn write_flush(&mut self, buf: &[u8]) -> Result<(), ()> {
         let mode = self.output_error_mode;
         self.writers
             .retain_mut(|writer| match writer.inner.write_all(buf) {
                 Ok(()) => true,
                 Err(e) => {
-                    if let Err(e) = process_error(mode, e, writer, &mut self.ignored_errors) {
-                        self.aborted.get_or_insert(e);
+                    if process_error(mode, e, writer, &mut self.ignored_errors).is_err() {
+                        self.aborted = true;
                     }
                     false
                 }
             });
-        match self.aborted.take() {
-            Some(e) => Err(e),
-            // This error kind will never be raised by std, so we can use it for termination when all writers exited
-            None if self.writers.is_empty() => Err(Error::from(ErrorKind::Other)),
-            None => Ok(()),
+        if self.aborted {
+            return Err(());
         }
+        Ok(())
     }
 }
 
@@ -228,7 +220,7 @@ fn process_error(
     e: Error,
     writer: &NamedWriter,
     ignored_errors: &mut usize,
-) -> Result<()> {
+) -> Result<(), ()> {
     let ignore_pipe = matches!(
         mode,
         None | Some(OutputErrorMode::WarnNoPipe) | Some(OutputErrorMode::ExitNoPipe)
@@ -239,7 +231,7 @@ fn process_error(
     }
     let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
-        Err(e)
+        Err(())
     } else {
         *ignored_errors += 1;
         Ok(())
@@ -252,11 +244,11 @@ enum Writer {
     #[cfg(any(unix, target_os = "wasi"))]
     Stdout(uucore::io::RawWriter<rustix::fd::BorrowedFd<'static>>),
     #[cfg(not(any(unix, target_os = "wasi")))]
-    Stdout(std::io::Stdout),
+    Stdout(io::Stdout),
 }
 
 impl Writer {
-    pub fn write_all(&mut self, buf: &[u8]) -> Result<()> {
+    pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         match self {
             // File does not have line buffering
             Self::File(f) => f.write_all(buf),
