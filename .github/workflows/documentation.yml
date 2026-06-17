@@ -17,6 +17,9 @@ on:
       - 'src/uu/*/locales/en-US.ftl'
       - 'Cargo.toml'
 
+permissions:
+  contents: read
+
 jobs:
   check-doc:
     name: Verify uudoc generates correct documentation
