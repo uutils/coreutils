@@ -3608,6 +3608,23 @@ fn test_cp_parents_2_deep_dir() {
     assert!(at.dir_exists("d/e/a/b/c"));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_cp_parents_recursive_source_ending_in_parent_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("src/sub");
+    at.write("src/sub/f", "x\n");
+    at.mkdir("d");
+
+    ucmd.args(&["--parents", "-r", "src/sub/..", "d"])
+        .fails()
+        .stderr_contains("cannot create directory 'd/src/sub/..'")
+        .stderr_contains("File exists");
+
+    assert!(at.dir_exists("d/src/sub"));
+    assert!(!at.file_exists("d/src/sub/f"));
+}
+
 #[test]
 fn test_cp_copy_symlink_contents_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
