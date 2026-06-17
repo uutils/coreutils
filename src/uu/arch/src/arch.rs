@@ -15,8 +15,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let uts =
         PlatformInfo::new().map_err(|_e| USimpleError::new(1, translate!("cannot-get-system")))?;
-
-    writeln!(stdout(), "{}", uts.machine().to_string_lossy().trim())?;
+    // no invalid unicode at here
+    let machine = uts.machine().as_encoded_bytes().trim_ascii();
+    stdout().write_all(machine)?;
     Ok(())
 }
 
