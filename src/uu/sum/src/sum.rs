@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -75,32 +75,16 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         Ok(Box::new(stdin()) as Box<dyn Read>)
     } else {
         let path = Path::new(name);
-
-        // Silent the warning as we want to the error message
-        match path.metadata() {
-            Ok(_) => {
-                if path.is_dir() {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-                    ));
-                }
+        let f = File::open(path).map_err(|e| {
+            #[cfg(windows)] // does not return ErrorKind::IsADirectory. So accept TOCTOU race...
+            if path.is_dir() {
+                return USimpleError::new(
+                    1,
+                    translate!("sum-error-is-directory", "name" => name.maybe_quote()),
+                );
             }
-            Err(err) => {
-                if err.kind() == ErrorKind::NotFound {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
-                    ));
-                } else if path.to_string_lossy().ends_with(['/', '\\']) {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sum-error-not-a-directory", "name" => name.maybe_quote()),
-                    ));
-                }
-            }
-        }
-        let f = File::open(path).map_err_context(String::new)?;
+            USimpleError::new(1, format!("{}: {}", name.maybe_quote(), strip_errno(&e)))
+        })?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Box::new(f) as Box<dyn Read>)
@@ -139,7 +123,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }?;
+        }
+        .map_err(|e| {
+            // todo: remove this hack when we started separating read error and write error
+            if cfg!(not(target_os = "windows")) && e.kind() == ErrorKind::IsADirectory {
+                USimpleError::new(2, format!("{}: {}", file.maybe_quote(), strip_errno(&e)))
+            } else {
+                e.into()
+            }
+        })?;
 
         let mut stdout = stdout().lock();
         if print_names {

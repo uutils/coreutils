@@ -9,5 +9,3 @@ sum-help-sysv-compatible = use System V sum algorithm, use 512 bytes blocks
 
 # Error messages
 sum-error-is-directory = { $name }: Is a directory
-sum-error-no-such-file-or-directory = { $name }: No such file or directory
-sum-error-not-a-directory = { $name }: Not a directory
