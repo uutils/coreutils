@@ -23,14 +23,6 @@ pub mod options {
     pub static COMMAND: &str = "COMMAND";
 }
 
-fn is_prefix_of(maybe_prefix: &str, target: &str, min_match: usize) -> bool {
-    if maybe_prefix.len() < min_match || maybe_prefix.len() > target.len() {
-        return false;
-    }
-
-    &target[0..maybe_prefix.len()] == maybe_prefix
-}
-
 /// Transform legacy arguments into a standardized form.
 ///
 /// The following are all legal argument sequences to GNU nice:
@@ -68,9 +60,9 @@ fn standardize_nice_args(mut args: impl uucore::Args) -> impl uucore::Args {
             new_arg.push(s);
             v.push(new_arg);
             saw_n = false;
-        } else if s.to_str() == Some("-n")
-            || s.to_str()
-                .is_some_and(|s| is_prefix_of(s, "--adjustment", "--a".len()))
+        } else if s
+            .to_str()
+            .is_some_and(|s| s == "-n" || (s.len() >= "--a".len() && "--adjustment".starts_with(s)))
         {
             saw_n = true;
         } else if let Ok(s) = s.clone().into_string() {

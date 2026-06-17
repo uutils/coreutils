@@ -151,11 +151,12 @@ pub struct Options {
     /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
     /// is used
     pub interactive: InteractiveMode,
-    #[allow(dead_code)]
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
     pub preserve_root: bool,
+    /// `--preserve-root=all`
+    pub preserve_root_all: bool,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -177,6 +178,7 @@ impl Default for Options {
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
             preserve_root: true,
+            preserve_root_all: false,
             recursive: false,
             dir: false,
             verbose: false,
@@ -233,6 +235,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
+    let preserve_root_all = matches
+        .get_one::<String>(OPT_PRESERVE_ROOT)
+        .is_some_and(|value| value == "all");
     let recursive = matches.get_flag(OPT_RECURSIVE);
 
     let options = Options {
@@ -252,6 +257,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
         preserve_root,
+        preserve_root_all,
         recursive,
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -389,7 +395,12 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help(translate!("rm-help-preserve-root"))
-                .action(ArgAction::SetTrue),
+                // `--preserve-root` alone protects only '/'; `--preserve-root=all`
+                // additionally refuses to cross into another file system.
+                .num_args(0..=1)
+                .require_equals(true)
+                .value_name("all")
+                .value_parser(["all"]),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -503,7 +514,6 @@ fn count_files_in_directory(p: &Path) -> u64 {
     1 + entries_count
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
 /// Remove (or unlink) the given files
 ///
 /// Returns true if it has encountered an error.
