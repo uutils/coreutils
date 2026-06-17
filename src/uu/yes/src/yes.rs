@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore strs
-
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -56,28 +54,15 @@ pub fn uu_app() -> Command {
 /// create a buffer filled by words `i` separated by spaces.
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
-    #[cfg(unix)]
-    use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
-
     let mut buf = Vec::with_capacity(BUF_SIZE);
-    // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
-    #[cfg(any(unix, target_os = "wasi"))]
-    for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
+    for part in itertools::intersperse(i.map(|a| a.as_encoded_bytes()), b" ") {
+        // On the platform OsStr is not &[u8], reject invalid utf8
+        // todo: accept invalid utf8 on safe output type
+        #[cfg(not(any(unix, target_os = "wasi")))]
+        std::str::from_utf8(part).map_err(|e| USimpleError::new(1, format!("{e}")))?;
         buf.extend_from_slice(part);
     }
-    // But, on Windows, we must hop through a String.
-    #[cfg(not(any(unix, target_os = "wasi")))]
-    for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-        let bytes = part
-            .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
-            .as_bytes();
-        buf.extend_from_slice(bytes);
-    }
-
     buf.push(b'\n');
-
     Ok(buf)
 }
 
