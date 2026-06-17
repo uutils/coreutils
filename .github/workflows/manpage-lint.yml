@@ -22,6 +22,9 @@ on:
       - 'GNUmakefile'
       - '.github/workflows/manpage-lint.yml'
 
+permissions:
+  contents: read
+
 jobs:
   manpage-lint:
     name: Validate manpages with mandoc
