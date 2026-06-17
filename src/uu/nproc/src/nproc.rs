@@ -117,11 +117,18 @@ fn cgroups2_quota() -> Option<usize> {
 
 fn available_parallelism() -> usize {
     // return all online cores if sched_getaffinity syscall failed as same as GNU
-    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[cfg(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "dragonfly"
+    ))]
     let affinity = rustix::thread::sched_getaffinity(None).map_or_else(
         |_| unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) } as usize,
         |s| s.count() as usize,
     );
+    #[cfg(any(target_os = "freebsd", target_os = "dragonfly"))]
+    return affinity;
     // ignore quota under some schedulers
     #[cfg(any(target_os = "linux", target_os = "android"))]
     match unsafe { libc::sched_getscheduler(0) } {
@@ -129,6 +136,11 @@ fn available_parallelism() -> usize {
         // GNU has no quota if /proc is masked
         _ => affinity.min(cgroups2_quota().unwrap_or(usize::MAX)),
     }
-    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "freebsd",
+        target_os = "dragonfly"
+    )))]
     std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }
