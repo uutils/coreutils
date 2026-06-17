@@ -122,6 +122,11 @@ fn test_sign_middle() {
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_nice_adj_negative() {
+    // This assumes the test suite is run as a normal (non-root) user, and as
+    // such attempting to set a negative niceness value will be rejected by
+    // the OS.  If it gets denied, then we know a negative value was parsed
+    // correctly.
+
     new_ucmd!()
         .args(&["--adj", "-20", "true"])
         .succeeds()
