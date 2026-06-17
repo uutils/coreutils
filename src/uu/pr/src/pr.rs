@@ -437,6 +437,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
+    #[expect(clippy::collapsible_if)]
     if let Some((pos, _value)) = num_option {
         if let Some(num_val_opt) = args.get(pos + 1) {
             if !num_regex.is_match(num_val_opt) {
@@ -452,10 +453,8 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     let expand_tabs_option = arguments
         .iter()
         .find_position(|x| e_regex.is_match(x.trim()));
-    if let Some((pos, value)) = expand_tabs_option {
-        if value.trim().len() <= 2 {
-            arguments[pos] = "-e\t8".to_string();
-        }
+    if let Some((pos, _value)) = expand_tabs_option.filter(|(_, value)| value.trim().len() <= 2) {
+        arguments[pos] = "-e\t8".to_string();
     }
 
     arguments
@@ -743,12 +742,10 @@ fn build_options(
         None => end_page_in_plus_option,
     };
 
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrors {
-                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-            });
-        }
+    if let Some(end_page) = end_page.filter(|e| start_page > *e) {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
+        });
     }
 
     let default_lines_per_page = if form_feed_used {

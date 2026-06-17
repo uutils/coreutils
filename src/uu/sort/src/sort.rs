@@ -1727,10 +1727,8 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
             i += 1;
         }
 
-        if matched_key {
-            if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
-                legacy_warnings[warning_idx].key_index = Some(key_index);
-            }
+        if matched_key && let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
+            legacy_warnings[warning_idx].key_index = Some(key_index);
         }
     }
 }
@@ -2007,6 +2005,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
+    #[expect(clippy::collapsible_if)]
     if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
         if let Some(first) = outputs.next() {
             if outputs.any(|out| out != first) {

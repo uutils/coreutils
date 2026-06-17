@@ -519,12 +519,11 @@ fn safe_du(
 
         // Process directories recursively
         if is_dir {
-            if options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
-                    if this_inode.dev_id != my_inode.dev_id {
-                        continue;
-                    }
-                }
+            if options.one_file_system
+                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
+                && this_inode.dev_id != my_inode.dev_id
+            {
+                continue;
             }
 
             let this_stat = safe_du(
@@ -638,13 +637,13 @@ fn du_regular(
                             if is_symlink
                                 && options.dereference == Deref::All
                                 && this_stat.metadata.is_dir()
+                                && this_stat
+                                    .inode
+                                    .as_ref()
+                                    .is_some_and(|inode| ancestors.contains(inode))
                             {
-                                if let Some(inode) = this_stat.inode {
-                                    if ancestors.contains(&inode) {
-                                        // This symlink points to an ancestor directory - skip to avoid cycle
-                                        continue 'file_loop;
-                                    }
-                                }
+                                // This symlink points to an ancestor directory - skip to avoid cycle
+                                continue 'file_loop;
                             }
 
                             // We have an exclude list
@@ -678,14 +677,12 @@ fn du_regular(
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
+                                if options.one_file_system
+                                    && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
+                                    && this_inode.dev_id != my_inode.dev_id
+                                {
+                                    continue;
                                 }
 
                                 let this_stat = du_regular(
@@ -1144,6 +1141,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
+        #[expect(clippy::collapsible_if)]
         if let Ok(stat) = stat.as_ref() {
             if let Some(inode) = stat.inode {
                 if !traversal_options.count_links && seen_inodes.contains(&inode) {
@@ -1173,6 +1171,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     Err(e) => {
                         // Check if this is our "already handled" error
+                        #[expect(clippy::collapsible_if)]
                         if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
                             if simple_error.code() == 0 {
                                 // Error already handled, continue to next file

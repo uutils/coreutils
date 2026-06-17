@@ -290,10 +290,8 @@ fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, i6
 
     // If allowed, parse the fractional part of the number if there can be one and the
     // input contains a '.' decimal separator.
-    if fractional {
-        if let Some(rest) = rest.strip_prefix('.') {
-            return base.parse_digits_count(rest, digits);
-        }
+    if fractional && let Some(rest) = rest.strip_prefix('.') {
+        return base.parse_digits_count(rest, digits);
     }
 
     (digits, 0, rest)
@@ -330,6 +328,7 @@ fn parse_exponent(base: Base, str: &str) -> (Option<BigInt>, &str) {
 
 /// Parse a multiplier from allowed suffixes (e.g. s/m/h).
 fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -> (u32, &'a str) {
+    #[expect(clippy::collapsible_if)]
     if let Some(ch) = str.chars().next() {
         if let Some(mul) = allowed_suffixes
             .iter()

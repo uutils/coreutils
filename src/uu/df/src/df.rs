@@ -157,6 +157,7 @@ impl Options {
             .get_many::<OsString>(OPT_EXCLUDE_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
 
+        #[expect(clippy::collapsible_if)]
         if let (Some(include), Some(exclude)) = (&include, &exclude) {
             if let Some(types) = Self::get_intersected_types(include, exclude) {
                 return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
@@ -222,31 +223,15 @@ impl Options {
 /// Whether to display the mount info given the inclusion settings.
 fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
-    if mi.remote && opt.show_local_fs {
-        return false;
-    }
-
+    !(mi.remote && opt.show_local_fs) &&
     // Don't show pseudo filesystems unless `--all` has been given.
     // The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
-        return false;
-    }
-
+    !((mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs) &&
     // Don't show filesystems if they have been explicitly excluded.
-    if let Some(ref excludes) = opt.exclude {
-        if excludes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-    if let Some(ref includes) = opt.include {
-        if !includes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-
-    true
+    !opt.exclude.as_ref().is_some_and(|e| e.contains(&mi.fs_type)) &&
+    !opt.include.as_ref().is_some_and(|i| !i.contains(&mi.fs_type))
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.
@@ -306,14 +291,15 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
             // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
             // the current working directory, which is extremely slow in deeply
             // nested directories (O(n) syscalls where n is the directory depth).
-            if dev_path.is_absolute() && dev_path.is_symlink() {
-                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+            if dev_path.is_absolute()
+                && dev_path.is_symlink()
+                && let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
                     dev_path,
                     uucore::fs::MissingHandling::Existing,
                     uucore::fs::ResolveMode::Logical,
-                ) {
-                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
-                }
+                )
+            {
+                mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
             }
 
             mounts.push(mi);

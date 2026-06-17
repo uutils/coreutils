@@ -491,10 +491,11 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N') {
-        if effective_width <= get_default_width(specifier) && effective_width != 0 {
-            result.truncate(effective_width);
-        }
+    } else if specifier.ends_with('N')
+        && effective_width <= get_default_width(specifier)
+        && effective_width != 0
+    {
+        result.truncate(effective_width);
     }
 
     Ok(result)
