@@ -15,17 +15,16 @@ fn test_get_current_niceness() {
 
 #[test]
 #[cfg(not(target_os = "android"))]
-fn test_negative_adj_is_adjustment() {
+fn test_nice_adj_negative() {
     // This assumes the test suite is run as a normal (non-root) user, and as
     // such attempting to set a negative niceness value will be rejected by
     // the OS.  If it gets denied, then we know a negative value was parsed
     // correctly.
 
-    let res = new_ucmd!().args(&["--adj", "-1", "true"]).succeeds();
-    assert!(
-        res.stderr_str()
-            .starts_with("nice: warning: setpriority: Permission denied")
-    ); // spell-checker:disable-line
+    new_ucmd!()
+        .args(&["--adj", "-20", "true"])
+        .succeeds()
+        .stderr_is("nice: warning: setpriority: Permission denied\n");
 }
 
 #[test]
@@ -118,17 +117,3 @@ fn test_sign_middle() {
 //uu: "-2+4" is not a valid number: invalid digit found in string
 //gnu: invalid adjustment `-2+4'
 //Both message is fine
-
-#[test]
-#[cfg(not(target_os = "android"))]
-fn test_nice_adj_negative() {
-    // This assumes the test suite is run as a normal (non-root) user, and as
-    // such attempting to set a negative niceness value will be rejected by
-    // the OS.  If it gets denied, then we know a negative value was parsed
-    // correctly.
-
-    new_ucmd!()
-        .args(&["--adj", "-20", "true"])
-        .succeeds()
-        .stderr_is("nice: warning: setpriority: Permission denied\n");
-}
