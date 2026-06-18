@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX FFFD
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -538,4 +538,16 @@ fn test_kill_realtime_signal() {
         .arg(format!("{}", target.pid()))
         .succeeds();
     assert_eq!(target.wait_for_signal(), Some(libc::SIGRTMIN()));
+}
+
+#[test]
+fn test_kill_invalid_utf8() {
+    let arg = uucore::os_str_from_bytes(b"\xFFa\xFF")
+        .expect("Only unix platforms can test non-unicode names");
+
+    new_ucmd!()
+        .arg("-l")
+        .arg(&arg)
+        .fails()
+        .stderr_contains("'\u{FFFD}a\u{FFFD}': invalid signal");
 }
