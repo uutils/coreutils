@@ -120,7 +120,11 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
                         // skip the next item
                         iter.next();
                         if let Some(times) = r.name("TIMES") {
-                            ExecutePattern::Times(times.as_str().parse::<usize>().unwrap() + 1)
+                            let n: usize = times
+                                .as_str()
+                                .parse()
+                                .map_err(|_| CsplitError::InvalidPattern(next_item.to_owned()))?;
+                            ExecutePattern::Times(n.saturating_add(1))
                         } else {
                             ExecutePattern::Always
                         }
@@ -133,7 +137,10 @@ fn extract_patterns(args: &[&str]) -> Result<Vec<Pattern>, CsplitError> {
         if let Some(captures) = to_match_reg.captures(arg) {
             let offset = match captures.name("OFFSET") {
                 None => 0,
-                Some(m) => m.as_str().parse().unwrap(),
+                Some(m) => m
+                    .as_str()
+                    .parse()
+                    .map_err(|_| CsplitError::LineOutOfRange(arg.to_owned()))?,
             };
             if let Some(up_to_match) = captures.name("UPTO") {
                 let pattern = Regex::new(up_to_match.as_str())
