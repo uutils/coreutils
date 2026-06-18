@@ -2,8 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR
-#[cfg(target_os = "linux")]
+// spell-checker:ignore axxbxx bxxaxx axxx axxxx xxaxx xxax xxxxa axyz zyax zyxa bbaaa aaabc bcdddd cddddaaabc xyzabc abcxyzabc nbbaaa EISDIR SIGBUS mmap
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -474,4 +474,81 @@ fn test_regular_end_anchor() {
         .pipe_in("aaa\nbbb\nccc\n")
         .succeeds()
         .stdout_is("\nccc\nbbaaa\nb");
+}
+
+/// Regression test for <https://github.com/uutils/coreutils/issues/9748>.
+///
+/// `tac` used to mmap regular files, so truncating a file mid-read raised
+/// SIGBUS and killed the process. It now reads files into memory up front, so a
+/// concurrent truncation can no longer crash it. The assertion only checks that
+/// no signal killed `tac`, so it is stable regardless of how the race lands.
+#[test]
+#[cfg(unix)]
+fn test_tac_file_truncated_during_read_does_not_crash() {
+    use std::fs::OpenOptions;
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A large sparse file, so the read overlaps with the truncation below.
+    // `set_len` keeps it sparse, so creation stays cheap.
+    let name = "input";
+    at.make_file(name).set_len(64 * 1024 * 1024).unwrap();
+
+    let child = ucmd.arg(name).run_no_wait();
+
+    // Give tac a moment to start reading, then truncate the file out from
+    // under it.
+    std::thread::sleep(Duration::from_millis(2));
+    OpenOptions::new()
+        .write(true)
+        .open(at.plus(name))
+        .unwrap()
+        .set_len(0)
+        .unwrap();
+
+    let result = child.wait().unwrap();
+    assert!(
+        result.signal().is_none(),
+        "tac was killed by signal {:?} (SIGBUS regression, see #9748)",
+        result.signal()
+    );
+}
+
+/// Companion to the test above for the `tac < file` path. `tac` used to mmap the
+/// raw stdin fd, exposing a redirected file to the same SIGBUS-on-truncation
+/// race; it now copies stdin to an unlinked temp file before mapping.
+#[test]
+#[cfg(unix)]
+fn test_tac_stdin_redirected_file_truncated_during_read_does_not_crash() {
+    use std::fs::{File, OpenOptions};
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A large sparse file, so the read overlaps with the truncation below.
+    let name = "input";
+    at.make_file(name).set_len(64 * 1024 * 1024).unwrap();
+
+    // Redirect the regular file in as stdin (`tac < input`).
+    let child = ucmd
+        .set_stdin(File::open(at.plus(name)).unwrap())
+        .run_no_wait();
+
+    // Give tac a moment to start reading, then truncate the file out from
+    // under it.
+    std::thread::sleep(Duration::from_millis(2));
+    OpenOptions::new()
+        .write(true)
+        .open(at.plus(name))
+        .unwrap()
+        .set_len(0)
+        .unwrap();
+
+    let result = child.wait().unwrap();
+    assert!(
+        result.signal().is_none(),
+        "tac was killed by signal {:?} (SIGBUS regression, see #9748)",
+        result.signal()
+    );
 }
