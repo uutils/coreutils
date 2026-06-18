@@ -1635,6 +1635,38 @@ fn test_du_files0_from_ignore_duplicate_file_names() {
 }
 
 #[test]
+fn test_du_files0_from_count_links_lists_duplicate_file_names() {
+    // With --count-links (-l), inode-based deduplication is disabled, so a
+    // file listed twice must be reported twice (matches GNU du).
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("-l")
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_repeated_missing_file_reported_each_time() {
+    // Missing files have no inode to deduplicate on, so each occurrence in the
+    // input must produce its own error (matches GNU du).
+    new_ucmd!()
+        .arg("--files0-from=-")
+        .pipe_in("missing\0missing\0")
+        .fails_with_code(1)
+        .stderr_is(
+            "du: cannot access 'missing': No such file or directory\n\
+             du: cannot access 'missing': No such file or directory\n",
+        );
+}
+
+#[test]
 fn test_du_files0_from_with_invalid_zero_length_file_names() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
