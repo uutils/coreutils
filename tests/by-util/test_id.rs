@@ -52,6 +52,35 @@ fn test_id_no_specified_user() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_id_nonexisting_ids() {
+    use uutests::{get_tests_binary, util::unshare_bin};
+
+    let unshare = unwrap_or_return!(unshare_bin());
+
+    let unshare_args = ["-U", "--map-user=10101", "--"];
+
+    let exp_result = Command::new(&unshare)
+        .args(unshare_args)
+        .arg(util_name!())
+        .output()
+        .unwrap();
+
+    let result = Command::new(unshare)
+        .args(unshare_args)
+        .arg(get_tests_binary!())
+        .arg(util_name!())
+        .output()
+        .unwrap();
+
+    assert_eq!(result.status.code(), exp_result.status.code());
+
+    let exp_stderr = String::from_utf8_lossy(&exp_result.stderr);
+    let act_stderr = String::from_utf8_lossy(&result.stderr);
+    assert_eq!(act_stderr, exp_stderr);
+}
+
+#[test]
 fn test_id_single_user() {
     let test_users = [&whoami()[..]];
 
