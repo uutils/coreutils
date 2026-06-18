@@ -28,6 +28,7 @@ impl Matcher for ExactMatcher<'_> {
         let mut pos = 0usize;
         loop {
             let match_idx = memchr(self.needle[0], &haystack[pos..])?;
+            unsafe { std::hint::assert_unchecked(match_idx < haystack.len()) };
             let match_idx = match_idx + pos; // account for starting from pos
 
             if self.needle.len() == 1 || haystack[match_idx + 1..].starts_with(&self.needle[1..]) {
@@ -45,6 +46,7 @@ pub struct WhitespaceMatcher {}
 impl Matcher for WhitespaceMatcher {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
         let match_idx = memchr2(b' ', b'\t', haystack)?;
+        unsafe { std::hint::assert_unchecked(match_idx < haystack.len()) };
         let mut skip = match_idx + 1;
 
         while skip < haystack.len() {
