@@ -159,23 +159,28 @@ where
     let mut src_file = open_source(source, nofollow)?;
     let dst_file = create_dest_restrictive(dest, false)?;
 
-    let size: usize = src_file.metadata()?.size().try_into().unwrap();
-    ftruncate(&dst_file, size.try_into().unwrap())?;
+    let size = src_file.metadata()?.size();
+    ftruncate(&dst_file, size)?;
 
-    let blksize = dst_file.metadata()?.blksize();
-    let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
-    let mut current_offset: usize = 0;
+    let blksize = dst_file.metadata()?.blksize() as usize;
+    let mut buf: Vec<u8> = vec![0; blksize];
+    let mut current_offset: u64 = 0;
 
     // TODO Perhaps we can employ the "fiemap ioctl" API to get the
     // file extent mappings:
     // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
     while current_offset < size {
         let this_read = src_file.read(&mut buf)?;
+        if this_read == 0 {
+            // The source shrank (e.g. truncated concurrently) before we reached
+            // its reported size; stop instead of looping forever on EOF reads.
+            break;
+        }
         let buf = &buf[..this_read];
         if buf.iter().any(|&x| x != 0) {
-            dst_file.write_all_at(buf, current_offset.try_into().unwrap())?;
+            dst_file.write_all_at(buf, current_offset)?;
         }
-        current_offset += this_read;
+        current_offset += this_read as u64;
     }
     Ok(())
 }

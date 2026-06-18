@@ -3959,6 +3959,26 @@ fn test_reflink_never_sparse_always() {
     assert_eq!(dest_metadata.len(), 1024 * 1024);
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_reflink_never_sparse_always_data_is_copied() {
+    // `--reflink=never --sparse=always` goes through the read-loop sparse copy.
+    // A file with data spread across several blocks must be copied byte-for-byte.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let mut buf = vec![0u8; 4096 * 4 + 7];
+    for i in [0, buf.len() / 2, buf.len() - 1] {
+        buf[i] = b'x';
+    }
+    at.write_bytes("src", &buf);
+
+    ucmd.args(&["--reflink=never", "--sparse=always", "src", "dest"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read_bytes("dest"), buf);
+}
+
 /// Test for preserving attributes of a hard link in a directory.
 #[test]
 #[cfg(not(any(target_os = "android", target_os = "openbsd")))]
