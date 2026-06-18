@@ -8,7 +8,11 @@
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 use rstest::rstest;
+#[cfg(unix)]
+use std::fmt::Write as _;
 use std::fs::metadata;
+#[cfg(unix)]
+use uutests::at_and_ts;
 use uutests::util::{TestScenario, UCommand};
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
@@ -45,6 +49,39 @@ fn valid_last_modified_template_vars(from: Timestamp) -> Vec<Vec<(String, String
         .into_iter()
         .map(|time| vec![("{last_modified_time}".to_string(), time)])
         .collect()
+}
+
+#[cfg(unix)]
+fn assert_file_and_fifo_outputs_match(args: &[&str], input: &[u8]) {
+    use std::time::Duration;
+
+    let (at, ts) = at_and_ts!();
+    at.write_bytes("input.txt", input);
+
+    let expected = ts
+        .ucmd()
+        .args(args)
+        .arg("input.txt")
+        .succeeds()
+        .stdout_move_bytes();
+
+    at.mkfifo("input.fifo");
+    let writer_path = at.plus("input.fifo");
+    let writer_input = input.to_vec();
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, writer_input).unwrap();
+    });
+
+    let actual = ts
+        .ucmd()
+        .timeout(Duration::from_secs(5))
+        .args(args)
+        .arg("input.fifo")
+        .succeeds()
+        .stdout_move_bytes();
+
+    writer.join().unwrap();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -899,11 +936,153 @@ fn test_version() {
     new_ucmd!().arg("--version").succeeds();
 }
 
+#[test]
+fn test_directory_read_error_includes_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("input_dir");
+
+    ucmd.arg("input_dir")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("pr: input_dir: ");
+}
+
 #[cfg(unix)]
 #[uutests::wasi_ignore(HostPathsNotVisible)]
 #[test]
 fn test_pr_char_device_dev_null() {
     new_ucmd!().arg("/dev/null").succeeds();
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+fn test_streaming_char_device_from_infinite_source() {
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    let mut cmd = new_ucmd!();
+    cmd.timeout(Duration::from_secs(5));
+
+    let mut child = cmd
+        .arg("/dev/zero")
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // `pr` should start writing promptly and terminate quietly on a closed pipe.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(HostPathsNotVisible)]
+#[test]
+fn test_streaming_stdin_from_infinite_source() {
+    use std::fs::File;
+    use std::process::Stdio;
+    use std::time::Duration;
+
+    let mut cmd = new_ucmd!();
+    cmd.timeout(Duration::from_secs(5));
+
+    let mut child = cmd
+        .set_stdin(Stdio::from(File::open("/dev/zero").unwrap()))
+        .set_stdout(Stdio::piped())
+        .run_no_wait();
+
+    // `pr` should stream stdin promptly and terminate quietly on a closed pipe.
+    child.close_stdout();
+    child.wait().unwrap().fails_silently();
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_with_invalid_utf8_succeeds() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+
+    let writer_path = at.plus("fifo");
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, [0xFF_u8, b'\n']).unwrap();
+    });
+
+    ucmd.timeout(Duration::from_secs(5));
+    ucmd.arg("fifo")
+        .succeeds()
+        .no_stderr()
+        .stdout_contains_bytes([0xFF_u8]);
+
+    writer.join().unwrap();
+}
+
+#[cfg(all(unix, not(target_vendor = "apple")))]
+#[uutests::wasi_ignore(NonUtf8ArgsUnsupported)]
+#[test]
+fn test_streaming_fifo_preserves_non_utf8_filename() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let name = OsStr::from_bytes(b"input-\xff");
+    at.mkfifo(name);
+    let writer_path = at.plus(name);
+    let writer = std::thread::spawn(move || {
+        std::fs::write(writer_path, b"line\n").unwrap();
+    });
+
+    ucmd.timeout(Duration::from_secs(5));
+    ucmd.arg(name)
+        .succeeds()
+        .no_stderr()
+        .stdout_contains_bytes(b"input-\xff")
+        .stdout_contains_bytes(b"line\n");
+
+    writer.join().unwrap();
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_page_header_matches_file() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-D", "date", "-l", "12"], b"line\n");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_multi_page_matches_file() {
+    let input = (1..=20).fold(String::new(), |mut input, line| {
+        writeln!(input, "line{line}").unwrap();
+        input
+    });
+
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-l", "5"], input.as_bytes());
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_with_headers_suppressed_by_page_length() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-l", "10"], b"line1\nline2\nline3\n");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_double_space_on_short_pages() {
+    assert_file_and_fifo_outputs_match(&["-h", "H", "-d", "-l", "11"], b"line1\nline2\nline3\n");
+}
+
+#[cfg(unix)]
+#[uutests::wasi_ignore(NoFifo)]
+#[test]
+fn test_streaming_fifo_double_space_with_long_unterminated_line() {
+    let input = format!("first\n{}", "x".repeat(20_000));
+    assert_file_and_fifo_outputs_match(&["-t", "-d"], input.as_bytes());
 }
 
 #[test]
