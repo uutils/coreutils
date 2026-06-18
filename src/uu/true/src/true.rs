@@ -35,10 +35,17 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     0
 }
 
+/// GNU coreutils prints the usage line before the about text for `true`/`false`.
+const HELP_TEMPLATE: &str = "\
+Usage: true [ignored command line arguments]\n\n\
+{about-with-newline}\
+{options}\
+";
+
 pub fn uu_app() -> Command {
     Command::new("true")
         .version(crate_version!())
-        .help_template(uucore::localized_help_template("true"))
+        .help_template(HELP_TEMPLATE)
         .about(translate!("true-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
