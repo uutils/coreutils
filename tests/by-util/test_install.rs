@@ -800,6 +800,24 @@ fn test_install_and_strip() {
 #[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
+fn test_install_no_strip_with_program() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--strip-program")
+        .arg("true")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .stderr_only(
+            "install: WARNING: ignoring --strip-program option as -s option was not specified\n",
+        );
+}
+
+#[test]
+#[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
