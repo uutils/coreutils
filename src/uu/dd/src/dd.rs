@@ -925,18 +925,30 @@ impl<'a> Output<'a> {
             dst.set_len(settings.seek).ok();
         }
 
-        Self::prepare_file(dst, settings)
+        Self::prepare_file(filename, dst, settings)
     }
 
-    fn prepare_file(dst: File, settings: &'a Settings) -> UResult<Self> {
+    fn prepare_file(filename: &Path, dst: File, settings: &'a Settings) -> UResult<Self> {
         let density = if settings.oconv.sparse {
             Density::Sparse
         } else {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
+        match dst.seek(settings.seek, settings.obs) {
+            Ok(offset) => Ok(offset),
+            Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
+                print!("====debug_for_test_fail====");
+                show_error!(
+                    "{}",
+                    translate!("dd-error-writing-invalid", "file" => filename.display())
+                );
+                #[cfg(unix)]
+                set_exit_code(1);
+                return Ok(Self { dst, settings });
+            }
+            Err(e) => Err(e).map_err_context(|| translate!("dd-error-failed-to-seek")),
+        }?;
         Ok(Self { dst, settings })
     }
 
@@ -956,7 +968,7 @@ impl<'a> Output<'a> {
             .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
-        Self::prepare_file(fx.into_file(), settings)
+        Self::prepare_file(Path::new("stdout"), fx.into_file(), settings)
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
@@ -1035,6 +1047,12 @@ impl<'a> Output<'a> {
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
+                Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "invalid input buffer",
+                    ));
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -1288,7 +1306,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1301,6 +1318,34 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             i.discard_cache(offset, len);
         }
         read_offset += read_len;
+
+        // Update the read stats before writing for better error handling
+        rstat += rstat_update;
+
+        // we need to break the loop when encountering an invalid input buffer
+        let wstat_update = match o.write_blocks(&buf) {
+            Ok(wstat) => wstat,
+            Err(e)
+                if e.kind() == io::ErrorKind::InvalidInput
+                    && e.to_string() == "invalid input buffer" =>
+            {
+                // GNU compatibility:
+                // this case prints the stats but sets the exit code to 1
+                if let Some(outfile) = &i.settings.outfile {
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-writing-invalid", "file" => outfile)
+                    );
+                    #[cfg(unix)]
+                    set_exit_code(1);
+                }
+                break;
+            }
+            Err(e) => {
+                show_error!("capture the error: {}", buf.len());
+                return Err(e);
+            }
+        };
 
         // Discard the system file cache for the written portion
         // of the output file.
@@ -1320,7 +1365,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error. Since it is just reporting progress and is not
         // crucial to the operation of `dd`, let's just ignore the
         // error.
-        rstat += rstat_update;
         wstat += wstat_update;
         #[cfg(target_os = "linux")]
         if check_and_reset_sigusr1() {

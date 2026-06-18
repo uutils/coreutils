@@ -129,6 +129,7 @@ dd-error-cannot-seek-invalid = '{ $output }': cannot seek: Invalid argument
 dd-error-not-directory = setting flags for '{ $file }': Not a directory
 dd-error-failed-discard-cache = failed to discard cache for: { $file }
 dd-error-reading-invalid = error reading '{ $file }': Invalid argument
+dd-error-writing-invalid = error writing '{ $file }': Invalid argument
 
 # Parse errors
 dd-error-unrecognized-operand = Unrecognized operand '{ $operand }'
