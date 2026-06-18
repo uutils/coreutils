@@ -122,6 +122,16 @@ impl FileLine {
     }
 }
 
+struct PageLine {
+    line_number: usize,
+    content: Vec<u8>,
+}
+
+struct InputPage {
+    page_number: usize,
+    lines: Vec<PageLine>,
+}
+
 struct ColumnModeOptions {
     width: usize,
     columns: usize,
@@ -967,104 +977,144 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     Ok(0)
 }
 
+struct PageBuilder<'a> {
+    options: &'a OutputOptions,
+    lines_needed_per_page: usize,
+    line_number: usize,
+    page_number: usize,
+    page: Vec<PageLine>,
+    pending: Vec<u8>,
+    current_line_has_content: bool,
+    last_delimiter: Option<u8>,
+}
+
+impl<'a> PageBuilder<'a> {
+    fn new(options: &'a OutputOptions) -> Self {
+        Self {
+            options,
+            lines_needed_per_page: lines_to_read_for_page(options),
+            line_number: get_start_line_number(options),
+            page_number: 0,
+            page: Vec::new(),
+            pending: Vec::new(),
+            current_line_has_content: false,
+            last_delimiter: None,
+        }
+    }
+
+    fn push_chunk(&mut self, chunk: &[u8]) -> Vec<InputPage> {
+        let mut pages = Vec::new();
+        let mut prev = 0;
+
+        for index in memchr::memchr2_iter(FF, NL, chunk) {
+            self.pending.extend_from_slice(&chunk[prev..index]);
+            let delimiter = chunk[index];
+
+            if delimiter == FF {
+                if !(self.pending.is_empty()
+                    && !self.current_line_has_content
+                    && matches!(self.last_delimiter, Some(NL)))
+                {
+                    self.push_pending_line();
+                }
+                self.last_delimiter = Some(FF);
+                if let Some(page) = self.finish_page() {
+                    pages.push(page);
+                }
+            } else {
+                if !(self.pending.is_empty()
+                    && !self.current_line_has_content
+                    && matches!(self.last_delimiter, Some(FF)))
+                {
+                    self.push_pending_line();
+                    self.line_number += 1;
+                }
+                self.last_delimiter = Some(NL);
+
+                if self.page.len() >= self.lines_needed_per_page {
+                    if let Some(page) = self.finish_page() {
+                        pages.push(page);
+                    }
+                }
+            }
+
+            prev = index + 1;
+        }
+
+        self.pending.extend_from_slice(&chunk[prev..]);
+        if !self.pending.is_empty() {
+            self.last_delimiter = None;
+        }
+
+        pages
+    }
+
+    fn finish(mut self) -> Vec<InputPage> {
+        if !self.pending.is_empty() || self.current_line_has_content {
+            self.push_pending_line();
+        }
+
+        if self.page.is_empty() {
+            Vec::new()
+        } else {
+            self.finish_page().into_iter().collect()
+        }
+    }
+
+    fn push_pending_line(&mut self) {
+        self.page.push(PageLine {
+            line_number: self.line_number,
+            content: std::mem::take(&mut self.pending),
+        });
+        self.current_line_has_content = false;
+    }
+
+    fn finish_page(&mut self) -> Option<InputPage> {
+        let page_number = self.page_number;
+        let lines = std::mem::take(&mut self.page);
+        self.page_number += 1;
+
+        if self.page_is_in_range(page_number) {
+            Some(InputPage { page_number, lines })
+        } else {
+            None
+        }
+    }
+
+    fn page_is_in_range(&self, page_number: usize) -> bool {
+        self.options.start_page <= page_number + 1
+            && self.options.end_page.is_none_or(|end| page_number < end)
+    }
+}
+
 /// Group lines of a file into pages.
 ///
 /// Returns a list of the form `(page_num, lines)`.
 ///
 fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
-    let start_page = options.start_page;
-    let end_page = options.end_page;
-    let lines_needed_per_page = lines_to_read_for_page(options);
-
-    // Keep a running total of the number of lines read, starting with
-    // 0 or another specified number.
-    let mut line_num = get_start_line_number(options);
-
-    // We will collect each page into a list of pages, along with
-    // its page number.
-    let mut pages: Vec<(usize, Vec<FileLine>)> = vec![];
-
-    // We will build each page iteratively, since one page may
-    // contain multiple lines and may be interrupted by either a
-    // form feed or by reaching a line limit.
-    let mut page = vec![];
-    let mut page_num = 0;
-
-    // Remember the index of the end of the last line to use as the
-    // beginning of the next line.
-    let mut prev = 0;
-
-    // Search for either the form feed character `\f` or the newline
-    // character `\n`. The newline character marks the end of a line,
-    // and a page comprises several lines. A form feed character marks
-    // the end of a page regardless of how many lines have been read.
-    for i in memchr::memchr2_iter(FF, NL, buf) {
-        if buf[i] == FF {
-            // Treat everything up to (but not including) the form feed
-            // character as the last line of the page.
-            if i > 0 && i == prev && buf[i - 1] == NL {
-                // If the file has the pattern `\n\f`, don't treat the
-                // `\f` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
-                page.push(file_line);
-            }
-
-            // Remember where the last line ended.
-            prev = i + 1;
-
-            // The page is finished, so we add it to the list of
-            // pages and clear the `page` buffer for the next
-            // iteration.
-            //
-            // TODO Optimization opportunity: don't bother pushing
-            // lines and pages if we aren't going to display it.
-            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
-            }
-            page_num += 1;
-            page.clear();
-        } else {
-            // Add everything up to (but not including) the newline
-            // character as one line of the page.
-            if i > 0 && i == prev && buf[i - 1] == FF {
-                // If the file has the pattern `\f\n`, don't treat the
-                // `\n` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
-                page.push(file_line);
-                line_num += 1;
-            }
-
-            // Remember where the last line ended.
-            prev = i + 1;
-
-            // If the page is finished, add it to the list of pages
-            // and clear the `page` buffer for the next iteration.
-            if page.len() >= lines_needed_per_page {
-                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
-                }
-                page_num += 1;
-                page.clear();
-            }
-        }
-    }
-
-    // Consider all trailing bytes as the last line.
-    if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
-        page.push(file_line);
-    }
-
-    // Consider all trailing lines as the last page.
-    if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
-    }
+    let mut builder = PageBuilder::new(options);
+    let mut pages = builder.push_chunk(buf);
+    pages.extend(builder.finish());
 
     pages
+        .into_iter()
+        .map(|page| {
+            let lines = page
+                .lines
+                .into_iter()
+                .map(|line| {
+                    FileLine::from_buf(
+                        file_id,
+                        page.page_number,
+                        line.line_number,
+                        &line.content,
+                        options,
+                    )
+                })
+                .collect();
+            (page.page_number, lines)
+        })
+        .collect()
 }
 
 /// Key used to group lines together according to their file and page number.
