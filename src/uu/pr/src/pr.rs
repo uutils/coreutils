@@ -11,7 +11,9 @@ use itertools::Itertools;
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::metadata;
-use std::io::{Read, Write, stderr, stdin, stdout};
+use std::io::{BufWriter, Read, Write, stderr, stdin, stdout};
+#[cfg(unix)]
+use std::os::fd::AsFd;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
@@ -938,6 +940,164 @@ fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
     }
 }
 
+fn should_use_streaming_pr(path: &str, options: &OutputOptions) -> bool {
+    let is_simple_layout = options.number.is_none()
+        && options.expand_tabs.is_none()
+        && options.column_mode_options.is_none()
+        && options.merge_files_print.is_none()
+        && !options.join_lines
+        && options.line_width.is_none()
+        && options.offset_spaces.is_empty();
+
+    if !is_simple_layout {
+        return false;
+    }
+
+    if lines_to_read_for_page(options) == 0 {
+        return false;
+    }
+
+    if path == FILE_STDIN {
+        return should_stream_stdin();
+    }
+
+    metadata(path).is_ok_and(|meta| !meta.file_type().is_file())
+}
+
+#[cfg(unix)]
+fn should_stream_stdin() -> bool {
+    rustix::fs::fstat(stdin().as_fd())
+        .is_ok_and(|stat| !rustix::fs::FileType::from_raw_mode(stat.st_mode).is_file())
+}
+
+#[cfg(not(unix))]
+fn should_stream_stdin() -> bool {
+    false
+}
+
+fn write_stream_page_header(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: usize,
+) -> Result<(), std::io::Error> {
+    let line_separator = options.line_separator.as_bytes();
+    for line in header_content(options, page) {
+        out.write_all(line.as_bytes())?;
+        out.write_all(line_separator)?;
+    }
+    Ok(())
+}
+
+fn write_stream_page_trailer(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    lines_in_page: usize,
+) -> Result<(), std::io::Error> {
+    let content_line_separator = options.content_line_separator.as_bytes();
+    if !options.form_feed_used {
+        // `print_page`/`write_columns` emits blank-content separators until
+        // the page reaches `lines_needed_per_page`.
+        let lines_needed_per_page = lines_to_read_for_page(options);
+        for _ in lines_in_page..lines_needed_per_page {
+            out.write_all(content_line_separator)?;
+        }
+    }
+
+    let line_separator = options.line_separator.as_bytes();
+    let trailer = trailer_content(options);
+    for (index, line) in trailer.iter().enumerate() {
+        out.write_all(line.as_bytes())?;
+        if index + 1 != trailer.len() {
+            out.write_all(line_separator)?;
+        }
+    }
+    out.write_all(options.page_separator_char.as_bytes())?;
+    Ok(())
+}
+
+fn write_stream_page(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: &InputPage,
+) -> Result<(), std::io::Error> {
+    write_stream_page_header(out, options, page.page_number + 1)?;
+    write_stream_page_body_and_trailer(out, options, page)
+}
+
+fn write_stream_page_body_and_trailer(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: &InputPage,
+) -> Result<(), std::io::Error> {
+    let content_line_separator = options.content_line_separator.as_bytes();
+    for line in &page.lines {
+        out.write_all(&line.content)?;
+        out.write_all(content_line_separator)?;
+    }
+
+    write_stream_page_trailer(out, options, page.lines.len())
+}
+
+fn pr_stream_simple_with_reader<R: Read>(
+    mut reader: R,
+    options: &OutputOptions,
+) -> Result<i32, PrError> {
+    let out = stdout();
+    let mut out = BufWriter::new(out.lock());
+    let mut page_builder = PageBuilder::new(options);
+    let mut streamed_current_page = false;
+
+    let mut buf = [0_u8; 8192];
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+
+        for page in page_builder.push_chunk(&buf[..n]) {
+            if streamed_current_page {
+                write_stream_page_body_and_trailer(&mut out, options, &page)?;
+                streamed_current_page = false;
+            } else {
+                write_stream_page(&mut out, options, &page)?;
+            }
+        }
+
+        if let Some(pending) = page_builder.take_pending_for_streaming() {
+            if page_builder.current_page_in_range() {
+                if !streamed_current_page {
+                    write_stream_page_header(&mut out, options, page_builder.page_number + 1)?;
+                    streamed_current_page = true;
+                }
+                out.write_all(&pending)?;
+            }
+        }
+
+        if page_builder.should_stop() {
+            break;
+        }
+    }
+
+    if !page_builder.should_stop() {
+        for page in page_builder.finish() {
+            if streamed_current_page {
+                write_stream_page_body_and_trailer(&mut out, options, &page)?;
+                streamed_current_page = false;
+            } else {
+                write_stream_page(&mut out, options, &page)?;
+            }
+        }
+    }
+
+    out.flush()?;
+    Ok(0)
+}
+
+fn pr_stream_simple(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+    let file = std::fs::File::open(path)?;
+    pr_stream_simple_with_reader(file, options)
+}
+
 fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOptions) {
     if byte == expand_options.input_char as u8 {
         // If the byte encountered is the input char we use width to calculate
@@ -960,6 +1120,13 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
 }
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+    if should_use_streaming_pr(path, options) {
+        if path == FILE_STDIN {
+            return pr_stream_simple_with_reader(stdin(), options);
+        }
+        return pr_stream_simple(path, options);
+    }
+
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
@@ -1058,6 +1225,26 @@ impl<'a> PageBuilder<'a> {
             Vec::new()
         } else {
             self.finish_page().into_iter().collect()
+        }
+    }
+
+    fn should_stop(&self) -> bool {
+        self.options
+            .end_page
+            .is_some_and(|end| self.page_number >= end)
+    }
+
+    fn current_page_in_range(&self) -> bool {
+        self.page_is_in_range(self.page_number)
+    }
+
+    fn take_pending_for_streaming(&mut self) -> Option<Vec<u8>> {
+        if self.pending.is_empty() {
+            None
+        } else {
+            self.current_line_has_content = true;
+            self.last_delimiter = None;
+            Some(std::mem::take(&mut self.pending))
         }
     }
 
