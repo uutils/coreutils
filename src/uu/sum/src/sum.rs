@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -140,7 +140,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             bsd_sum(reader)
         }?;
-
+        .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
         let mut stdout = stdout().lock();
         if print_names {
             write!(stdout, "{sum:0width$} {blocks:width$} ")?;
