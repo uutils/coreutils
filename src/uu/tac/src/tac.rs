@@ -383,20 +383,19 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
                 }
             };
 
-            if let Some(mmap1) = try_mmap_file(&file) {
-                mmap = mmap1;
-                &mmap
-            } else {
-                let mut contents = Vec::new();
-                match file.read_to_end(&mut contents) {
-                    Ok(_) => {
-                        buf = contents;
-                        &buf
-                    }
-                    Err(e) => {
-                        show!(TacError::ReadError(filename.clone(), e));
-                        continue;
-                    }
+            // Read the file into memory instead of memory-mapping it.
+            // Using mmap on regular files is unsafe because if the file is
+            // truncated while mapped, accessing the now-invalid region
+            // triggers SIGBUS and crashes the process (see #9748).
+            let mut contents = Vec::new();
+            match file.read_to_end(&mut contents) {
+                Ok(_) => {
+                    buf = contents;
+                    &buf
+                }
+                Err(e) => {
+                    show!(TacError::ReadError(filename.clone(), e));
+                    continue;
                 }
             }
         };
@@ -450,11 +449,6 @@ fn buffer_stdin() -> std::io::Result<StdinData> {
     }
 }
 
-fn try_mmap_file(file: &File) -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(file).ok() }
-}
 
 #[cfg(test)]
 mod tests_hybrid_flavor {
