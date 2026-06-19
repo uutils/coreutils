@@ -12,6 +12,7 @@ use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::metadata;
 use std::io::{Read, Write, stderr, stdin, stdout};
+use std::num::IntErrorKind;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
@@ -864,7 +865,27 @@ fn build_options(
         across_mode,
     });
 
-    let offset_spaces = " ".repeat(parse_usize(matches, options::INDENT).unwrap_or(Ok(0))?);
+    let offset_spaces = match matches.get_one::<String>(options::INDENT) {
+        None => String::new(),
+        // Parse as i32 to match GNU pr's behavior
+        Some(raw) => match raw.parse::<i32>() {
+            Ok(n) if n >= 0 => " ".repeat(n as usize),
+            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                return Err(PrError::EncounteredErrors {
+                    msg: format!(
+                        "'-o MARGIN' invalid line offset: {}: Value too large for defined data type",
+                        raw.quote()
+                    ),
+                });
+            }
+            _ => {
+                return Err(PrError::EncounteredErrors {
+                    msg: format!("'-o MARGIN' invalid line offset: {}", raw.quote()),
+                });
+            }
+        },
+    };
+
     let join_lines = matches.get_flag(options::JOIN_LINES);
 
     let col_sep_for_printing = column_mode_options.as_ref().map_or_else(
