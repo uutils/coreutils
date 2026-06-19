@@ -118,5 +118,5 @@ fn test_filename_proc_self_mem() {
     let input_output = "sum: /proc/self/mem: Input/output error\n";
     let io = "sum: /proc/self/mem: I/O error\n";
 
-    assert!(stderr == input_output || stderr == io,);
+    assert!(stderr == input_output || stderr == io);
 }
