@@ -139,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }?;
+        }
         .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
         let mut stdout = stdout().lock();
         if print_names {
