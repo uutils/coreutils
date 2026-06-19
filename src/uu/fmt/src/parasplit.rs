@@ -5,13 +5,16 @@
 
 // spell-checker:ignore (ToDO) INFTY MULT PSKIP accum aftertab beforetab breakwords fmt's formatline linebreak linebreaking linebreaks linelen maxlength minlength nchars noformat noformatline ostream overlen parasplit plass pmatch poffset posn powf prefixindent punct signum slen sstart tabwidth tlen underlen winfo wlen wordlen wordsplits xanti xprefix
 
-use std::io::BufRead;
+use std::io::{BufRead, Read};
 use std::iter::Peekable;
 use std::slice::Iter;
 use unicode_width::UnicodeWidthChar;
 
 use crate::FileOrStdReader;
 use crate::FmtOptions;
+
+// Prevent unbounded buffering on inputs without newlines.
+const MAX_LINE_BYTES: usize = 1024 * 1024; // 1 MiB
 
 fn char_width(c: char) -> usize {
     if (c as usize) < 0xA0 {
@@ -153,6 +156,8 @@ impl Line {
 #[derive(Debug)]
 pub struct FileLine {
     line: Vec<u8>,
+    /// Whether this line was split because it reached [`MAX_LINE_BYTES`].
+    hit_limit: bool,
     /// The end of the indent, always the start of the text
     indent_end: usize,
     /// The end of the PREFIX's indent, that is, the spaces before the prefix
@@ -167,11 +172,62 @@ pub struct FileLine {
 pub struct FileLines<'a> {
     opts: &'a FmtOptions,
     reader: &'a mut FileOrStdReader,
+    skip_line_ending: bool,
+}
+
+struct LimitedLine {
+    bytes: Vec<u8>,
+    hit_limit: bool,
 }
 
 impl FileLines<'_> {
     fn new<'b>(opts: &'b FmtOptions, reader: &'b mut FileOrStdReader) -> FileLines<'b> {
-        FileLines { opts, reader }
+        FileLines {
+            opts,
+            reader,
+            skip_line_ending: false,
+        }
+    }
+
+    /// Remove trailing LF or CRLF from a buffer.
+    fn strip_line_ending(buf: &mut Vec<u8>) {
+        if buf.ends_with(b"\n") {
+            buf.pop();
+            if buf.ends_with(b"\r") {
+                buf.pop();
+            }
+        }
+    }
+
+    /// Read a line, limiting memory usage on inputs without newlines.
+    fn read_limited_line(&mut self) -> Option<LimitedLine> {
+        loop {
+            let mut line = Vec::new();
+            let bytes_read = (&mut *self.reader)
+                .take(MAX_LINE_BYTES as u64)
+                .read_until(b'\n', &mut line)
+                .ok()?;
+
+            if bytes_read == 0 {
+                return None;
+            }
+
+            if self.skip_line_ending {
+                self.skip_line_ending = false;
+                if line == b"\n" || line == b"\r\n" {
+                    continue;
+                }
+            }
+
+            let hit_limit = line.len() == MAX_LINE_BYTES && !line.ends_with(b"\n");
+            self.skip_line_ending = hit_limit;
+            Self::strip_line_ending(&mut line);
+
+            return Some(LimitedLine {
+                bytes: line,
+                hit_limit,
+            });
+        }
     }
 
     /// returns true if this line should be formatted
@@ -254,19 +310,10 @@ impl Iterator for FileLines<'_> {
     type Item = Line;
 
     fn next(&mut self) -> Option<Line> {
-        let mut buf = Vec::new();
-        match self.reader.read_until(b'\n', &mut buf) {
-            Ok(0) => return None,
-            Ok(_) => {}
-            Err(_) => return None,
-        }
-        if buf.ends_with(b"\n") {
-            buf.pop();
-            if buf.ends_with(b"\r") {
-                buf.pop();
-            }
-        }
-        let n = buf;
+        let LimitedLine {
+            bytes: n,
+            hit_limit,
+        } = self.read_limited_line()?;
 
         // if this line is entirely whitespace,
         // emit a blank line
@@ -309,6 +356,7 @@ impl Iterator for FileLines<'_> {
 
         Some(Line::FormatLine(FileLine {
             line: n,
+            hit_limit,
             indent_end,
             prefix_indent_end: poffset,
             indent_len,
@@ -503,10 +551,13 @@ impl Iterator for ParagraphStream<'_> {
                 }
             }
 
-            p_lines.push(self.lines.next().unwrap().get_formatline().line);
+            let line = self.lines.next().unwrap().get_formatline();
+            let hit_limit = line.hit_limit;
+            p_lines.push(line.line);
 
-            // when we're in split-only mode, we never join lines, so stop here
-            if self.opts.split_only {
+            // Split-only never joins lines. A line split at the safety limit must
+            // also end the paragraph so an endless input can make progress.
+            if self.opts.split_only || hit_limit {
                 break;
             }
         }
@@ -739,5 +790,102 @@ impl<'a> Iterator for WordSplit<'a> {
             ends_punct,
             new_line,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{BufReader, Read};
+
+    const TEST_READER_CAPACITY: usize = 64;
+
+    struct NoNewlineReader {
+        bytes_before_panic: usize,
+    }
+
+    impl Read for NoNewlineReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            assert!(
+                self.bytes_before_panic > 0,
+                "reader consumed more than the configured bound"
+            );
+            let count = buf.len().min(self.bytes_before_panic);
+            buf[..count].fill(0);
+            self.bytes_before_panic -= count;
+            Ok(count)
+        }
+    }
+
+    fn test_options(split_only: bool) -> FmtOptions {
+        FmtOptions {
+            crown: false,
+            tagged: false,
+            mail: false,
+            split_only,
+            prefix: None,
+            xprefix: false,
+            anti_prefix: None,
+            xanti_prefix: false,
+            uniform: false,
+            quick: false,
+            width: 75,
+            goal: 70,
+            tabwidth: 8,
+        }
+    }
+
+    fn bounded_no_newline_reader() -> FileOrStdReader {
+        let source: Box<dyn Read> = Box::new(NoNewlineReader {
+            // Any read beyond the limit panics, modeling a stream that has
+            // produced exactly the limit and then remains open without data.
+            bytes_before_panic: MAX_LINE_BYTES,
+        });
+        BufReader::with_capacity(TEST_READER_CAPACITY, source)
+    }
+
+    #[test]
+    fn read_limited_line_stops_without_newline_or_eof() {
+        let options = test_options(true);
+        let mut reader = bounded_no_newline_reader();
+        let mut lines = FileLines::new(&options, &mut reader);
+
+        let line = lines.read_limited_line().unwrap();
+
+        assert_eq!(line.bytes.len(), MAX_LINE_BYTES);
+        assert!(line.bytes.iter().all(|&byte| byte == 0));
+        assert!(line.hit_limit);
+    }
+
+    #[test]
+    fn paragraph_stream_stops_without_newline_or_eof() {
+        let options = test_options(false);
+        let mut reader = bounded_no_newline_reader();
+        let mut paragraphs = ParagraphStream::new(&options, &mut reader);
+
+        let paragraph = paragraphs.next().unwrap().unwrap();
+
+        assert_eq!(paragraph.lines.len(), 1);
+        assert_eq!(paragraph.lines[0].len(), MAX_LINE_BYTES);
+    }
+
+    #[test]
+    fn read_limited_line_consumes_crlf_at_limit() {
+        let options = test_options(true);
+        for payload_len in [MAX_LINE_BYTES, MAX_LINE_BYTES - 1] {
+            let mut input = vec![b'a'; payload_len];
+            input.extend_from_slice(b"\r\nb\n");
+            let source: Box<dyn Read> = Box::new(std::io::Cursor::new(input));
+            let mut reader = BufReader::with_capacity(TEST_READER_CAPACITY, source);
+            let mut lines = FileLines::new(&options, &mut reader);
+
+            let first = lines.read_limited_line().unwrap();
+            assert_eq!(first.bytes.len(), MAX_LINE_BYTES);
+            assert!(first.hit_limit);
+            let second = lines.read_limited_line().unwrap();
+            assert_eq!(second.bytes, b"b");
+            assert!(!second.hit_limit);
+            assert!(lines.read_limited_line().is_none());
+        }
     }
 }
