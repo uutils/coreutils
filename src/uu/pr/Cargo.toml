@@ -27,6 +27,7 @@ memchr = { workspace = true }
 regex = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "pr"
