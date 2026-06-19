@@ -462,6 +462,18 @@ fn test_check_status_code() {
 }
 
 #[test]
+fn test_check_status_reports_malformed_input() {
+    // --status should still print "no properly formatted checksum lines found"
+    // when all input lines are invalid (issue #12867)
+    new_ucmd!()
+        .args(&["-c", "--status"])
+        .pipe_in("I'mNotAHash\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("no properly formatted checksum lines found");
+}
+
+#[test]
 fn test_sha1_with_md5sum_should_fail() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
