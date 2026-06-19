@@ -66,8 +66,8 @@ jobs:
         echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
     - name: Run `cargo-fuzz build`
       # Force the correct target
-      # https://github.com/rust-fuzz/cargo-fuzz/issues/398
-      run: cargo fuzz build --target $(rustc --print host-tuple)
+      # <https://github.com/rust-fuzz/cargo-fuzz/issues/398>
+      run: cargo fuzz build --target host-tuple
 
   fuzz-run:
     needs: fuzz-build
@@ -118,8 +118,8 @@ jobs:
         mkdir -p fuzz/stats
         STATS_FILE="fuzz/stats/${{ matrix.test-target.name }}.txt"
         # Force the correct target
-        # https://github.com/rust-fuzz/cargo-fuzz/issues/398
-        cargo fuzz run --target $(rustc --print host-tuple) ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+        # <https://github.com/rust-fuzz/cargo-fuzz/issues/398>
+        cargo fuzz run --target host-tuple ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
 
         # Extract key stats from the output
         if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then

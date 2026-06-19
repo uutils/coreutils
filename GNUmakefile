@@ -66,7 +66,7 @@ TOYBOX_SRC  := $(TOYBOX_ROOT)/toybox-$(TOYBOX_VER)
 # Detect the target system
 # See https://doc.rust-lang.org/beta/rustc/platform-support.html
 # todo: support building wasm
-OS := $(or $(CARGO_BUILD_TARGET),$(shell rustc --print host-tuple))
+OS := $(or $(CARGO_BUILD_TARGET), host-tuple)
 
 # hardlinks are better default since
 # - Windows(cygwin) does not allow symlink by default
