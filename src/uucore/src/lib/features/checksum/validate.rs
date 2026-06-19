@@ -951,9 +951,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if opts.verbose.over_status() {
-            log_no_properly_formatted(filename_display());
-        }
+        log_no_properly_formatted(filename_display());
         return Err(FileCheckError::Failed);
     }
 
