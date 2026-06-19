@@ -202,9 +202,8 @@ impl MultiWriter {
             .retain_mut(|writer| match writer.inner.write_all(buf) {
                 Ok(()) => true,
                 Err(e) => {
-                    if process_error(mode, e, writer, &mut self.ignored_errors).is_err() {
-                        self.aborted = true;
-                    }
+                    self.aborted |=
+                        process_error(mode, e, writer, &mut self.ignored_errors).is_err();
                     false
                 }
             });
