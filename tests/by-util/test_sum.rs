@@ -105,3 +105,12 @@ fn test_filename_ends_with_slash() {
         .fails_with_code(1)
         .stderr_is("sum: a/: Not a directory\n");
 }
+
+#[test]
+fn test_filename_proc_self_mem() {
+    // https://github.com/uutils/coreutils/issues/12949
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        .stderr_is("sum: /proc/self/mem: Input/output error\n");
+}
