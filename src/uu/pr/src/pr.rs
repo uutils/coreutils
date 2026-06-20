@@ -78,7 +78,7 @@ struct OutputOptions {
     page_separator_char: String,
     column_mode_options: Option<ColumnModeOptions>,
     merge_files_print: Option<usize>,
-    offset_spaces: String,
+    offset_spaces: usize,
     form_feed_used: bool,
     join_lines: bool,
     col_sep_for_printing: String,
@@ -866,10 +866,11 @@ fn build_options(
     });
 
     let offset_spaces = match matches.get_one::<String>(options::INDENT) {
-        None => String::new(),
+        None => 0,
         // Parse as i32 to match GNU pr's behavior
+        // Store the count. Spaces are streamed at print time to avoid huge allocations.
         Some(raw) => match raw.parse::<i32>() {
-            Ok(n) if n >= 0 => " ".repeat(n as usize),
+            Ok(n) if n >= 0 => n as usize,
             Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
                 return Err(PrError::EncounteredErrors {
                     msg: format!(
@@ -1274,6 +1275,18 @@ fn to_table_short_file(
     table
 }
 
+/// Write `n` space characters to `out` in fixed-size chunks, so the indent is
+/// streamed rather than allocated up front.
+fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> Result<(), std::io::Error> {
+    const SPACES: [u8; 256] = [b' '; 256];
+    while n > 0 {
+        let chunk = n.min(SPACES.len());
+        out.write_all(&SPACES[..chunk])?;
+        n -= chunk;
+    }
+    Ok(())
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
@@ -1339,6 +1352,7 @@ fn write_columns(
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
             if cell.is_none() && options.merge_files_print.is_some() {
+                write_offset_spaces(out, options.offset_spaces)?;
                 out.write_all(
                     get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
                         .as_bytes(),
@@ -1349,6 +1363,7 @@ fn write_columns(
             } else if cell.is_some() {
                 let file_line = cell.unwrap();
 
+                write_offset_spaces(out, options.offset_spaces)?;
                 out.write_all(
                     get_line_for_printing(options, file_line, columns, i, line_width, indexes)
                         .as_bytes(),
@@ -1379,8 +1394,6 @@ fn get_line_for_printing(
     let content = String::from_utf8_lossy(&file_line.line_content);
     let mut complete_line = format!("{formatted_line_number}{content}");
 
-    let offset_spaces = &options.offset_spaces;
-
     let tab_count = complete_line.chars().filter(|i| i == &TAB).count();
 
     let display_length = complete_line.len() + (tab_count * 7);
@@ -1392,7 +1405,7 @@ fn get_line_for_printing(
     };
 
     format!(
-        "{offset_spaces}{}{sep}",
+        "{}{sep}",
         line_width
             .map(|i| {
                 let min_width = (i - (columns - 1)) / columns;
