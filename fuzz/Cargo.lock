@@ -1908,7 +1908,7 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
- "nix",
+ "libc",
  "rust-ini",
  "thiserror",
  "uucore",
