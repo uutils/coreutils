@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction sigfillset SIGBUS SIGSEGV extendedbigdecimal myutil logind
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -140,12 +140,6 @@ pub use crate::features::smack;
 
 //## core functions
 
-#[cfg(unix)]
-use nix::errno::Errno;
-#[cfg(unix)]
-use nix::sys::signal::{
-    SaFlags, SigAction, SigHandler::SigDfl, SigSet, Signal::SIGBUS, Signal::SIGSEGV, sigaction,
-};
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
@@ -161,19 +155,21 @@ use std::sync::{LazyLock, atomic::Ordering};
 /// Disables the custom signal handlers installed by Rust for stack-overflow handling. With those custom signal handlers processes ignore the first SIGBUS and SIGSEGV signal they receive.
 /// See <https://github.com/rust-lang/rust/blob/8ac1525e091d3db28e67adcbbd6db1e1deaa37fb/src/libstd/sys/unix/stack_overflow.rs#L71-L92> for details.
 #[cfg(unix)]
-pub fn disable_rust_signal_handlers() -> Result<(), Errno> {
+pub fn disable_rust_signal_handlers() -> std::io::Result<()> {
+    // rustix leaves signal dispositions to libc (see its `not_implemented::libc_internals`),
+    // so this goes straight to libc.
+    // SAFETY: the action is fully initialized below, and SIG_DFL is a valid disposition
+    // for both signals.
     unsafe {
-        sigaction(
-            SIGSEGV,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
-    unsafe {
-        sigaction(
-            SIGBUS,
-            &SigAction::new(SigDfl, SaFlags::empty(), SigSet::all()),
-        )
-    }?;
+        let mut action: libc::sigaction = std::mem::zeroed();
+        action.sa_sigaction = libc::SIG_DFL;
+        libc::sigfillset(&raw mut action.sa_mask);
+        for signal in [libc::SIGSEGV, libc::SIGBUS] {
+            if libc::sigaction(signal, &raw const action, std::ptr::null_mut()) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+    }
     Ok(())
 }
 

@@ -79,6 +79,20 @@ fn test_verbose() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_signal_realtime() {
+    // A real-time signal must be forwarded to the child so it terminates on its own;
+    // otherwise timeout falls back to SIGKILL (exit 137 + a KILL line). Regression for
+    // tests/env/env-signal-handler.sh.
+    // The kill-after window is generous: a regression sends SIGKILL at once, while a
+    // slow CI container just needs time to tear the child down.
+    new_ucmd!()
+        .args(&["--verbose", "-k5", "--signal=RTMIN", ".1", "sleep", "10"])
+        .fails_with_code(124)
+        .stderr_only("timeout: sending signal RTMIN to command 'sleep'\n");
+}
+
+#[test]
 fn test_zero_timeout() {
     let (ts, bin) = scenario_with_bin();
     ts.ucmd()

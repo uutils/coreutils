@@ -37,7 +37,13 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
+rustix = { workspace = true, features = [
+  "event",
+  "fs",
+  "net",
+  "pipe",
+  "process",
+] }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -103,15 +109,7 @@ time = { workspace = true, optional = true, features = [
   "local-offset",
   "macros",
 ] }
-nix = { workspace = true, features = [
-  "dir",
-  "fs",
-  "poll",
-  "signal",
-  "uio",
-  "user",
-  "zerocopy",
-] }
+nix = { workspace = true, features = ["dir", "fs", "uio", "user", "zerocopy"] }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
@@ -193,7 +191,7 @@ safe-copy = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
-signals = []
+signals = ["libc"]
 sum = [
   "digest",
   "hex",
