@@ -846,4 +846,62 @@ mod tests {
         let manager = style_manager(&colors, indicator_codes);
         assert!(manager.has_indicator_style(Indicator::Directory));
     }
+
+    #[test]
+    fn apply_empty_style_emits_reset_then_empty_sgr() {
+        // GNU ls treats an explicit empty entry (e.g. `or=`) as "disable
+        // coloring": emit a reset followed by the empty SGR sequence and never
+        // fall back to another indicator's color.
+        let colors = LsColors::empty();
+        let mut indicator_codes = FxHashMap::default();
+        indicator_codes.insert(Indicator::OrphanedSymbolicLink, String::new());
+        let mut manager = style_manager(&colors, indicator_codes);
+
+        let out = manager.apply_indicator_style(
+            Indicator::OrphanedSymbolicLink,
+            OsString::from("link"),
+            false,
+        );
+        assert_eq!(out, OsString::from("\x1b[0m\x1b[mlink\x1b[0m"));
+    }
+
+    #[test]
+    fn apply_empty_style_appends_clear_to_eol_when_wrapping() {
+        let colors = LsColors::empty();
+        let mut indicator_codes = FxHashMap::default();
+        indicator_codes.insert(Indicator::MissingFile, String::new());
+        let mut manager = style_manager(&colors, indicator_codes);
+
+        let out =
+            manager.apply_indicator_style(Indicator::MissingFile, OsString::from("gone"), true);
+        assert_eq!(out, OsString::from("\x1b[0m\x1b[mgone\x1b[0m\x1b[K"));
+    }
+
+    #[test]
+    fn apply_missing_target_style_falls_back_to_orphan_when_mi_unset() {
+        // `mi` is not configured, so a missing link target must reuse the `or`
+        // (orphaned symlink) style, matching GNU ls's mi->or fallback.
+        let colors = LsColors::empty();
+        let mut indicator_codes = FxHashMap::default();
+        indicator_codes.insert(Indicator::OrphanedSymbolicLink, "01;31".to_string());
+        let mut manager = style_manager(&colors, indicator_codes);
+
+        assert!(!manager.has_indicator_style(Indicator::MissingFile));
+        let out = manager.apply_missing_target_style(OsString::from("target"), false);
+        assert_eq!(out, OsString::from("\x1b[0m\x1b[01;31mtarget\x1b[0m"));
+    }
+
+    #[test]
+    fn apply_orphan_link_style_falls_back_to_missing_when_or_unset() {
+        // Symmetric fallback: with only `mi` configured, an orphaned symlink
+        // borrows the `mi` (missing file) style.
+        let colors = LsColors::empty();
+        let mut indicator_codes = FxHashMap::default();
+        indicator_codes.insert(Indicator::MissingFile, "01;30".to_string());
+        let mut manager = style_manager(&colors, indicator_codes);
+
+        assert!(!manager.has_indicator_style(Indicator::OrphanedSymbolicLink));
+        let out = manager.apply_orphan_link_style(OsString::from("orphan"), false);
+        assert_eq!(out, OsString::from("\x1b[0m\x1b[01;30morphan\x1b[0m"));
+    }
 }
