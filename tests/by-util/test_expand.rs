@@ -273,6 +273,21 @@ fn test_tabs_with_too_large_size() {
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
 
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[test]
+fn test_large_tab_stop_without_tabs_does_not_allocate() {
+    use rlimit::Resource;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .arg("--tabs=267672676527678256")
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
 #[test]
 fn test_tabs_shortcut() {
     new_ucmd!()
