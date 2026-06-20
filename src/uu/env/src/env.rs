@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigemptyset sigaddset sighandler
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -18,12 +18,6 @@ use native_int_str::{
     Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
     from_native_int_representation_owned, get_single_native_int_value,
 };
-#[cfg(unix)]
-use nix::libc;
-#[cfg(unix)]
-use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
-#[cfg(unix)]
-use nix::unistd::execvp;
 use std::borrow::Cow;
 #[cfg(unix)]
 use std::collections::{BTreeMap, BTreeSet};
@@ -35,18 +29,13 @@ use std::io;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
-use std::mem::zeroed;
-#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{
-    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
-    signal_number_upper_bound,
-};
+use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -293,21 +282,6 @@ fn build_signal_request(
     }
 
     Ok(request)
-}
-
-#[cfg(unix)]
-fn signal_is_valid(sig: usize) -> bool {
-    if Signal::try_from(sig as i32).is_err() {
-        // nix::sys::signal does not know about real-time signals, so check that
-        // ourselves.
-        if let Some((rtmin, rtmax)) = realtime_signal_bounds() {
-            return sig >= rtmin && sig <= rtmax;
-        }
-
-        return false;
-    }
-
-    true
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -790,13 +764,13 @@ impl EnvAppData {
                 &opts.default_signal,
                 &mut signal_action_log,
                 SignalActionKind::Default,
-                reset_signal,
+                |sig| set_signal_disposition(sig, libc::SIG_DFL),
             )?;
             apply_signal_action(
                 &opts.ignore_signal,
                 &mut signal_action_log,
                 SignalActionKind::Ignore,
-                ignore_signal,
+                |sig| set_signal_disposition(sig, libc::SIG_IGN),
             )?;
             apply_signal_action(
                 &opts.block_signal,
@@ -895,12 +869,21 @@ impl EnvAppData {
                 argv.push(arg_cstring);
             }
 
-            // Execute the program using execvp. this replaces the current
-            // process. The execvp function takes care of appending a NULL
-            // argument to the argument list so that we don't have to.
-            match execvp(&prog_cstring, &argv) {
-                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
-                Err(nix::errno::Errno::EACCES) => {
+            // Execute the program using execvp(3). This replaces the current
+            // process and only returns on error. Build the NULL-terminated argv
+            // array of pointers that libc expects.
+            let mut argv_ptrs: Vec<*const libc::c_char> =
+                argv.iter().map(|arg| arg.as_ptr()).collect();
+            argv_ptrs.push(std::ptr::null());
+
+            // SAFETY: `prog_cstring` and every `argv` entry are valid NUL-terminated
+            // C strings that outlive the call, and `argv_ptrs` is NULL-terminated.
+            unsafe { libc::execvp(prog_cstring.as_ptr(), argv_ptrs.as_ptr()) };
+
+            // execvp only returns on failure; errno tells us why.
+            match io::Error::last_os_error().raw_os_error() {
+                Some(libc::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
+                Some(libc::EACCES) => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -910,7 +893,7 @@ impl EnvAppData {
                     );
                     Err(126.into())
                 }
-                Err(_) => {
+                _ => {
                     uucore::show_error!(
                         "{}",
                         translate!(
@@ -919,9 +902,6 @@ impl EnvAppData {
                         )
                     );
                     Err(126.into())
-                }
-                Ok(_) => {
-                    unreachable!("execvp should never return on success")
                 }
             }
         }
@@ -1132,21 +1112,21 @@ fn apply_signal_action<F>(
     signal_fn: F,
 ) -> UResult<()>
 where
-    F: Fn(usize) -> UResult<()>,
+    F: Fn(i32) -> UResult<()>,
 {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
-        if !signal_is_valid(sig_value) {
+        let Some(sig) = uucore::signals::signal_from_raw(sig_value) else {
             return Ok(());
-        }
+        };
 
-        signal_fn(sig_value)?;
+        signal_fn(sig)?;
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
         // that SIGPIPE should be default (not ignored)
-        if matches!(action_kind, SignalActionKind::Default) && sig_value == libc::SIGPIPE as usize {
+        if matches!(action_kind, SignalActionKind::Default) && sig == libc::SIGPIPE {
             unsafe {
                 env::set_var("RUST_SIGPIPE", "default");
             }
@@ -1156,89 +1136,36 @@ where
     })
 }
 
+/// Set `sig`'s disposition to `SIG_IGN`/`SIG_DFL`, wrapping failures in env's
+/// translated error. The disposition is applied via [`uucore::signals::set_disposition`],
+/// which handles real-time signals too.
 #[cfg(unix)]
-fn ignore_signal(sig: usize) -> UResult<()> {
-    // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
-    // libc::signal directly.
-    let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
-        nix::errno::Errno::result(res)
-    };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
+fn set_signal_disposition(sig: i32, handler: libc::sighandler_t) -> UResult<()> {
+    uucore::signals::set_disposition(sig, handler).map_err(|_| signal_action_error(sig))
+}
+
+#[cfg(unix)]
+fn block_signal(sig: i32) -> UResult<()> {
+    // SAFETY: build a set containing only `sig` and add it to the process mask.
+    let mut set: libc::sigset_t = unsafe { std::mem::zeroed() };
+    unsafe { libc::sigemptyset(&raw mut set) };
+    unsafe { libc::sigaddset(&raw mut set, sig) };
+    if unsafe { libc::sigprocmask(libc::SIG_BLOCK, &raw const set, std::ptr::null_mut()) } == -1 {
+        return Err(signal_action_error(sig));
     }
     Ok(())
 }
 
 #[cfg(unix)]
-fn reset_signal(sig: usize) -> UResult<()> {
-    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
-    // libc::signal directly.
-    let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
-        nix::errno::Errno::result(res)
-    };
-    if let Err(err) = result {
-        return Err(USimpleError::new(
-            125,
-            translate!("env-error-failed-set-signal-action", "signal" => (sig as i32), "error" => err.desc()),
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
-    // nix::sys::signal::Signal does not cover real time signals, so we need to build
-    // sigset_t manually using libc.
-    let mut sigset: libc::sigset_t = unsafe { zeroed() };
-
-    if let Err(err) = unsafe { nix::errno::Errno::result(libc::sigemptyset(&raw mut sigset)) } {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-
-    if let Err(err) =
-        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
-    {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-
-    Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
-}
-
-#[cfg(unix)]
-fn block_signal(sig: usize) -> UResult<()> {
-    let set = sigset_from_signal_value(sig)?;
-
-    if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
-        return Err(USimpleError::new(
-            125,
-            translate!(
-                "env-error-failed-set-signal-action",
-                "signal" => (sig as i32),
-                "error" => err.desc()
-            ),
-        ));
-    }
-    Ok(())
+fn signal_action_error(sig: i32) -> Box<dyn UError> {
+    USimpleError::new(
+        125,
+        translate!(
+            "env-error-failed-set-signal-action",
+            "signal" => sig,
+            "error" => uucore::error::strip_errno(&io::Error::last_os_error())
+        ),
+    )
 }
 
 #[cfg(unix)]
