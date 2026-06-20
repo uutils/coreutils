@@ -2002,7 +2002,6 @@ dependencies = [
  "libc",
  "md-5",
  "memchr",
- "nix",
  "num-traits",
  "os_display",
  "procfs",

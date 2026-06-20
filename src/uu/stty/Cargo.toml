@@ -19,7 +19,7 @@ doctest = false
 clap = { workspace = true }
 fluent = { workspace = true }
 nix = { workspace = true, features = ["ioctl", "term"] }
-uucore = { workspace = true, features = ["parser"] }
+uucore = { workspace = true, features = ["nix", "parser"] }
 
 [build-dependencies]
 cfg_aliases = { workspace = true }
