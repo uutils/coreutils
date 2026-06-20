@@ -36,7 +36,13 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
+rustix = { workspace = true, features = [
+  "event",
+  "fs",
+  "net",
+  "pipe",
+  "process",
+] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
@@ -102,7 +108,6 @@ selinux = { workspace = true, optional = true }
 nix = { workspace = true, features = [
   "dir",
   "fs",
-  "poll",
   "signal",
   "uio",
   "user",
@@ -186,7 +191,7 @@ safe-copy = []
 safe-traversal = ["libc"]
 selinux = ["dep:selinux"]
 smack = ["xattr"]
-signals = []
+signals = ["libc"]
 sum = [
   "digest",
   "hex",
