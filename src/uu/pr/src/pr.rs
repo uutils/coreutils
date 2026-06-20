@@ -858,6 +858,20 @@ fn build_options(
         None => start_column_option,
     };
 
+    // Reject column counts that would later overflow the Vec allocations in
+    // to_table()/to_table_across()/to_table_short_file() (issue #12996),
+    // matching GNU's "Value too large for defined data type" rejection.
+    if let Some(columns) = column_option_value {
+        if columns > i32::MAX as usize {
+            return Err(PrError::EncounteredErrors {
+                msg: format!(
+                    "invalid number of columns: {}: Value too large for defined data type",
+                    columns.to_string().quote()
+                ),
+            });
+        }
+    }
+
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
         width: column_width,

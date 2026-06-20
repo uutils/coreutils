@@ -943,6 +943,25 @@ fn test_zero_columns_shortcut() {
 }
 
 #[test]
+fn test_huge_columns_does_not_panic() {
+    // Previously panicked with "capacity overflow" (issue #12996).
+    new_ucmd!()
+        .arg("--column=9999999999999999999")
+        .fails_with_code(1)
+        .stderr_contains("invalid number of columns")
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_huge_columns_shortcut_does_not_panic() {
+    new_ucmd!()
+        .arg("-9999999999999999999")
+        .fails_with_code(1)
+        .stderr_contains("invalid number of columns")
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
 fn test_zero_expand_tab_width() {
     let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
     new_ucmd!()
