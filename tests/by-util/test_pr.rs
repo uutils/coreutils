@@ -439,6 +439,22 @@ fn test_offset_too_large() {
         ));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_offset_large_value_does_not_abort_under_memory_limit() {
+    use rlimit::Resource;
+    use std::process::Stdio;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-t", "-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
+}
+
 #[test]
 fn test_offset_invalid() {
     new_ucmd!()
