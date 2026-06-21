@@ -8,13 +8,25 @@
 //! Locale-aware datetime formatting utilities using ICU and jiff-icu
 
 use icu_calendar::Date;
-use icu_calendar::cal::{Ethiopian, Iso, Persian};
+use icu_calendar::cal::{Buddhist, Ethiopian, Iso, Persian};
 use icu_locale::Locale;
 use jiff::civil::Date as JiffDate;
 use jiff_icu::ConvertFrom;
 use std::sync::OnceLock;
 
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 use icu_datetime::DateTimeFormatter;
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 use icu_datetime::fieldsets;
 #[cfg(all(
     unix,
@@ -75,6 +87,177 @@ pub enum CalendarType {
     Ethiopian,
 }
 
+/// Locale-specific month name for the current `LC_TIME` locale.
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
+fn locale_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    use std::ffi::CStr;
+
+    let month_items: [libc::nl_item; 12] = if long {
+        [
+            libc::MON_1,
+            libc::MON_2,
+            libc::MON_3,
+            libc::MON_4,
+            libc::MON_5,
+            libc::MON_6,
+            libc::MON_7,
+            libc::MON_8,
+            libc::MON_9,
+            libc::MON_10,
+            libc::MON_11,
+            libc::MON_12,
+        ]
+    } else {
+        [
+            libc::ABMON_1,
+            libc::ABMON_2,
+            libc::ABMON_3,
+            libc::ABMON_4,
+            libc::ABMON_5,
+            libc::ABMON_6,
+            libc::ABMON_7,
+            libc::ABMON_8,
+            libc::ABMON_9,
+            libc::ABMON_10,
+            libc::ABMON_11,
+            libc::ABMON_12,
+        ]
+    };
+
+    unsafe {
+        libc::setlocale(libc::LC_TIME, c"".as_ptr());
+    }
+
+    let ordinal = usize::from(date.month().ordinal).checked_sub(1)?;
+    let ptr = unsafe { libc::nl_langinfo(month_items[ordinal]) };
+    if ptr.is_null() {
+        return None;
+    }
+
+    let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.into_owned())
+    }
+}
+
+/// Locale-specific weekday name for the current `LC_TIME` locale.
+#[cfg(all(
+    unix,
+    not(target_os = "android"),
+    not(target_os = "cygwin"),
+    not(target_os = "redox")
+))]
+fn locale_weekday_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    use std::ffi::CStr;
+
+    let weekday_items: [libc::nl_item; 7] = if long {
+        [
+            libc::DAY_1,
+            libc::DAY_2,
+            libc::DAY_3,
+            libc::DAY_4,
+            libc::DAY_5,
+            libc::DAY_6,
+            libc::DAY_7,
+        ]
+    } else {
+        [
+            libc::ABDAY_1,
+            libc::ABDAY_2,
+            libc::ABDAY_3,
+            libc::ABDAY_4,
+            libc::ABDAY_5,
+            libc::ABDAY_6,
+            libc::ABDAY_7,
+        ]
+    };
+
+    unsafe {
+        libc::setlocale(libc::LC_TIME, c"".as_ptr());
+    }
+
+    let weekday = usize::from((date.weekday() as u8) % 7);
+    let ptr = unsafe { libc::nl_langinfo(weekday_items[weekday]) };
+    if ptr.is_null() {
+        return None;
+    }
+
+    let name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy();
+    if name.is_empty() {
+        None
+    } else {
+        Some(name.into_owned())
+    }
+}
+
+/// Locale-specific month name for the current `LC_TIME` locale.
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
+fn locale_month_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    let (locale, _) = get_time_locale();
+    let locale = if locale.to_string().starts_with("th") {
+        icu_locale::locale!("en-US")
+    } else {
+        locale.clone()
+    };
+    let locale_prefs = locale.into();
+    let formatter = DateTimeFormatter::try_new(
+        locale_prefs,
+        if long {
+            fieldsets::M::long()
+        } else {
+            fieldsets::M::medium()
+        },
+    )
+    .ok()?;
+
+    let name = formatter.format(date).to_string();
+    Some(if long {
+        name
+    } else {
+        name.trim_end_matches('.').to_string()
+    })
+}
+
+/// Locale-specific weekday name for the current `LC_TIME` locale.
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
+fn locale_weekday_name(date: &Date<Iso>, long: bool) -> Option<String> {
+    let (locale, _) = get_time_locale();
+    let locale = if locale.to_string().starts_with("th") {
+        icu_locale::locale!("en-US")
+    } else {
+        locale.clone()
+    };
+    let locale_prefs = locale.into();
+    let formatter = DateTimeFormatter::try_new(
+        locale_prefs,
+        if long {
+            fieldsets::E::long()
+        } else {
+            fieldsets::E::short()
+        },
+    )
+    .ok()?;
+
+    Some(formatter.format(date).to_string())
+}
+
 /// Transform a strftime format string to use locale-specific calendar values
 pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     const PERCENT_PLACEHOLDER: &str = "\x00\x00";
@@ -83,13 +266,18 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     let iso_date = Date::<Iso>::convert_from(date);
 
     let mut fmt = format.replace("%%", PERCENT_PLACEHOLDER);
-    fmt = fmt.replace("%EY", "%Y");
-
-    // GNU date keeps `%Y` and `%EY` Gregorian for th_TH.UTF-8, so normalize
-    // `%EY` to `%Y` before applying locale-specific substitutions.
+    // Leave `%EY` untouched so GNU-compatible alternate year formatting can be
+    // handled by the underlying strftime implementation.
     let calendar_type = get_locale_calendar_type(locale);
     match calendar_type {
-        CalendarType::Buddhist => {}
+        CalendarType::Buddhist => {
+            let d = iso_date.to_calendar(Buddhist);
+            let buddhist_year = d.year().era_year_or_related_iso();
+            fmt = fmt
+                .replace("%EY", &format!("พ.ศ. {buddhist_year}"))
+                .replace("%EC", "พ.ศ.")
+                .replace("%Ey", &buddhist_year.to_string());
+        }
         CalendarType::Persian => {
             let d = iso_date.to_calendar(Persian);
             let cal_year = d.year().extended_year();
@@ -115,41 +303,24 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
         CalendarType::Gregorian => {}
     }
 
-    // Format localized names.
-    let name_locale = if locale.to_string().starts_with("th") {
-        icu_locale::locale!("en-US")
-    } else {
-        locale.clone()
-    };
-    let locale_prefs = name_locale.into();
-
     if fmt.contains("%B") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
-            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
+        if let Some(month_name) = locale_month_name(&iso_date, true) {
+            fmt = fmt.replace("%B", &month_name);
         }
     }
     if fmt.contains("%b") || fmt.contains("%h") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
-            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-            // which when combined with locale format strings that also add periods after
-            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-            // The standard C/POSIX locale via nl_langinfo returns abbreviations
-            // WITHOUT trailing periods, so we strip them here for consistency.
-            let month_abbrev = f.format(&iso_date).to_string();
-            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-            fmt = fmt
-                .replace("%b", &month_abbrev)
-                .replace("%h", &month_abbrev);
+        if let Some(month_name) = locale_month_name(&iso_date, false) {
+            fmt = fmt.replace("%b", &month_name).replace("%h", &month_name);
         }
     }
     if fmt.contains("%A") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
-            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
+        if let Some(weekday_name) = locale_weekday_name(&iso_date, true) {
+            fmt = fmt.replace("%A", &weekday_name);
         }
     }
     if fmt.contains("%a") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
-            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
+        if let Some(weekday_name) = locale_weekday_name(&iso_date, false) {
+            fmt = fmt.replace("%a", &weekday_name);
         }
     }
 
