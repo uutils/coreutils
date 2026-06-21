@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigemptyset sigaddset sighandler
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigemptyset sigaddset sighandler ptrs
 
 pub mod native_int_str;
 pub mod split_iterator;
