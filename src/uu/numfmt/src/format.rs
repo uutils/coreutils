@@ -542,8 +542,12 @@ fn consider_suffix(
 fn is_too_large_to_format(scaled: i128, precision: usize) -> bool {
     const MAX_FORMATTED: u128 = 10_000_000_000_000_000_000;
     let precision_factor = 10_u128.pow(precision.min(19) as u32);
+    // `.max(1)`: a zero value must still be bounded by precision, else any
+    // `--format` precision is accepted (0 * factor == 0), printing/allocating
+    // unboundedly. Treating 0 as magnitude 1 matches GNU's threshold.
     scaled
         .unsigned_abs()
+        .max(1)
         .checked_mul(precision_factor)
         .is_none_or(|v| v >= MAX_FORMATTED)
 }

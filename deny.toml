@@ -100,8 +100,6 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
-  # hashbrown
-  { name = "foldhash", version = "0.1.5" },
   # crc-fast
   { name = "digest", version = "0.10.7" },
   # digest

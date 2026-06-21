@@ -54,6 +54,7 @@ install-error-failed-to-remove = Failed to remove existing file { $path }. Error
 
 # Warning messages
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
+install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 
 # Verbose output
 install-verbose-creating-directory = creating directory { $path }

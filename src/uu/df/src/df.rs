@@ -222,31 +222,17 @@ impl Options {
 /// Whether to display the mount info given the inclusion settings.
 fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
-    if mi.remote && opt.show_local_fs {
-        return false;
-    }
+    !(mi.remote && opt.show_local_fs) &&
 
     // Don't show pseudo filesystems unless `--all` has been given.
     // The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
-        return false;
-    }
+    !((mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs) &&
 
     // Don't show filesystems if they have been explicitly excluded.
-    if let Some(ref excludes) = opt.exclude {
-        if excludes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-    if let Some(ref includes) = opt.include {
-        if !includes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-
-    true
+    !opt.exclude.as_ref().is_some_and(|e| e.contains(&mi.fs_type)) &&
+    opt.include.as_ref().is_none_or(|i| i.contains(&mi.fs_type))
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.

@@ -378,6 +378,24 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
     let strip = matches.get_flag(OPT_STRIP);
+    let strip_program = match matches.get_one::<String>(OPT_STRIP_PROGRAM) {
+        Some(p) => {
+            if !strip
+                && writeln!(
+                    std::io::stderr(),
+                    "install: {}",
+                    translate!("install-warning-no-strip-with-program")
+                )
+                .is_err()
+            {
+                uucore::error::set_exit_code(1);
+            }
+            p
+        }
+        None => DEFAULT_STRIP_PROGRAM,
+    }
+    .to_string();
+
     if preserve_timestamps && compare {
         show_error!(
             "{}",
@@ -458,11 +476,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_timestamps,
         compare,
         strip,
-        strip_program: String::from(
-            matches
-                .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
-        ),
+        strip_program,
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,

@@ -93,6 +93,7 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
+        #[expect(clippy::collapsible_if)]
         if let Some(ref fallback) = self.fallback_bundle {
             if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
                 let mut errs = Vec::new();
