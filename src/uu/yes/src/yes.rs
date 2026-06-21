@@ -22,7 +22,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap());
+    // On the platform OsStr is not &[u8], reject invalid utf8
+    // todo: accept invalid utf8 on safe output type
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    std::str::from_utf8(&buffer).map_err(|e| USimpleError::new(1, format!("{e}")))?;
+
     repeat_content_to_capacity(&mut buffer);
     match exec(&buffer) {
         Ok(()) => Ok(()),
@@ -52,18 +57,13 @@ pub fn uu_app() -> Command {
 }
 
 /// create a buffer filled by words `i` separated by spaces.
-#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
+fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> Vec<u8> {
     let mut buf = Vec::with_capacity(BUF_SIZE);
     for part in itertools::intersperse(i.map(|a| a.as_encoded_bytes()), b" ") {
-        // On the platform OsStr is not &[u8], reject invalid utf8
-        // todo: accept invalid utf8 on safe output type
-        #[cfg(not(any(unix, target_os = "wasi")))]
-        std::str::from_utf8(part).map_err(|e| USimpleError::new(1, format!("{e}")))?;
         buf.extend_from_slice(part);
     }
     buf.push(b'\n');
-    Ok(buf)
+    buf
 }
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
@@ -159,19 +159,19 @@ mod tests {
     fn test_args_into_buf() {
         {
             let default_args = ["y".into()];
-            let v = args_into_buffer(default_args.iter()).unwrap();
+            let v = args_into_buffer(default_args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "y\n");
         }
 
         {
             let args = ["foo".into()];
-            let v = args_into_buffer(args.iter()).unwrap();
+            let v = args_into_buffer(args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
         }
 
         {
             let args = ["foo".into(), "bar    baz".into(), "qux".into()];
-            let v = args_into_buffer(args.iter()).unwrap();
+            let v = args_into_buffer(args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
         }
     }
