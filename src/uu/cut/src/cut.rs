@@ -759,6 +759,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
+                .short('O')
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
                 .help(translate!("cut-help-output-delimiter"))
