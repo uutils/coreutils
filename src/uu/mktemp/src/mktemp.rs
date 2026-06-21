@@ -435,7 +435,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+
+    let path = res?;
+    let res = println_verbatim(&path);
+
+    // Delete the file/directory if output flush failed.
+    if res.is_err() {
+        if path.is_dir() {
+            fs::remove_dir(&path)?;
+        } else {
+            fs::remove_file(&path)?;
+        }
+    }
+
+    res.map_err_context(|| translate!("mktemp-error-failed-print"))
 }
 
 pub fn uu_app() -> Command {
