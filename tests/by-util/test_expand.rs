@@ -274,6 +274,10 @@ fn test_tabs_with_too_large_size() {
 }
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI runner target is not suitable for this address-space-limit regression test"
+)]
 #[test]
 fn test_large_tab_stop_without_tabs_does_not_allocate() {
     use rlimit::Resource;
