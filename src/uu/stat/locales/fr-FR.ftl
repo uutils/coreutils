@@ -99,7 +99,7 @@ stat-error-invalid-directive = {$directive} : directive invalide
 stat-error-cannot-read-filesystem = impossible de lire la table des systèmes de fichiers montés : {$error}
 stat-error-stdin-filesystem-mode = utiliser '-' pour désigner l'entrée standard ne fonctionne pas en mode système de fichiers
 stat-error-cannot-read-filesystem-info = impossible de lire les informations du système de fichiers pour {$file} : {$error}
-stat-error-cannot-stat = impossible d'obtenir le statut de {$file} : {$error}
+stat-error-cannot-statx = impossible d'obtenir le statut de {$file} : {$error}
 
 ## Messages d'avertissement
 
