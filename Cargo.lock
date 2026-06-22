@@ -553,7 +553,7 @@ dependencies = [
  "fluent-syntax",
  "glob",
  "hex-literal",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "libc",
  "nix",
@@ -1017,7 +1017,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1697,6 +1697,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2014,7 +2023,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2620,7 +2629,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2938,7 +2947,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2948,7 +2957,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3922,7 +3931,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "memchr",
  "regex",
  "thiserror 2.0.18",
@@ -4133,7 +4142,7 @@ dependencies = [
  "ctrlc",
  "fluent",
  "foldhash",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "libc",
  "memchr",
  "rand 0.10.1",
@@ -4473,7 +4482,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "rustix",
  "uucore",
 ]
@@ -4505,7 +4514,7 @@ dependencies = [
  "icu_decimal",
  "icu_locale",
  "icu_provider",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "jiff",
  "jiff-icu",
  "libc",
@@ -4695,7 +4704,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
