@@ -727,3 +727,12 @@ fn test_correct_metadata() {
         assert_eq!(output, &expected);
     }
 }
+
+#[test]
+fn test_no_such_directory_message() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("a")
+        .fails_with(1)
+        .stderr_is("stat: cannot statx 'a': No such file or directory\n");
+}
