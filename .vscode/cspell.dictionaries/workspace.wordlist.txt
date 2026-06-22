@@ -374,6 +374,8 @@ weblate
 algs
 wasm
 wasip
+statx
+Statx
 
 # * stty terminal flags
 brkint
