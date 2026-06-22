@@ -184,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
