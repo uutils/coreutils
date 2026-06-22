@@ -372,6 +372,15 @@ fn test_install_target_file() {
 }
 
 #[test]
+fn test_install_missing_source_reports_cannot_stat_with_path() {
+    new_ucmd!()
+        .arg("missing_source")
+        .arg("target_file")
+        .fails_with_code(1)
+        .stderr_contains("cannot stat 'missing_source': No such file or directory");
+}
+
+#[test]
 fn test_install_target_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
