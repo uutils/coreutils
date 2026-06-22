@@ -1,0 +1,31 @@
+[package]
+name = "uu-wall"
+categories.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+license.workspace = true
+readme.workspace = true
+version.workspace = true
+
+[dependencies]
+clap = { workspace = true }
+fluent = { workspace = true }
+thiserror.workspace = true
+jiff = { workspace = true }
+rustix = { workspace = true, features = ["system"] }
+[target.'cfg(target_os = "linux")'.dependencies]
+uucore = { workspace = true, features = ["utmpx", "feat_systemd_logind"] }
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+uucore = { workspace = true, features = ["utmpx"] }
+
+[lints]
+workspace = true
+
+[lib]
+path = "src/wall.rs"
+
+[[bin]]
+name = "wall"
+path = "src/main.rs"
