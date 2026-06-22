@@ -733,6 +733,6 @@ fn test_no_such_directory_message() {
     let ts = TestScenario::new(util_name!());
     ts.ucmd()
         .arg("a")
-        .fails_with(1)
+        .fails_with_code(1)
         .stderr_is("stat: cannot statx 'a': No such file or directory\n");
 }
