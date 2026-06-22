@@ -770,8 +770,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
+        let source_metadata = metadata_for_source(source)?;
 
-        if source.is_dir() {
+        if source_metadata.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
@@ -827,6 +828,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
 }
 
+fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
+    path.metadata()
+        .map_err_context(|| format!("cannot stat {}", path.quote()))
+}
+
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
@@ -842,15 +848,15 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files {
-        if let Err(err) = sourcepath
-            .metadata()
-            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
-        {
-            show!(err);
-            continue;
-        }
+        let source_metadata = match metadata_for_source(sourcepath) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                show!(err);
+                continue;
+            }
+        };
 
-        if sourcepath.is_dir() {
+        if source_metadata.is_dir() {
             let err = InstallError::OmittingDirectory(sourcepath.clone());
             show!(err);
             continue;
