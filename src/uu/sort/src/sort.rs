@@ -284,7 +284,6 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: u64,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -458,7 +457,6 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: 0,
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -2116,14 +2114,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    settings.threads = matches
-        .get_one::<u64>(options::PARALLEL)
-        .copied()
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+
+    // WASI doesn't support threads, so we ignore the corresponding option
     #[cfg(not(target_os = "wasi"))]
-    let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(settings.threads as usize)
-        .build_global();
+    {
+        let threads = matches
+            .get_one::<u64>(options::PARALLEL)
+            .copied()
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build_global();
+    }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
