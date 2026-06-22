@@ -36,7 +36,7 @@ env:
 jobs:
   native:
     name: Run GNU tests (native)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     #### Get the code
     - name: Checkout code (uutils)
@@ -57,8 +57,6 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
-        curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
-        sudo dpkg -i --force-depends automake-1.18.deb
     - name: Add various locales
       shell: bash
       run: |
