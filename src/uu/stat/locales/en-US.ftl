@@ -63,7 +63,7 @@ stat-error-invalid-directive = {$directive}: invalid directive
 stat-error-cannot-read-filesystem = cannot read table of mounted file systems: {$error}
 stat-error-stdin-filesystem-mode = using '-' to denote standard input does not work in file system mode
 stat-error-cannot-read-filesystem-info = cannot read file system information for {$file}: {$error}
-stat-error-cannot-stat = cannot stat {$file}: {$error}
+stat-error-cannot-statx = cannot statx {$file}: {$error}
 
 ## Warning messages
 
