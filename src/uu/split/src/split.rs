@@ -21,14 +21,12 @@ use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Wr
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::strip_errno;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
 
 use uucore::format_usage;
-use uucore::uio_error;
 
 static OPT_BYTES: &str = "bytes";
 static OPT_LINE_BYTES: &str = "line-bytes";
@@ -1574,10 +1572,7 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            if let Err(e) = io::copy(&mut reader, &mut writer) {
-                return Err(USimpleError::new(1, strip_errno(&e).clone()));
-            }
-            Ok(())
+            copy(&mut reader, &mut writer)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
@@ -1599,10 +1594,9 @@ fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
         // indicate that. A special error message needs to be
         // printed in that case.
         Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-        Err(e) => Err(uio_error!(
-            e,
-            "{}",
-            translate!("split-error-input-output-error")
+        Err(_) => Err(USimpleError::new(
+            1,
+            translate!("split-error-input-output-error"),
         )),
     }
 }
