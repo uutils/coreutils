@@ -454,10 +454,7 @@ impl error::UError for NonUtf8OsStrError {}
 /// and fails on other platforms if the string can't be coerced to UTF-8.
 #[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
-    return Ok(os_string.as_bytes());
-
-    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    #[cfg(any(unix, target_os = "wasi"))]
     return Ok(os_string.as_encoded_bytes());
 
     #[cfg(not(any(unix, target_os = "wasi")))]
@@ -474,9 +471,7 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
 /// This is always lossless on unix platforms,
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
 pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
-    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
-    return Cow::from(os_string.as_bytes());
-    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    #[cfg(any(unix, target_os = "wasi"))]
     return Cow::from(os_string.as_encoded_bytes());
 
     #[cfg(not(any(unix, target_os = "wasi")))]
