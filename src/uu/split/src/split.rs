@@ -29,24 +29,24 @@ use uucore::parser::parse_size::parse_size_u64;
 use uucore::format_usage;
 use uucore::uio_error;
 
-static OPT_BYTES: &str = "bytes";
-static OPT_LINE_BYTES: &str = "line-bytes";
-static OPT_LINES: &str = "lines";
-static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
-static OPT_FILTER: &str = "filter";
-static OPT_NUMBER: &str = "number";
-static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
-static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
-static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
-static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_SEPARATOR: &str = "separator";
-static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-static OPT_IO_BLKSIZE: &str = "-io-blksize";
+const OPT_BYTES: &str = "bytes";
+const OPT_LINE_BYTES: &str = "line-bytes";
+const OPT_LINES: &str = "lines";
+const OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
+const OPT_FILTER: &str = "filter";
+const OPT_NUMBER: &str = "number";
+const OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
+const OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
+const OPT_HEX_SUFFIXES: &str = "hex-suffixes";
+const OPT_HEX_SUFFIXES_SHORT: &str = "-x";
+const OPT_SUFFIX_LENGTH: &str = "suffix-length";
+const OPT_VERBOSE: &str = "verbose";
+const OPT_SEPARATOR: &str = "separator";
+const OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
+const OPT_IO_BLKSIZE: &str = "-io-blksize";
 
-static ARG_INPUT: &str = "input";
-static ARG_PREFIX: &str = "prefix";
+const ARG_INPUT: &str = "input";
+const ARG_PREFIX: &str = "prefix";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -209,25 +209,23 @@ fn handle_preceding_options(
     // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    if slice.starts_with("--") {
-        *preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
-            || &slice[2..] == OPT_LINE_BYTES
-            || &slice[2..] == OPT_LINES
-            || &slice[2..] == OPT_ADDITIONAL_SUFFIX
-            || &slice[2..] == OPT_FILTER
-            || &slice[2..] == OPT_NUMBER
-            || &slice[2..] == OPT_SUFFIX_LENGTH
-            || &slice[2..] == OPT_SEPARATOR;
+    if let Some(opt) = slice.strip_prefix("--") {
+        *preceding_long_opt_req_value = matches!(
+            opt,
+            OPT_BYTES
+                | OPT_LINE_BYTES
+                | OPT_LINES
+                | OPT_ADDITIONAL_SUFFIX
+                | OPT_FILTER
+                | OPT_NUMBER
+                | OPT_SUFFIX_LENGTH
+                | OPT_SEPARATOR
+        );
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value = slice == "-b"
-        || slice == "-C"
-        || slice == "-l"
-        || slice == "-n"
-        || slice == "-a"
-        || slice == "-t";
+    *preceding_short_opt_req_value = matches!(slice, "-b" | "-C" | "-l" | "-n" | "-a" | "-t");
     // slice is a value
     // reset preceding option flags
     if !slice.starts_with('-') {
@@ -748,11 +746,7 @@ impl Write for ByteChunkWriter<'_> {
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
         let mut carryover_bytes_written: usize = 0;
-        loop {
-            if buf.is_empty() {
-                return Ok(carryover_bytes_written);
-            }
-
+        while !buf.is_empty() {
             if self.num_bytes_remaining_in_current_chunk == 0 {
                 // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
                 self.num_chunks_written += 1;
@@ -800,6 +794,7 @@ impl Write for ByteChunkWriter<'_> {
             // Remember for the next iteration that we wrote these bytes.
             carryover_bytes_written += num_bytes_written;
         }
+        Ok(carryover_bytes_written)
     }
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
