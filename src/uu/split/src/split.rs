@@ -725,7 +725,7 @@ impl<'a> ByteChunkWriter<'a> {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            println!("creating file {}", filename.quote());
+            writeln!(io::stdout(), "creating file {}", filename.quote())?;
         }
         let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
@@ -763,7 +763,7 @@ impl Write for ByteChunkWriter<'_> {
                     io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
                 })?;
                 if self.settings.verbose {
-                    println!("creating file {}", filename.quote());
+                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
                 }
                 self.inner = self.settings.instantiate_current_writer(&filename, true)?;
             }
@@ -864,7 +864,7 @@ impl<'a> LineChunkWriter<'a> {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            println!("creating file {}", filename.quote());
+            writeln!(io::stdout(), "creating file {}", filename.quote())?;
         }
         settings.instantiate_current_writer(&filename, true)
     }
@@ -1489,7 +1489,7 @@ where
                     USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
                 })?;
                 if settings.verbose {
-                    println!("creating file {}", filename.quote());
+                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
                 }
                 writer = settings.instantiate_current_writer(&filename, true)?;
                 remaining = chunk_size;
