@@ -346,6 +346,35 @@ fn test_stdbuf_non_utf8_paths() {
         .stdout_is("test content for stdbuf\n");
 }
 
+fn stdbuf_observed_exec_name<'a>(cmdline: &'a str, expected_command: &str) -> Option<&'a str> {
+    let name = cmdline.split('\0').next().unwrap_or("");
+    let command_name = std::path::Path::new(name)
+        .file_name()
+        .and_then(|v| v.to_str())
+        .unwrap_or(name);
+
+    // /proc/<pid>/cmdline can briefly expose a partial argv during exec.
+    // Only accept the expected target command rather than any non-stdbuf value.
+    if command_name == expected_command {
+        Some(name)
+    } else {
+        None
+    }
+}
+
+#[test]
+fn test_stdbuf_cmdline_poll_ignores_transient_target_prefix() {
+    assert!(stdbuf_observed_exec_name("/target/x86_64-unknown-linux-gnu\0", "sleep").is_none());
+    assert_eq!(
+        stdbuf_observed_exec_name(concat!("/usr/bin/sleep", "\0", "3", "\0"), "sleep"),
+        Some("/usr/bin/sleep")
+    );
+    assert_eq!(
+        stdbuf_observed_exec_name(concat!("sleep", "\0", "3", "\0"), "sleep"),
+        Some("sleep")
+    );
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_stdbuf_no_fork_regression() {
@@ -384,12 +413,7 @@ fn test_stdbuf_no_fork_regression() {
         }
 
         if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
-            let cmd_parts: Vec<&str> = cmdline.split('\0').collect();
-            let name = cmd_parts.first().map_or("", |v| v);
-
-            // Wait for exec to complete (process name changes from original binary to target)
-            // Handle both multicall binary (coreutils) and individual utilities (stdbuf)
-            if !name.contains("coreutils") && !name.contains("stdbuf") && !name.is_empty() {
+            if let Some(name) = stdbuf_observed_exec_name(&cmdline, "sleep") {
                 break name.to_string();
             }
         }
