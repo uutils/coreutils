@@ -369,12 +369,13 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
+            let is_interactive = stdin.is_terminal();
             if is_unsafe_overwrite(&stdin, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: io::stdin().is_terminal(),
+                is_interactive,
             };
             cat_handle(&mut handle, options, state)
         }
