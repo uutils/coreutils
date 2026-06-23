@@ -106,7 +106,12 @@ fn test_filename_ends_with_slash() {
         .stderr_is("sum: a/: Not a directory\n");
 }
 
-#[cfg(all(unix, not(windows), not(target_os = "macos")))]
+#[cfg(all(
+    unix,
+    not(windows),
+    not(target_os = "macos"),
+    not(target_os = "openbsd")
+))]
 #[cfg_attr(wasi_runner, ignore)]
 #[test]
 fn test_filename_proc_self_mem() {
