@@ -206,6 +206,9 @@ fn handle_preceding_options(
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
 ) {
+    *preceding_short_opt_req_value = false;
+    *preceding_long_opt_req_value = false;
+
     // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
@@ -226,12 +229,6 @@ fn handle_preceding_options(
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
     *preceding_short_opt_req_value = matches!(slice, "-b" | "-C" | "-l" | "-n" | "-a" | "-t");
-    // slice is a value
-    // reset preceding option flags
-    if !slice.starts_with('-') {
-        *preceding_short_opt_req_value = false;
-        *preceding_long_opt_req_value = false;
-    }
 }
 
 pub fn uu_app() -> Command {
