@@ -31,9 +31,7 @@ where
 {
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
-    if ioctl_ficlone(&dst, &src).is_err() {
-        buf_copy::copy_fast(&mut src, &mut dst)?;
-    }
+    buf_copy::copy_fast(&mut src, &mut dst)?;
     Ok(())
 }
 
