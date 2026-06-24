@@ -1572,17 +1572,17 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            copy(&mut reader, &mut writer, &settings.input.to_string_lossy())
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            copy(&mut reader, &mut writer, &settings.input.to_string_lossy())
         }
         Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
     }
 }
 
-fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
+fn copy(reader: &mut impl Read, writer: &mut impl Write, file_path: &str) -> UResult<()> {
     match io::copy(reader, writer) {
         Ok(_) => Ok(()),
         // TODO Since the writer object controls the creation of
@@ -1594,9 +1594,6 @@ fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
         // indicate that. A special error message needs to be
         // printed in that case.
         Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-        Err(_) => Err(USimpleError::new(
-            1,
-            translate!("split-error-input-output-error"),
-        )),
+        Err(e) => Err(e.map_err_context(|| file_path.to_string())),
     }
 }
