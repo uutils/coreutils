@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use std::env;
 use std::ffi::{OsStr, OsString};
-use std::io::{BufWriter, Error, Result};
+use std::io::{Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -131,7 +131,7 @@ pub fn instantiate_current_writer(
     input: &OsStr,
     filename: &OsStr,
     is_new: bool,
-) -> Result<BufWriter<Box<dyn Write>>> {
+) -> Result<Box<dyn Write>> {
     match filter {
         None => {
             let file = if is_new {
@@ -156,12 +156,12 @@ pub fn instantiate_current_writer(
 
                 file
             };
-            Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+            Ok(Box::new(file) as Box<dyn Write>)
         }
-        Some(filter_command) => Ok(BufWriter::new(Box::new(
+        Some(filter_command) => Ok(Box::new(
             // spawn a shell command and write to it
             FilterWriter::new(filter_command, filename)?,
-        ) as Box<dyn Write>)),
+        ) as Box<dyn Write>),
     }
 }
 

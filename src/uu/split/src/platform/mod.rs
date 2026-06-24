@@ -31,7 +31,7 @@ pub fn instantiate_current_writer(
     input: &std::ffi::OsStr,
     filename: &std::ffi::OsStr,
     is_new: bool,
-) -> std::io::Result<std::io::BufWriter<Box<dyn std::io::Write>>> {
+) -> std::io::Result<Box<dyn std::io::Write>> {
     // Refuse to truncate/overwrite the input. WASI cannot do the fd-based check
     // unix/windows use, so this is a best-effort path comparison.
     if paths_refer_to_same_file(input, filename) {
@@ -50,9 +50,7 @@ pub fn instantiate_current_writer(
             .append(true)
             .open(std::path::Path::new(filename))?
     };
-    Ok(std::io::BufWriter::new(
-        Box::new(file) as Box<dyn std::io::Write>
-    ))
+    Ok(Box::new(file) as Box<dyn std::io::Write>)
 }
 
 #[cfg(unix)]

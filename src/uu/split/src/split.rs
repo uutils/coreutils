@@ -17,7 +17,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -543,7 +543,7 @@ impl Settings {
         &self,
         filename: &OsStr,
         is_new: bool,
-    ) -> io::Result<BufWriter<Box<dyn Write>>> {
+    ) -> io::Result<Box<dyn Write>> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
@@ -710,7 +710,7 @@ struct ByteChunkWriter<'a> {
     /// Once the number of bytes written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
     /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    inner: Box<dyn Write>,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -831,7 +831,7 @@ struct LineChunkWriter<'a> {
     /// Once the number of lines written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
     /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    inner: Box<dyn Write>,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -854,7 +854,7 @@ impl<'a> LineChunkWriter<'a> {
     fn start_new_chunk(
         settings: &Settings,
         filename_iterator: &mut FilenameIterator,
-    ) -> io::Result<BufWriter<Box<dyn Write>>> {
+    ) -> io::Result<Box<dyn Write>> {
         let filename = filename_iterator.next().ok_or_else(|| {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
@@ -919,7 +919,7 @@ impl Write for LineChunkWriter<'_> {
 /// Output file parameters
 struct OutFile {
     filename: OsString,
-    maybe_writer: Option<BufWriter<Box<dyn Write>>>,
+    maybe_writer: Option<Box<dyn Write>>,
     is_new: bool,
 }
 
@@ -932,7 +932,7 @@ trait ManageOutFiles {
         &mut self,
         idx: usize,
         settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
+    ) -> UResult<&mut Box<dyn Write>>;
     /// Initialize a new set of output files
     /// Each [`OutFile`] is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
@@ -951,11 +951,7 @@ trait ManageOutFiles {
     /// are flagged as `is_new=false`, so they can be re-opened for appending
     /// instead of created anew if we need to keep writing into them later,
     /// i.e. in case of round robin distribution as in [`n_chunks_by_line_round_robin`]
-    fn get_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
+    fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Box<dyn Write>>;
 }
 
 impl ManageOutFiles for OutFiles {
@@ -1001,7 +997,7 @@ impl ManageOutFiles for OutFiles {
         &mut self,
         idx: usize,
         settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+    ) -> UResult<&mut Box<dyn Write>> {
         let mut count = 0;
         // Use-case for doing multiple tries of closing fds:
         // E.g. split running in parallel to other processes (e.g. another split) doing similar stuff,
@@ -1048,11 +1044,7 @@ impl ManageOutFiles for OutFiles {
         }
     }
 
-    fn get_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+    fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Box<dyn Write>> {
         if self[idx].maybe_writer.is_some() {
             Ok(self[idx].maybe_writer.as_mut().unwrap())
         } else {
@@ -1472,7 +1464,7 @@ where
     // to be overwritten for sure at the beginning of the loop below
     // because we start with `remaining == 0`, indicating that a new
     // chunk should start.
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(Box::new(io::Cursor::new(vec![])));
+    let mut writer: Box<dyn Write> = Box::new(io::Cursor::new(vec![]));
 
     let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {

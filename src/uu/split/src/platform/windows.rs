@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::io::{BufWriter, Error, Result};
+use std::io::{Error, Result};
 use std::io::{ErrorKind, Write};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -19,7 +19,7 @@ pub fn instantiate_current_writer(
     input: &OsStr,
     filename: &OsStr,
     is_new: bool,
-) -> Result<BufWriter<Box<dyn Write>>> {
+) -> Result<Box<dyn Write>> {
     let file = if is_new {
         create_or_truncate_output_file(input, filename)?
     } else {
@@ -41,7 +41,7 @@ pub fn instantiate_current_writer(
 
         file
     };
-    Ok(BufWriter::new(Box::new(file) as Box<dyn Write>))
+    Ok(Box::new(file) as Box<dyn Write>)
 }
 
 fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std::fs::File> {
