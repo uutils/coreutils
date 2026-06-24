@@ -360,8 +360,10 @@ uutests
 uutils
 
 # * function names
+sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat

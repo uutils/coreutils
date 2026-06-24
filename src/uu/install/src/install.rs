@@ -1028,7 +1028,11 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .create_new(true)
         .mode(0o600)
         .open(to)?;
-
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if rustix::fs::ioctl_ficlone(&dest, &handle).is_ok() {
+        return Ok(());
+    }
+    // faster than io::copy's copy_file_range and sendfile
     copy_stream(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
