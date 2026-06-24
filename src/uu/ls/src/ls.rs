@@ -875,6 +875,10 @@ impl<'a> PathData<'a> {
             Dereference::None => false,
         };
 
+        // `.`, `..`, `/` and trailing `..` denote the directory itself, not a symlink: on
+        // Windows/Redox `ls -l` in a symlinked dir would otherwise print `. -> target` (#6467, #7873).
+        let must_dereference = must_dereference || (command_line && p_buf.file_name().is_none());
+
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
