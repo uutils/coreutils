@@ -97,6 +97,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
 
+    #[error("{}", translate!("install-error-strip-terminated"))]
+    StripTerminated,
+
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
 
@@ -124,6 +127,9 @@ enum InstallError {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
+
+    #[error("{}", translate!("install-error-not-permitted", "path" => .0.quote()))]
+    NotPermitted(PathBuf),
 }
 
 impl UError for InstallError {
@@ -372,6 +378,24 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
     let strip = matches.get_flag(OPT_STRIP);
+    let strip_program = match matches.get_one::<String>(OPT_STRIP_PROGRAM) {
+        Some(p) => {
+            if !strip
+                && writeln!(
+                    std::io::stderr(),
+                    "install: {}",
+                    translate!("install-warning-no-strip-with-program")
+                )
+                .is_err()
+            {
+                uucore::error::set_exit_code(1);
+            }
+            p
+        }
+        None => DEFAULT_STRIP_PROGRAM,
+    }
+    .to_string();
+
     if preserve_timestamps && compare {
         show_error!(
             "{}",
@@ -405,7 +429,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match usr2uid(&owner) {
             Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            // When using -o500 option and there's no user with uid 500 on the system
+            // usr2uid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with uid 500 in the same situation
+            // so just return the supplied owner as uid if it's an integer value
+            Err(_) => match owner.parse::<u32>() {
+                Ok(u) => Some(u),
+                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
+            },
         }
     };
 
@@ -419,7 +450,14 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     } else {
         match grp2gid(&group) {
             Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            // When using -g500 option and there's no group with gid 500 on the system
+            // grp2gid returns an Err value and the whole install operation fails.
+            // GNU coreutils installs a file with gid 500 in the same situation
+            // so just return the supplied group as gid if it's an integer value
+            Err(_) => match group.parse::<u32>() {
+                Ok(g) => Some(g),
+                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
+            },
         }
     };
 
@@ -438,11 +476,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_timestamps,
         compare,
         strip,
-        strip_program: String::from(
-            matches
-                .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
-        ),
+        strip_program,
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
@@ -736,8 +770,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
+        let source_metadata = metadata_for_source(source)?;
 
-        if source.is_dir() {
+        if source_metadata.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
@@ -749,6 +784,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if is_potential_directory_path(&target) {
             return copy_files_into_dir(sources, &target, b);
+        }
+
+        if b.backup_mode.ne(&BackupMode::None)
+            && let Ok(to_abs) = target.canonicalize()
+        {
+            if source.canonicalize()? == to_abs {
+                return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+            }
         }
 
         if target.is_file() || is_new_file_path(&target) {
@@ -785,6 +828,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
 }
 
+fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
+    path.metadata()
+        .map_err_context(|| format!("cannot stat {}", path.quote()))
+}
+
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
@@ -800,15 +848,15 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files {
-        if let Err(err) = sourcepath
-            .metadata()
-            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
-        {
-            show!(err);
-            continue;
-        }
+        let source_metadata = match metadata_for_source(sourcepath) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                show!(err);
+                continue;
+            }
+        };
 
-        if sourcepath.is_dir() {
+        if source_metadata.is_dir() {
             let err = InstallError::OmittingDirectory(sourcepath.clone());
             show!(err);
             continue;
@@ -960,13 +1008,17 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
-    if let Err(e) = fs::remove_file(to)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        show_error!(
-            "{}",
-            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-        );
+    if let Err(e) = fs::remove_file(to) {
+        match e.kind() {
+            std::io::ErrorKind::NotFound => {}
+            std::io::ErrorKind::PermissionDenied => {
+                return Err(InstallError::NotPermitted(to.to_path_buf()).into());
+            }
+            _ => show_error!(
+                "{}",
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+            ),
+        }
     }
 
     let mut handle = File::open(from)?;
@@ -1010,9 +1062,14 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
-                )
+                // A signal-terminated strip has no exit code; report GNU's
+                // "strip process terminated abnormally" instead of unwrapping None.
+                return Err(match status.code() {
+                    Some(code) => InstallError::StripProgramFailed(
+                        translate!("install-error-strip-abnormal", "code" => code),
+                    ),
+                    None => InstallError::StripTerminated,
+                }
                 .into());
             }
         }

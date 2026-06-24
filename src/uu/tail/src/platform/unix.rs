@@ -36,21 +36,5 @@ impl Drop for ProcessChecker {
 }
 
 pub fn supports_pid_checks(pid: Pid) -> bool {
-    let Some(pid) = RustixPid::from_raw(pid) else {
-        return false;
-    };
-    match test_kill_process(pid) {
-        Ok(()) => true,
-        Err(rustix::io::Errno::NOSYS) => false,
-        Err(_) => true,
-    }
+    RustixPid::from_raw(pid).is_some_and(|p| test_kill_process(p) != Err(rustix::io::Errno::NOSYS))
 }
-
-//pub fn stdin_is_bad_fd() -> bool {
-// FIXME: Detect a closed file descriptor, e.g.: `tail <&-`
-// this is never `true`, even with `<&-` because Rust's stdlib is reopening fds as /dev/null
-// see also: https://github.com/uutils/coreutils/issues/2873
-// (gnu/tests/tail-2/follow-stdin.sh fails because of this)
-// unsafe { libc::fcntl(fd, libc::F_GETFD) == -1 && get_errno() == libc::EBADF }
-//false
-//}

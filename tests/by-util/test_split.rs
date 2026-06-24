@@ -633,6 +633,22 @@ fn test_split_obs_lines_as_other_option_value() {
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
+#[test]
+fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["-n", "l/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "r/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+}
+
 /// Test for using more than one obsolete lines option (standalone)
 /// last one wins
 #[test]
@@ -912,6 +928,14 @@ fn test_suffix_length_req() {
         .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: the suffix length needs to be at least 2\n");
+}
+
+#[test]
+fn test_large_suffix_length_is_rejected() {
+    new_ucmd!()
+        .args(&["-a", "66542562175252"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '66542562175252'\n");
 }
 
 #[test]

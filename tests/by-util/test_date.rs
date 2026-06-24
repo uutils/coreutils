@@ -1075,6 +1075,27 @@ fn test_date_tz_abbreviation_us_timezones() {
 }
 
 #[test]
+fn test_date_double_timezone_is_invalid() {
+    // A date string that specifies a timezone twice is invalid, matching GNU.
+    // Regression test for issue #12875.
+    for input in ["EST EST", "EST PST", "2021-03-20 14:53:01 EST EST"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+
+    // A single trailing timezone abbreviation must still be accepted.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_date_tz_abbreviation_australian_timezones() {
     // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
     // This demonstrates uutils date going beyond GNU capabilities
@@ -1261,6 +1282,41 @@ fn test_date_military_timezone_j_variations() {
         .succeeds()
         .stdout_contains("00:00:00")
         .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_military_timezone_j_with_time() {
+    // 'J' is local time, so "<digits>j" is the time-of-day form (HH or HHMM)
+    // in the local zone, same as the bare "<digits>" input. GNU accepts it.
+    let test_cases = vec![
+        ("8j", "08:00:00"),
+        ("9j", "09:00:00"),
+        ("9J", "09:00:00"),
+        ("12j", "12:00:00"),
+        ("1230j", "12:30:00"),
+        ("0j", "00:00:00"),
+        ("00j", "00:00:00"),
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // Out-of-range times are rejected, same as the bare digit form
+    for input in ["2400j", "2360j", "12345j"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .fails()
+            .stderr_contains("invalid date");
+    }
 }
 
 #[test]
@@ -1973,20 +2029,19 @@ fn test_date_bare_timezone_abbreviation() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/279 — GNU date silently ignores unrecognized trailing tokens (e.g. `8j`), but parse_datetime rejects them."]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/279. GNU date silently ignores unrecognized trailing tokens (e.g. `8 j`), but parse_datetime rejects them."]
 fn test_date_ignores_unrecognized_trailing_tokens() {
     // GNU compatibility: trailing unknown word-tokens after a valid number are ignored.
-    // GNU parses `8j`, `8 j`, etc. as hour 8; our parse_datetime crate errors out.
-    for input in ["8j", "8 j"] {
-        new_ucmd!()
-            .env("TZ", "UTC")
-            .arg("-u")
-            .arg("-d")
-            .arg(input)
-            .arg("+%H:%M:%S")
-            .succeeds()
-            .stdout_only("08:00:00\n");
-    }
+    // GNU parses `8 j` (number, space, token) as hour 8; our parse_datetime crate errors out.
+    // The no-space `8j` form is handled directly (see test_date_military_timezone_j_with_time).
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("8 j")
+        .arg("+%H:%M:%S")
+        .succeeds()
+        .stdout_only("08:00:00\n");
 }
 
 #[test]

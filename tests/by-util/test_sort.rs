@@ -184,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
@@ -3013,6 +3020,25 @@ fn test_consistent_sorting_with_i18n_collate() {
         .env("LC_ALL", "C")
         .arg("fix_i18n_collate_inconsistency_1.txt")
         .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation_weights() {
+    // Test for issue #12542
+    let input = "file10\nfile-10\n";
+    let expected_output = "file-10\nfile10\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected_output);
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .pipe_in(input)
         .succeeds()
         .stdout_is(expected_output);
 }

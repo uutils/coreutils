@@ -789,7 +789,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
         use mode::{S_IFDIR, S_IFMT};
-        let mode = rustix::fs::fstat(stdin.as_fd()).unwrap().st_mode as u32;
+        let mode = rustix::fs::fstat(stdin).unwrap().st_mode as u32;
         // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
         // sockets for directories.
         mode & S_IFMT == S_IFDIR

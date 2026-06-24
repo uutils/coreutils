@@ -5,11 +5,15 @@ name: Security audit
 on:
   schedule:
     - cron: "0 0 * * *"
+
+permissions:
+  contents: read
+
 jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
       - uses: rustsec/audit-check@v2

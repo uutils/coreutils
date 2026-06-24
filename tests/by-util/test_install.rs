@@ -8,6 +8,10 @@
 use filetime::FileTime;
 use std::fs;
 #[cfg(target_os = "linux")]
+use std::fs::File;
+#[cfg(target_os = "linux")]
+use std::io::{BufRead, BufReader};
+#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(not(windows))]
@@ -365,6 +369,15 @@ fn test_install_target_file() {
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
+}
+
+#[test]
+fn test_install_missing_source_reports_cannot_stat_with_path() {
+    new_ucmd!()
+        .arg("missing_source")
+        .arg("target_file")
+        .fails_with_code(1)
+        .stderr_contains("cannot stat 'missing_source': No such file or directory");
 }
 
 #[test]
@@ -796,6 +809,24 @@ fn test_install_and_strip() {
 #[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
+fn test_install_no_strip_with_program() {
+    TestScenario::new(util_name!())
+        .ucmd()
+        .arg("--strip-program")
+        .arg("true")
+        .arg(strip_source_file())
+        .arg(STRIP_TARGET_FILE)
+        .succeeds()
+        .stderr_only(
+            "install: WARNING: ignoring --strip-program option as -s option was not specified\n",
+        );
+}
+
+#[test]
+#[cfg(not(windows))]
+#[cfg(not(target_os = "android"))] // missing strip binary
+// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
+#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -928,6 +959,26 @@ fn test_install_and_strip_with_invalid_program() {
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
+    assert!(!at.file_exists(STRIP_TARGET_FILE));
+}
+
+#[test]
+#[cfg(not(windows))]
+fn test_install_and_strip_with_signal_terminated_program() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src.sh", "kill -9 $$\n");
+    scene
+        .ucmd()
+        .args(&[
+            "-s",
+            "--strip-program",
+            "/bin/sh",
+            "src.sh",
+            STRIP_TARGET_FILE,
+        ])
+        .fails()
+        .stderr_only("install: strip process terminated abnormally\n");
     assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
@@ -2694,4 +2745,130 @@ fn test_install_d_dangling_symlink_in_path_errors() {
         !at.plus("nonexistent").exists(),
         "The symlink target must not have been created"
     );
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_set_owner_nonexistent_uid_and_gid() {
+    let file = File::open("/etc/login.defs").unwrap();
+    let reader = BufReader::new(file);
+    let mut uid_min: u32 = 0;
+    let mut uid_max: u32 = 0;
+    let mut gid_min: u32 = 0;
+    let mut gid_max: u32 = 0;
+    for line in reader.lines() {
+        let line = line.unwrap();
+        if line.starts_with("UID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("UID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            uid_max = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MIN") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_min = tokens[1].parse().unwrap();
+        }
+        if line.starts_with("GID_MAX") {
+            let tokens: Vec<&str> = line.split_whitespace().collect();
+            gid_max = tokens[1].parse().unwrap();
+        }
+    }
+    let file = File::open("/etc/passwd").unwrap();
+    let reader = BufReader::new(file);
+
+    let mut uids: Vec<u32> = vec![];
+    let mut gids: Vec<u32> = vec![];
+    for line in reader.lines() {
+        let line = line.unwrap();
+        let tokens: Vec<&str> = line.split(':').collect();
+        let uid: u32 = tokens[2].parse().unwrap();
+        if (uid_min..=uid_max).contains(&uid) {
+            uids.push(uid);
+        }
+        let gid: u32 = tokens[3].parse().unwrap();
+        if (gid_min..=gid_max).contains(&gid) {
+            gids.push(gid);
+        }
+    }
+    uids.sort_unstable();
+
+    let next_uid = if let Some(uid) = uids.last() {
+        *uid + 1
+    } else {
+        uid_min
+    };
+
+    let next_gid = if let Some(gid) = gids.last() {
+        *gid + 1
+    } else {
+        gid_min
+    };
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("a");
+
+    if let Ok(result) = run_ucmd_as_root(
+        &ts,
+        &[
+            format!("-o{next_uid}").as_str(),
+            format!("-g{next_gid}").as_str(),
+            "a",
+            "b",
+        ],
+    ) {
+        result.success();
+        assert!(at.file_exists("b"));
+
+        let metadata = fs::metadata(at.plus("b")).unwrap();
+        assert_eq!(metadata.uid(), next_uid);
+        assert_eq!(metadata.gid(), next_gid);
+    } else {
+        println!("Test skipped; requires root user");
+    }
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_install_proc_self_mem_as_dst() {
+    let scene = TestScenario::new(util_name!());
+    let src = "/dev/full";
+    let dest = "/proc/self/mem";
+
+    scene
+        .ucmd()
+        .args(&["-g", "0"])
+        .arg(src)
+        .arg(dest)
+        .fails()
+        .stderr_contains("cannot remove");
+}
+
+#[test]
+fn test_install_backup_nil_same_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file = "test_install_backup_numbering_file";
+
+    at.write(file, "content");
+
+    let methods = [
+        "none", "off", "numbered", "t", "existing", "nil", "simple", "never",
+    ];
+
+    for method in &methods {
+        scene
+            .ucmd()
+            .args(&[
+                format!("--backup={method}"),
+                file.to_string(),
+                file.to_string(),
+            ])
+            .fails()
+            .stderr_contains("are the same file");
+        assert_eq!(at.read(file), "content");
+    }
 }

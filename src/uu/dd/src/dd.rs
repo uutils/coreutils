@@ -680,7 +680,15 @@ impl Dest {
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
-                f.set_len(pos)
+                // `set_len()` can fail with EINVAL on special outputs such as
+                // `/dev/null`; GNU `dd` ignores that. But on a regular file a
+                // truncate failure (e.g. ENOSPC, read-only fs) means silent data
+                // loss, so the error must surface there.
+                match f.set_len(pos) {
+                    Ok(()) => Ok(()),
+                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
+                    Err(_) => Ok(()),
+                }
             }
             _ => Ok(()),
         }
@@ -1062,17 +1070,15 @@ impl BlockWriter<'_> {
     }
 
     /// Truncate the file to the final cursor location.
-    fn truncate(&mut self) {
-        // Calling `set_len()` may result in an error (for example,
-        // when calling it on `/dev/null`), but we don't want to
-        // terminate the process when that happens. Instead, we
-        // suppress the error by calling `Result::ok()`. This matches
-        // the behavior of GNU `dd` when given the command-line
-        // argument `of=/dev/null`.
+    ///
+    /// Errors are suppressed for special outputs (e.g. `/dev/null`) but
+    /// propagated for regular files, so a failed truncate does not silently
+    /// leave stale data behind. See [`Dest::truncate`].
+    fn truncate(&mut self) -> io::Result<()> {
         match self {
-            Self::Unbuffered(o) => o.truncate().ok(),
-            Self::Buffered(o) => o.truncate().ok(),
-        };
+            Self::Unbuffered(o) => o.truncate(),
+            Self::Buffered(o) => o.truncate(),
+        }
     }
 
     fn write_blocks(&mut self, buf: &[u8]) -> io::Result<WriteStat> {
@@ -1303,7 +1309,7 @@ fn finalize<T>(
 
     // Truncate the file to the final cursor location.
     if truncate {
-        output.truncate();
+        output.truncate()?;
     }
 
     // Print the final read/write statistics.
@@ -1620,6 +1626,41 @@ mod tests {
         assert_eq!(res % m, 0);
 
         assert_eq!(res, m);
+    }
+
+    // a failed truncate on a regular file must surface as an
+    // error instead of being silently swallowed (which would hide data loss).
+    #[cfg(unix)]
+    #[test]
+    fn truncate_propagates_error_on_regular_file() {
+        use crate::{Density, Dest};
+        use std::fs::OpenOptions;
+        use std::io::Write;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("regular");
+        std::fs::File::create(&path)
+            .unwrap()
+            .write_all(b"hello world")
+            .unwrap();
+
+        // Open read-only so `set_len()` fails with EINVAL on a regular file.
+        let f = OpenOptions::new().read(true).open(&path).unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.truncate().is_err());
+    }
+
+    // truncate failures on special outputs (e.g. `/dev/null`)
+    // are still suppressed, matching GNU `dd of=/dev/null`.
+    #[cfg(unix)]
+    #[test]
+    fn truncate_suppresses_error_on_special_file() {
+        use crate::{Density, Dest};
+        use std::fs::OpenOptions;
+
+        let f = OpenOptions::new().write(true).open("/dev/null").unwrap();
+        let mut dst = Dest::File(f, Density::Dense);
+        assert!(dst.truncate().is_ok());
     }
 
     #[test]

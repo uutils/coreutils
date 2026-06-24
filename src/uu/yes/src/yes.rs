@@ -3,8 +3,6 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// cSpell:ignore strs
-
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::io::{self, Write};
@@ -24,9 +22,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     #[allow(clippy::unwrap_used, reason = "clap provides 'y' by default")]
-    let buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap())?;
+    let mut buffer = args_into_buffer(matches.get_many::<OsString>("STRING").unwrap());
+    // On the platform OsStr is not &[u8], reject invalid utf8
+    // todo: accept invalid utf8 on safe output type
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    std::str::from_utf8(&buffer).map_err(|e| USimpleError::new(1, format!("{e}")))?;
 
-    match exec(buffer) {
+    repeat_content_to_capacity(&mut buffer);
+    match exec(&buffer) {
         Ok(()) => Ok(()),
         // On Windows, silently handle broken pipe since there's no SIGPIPE
         #[cfg(windows)]
@@ -54,31 +57,13 @@ pub fn uu_app() -> Command {
 }
 
 /// create a buffer filled by words `i` separated by spaces.
-#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> UResult<Vec<u8>> {
-    #[cfg(unix)]
-    use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
-
+fn args_into_buffer<'a>(i: impl Iterator<Item = &'a OsString>) -> Vec<u8> {
     let mut buf = Vec::with_capacity(BUF_SIZE);
-    // On Unix (and wasi), OsStrs are just &[u8]'s underneath...
-    #[cfg(any(unix, target_os = "wasi"))]
-    for part in itertools::intersperse(i.map(|a| a.as_bytes()), b" ") {
+    for part in itertools::intersperse(i.map(|a| a.as_encoded_bytes()), b" ") {
         buf.extend_from_slice(part);
     }
-    // But, on Windows, we must hop through a String.
-    #[cfg(not(any(unix, target_os = "wasi")))]
-    for part in itertools::intersperse(i.map(|a| a.to_str()), Some(" ")) {
-        let bytes = part
-            .ok_or_else(|| USimpleError::new(1, translate!("yes-error-invalid-utf8")))?
-            .as_bytes();
-        buf.extend_from_slice(bytes);
-    }
-
     buf.push(b'\n');
-
-    Ok(buf)
+    buf
 }
 
 /// Assumes buf holds a single output line forged from the command line arguments, copies it
@@ -96,9 +81,7 @@ fn repeat_content_to_capacity(buf: &mut Vec<u8>) {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     loop {
         stdout.write_all(bytes)?;
@@ -106,41 +89,32 @@ pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-pub fn exec(mut bytes: Vec<u8>) -> io::Result<()> {
+pub fn exec(bytes: &[u8]) -> io::Result<()> {
     use uucore::io::RawWriter;
     use uucore::pipes::{pipe, splice, tee};
 
-    let safe_partial_send = rustix::pipe::PIPE_BUF.is_multiple_of(bytes.len());
-    repeat_content_to_capacity(&mut bytes);
-    let bytes = bytes.as_slice();
     let stdout = rustix::stdio::stdout();
     // improve throughput
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
-    // don't show any error from fast-path and fallback to write for proper message
+    // GNU catches all strace injections for zero-copy syscalls except for 1st one (checking support of it)
+    // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
+    // but it is slower than mixing splice even it reduces syscalls...
+    let bytes_len = bytes.len();
     if let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
+        && let Ok((broker_read, broker_write)) = pipe::<true>()
+        && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
+        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
     {
-        // tee() cannot control offset. But omit splice if it is possible
-        if safe_partial_send {
-            // fails if stdout is not a pipe
-            while tee(&p_read, &stdout, MAX_ROOTLESS_PIPE_SIZE).is_ok() {}
-        }
-        if let Ok((broker_read, broker_write)) = pipe::<true>() {
-            'splice: while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-            {
-                debug_assert!(remain == bytes.len(), "splice() should cleanup pipe");
-                while remain > 0 {
-                    if let Ok(s) = splice(&broker_read, &stdout, remain) {
-                        remain -= s;
-                    } else {
-                        // avoid output breakage with reduced remain even if it would not happen
-                        RawWriter(stdout).write_all(&bytes[bytes.len() - remain..])?;
-                        break 'splice;
-                    }
-                }
+        // fallback from tee() is possible since we did not send anything to stdout yet
+        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
+            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
+            while remain > 0 {
+                remain -= splice(&broker_read, &stdout, remain)?;
             }
         }
     }
+
     // fallback
     let mut stdout = RawWriter(stdout);
     loop {
@@ -185,19 +159,19 @@ mod tests {
     fn test_args_into_buf() {
         {
             let default_args = ["y".into()];
-            let v = args_into_buffer(default_args.iter()).unwrap();
+            let v = args_into_buffer(default_args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "y\n");
         }
 
         {
             let args = ["foo".into()];
-            let v = args_into_buffer(args.iter()).unwrap();
+            let v = args_into_buffer(args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "foo\n");
         }
 
         {
             let args = ["foo".into(), "bar    baz".into(), "qux".into()];
-            let v = args_into_buffer(args.iter()).unwrap();
+            let v = args_into_buffer(args.iter());
             assert_eq!(String::from_utf8(v).unwrap(), "foo bar    baz qux\n");
         }
     }

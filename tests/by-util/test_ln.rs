@@ -380,6 +380,10 @@ fn test_symlink_target_dir() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: non-utf8 arguments cannot be passed through the spawned test harness"
+)]
 fn test_symlink_target_dir_non_utf8_source_name() {
     use std::ffi::OsStr;
     use std::fs;
@@ -788,6 +792,13 @@ fn test_symlink_no_deref_file() {
 #[test]
 fn test_relative_requires_symbolic() {
     new_ucmd!().args(&["-r", "foo", "bar"]).fails();
+}
+
+#[test]
+fn test_relative_target_with_no_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "data");
+    ucmd.args(&["-rsfT", "src", ""]).fails_with_code(1);
 }
 
 #[test]

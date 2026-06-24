@@ -420,7 +420,7 @@ icu_decimal = { version = "2.0.0", default-features = false }
 icu_locale = { version = "2.0.0", default-features = false }
 icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
-itertools = "0.14.0"
+itertools = "0.15.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
