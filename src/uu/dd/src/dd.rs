@@ -668,9 +668,11 @@ impl Dest {
     }
 
     #[cfg_attr(not(unix), allow(unused_variables))]
-    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
+    fn seek(&mut self, n: u64, obs: usize) -> Result<u64, DdError> {
         match self {
-            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::Stdout(stdout) => {
+                io::copy(&mut io::repeat(0).take(n), stdout).map_err(DdError::IOError)
+            }
             Self::File(f, _) => {
                 #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
@@ -685,12 +687,18 @@ impl Dest {
                     set_exit_code(1);
                     return Ok(len);
                 }
-                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+                f.seek(SeekFrom::Current(n.try_into().map_err(|e| {
+                    DdError::IOError(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("invalid input: {e:?}"),
+                    ))
+                })?))
+                .map_err(DdError::IOError)
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                read_and_discard(f, n, obs)
+                read_and_discard(f, n, obs).map_err(DdError::IOError)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -698,18 +706,18 @@ impl Dest {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => {
-                let pos = f.stream_position()?;
+                let pos = f.stream_position().unwrap_or_default();
                 // `set_len()` can fail with EINVAL on special outputs such as
                 // `/dev/null`; GNU `dd` ignores that. But on a regular file a
                 // truncate failure (e.g. ENOSPC, read-only fs) means silent data
                 // loss, so the error must surface there.
                 match f.set_len(pos) {
                     Ok(()) => Ok(()),
-                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
+                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e.into()),
                     Err(_) => Ok(()),
                 }
             }
@@ -857,8 +865,7 @@ impl<'a> Output<'a> {
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         let mut dst = Dest::Stdout(fx.into_file());
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-write-error"))?;
+        dst.seek(settings.seek, settings.obs)?;
         Ok(Self { dst, settings })
     }
 
@@ -895,19 +902,18 @@ impl<'a> Output<'a> {
             dst.set_len(settings.seek).ok();
         }
 
-        Self::prepare_file(dst, settings)
+        Ok(Self::prepare_file(dst, settings))
     }
 
-    fn prepare_file(dst: File, settings: &'a Settings) -> UResult<Self> {
+    fn prepare_file(dst: File, settings: &'a Settings) -> Self {
         let density = if settings.oconv.sparse {
             Density::Sparse
         } else {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
-        Ok(Self { dst, settings })
+        dst.seek(settings.seek, settings.obs).unwrap_or_default();
+        Self { dst, settings }
     }
 
     /// Instantiate this struct with file descriptor as a destination.
@@ -926,7 +932,7 @@ impl<'a> Output<'a> {
             .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
-        Self::prepare_file(fx.into_file(), settings)
+        Ok(Self::prepare_file(fx.into_file(), settings))
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
@@ -1052,7 +1058,7 @@ impl<'a> Output<'a> {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         self.dst.truncate()
     }
 }
@@ -1097,7 +1103,7 @@ impl BlockWriter<'_> {
     /// Errors are suppressed for special outputs (e.g. `/dev/null`) but
     /// propagated for regular files, so a failed truncate does not silently
     /// leave stale data behind. See [`Dest::truncate`].
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         match self {
             Self::Unbuffered(o) => o.truncate(),
             Self::Buffered(o) => o.truncate(),
@@ -1192,8 +1198,7 @@ fn dd_copy(mut i: Input, o: Output) -> Result<(), DdError> {
             &prog_tx,
             output_thread,
             truncate,
-        )
-        .map_err(Into::into);
+        );
     }
 
     // Spawn a timer thread to provide a scheduled signal indicating when we
@@ -1312,7 +1317,7 @@ fn dd_copy(mut i: Input, o: Output) -> Result<(), DdError> {
         }
     }
 
-    finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate).map_err(DdError::IOError)
+    finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
 }
 
 /// Flush output, print final stats, and join with the progress thread.
@@ -1324,7 +1329,7 @@ fn finalize<T>(
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
     truncate: bool,
-) -> io::Result<()> {
+) -> Result<(), DdError> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
     let wstat_update = output.flush()?;

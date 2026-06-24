@@ -2209,3 +2209,16 @@ fn test_count_bytes_with_expanding_block_conv() {
     assert_eq!(bytecount::count(&output, b'a'), 1000);
     assert!(!output.contains(&b'Z'));
 }
+
+/*
+ * Test that the output file can be `/dev/stdout`.
+ * on android, we don't have permission to /dev/stdout
+ */
+#[cfg(all(unix, not(target_os = "android")))]
+#[test]
+fn test_outfile_dev_stdout() {
+    new_ucmd!()
+        .args(&["if=/dev/null", "of=/dev/stdout"])
+        .succeeds()
+        .no_stdout();
+}
