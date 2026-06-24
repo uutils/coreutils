@@ -11,7 +11,7 @@ check out these documents:
 - Our community's [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 - [DEVELOPMENT.md](./DEVELOPMENT.md) for setting up your development
   environment.
-- Our [Review Guidelines](https://uutils.github.io/reviews/) for what we expect
+- Our [Review Guidelines](https://uutils.org/reviews/) for what we expect
   from a pull request and how reviews are done.
 
 Now follows a very important warning:
