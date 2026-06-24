@@ -2094,7 +2094,7 @@ fn test_split_directory_already_exists() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn test_io_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
