@@ -61,7 +61,7 @@ uutils coreutils ships by default on Ubuntu since version 25.10.
 ## Documentation
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/coreutils/docs/)
+- [User Manual](https://uutils.org/coreutils/docs/)
 - [Developer Documentation](https://docs.rs/crate/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in
@@ -70,7 +70,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/) to translate the Rust coreutils into your language.
 
 You can try the utilities in your browser through the
-[WebAssembly playground](https://uutils.github.io/playground/), without
+[WebAssembly playground](https://uutils.org/playground/), without
 installing anything.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
@@ -340,7 +340,7 @@ make PREFIX=/my/path uninstall
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/coreutils/docs/test_coverage.html).
+[in the user manual](https://uutils.org/coreutils/docs/test_coverage.html).
 
 See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
 (many are missing).
