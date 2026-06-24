@@ -5,15 +5,19 @@
 
 // spell-checker:ignore nbbbb ncccc hexdigit getmaxstdio
 
+mod cli;
 mod filenames;
 mod number;
 mod platform;
 mod strategy;
 
+use crate::cli::ARG_INPUT;
+use crate::cli::ARG_PREFIX;
+use crate::cli::options;
+pub use crate::cli::uu_app;
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
-use std::env;
+use clap::{ArgMatches, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
@@ -26,27 +30,7 @@ use uucore::translate;
 
 use uucore::parser::parse_size::parse_size_u64;
 
-use uucore::format_usage;
 use uucore::uio_error;
-
-const OPT_BYTES: &str = "bytes";
-const OPT_LINE_BYTES: &str = "line-bytes";
-const OPT_LINES: &str = "lines";
-const OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
-const OPT_FILTER: &str = "filter";
-const OPT_NUMBER: &str = "number";
-const OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-const OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
-const OPT_HEX_SUFFIXES: &str = "hex-suffixes";
-const OPT_HEX_SUFFIXES_SHORT: &str = "-x";
-const OPT_SUFFIX_LENGTH: &str = "suffix-length";
-const OPT_VERBOSE: &str = "verbose";
-const OPT_SEPARATOR: &str = "separator";
-const OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-const OPT_IO_BLKSIZE: &str = "-io-blksize";
-
-const ARG_INPUT: &str = "input";
-const ARG_PREFIX: &str = "prefix";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -212,14 +196,14 @@ fn handle_preceding_options(
     if let Some(opt) = slice.strip_prefix("--") {
         *preceding_long_opt_req_value = matches!(
             opt,
-            OPT_BYTES
-                | OPT_LINE_BYTES
-                | OPT_LINES
-                | OPT_ADDITIONAL_SUFFIX
-                | OPT_FILTER
-                | OPT_NUMBER
-                | OPT_SUFFIX_LENGTH
-                | OPT_SEPARATOR
+            options::BYTES
+                | options::LINE_BYTES
+                | options::LINES
+                | options::ADDITIONAL_SUFFIX
+                | options::FILTER
+                | options::NUMBER
+                | options::SUFFIX_LENGTH
+                | options::SEPARATOR
         );
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
@@ -232,167 +216,6 @@ fn handle_preceding_options(
         *preceding_short_opt_req_value = false;
         *preceding_long_opt_req_value = false;
     }
-}
-
-pub fn uu_app() -> Command {
-    Command::new("split")
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("split-about"))
-        .after_help(translate!("split-after-help"))
-        .override_usage(format_usage(&translate!("split-usage")))
-        .infer_long_args(true)
-        // strategy (mutually exclusive)
-        .arg(
-            Arg::new(OPT_BYTES)
-                .short('b')
-                .long(OPT_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help(translate!("split-help-bytes")),
-        )
-        .arg(
-            Arg::new(OPT_LINE_BYTES)
-                .short('C')
-                .long(OPT_LINE_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help(translate!("split-help-line-bytes")),
-        )
-        .arg(
-            Arg::new(OPT_LINES)
-                .short('l')
-                .long(OPT_LINES)
-                .allow_hyphen_values(true)
-                .value_name("NUMBER")
-                .default_value("1000")
-                .help(translate!("split-help-lines")),
-        )
-        .arg(
-            Arg::new(OPT_NUMBER)
-                .short('n')
-                .long(OPT_NUMBER)
-                .allow_hyphen_values(true)
-                .value_name("CHUNKS")
-                .help(translate!("split-help-number")),
-        )
-        // rest of the arguments
-        .arg(
-            Arg::new(OPT_ADDITIONAL_SUFFIX)
-                .long(OPT_ADDITIONAL_SUFFIX)
-                .allow_hyphen_values(true)
-                .value_name("SUFFIX")
-                .default_value("")
-                .value_parser(clap::value_parser!(OsString))
-                .help(translate!("split-help-additional-suffix")),
-        )
-        .arg(
-            Arg::new(OPT_FILTER)
-                .long(OPT_FILTER)
-                .allow_hyphen_values(true)
-                .value_name("COMMAND")
-                .value_hint(ValueHint::CommandName)
-                .help(translate!("split-help-filter")),
-        )
-        .arg(
-            Arg::new(OPT_ELIDE_EMPTY_FILES)
-                .long(OPT_ELIDE_EMPTY_FILES)
-                .short('e')
-                .help(translate!("split-help-elide-empty-files"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
-                .short('d')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .help(translate!("split-help-numeric-suffixes-short")),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES)
-                .long(OPT_NUMERIC_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .value_name("FROM")
-                .help(translate!("split-help-numeric-suffixes")),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES_SHORT)
-                .short('x')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .help(translate!("split-help-hex-suffixes-short")),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .long(OPT_HEX_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .value_name("FROM")
-                .help(translate!("split-help-hex-suffixes")),
-        )
-        .arg(
-            Arg::new(OPT_SUFFIX_LENGTH)
-                .short('a')
-                .long(OPT_SUFFIX_LENGTH)
-                .allow_hyphen_values(true)
-                .value_name("N")
-                .help(translate!("split-help-suffix-length")),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .long(OPT_VERBOSE)
-                .help(translate!("split-help-verbose"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_SEPARATOR)
-                .short('t')
-                .long(OPT_SEPARATOR)
-                .allow_hyphen_values(true)
-                .value_name("SEP")
-                .action(ArgAction::Append)
-                .help(translate!("split-help-separator")),
-        )
-        .arg(
-            Arg::new(OPT_IO_BLKSIZE)
-                .long("io-blksize")
-                .alias(OPT_IO_BLKSIZE)
-                .hide(true),
-        )
-        .arg(
-            Arg::new(ARG_INPUT)
-                .default_value("-")
-                .value_hint(ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
-        .arg(
-            Arg::new(ARG_PREFIX)
-                .default_value("x")
-                .value_parser(clap::value_parser!(OsString)),
-        )
 }
 
 /// Parameters that control how a file gets split.
@@ -478,7 +301,7 @@ impl Settings {
         // defaults to '\n' - newline character
         // If the same separator (the same value) was used multiple times - `split` should NOT fail
         // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
-        let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
+        let separator = match matches.get_many::<String>(options::SEPARATOR) {
             Some(mut sep_values) => {
                 let first = sep_values.next().unwrap(); // it is safe to just unwrap here since Clap should not return empty ValuesRef<'_,String> in the option from get_many() call
                 if !sep_values.all(|s| s == first) {
@@ -493,25 +316,26 @@ impl Settings {
             None => b'\n',
         };
 
-        let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
-            match parse_size_u64(s) {
-                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-                Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-            }
-        } else {
-            None
-        };
+        let io_blksize: Option<u64> =
+            if let Some(s) = matches.get_one::<String>(options::IO_BLKSIZE) {
+                match parse_size_u64(s) {
+                    Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
+                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
+                }
+            } else {
+                None
+            };
 
         let result = Self {
             prefix: matches.get_one::<OsString>(ARG_PREFIX).unwrap().clone(),
             suffix,
             input: matches.get_one::<OsString>(ARG_INPUT).unwrap().clone(),
-            filter: matches.get_one::<String>(OPT_FILTER).cloned(),
+            filter: matches.get_one::<String>(options::FILTER).cloned(),
             strategy,
-            verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
+            verbose: matches.value_source(options::VERBOSE) == Some(ValueSource::CommandLine),
             separator,
-            elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.get_flag(options::ELIDE_EMPTY_FILES),
             io_blksize,
         };
 
