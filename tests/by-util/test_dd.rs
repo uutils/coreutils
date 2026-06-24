@@ -2128,3 +2128,16 @@ fn test_bs_not_positive() {
         }
     }
 }
+
+/*
+ * Test that the output file can be `/dev/stdout`.
+ * on android, we don't have permission to /dev/stdout
+ */
+#[cfg(all(unix, not(target_os = "android")))]
+#[test]
+fn test_outfile_dev_stdout() {
+    new_ucmd!()
+        .args(&["if=/dev/null", "of=/dev/stdout"])
+        .succeeds()
+        .no_stdout();
+}
