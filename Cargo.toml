@@ -272,11 +272,8 @@ feat_os_unix_musl = [
   "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
-# "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
-feat_os_windows = [
-  "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
-  "stdbuf",
-]
+# "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
+feat_os_windows = ["feat_Tier1", "stdbuf"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
@@ -351,15 +348,6 @@ feat_os_unix_redox = [
   "chmod",
   "stat",
   "uname",
-]
-# "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
-feat_os_windows_legacy = [
-  "feat_common_core",
-  #
-  "arch",
-  "nproc",
-  "sync",
-  "whoami",
 ]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
