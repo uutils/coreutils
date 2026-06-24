@@ -363,6 +363,7 @@ uutils
 sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat
