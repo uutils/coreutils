@@ -37,7 +37,6 @@ split-error-would-overwrite-input = { $file } would overwrite input; aborting
 split-error-cannot-determine-input-size = { $input }: cannot determine input size
 split-error-cannot-determine-file-size = { $input }: cannot determine file size
 split-error-cannot-read-from-input = { $input }: cannot read from input : { $error }
-split-error-input-output-error = Input/output error
 split-error-unable-to-open-file = unable to open { $file }; aborting
 split-error-unable-to-reopen-file = unable to re-open { $file }; aborting
 split-error-file-descriptor-limit = at file descriptor limit, but no file descriptor left to close. Closed { $count } writers before.
