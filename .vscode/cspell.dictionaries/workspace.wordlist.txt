@@ -360,6 +360,7 @@ uutests
 uutils
 
 # * function names
+sendfile
 execfn
 fadvise
 fstatfs
