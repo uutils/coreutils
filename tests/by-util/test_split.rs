@@ -2099,5 +2099,5 @@ fn test_io_error() {
     let scene = new_ucmd!().arg("/proc/self/mem").fails_with_code(1);
     let stderr = scene.stderr_str();
 
-    assert!(stderr == "split: Input/output error\n");
+    assert!(stderr == "split: /proc/self/mem: Input/output error\n");
 }
