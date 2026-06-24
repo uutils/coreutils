@@ -35,7 +35,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-fn test_install_basic() {
+fn test_install_basic_try_reflink() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "target_dir";
     let file1 = "source_file1";
@@ -44,7 +44,23 @@ fn test_install_basic() {
     at.touch(file1);
     at.touch(file2);
     at.mkdir(dir);
+    #[cfg(not(target_os = "linux"))]
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    // mkfs.btrfs needs root. use strace instead.
+    #[cfg(target_os = "linux")]
+    if process::Command::new("strace")
+        .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
+        .arg(uutests::util::get_tests_binary())
+        .args(["install", file1, file2, dir])
+        .current_dir(at.as_string())
+        .output()
+        .is_ok()
+    {
+        assert!(at.read("strace.out").contains("FICLONE"));
+    } else {
+        // missing strace
+        ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
+    }
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
