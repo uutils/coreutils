@@ -1531,11 +1531,8 @@ fn split(settings: &Settings) -> UResult<()> {
         let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
         Box::new(r) as Box<dyn Read>
     };
-    let mut reader = if let Some(c) = settings.io_blksize {
-        BufReader::with_capacity(c.try_into().unwrap(), r_box)
-    } else {
-        BufReader::new(r_box)
-    };
+    let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
+    let mut reader = BufReader::with_capacity(io_blksize, r_box);
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
