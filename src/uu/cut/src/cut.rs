@@ -9,7 +9,7 @@ use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
+use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Stdout, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -445,10 +445,11 @@ where
     I: IntoIterator<Item = &'a OsString>,
 {
     let mut stdin_read = false;
-    let mut out: Box<dyn Write> = if stdout().is_terminal() {
-        Box::new(stdout())
+    let stdout = stdout();
+    let mut out = if stdout.is_terminal() {
+        Writer::Stdout(stdout)
     } else {
-        Box::new(BufWriter::new(stdout())) as Box<dyn Write>
+        Writer::BufWriter(BufWriter::new(stdout))
     };
 
     for filename in filenames {
@@ -779,4 +780,25 @@ pub fn uu_app() -> Command {
                 .help("(ignored)")
                 .action(ArgAction::SetTrue),
         )
+}
+
+enum Writer {
+    Stdout(Stdout),
+    BufWriter(BufWriter<Stdout>),
+}
+
+impl Write for Writer {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stdout(w) => w.write(buf),
+            Self::BufWriter(w) => w.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::Stdout(w) => w.flush(),
+            Self::BufWriter(w) => w.flush(),
+        }
+    }
 }
