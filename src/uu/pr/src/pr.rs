@@ -1103,29 +1103,27 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
     let mut current_key: Option<usize> = None;
     let mut current_group: Vec<FileLine> = vec![];
 
-    if lines.is_empty() {
-        result
-    } else {
-        for file_line in lines {
-            match current_key {
-                None => {
-                    current_key = Some(group_key(num_files, &file_line));
-                    current_group.push(file_line);
-                }
-                Some(key) if group_key(num_files, &file_line) == key => {
-                    current_group.push(file_line);
-                }
-                Some(key) => {
-                    result.push((key, current_group.clone()));
-                    current_group.clear();
-                    current_key = Some(group_key(num_files, &file_line));
-                    current_group.push(file_line);
-                }
+    for file_line in lines {
+        match current_key {
+            None => {
+                current_key = Some(group_key(num_files, &file_line));
+                current_group.push(file_line);
+            }
+            Some(key) if group_key(num_files, &file_line) == key => {
+                current_group.push(file_line);
+            }
+            Some(key) => {
+                result.push((key, current_group.clone()));
+                current_group.clear();
+                current_key = Some(group_key(num_files, &file_line));
+                current_group.push(file_line);
             }
         }
-        result.push((current_key.unwrap(), current_group));
-        result
     }
+    if let Some(k) = current_key {
+        result.push((k, current_group));
+    }
+    result
 }
 
 /// Group each line by its file and page number.
