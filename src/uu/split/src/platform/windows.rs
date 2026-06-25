@@ -2,9 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+use crate::platform::Writer;
 use std::ffi::OsStr;
-use std::io::{Error, Result};
-use std::io::{ErrorKind, Write};
+use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::fs;
@@ -19,7 +19,7 @@ pub fn instantiate_current_writer(
     input: &OsStr,
     filename: &OsStr,
     is_new: bool,
-) -> Result<Box<dyn Write>> {
+) -> Result<Writer> {
     let file = if is_new {
         create_or_truncate_output_file(input, filename)?
     } else {
@@ -41,7 +41,7 @@ pub fn instantiate_current_writer(
 
         file
     };
-    Ok(Box::new(file) as Box<dyn Write>)
+    Ok(Writer::File(file))
 }
 
 fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std::fs::File> {
