@@ -1267,26 +1267,30 @@ where
     R: BufRead,
 {
     let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
+    let mut next_writer = || -> UResult<_> {
+        let name = filename_iterator.next().ok_or_else(|| {
+            USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+        })?;
+        if settings.verbose {
+            writeln!(
+                io::stdout(),
+                "{}",
+                translate!("split-creating-file", "file" => name.quote())
+            )?;
+        }
+        Ok(settings.instantiate_current_writer(&name, true)?)
+    };
 
-    // Initialize the writer just to satisfy the compiler. It is going
-    // to be overwritten for sure at the beginning of the loop below
-    // because we start with `remaining == 0`, indicating that a new
-    // chunk should start.
-    let mut writer = Writer::Cursor(io::Cursor::new(vec![]));
+    let mut writer = next_writer()?;
+    debug_assert!(chunk_size > 0);
+    let mut remaining = chunk_size;
 
-    let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {
         let line = line?;
         let mut line = &line[..];
         loop {
             if remaining == 0 {
-                let filename = filename_iterator.next().ok_or_else(|| {
-                    USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
-                })?;
-                if settings.verbose {
-                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
-                }
-                writer = settings.instantiate_current_writer(&filename, true)?;
+                writer = next_writer()?;
                 remaining = chunk_size;
             }
 

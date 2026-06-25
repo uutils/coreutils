@@ -56,10 +56,9 @@ mod unix;
 #[cfg(windows)]
 mod windows;
 
-// todo: add .as_fd for std::io::copy's specialization (blocked by dummy Cursor...)
+// todo: add .as_fd for std::io::copy's specialization for --bytes
 pub enum Writer {
     File(std::fs::File),
-    Cursor(std::io::Cursor<Vec<u8>>),
     #[cfg(unix)]
     Filter(FilterWriter),
 }
@@ -68,7 +67,6 @@ impl std::io::Write for Writer {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         match self {
             Self::File(w) => w.write(buf),
-            Self::Cursor(w) => w.write(buf),
             #[cfg(unix)]
             Self::Filter(w) => w.write(buf),
         }
@@ -77,7 +75,6 @@ impl std::io::Write for Writer {
     fn flush(&mut self) -> std::io::Result<()> {
         match self {
             Self::File(w) => w.flush(),
-            Self::Cursor(w) => w.flush(),
             #[cfg(unix)]
             Self::Filter(w) => w.flush(),
         }
