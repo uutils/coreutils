@@ -41,6 +41,11 @@ pub const ALGORITHM_OPTIONS_SM3: &str = "sm3";
 pub const ALGORITHM_OPTIONS_SHAKE128: &str = "shake128";
 pub const ALGORITHM_OPTIONS_SHAKE256: &str = "shake256";
 
+/// SHAKE has no inherent maximum output length, but an unbounded `--length`
+/// causes the digest buffer allocation to abort the process (#12869). 8192
+/// bits (1 KiB of output) comfortably covers real use cases.
+pub const MAX_SHAKE_LENGTH_BITS: usize = 8192;
+
 pub const SUPPORTED_ALGORITHMS: [&str; 17] = [
     ALGORITHM_OPTIONS_SYSV,
     ALGORITHM_OPTIONS_BSD,
@@ -455,6 +460,8 @@ pub enum ChecksumError {
     InvalidLength(String),
     #[error("maximum digest length for {} is 512 bits", .0.quote())]
     LengthTooBigForBlake(String),
+    #[error("maximum digest length for {} is {MAX_SHAKE_LENGTH_BITS} bits", .0.quote())]
+    LengthTooBigForShake(String),
     #[error("length is not a multiple of 8")]
     LengthNotMultipleOf8,
     #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]

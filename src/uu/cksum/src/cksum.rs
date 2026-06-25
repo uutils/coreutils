@@ -12,12 +12,12 @@ use uu_checksum_common::{ChecksumCommand, checksum_main, default_checksum_app, o
 
 use uucore::checksum::compute::OutputFormat;
 use uucore::checksum::{
-    AlgoKind, BlakeLength, ChecksumError, HashLength, parse_blake_length,
+    AlgoKind, BlakeLength, ChecksumError, HashLength, MAX_SHAKE_LENGTH_BITS, parse_blake_length,
     sanitize_sha2_sha3_length_str,
 };
 use uucore::error::UResult;
 use uucore::hardware::{HasHardwareFeatures as _, SimdPolicy};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 /// Print CPU hardware capability detection information to stderr
 /// 2>/dev/full does not abort
@@ -58,15 +58,21 @@ fn maybe_sanitize_length(
             sanitize_sha2_sha3_length_str(algo, s_len).map(Some)
         }
 
-        // SHAKE128 and SHAKE256 algorithms optionally take a bit length. No
-        // validation is performed on this length, any value is valid. If the
-        // given length is not a multiple of 8, the last byte of the output
-        // will have its extra bits set to zero.
-        (Some(AlgoKind::Shake128 | AlgoKind::Shake256), Some(len)) => match len.parse::<usize>() {
-            Ok(0) => Ok(None),
-            Ok(l) => Ok(Some(HashLength::from_bits(l))),
-            Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
-        },
+        // SHAKE128 and SHAKE256 algorithms optionally take a bit length. If
+        // the given length is not a multiple of 8, the last byte of the
+        // output will have its extra bits set to zero. The length is capped
+        // to avoid an out-of-memory abort when allocating the digest buffer.
+        (Some(algo @ (AlgoKind::Shake128 | AlgoKind::Shake256)), Some(len)) => {
+            match len.parse::<usize>() {
+                Ok(0) => Ok(None),
+                Ok(l) if l > MAX_SHAKE_LENGTH_BITS => {
+                    show_error!("{}", ChecksumError::InvalidLength(len.to_string()));
+                    Err(ChecksumError::LengthTooBigForShake(algo.to_uppercase().into()).into())
+                }
+                Ok(l) => Ok(Some(HashLength::from_bits(l))),
+                Err(_) => Err(ChecksumError::InvalidLength(len.into()).into()),
+            }
+        }
 
         // For BLAKE, if a length is provided, validate it.
         (Some(algo @ (AlgoKind::Blake2b | AlgoKind::Blake3)), Some(len)) => {
