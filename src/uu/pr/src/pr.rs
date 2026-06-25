@@ -1102,26 +1102,30 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
     let mut result: Vec<(usize, Vec<FileLine>)> = vec![];
     let mut current_key: Option<usize> = None;
     let mut current_group: Vec<FileLine> = vec![];
-    for file_line in lines {
-        match current_key {
-            None => {
-                current_key = Some(group_key(num_files, &file_line));
-                current_group.push(file_line);
-            }
-            Some(key) if group_key(num_files, &file_line) == key => {
-                current_group.push(file_line);
-            }
-            Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
-                current_key = Some(group_key(num_files, &file_line));
-                current_group.push(file_line);
+
+    if lines.is_empty() {
+        result
+    } else {
+        for file_line in lines {
+            match current_key {
+                None => {
+                    current_key = Some(group_key(num_files, &file_line));
+                    current_group.push(file_line);
+                }
+                Some(key) if group_key(num_files, &file_line) == key => {
+                    current_group.push(file_line);
+                }
+                Some(key) => {
+                    result.push((key, current_group.clone()));
+                    current_group.clear();
+                    current_key = Some(group_key(num_files, &file_line));
+                    current_group.push(file_line);
+                }
             }
         }
+        result.push((current_key.unwrap(), current_group));
+        result
     }
-    // TODO Handle empty file.
-    result.push((current_key.unwrap(), current_group));
-    result
 }
 
 /// Group each line by its file and page number.
@@ -1153,6 +1157,10 @@ fn get_file_line_groups(
 
 fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
     let file_line_groups = get_file_line_groups(options, paths)?;
+
+    if file_line_groups.is_empty() {
+        return Ok(0);
+    }
 
     let start_page = options.start_page;
     let mut lines = Vec::new();
