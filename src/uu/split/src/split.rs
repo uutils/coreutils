@@ -1500,12 +1500,10 @@ where
                 custom_write_all(line, &mut writer, settings)?;
                 remaining -= line.len();
                 break;
-            }
-
-            // If the line is too large to fit in *any* chunk and we are
-            // at the start of a new chunk, write as much as we can of
-            // it and pass the remainder along to the next chunk.
-            if line.len() > chunk_size && remaining == chunk_size {
+            } else if remaining == chunk_size {
+                // If the line is too large to fit in *any* chunk and we are
+                // at the start of a new chunk, write as much as we can of
+                // it and pass the remainder along to the next chunk.
                 custom_write_all(&line[..chunk_size], &mut writer, settings)?;
                 line = &line[chunk_size..];
                 remaining = 0;
