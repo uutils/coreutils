@@ -1013,9 +1013,9 @@ fn test_negative_expand_tabs() {
 
 #[cfg(unix)]
 #[test]
-fn test_empty_input_in_merge_mode() {
+fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "/dev/null", "/dev/null"])
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
