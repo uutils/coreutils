@@ -1010,3 +1010,12 @@ fn test_negative_expand_tabs() {
         .fails_with_code(1)
         .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
 }
+
+#[cfg(unix)]
+#[test]
+fn test_empty_input_in_merge_mode() {
+    new_ucmd!()
+        .args(&["-m", "/dev/null", "/dev/null"])
+        .succeeds()
+        .stdout_is("");
+}
