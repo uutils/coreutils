@@ -1102,6 +1102,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
     let mut result: Vec<(usize, Vec<FileLine>)> = vec![];
     let mut current_key: Option<usize> = None;
     let mut current_group: Vec<FileLine> = vec![];
+
     for file_line in lines {
         match current_key {
             None => {
@@ -1119,8 +1120,9 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
             }
         }
     }
-    // TODO Handle empty file.
-    result.push((current_key.unwrap(), current_group));
+    if let Some(k) = current_key {
+        result.push((k, current_group));
+    }
     result
 }
 
@@ -1153,6 +1155,10 @@ fn get_file_line_groups(
 
 fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
     let file_line_groups = get_file_line_groups(options, paths)?;
+
+    if file_line_groups.is_empty() {
+        return Ok(0);
+    }
 
     let start_page = options.start_page;
     let mut lines = Vec::new();
