@@ -2,6 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
+use crate::platform::Writer;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::io::{Error, Result};
@@ -19,7 +21,7 @@ use uucore::translate;
 ///
 /// We use a shell process (not directly calling a sub-process) so we can forward the name of the
 /// corresponding output file (xaa, xab, xac… ). This is the way it was implemented in GNU split.
-struct FilterWriter {
+pub struct FilterWriter {
     /// Running shell process
     shell_process: Child,
 }
@@ -131,7 +133,7 @@ pub fn instantiate_current_writer(
     input: &OsStr,
     filename: &OsStr,
     is_new: bool,
-) -> Result<Box<dyn Write>> {
+) -> Result<Writer> {
     match filter {
         None => {
             let file = if is_new {
@@ -156,12 +158,12 @@ pub fn instantiate_current_writer(
 
                 file
             };
-            Ok(Box::new(file) as Box<dyn Write>)
+            Ok(Writer::File(file))
         }
-        Some(filter_command) => Ok(Box::new(
+        Some(filter_command) => Ok(
             // spawn a shell command and write to it
-            FilterWriter::new(filter_command, filename)?,
-        ) as Box<dyn Write>),
+            Writer::Filter(FilterWriter::new(filter_command, filename)?),
+        ),
     }
 }
 
