@@ -70,9 +70,9 @@ fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     Ok((blocks_read, ret as u16))
 }
 
-fn open(name: &OsString) -> UResult<Box<dyn Read>> {
+fn open(name: &OsString) -> UResult<Reader> {
     if name == "-" {
-        Ok(Box::new(stdin()) as Box<dyn Read>)
+        Ok(Reader::Stdin(stdin()))
     } else {
         let path = Path::new(name);
 
@@ -103,7 +103,7 @@ fn open(name: &OsString) -> UResult<Box<dyn Read>> {
         let f = File::open(path).map_err_context(String::new)?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-        Ok(Box::new(f) as Box<dyn Read>)
+        Ok(Reader::File(f))
     }
 }
 
@@ -180,4 +180,18 @@ pub fn uu_app() -> Command {
                 .help(translate!("sum-help-sysv-compatible"))
                 .action(ArgAction::SetTrue),
         )
+}
+
+enum Reader {
+    Stdin(std::io::Stdin),
+    File(File),
+}
+
+impl Read for Reader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
 }
