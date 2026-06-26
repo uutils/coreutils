@@ -123,7 +123,7 @@ impl Options {
         ) {
             // We add 1 to the number of lines to display because the last line
             // is used for the banner
-            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n + 1),
+            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n.saturating_add(1)),
             _ => None, // Use terminal height
         };
         let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
@@ -1135,6 +1135,14 @@ mod tests {
         assert!(stdout.contains("0\n"));
         assert!(stdout.contains("1\n"));
         assert!(!stdout.contains("2\n"));
+    }
+
+    #[test]
+    fn test_lines_option_max_u16() {
+        // The +1 for the banner line used to overflow when -n is u16::MAX.
+        let matches = uu_app().get_matches_from(vec!["more", "-n", "65535"]);
+        let options = Options::from(&matches);
+        assert_eq!(options.lines, Some(u16::MAX));
     }
 
     #[test]
