@@ -536,7 +536,7 @@ impl<'a> ByteChunkWriter<'a> {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(io::stdout(), "creating file {}", filename.quote())?;
+            print_creating_file(&filename)?;
         }
         let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
@@ -570,7 +570,7 @@ impl Write for ByteChunkWriter<'_> {
                     io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
                 })?;
                 if self.settings.verbose {
-                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
+                    print_creating_file(&filename)?;
                 }
                 self.inner = self.settings.instantiate_current_writer(&filename, true)?;
             }
@@ -672,7 +672,7 @@ impl<'a> LineChunkWriter<'a> {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(io::stdout(), "creating file {}", filename.quote())?;
+            print_creating_file(&filename)?;
         }
         settings.instantiate_current_writer(&filename, true)
     }
@@ -1245,11 +1245,7 @@ fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize)
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            writeln!(
-                io::stdout(),
-                "{}",
-                translate!("split-creating-file", "file" => name.quote())
-            )?;
+            print_creating_file(&name)?;
         }
         Ok(settings.instantiate_current_writer(&name, true)?)
     };
@@ -1368,4 +1364,12 @@ fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
             translate!("split-error-input-output-error")
         )),
     }
+}
+
+fn print_creating_file(name: &OsString) -> io::Result<()> {
+    writeln!(
+        io::stdout(),
+        "{}",
+        translate!("split-creating-file", "file" => name.quote())
+    )
 }
