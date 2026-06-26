@@ -127,6 +127,9 @@ enum InstallError {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
+
+    #[error("{}", translate!("install-error-not-permitted", "path" => .0.quote()))]
+    NotPermitted(PathBuf),
 }
 
 impl UError for InstallError {
@@ -375,6 +378,24 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
     let strip = matches.get_flag(OPT_STRIP);
+    let strip_program = match matches.get_one::<String>(OPT_STRIP_PROGRAM) {
+        Some(p) => {
+            if !strip
+                && writeln!(
+                    std::io::stderr(),
+                    "install: {}",
+                    translate!("install-warning-no-strip-with-program")
+                )
+                .is_err()
+            {
+                uucore::error::set_exit_code(1);
+            }
+            p
+        }
+        None => DEFAULT_STRIP_PROGRAM,
+    }
+    .to_string();
+
     if preserve_timestamps && compare {
         show_error!(
             "{}",
@@ -455,11 +476,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_timestamps,
         compare,
         strip,
-        strip_program: String::from(
-            matches
-                .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
-        ),
+        strip_program,
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
@@ -753,8 +770,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
+        let source_metadata = metadata_for_source(source)?;
 
-        if source.is_dir() {
+        if source_metadata.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
@@ -766,6 +784,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if is_potential_directory_path(&target) {
             return copy_files_into_dir(sources, &target, b);
+        }
+
+        if b.backup_mode.ne(&BackupMode::None)
+            && let Ok(to_abs) = target.canonicalize()
+        {
+            if source.canonicalize()? == to_abs {
+                return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+            }
         }
 
         if target.is_file() || is_new_file_path(&target) {
@@ -802,6 +828,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
 }
 
+fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
+    path.metadata()
+        .map_err_context(|| format!("cannot stat {}", path.quote()))
+}
+
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
@@ -817,15 +848,15 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files {
-        if let Err(err) = sourcepath
-            .metadata()
-            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
-        {
-            show!(err);
-            continue;
-        }
+        let source_metadata = match metadata_for_source(sourcepath) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                show!(err);
+                continue;
+            }
+        };
 
-        if sourcepath.is_dir() {
+        if source_metadata.is_dir() {
             let err = InstallError::OmittingDirectory(sourcepath.clone());
             show!(err);
             continue;
@@ -977,13 +1008,17 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
-    if let Err(e) = fs::remove_file(to)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        show_error!(
-            "{}",
-            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-        );
+    if let Err(e) = fs::remove_file(to) {
+        match e.kind() {
+            std::io::ErrorKind::NotFound => {}
+            std::io::ErrorKind::PermissionDenied => {
+                return Err(InstallError::NotPermitted(to.to_path_buf()).into());
+            }
+            _ => show_error!(
+                "{}",
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+            ),
+        }
     }
 
     let mut handle = File::open(from)?;

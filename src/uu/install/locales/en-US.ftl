@@ -43,6 +43,7 @@ install-error-override-directory-failed = cannot overwrite directory { $dir } wi
 install-error-same-file = { $file1 } and { $file2 } are the same file
 install-error-extra-operand = extra operand { $operand }
 { $usage }
+install-error-not-permitted = cannot remove { $path }: Operation not permitted
 install-error-invalid-mode = Invalid mode string: { $error }
 install-error-mutually-exclusive-target = Options --target-directory and --no-target-directory are mutually exclusive
 install-error-mutually-exclusive-compare-preserve = Options --compare and --preserve-timestamps are mutually exclusive
@@ -53,6 +54,7 @@ install-error-failed-to-remove = Failed to remove existing file { $path }. Error
 
 # Warning messages
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
+install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 
 # Verbose output
 install-verbose-creating-directory = creating directory { $path }

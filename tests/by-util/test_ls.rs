@@ -168,6 +168,15 @@ fn test_invalid_value_time_style() {
 }
 
 #[test]
+fn test_time_style_empty_after_posix_prefix() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("--time-style=posix-")
+        .fails_with_code(2)
+        .stderr_contains("ls: invalid --time-style argument ''");
+}
+
+#[test]
 fn test_ls_ls() {
     new_ucmd!().succeeds();
 }

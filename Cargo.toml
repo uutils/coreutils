@@ -272,11 +272,8 @@ feat_os_unix_musl = [
   "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
-# "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
-feat_os_windows = [
-  "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
-  "stdbuf",
-]
+# "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
+feat_os_windows = ["feat_Tier1", "stdbuf"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
@@ -352,15 +349,6 @@ feat_os_unix_redox = [
   "stat",
   "uname",
 ]
-# "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
-feat_os_windows_legacy = [
-  "feat_common_core",
-  #
-  "arch",
-  "nproc",
-  "sync",
-  "whoami",
-]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
@@ -401,7 +389,7 @@ compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
 ctor = "1.0.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
-divan = { package = "codspeed-divan-compat", version = "4.4.1" }
+divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.13.0"
 file_diff = "1.0.0"
@@ -420,7 +408,7 @@ icu_decimal = { version = "2.0.0", default-features = false }
 icu_locale = { version = "2.0.0", default-features = false }
 icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
-itertools = "0.14.0"
+itertools = "0.15.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"

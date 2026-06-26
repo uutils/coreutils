@@ -169,7 +169,6 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 struct Options {
     files: Vec<OsString>,
     tabstops: Vec<usize>,
-    tspaces: String,
     iflag: bool,
     utf8: bool,
 
@@ -188,19 +187,6 @@ impl Options {
         let iflag = matches.get_flag(options::INITIAL);
         let utf8 = !matches.get_flag(options::NO_UTF8);
 
-        // avoid allocations when dumping out long sequences of spaces
-        // by precomputing the longest string of spaces we will ever need
-        let nspaces = tabstops
-            .iter()
-            .scan(0, |pr, &it| {
-                let ret = Some(it - *pr);
-                *pr = it;
-                ret
-            })
-            .max()
-            .unwrap(); // length of tabstops is guaranteed >= 1
-        let tspaces = " ".repeat(nspaces);
-
         let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
             Some(s) => s.cloned().collect(),
             None => vec![OsString::from("-")],
@@ -209,7 +195,6 @@ impl Options {
         Ok(Self {
             files,
             tabstops,
-            tspaces,
             iflag,
             utf8,
             remaining_mode,
@@ -325,8 +310,7 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
 
-                let steps_required = 1 + characters_since_last_tabstop / step_size;
-                steps_required * step_size - characters_since_last_tabstop
+                step_size - characters_since_last_tabstop % step_size
             }
         }
         RemainingMode::Slash => {
@@ -390,16 +374,16 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
 
 /// Write spaces for a tab expansion.
 #[inline]
-fn write_tab_spaces(
-    output: &mut BufWriter<std::io::Stdout>,
-    nts: usize,
-    tspaces: &str,
-) -> std::io::Result<()> {
-    if nts <= tspaces.len() {
-        output.write_all(&tspaces.as_bytes()[..nts])
-    } else {
-        output.write_all(" ".repeat(nts).as_bytes())
+fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 256] = [b' '; 256];
+
+    while n > 0 {
+        let chunk = n.min(SPACES.len());
+        output.write_all(&SPACES[..chunk])?;
+        n -= chunk;
     }
+
+    Ok(())
 }
 
 fn expand_buf(
@@ -436,7 +420,7 @@ fn expand_buf(
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
-                    write_tab_spaces(output, nts, &options.tspaces)?;
+                    write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
@@ -533,6 +517,14 @@ mod tests {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
         assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
         assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
+    }
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_plus_does_not_overflow() {
+        assert_eq!(
+            next_tabstop(&[1, usize::MAX - 2], usize::MAX, &RemainingMode::Plus),
+            usize::MAX - 3
+        );
     }
 
     #[test]

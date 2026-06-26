@@ -196,6 +196,63 @@ fn test_recursive() {
 }
 
 #[test]
+fn test_one_file_system_same_device() {
+    // Cross-device skipping needs a mount point (root privileges), so here we
+    // only guard the single-device case: the whole tree must still be removed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_one_file_system_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--one-file-system")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(&file));
+    assert!(!at.dir_exists(&subdir));
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_all_same_device() {
+    // Refusing to cross a device boundary needs a mount point (root
+    // privileges); without one, --preserve-root=all must remove the tree as
+    // usual since it stays on a single device.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_preserve_root_all_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--preserve-root=all")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_rejects_unknown_value() {
+    new_ucmd!()
+        .arg("--preserve-root=bogus")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_contains("invalid value 'bogus'");
+}
+
+#[test]
 fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";

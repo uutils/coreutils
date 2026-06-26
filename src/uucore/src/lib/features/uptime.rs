@@ -222,10 +222,11 @@ impl FormattedUptime {
     }
 
     fn get_human_readable_uptime(&self) -> String {
+        // Hours are not zero-padded (issue #13027); minutes always are.
         translate!(
         "uptime-format",
         "days" => self.days,
-        "time" => format!("{:02}:{:02}", self.hours, self.mins))
+        "time" => format!("{}:{:02}", self.hours, self.mins))
     }
 
     fn get_pretty_print_uptime(&self) -> String {
@@ -493,6 +494,28 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    #[test]
+    fn test_human_readable_uptime_hours_not_zero_padded() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+        // Hours below 10 are not zero-padded (issue #13027).
+        assert_eq!(
+            "1:27",
+            FormattedUptime::new(3600 + 27 * 60).get_human_readable_uptime()
+        );
+        assert_eq!(
+            "9:05",
+            FormattedUptime::new(9 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
+        // Two-digit hours are unchanged.
+        assert_eq!(
+            "10:05",
+            FormattedUptime::new(10 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
     }
 
     /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.

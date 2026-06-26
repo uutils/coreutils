@@ -189,6 +189,21 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_time_style_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("a");
+    ts.ucmd()
+        .args(&["--time", "--time-style=", "a"])
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+    ts.ucmd()
+        .args(&["--time", "a"])
+        .env("TIME_STYLE", "posix-")
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+}
+
+#[test]
 fn test_du_zero_env_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

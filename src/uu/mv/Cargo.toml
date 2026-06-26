@@ -28,6 +28,7 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
   "fsxattr",
   "perms",
