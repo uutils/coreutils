@@ -128,16 +128,11 @@ fn should_extract_obs_lines(
     preceding_long_opt_req_value: bool,
     preceding_short_opt_req_value: bool,
 ) -> bool {
-    slice.starts_with('-')
-        && !slice.starts_with("--")
-        && !preceding_long_opt_req_value
+    !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
-        && !slice.starts_with("-a")
-        && !slice.starts_with("-b")
-        && !slice.starts_with("-C")
-        && !slice.starts_with("-l")
-        && !slice.starts_with("-n")
-        && !slice.starts_with("-t")
+        && slice.strip_prefix("-").is_some_and(|s| {
+            !s.as_bytes().first().is_some_and(|s| b"-abClnt".contains(s)) // spell-checker:disable-line
+        })
 }
 
 /// Helper function to [`filter_args`]
