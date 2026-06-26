@@ -80,3 +80,18 @@ impl std::io::Write for Writer {
         }
     }
 }
+
+// todo: add .as_fd for std::io::copy's specialization
+pub enum Reader {
+    File(std::fs::File),
+    Stdin(std::io::Stdin),
+}
+
+impl std::io::Read for Reader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::File(r) => r.read(buf),
+            Self::Stdin(r) => r.read(buf),
+        }
+    }
+}
