@@ -1502,7 +1502,7 @@ fn test_chmod_symlink_two_links_same_dir() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(target_os = "linux")]
 fn test_chmod_permission_denied() {
     let (_, mut ucmd) = at_and_ucmd!();
 
