@@ -22,7 +22,7 @@ use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
 
 #[cfg(all(unix, not(target_os = "redox")))]
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
-use uucore::{format_usage, show};
+use uucore::{format_usage, show, show_error};
 
 use uucore::translate;
 
@@ -777,9 +777,9 @@ impl Chmoder {
         // fs::set_permissions calls chmod which we need for the gnu test chmod/only-op.sh
         if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                println!(
+                show_error!(
                     "{}",
-                    translate!("chmod-permissions-changed", "file" => file.quote(), "errno" =>strip_errno(&err))
+                    translate!("chmod-permissions-changed", "file" => file.quote(), "errno" => strip_errno(&err))
                 );
             }
             if self.verbose {
