@@ -3291,24 +3291,6 @@ fn test_check_shake128_no_length() {
 }
 
 #[test]
-fn test_shake_length_too_large_does_not_panic() {
-    for algo in ["shake128", "shake256"] {
-        new_ucmd!()
-            .arg("--algorithm")
-            .arg(algo)
-            .arg("--length=10011111117721172727")
-            .pipe_in("xxx")
-            .fails_with_code(1)
-            .no_stdout()
-            .stderr_contains("invalid length: '10011111117721172727'")
-            .stderr_contains(format!(
-                "maximum digest length for '{}' is 8192 bits",
-                algo.to_uppercase()
-            ));
-    }
-}
-
-#[test]
 fn test_check_shake256_no_length() {
     const INPUT_SHAKE256_CORRECT_LEN: &str = "SHAKE256 (bar) = 2fa631503c3ea5fe85131dbfa24805185474740e6dcb5f2a64f69d932bcb55f7b24958f3e3c4cc0e71f1fe6f054cd3fb28b9efb62b4f8f3fbe6d50d90f5c6eba";
     const INPUT_SHAKE256_WRONG_LEN: &str =
@@ -3331,6 +3313,22 @@ fn test_check_shake256_no_length() {
         .pipe_in(INPUT_SHAKE256_WRONG_LEN)
         .fails()
         .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
+}
+
+#[test]
+fn test_shake_extremely_large_length_does_not_abort() {
+    // Regression test for #12869: an absurdly large `--length` used to
+    // trigger an unguarded allocation that aborts the process instead of
+    // returning a normal error.
+    new_ucmd!()
+        .args(&[
+            "--algorithm",
+            "shake128",
+            "--length",
+            "10011111117721172727",
+        ])
+        .pipe_in("")
+        .fails();
 }
 
 #[template]
