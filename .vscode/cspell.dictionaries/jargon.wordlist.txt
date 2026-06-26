@@ -254,3 +254,5 @@ Hijri
 Nowruz
 charmap
 hijri
+
+CTYPE
