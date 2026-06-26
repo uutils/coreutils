@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
+use signal_hook::{consts::SIGINT, iterator::Signals};
+#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::path::Path;
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -15,8 +17,6 @@ use std::{
 
 use tempfile::TempDir;
 use uucore::error::UResult;
-#[cfg(not(any(target_os = "redox", target_os = "wasi")))]
-use uucore::{error::USimpleError, show_error, translate};
 
 use crate::SortError;
 
@@ -45,7 +45,7 @@ static HANDLER_STATE: LazyLock<Arc<Mutex<HandlerRegistration>>> =
     LazyLock::new(|| Arc::new(Mutex::new(HandlerRegistration::default())));
 
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
-fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UResult<()> {
+fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) {
     // This shared state must originate from `HANDLER_STATE` so the handler always sees
     // the current lock/path pair and can clean up the active temp directory on SIGINT.
     // Install a shared SIGINT handler so the active temp directory is deleted when the user aborts.
@@ -56,42 +56,27 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
     {
-        return Ok(());
+        return;
     }
 
-    let handler_state = state.clone();
-    if let Err(e) = ctrlc::set_handler(move || {
-        // Load the latest lock/path snapshot so the handler cleans the active temp dir.
-        let (lock, path) = {
-            let state = handler_state.lock().unwrap();
-            (state.lock.clone(), state.path.clone())
+    std::thread::spawn(move || {
+        // silently ignore errors since cleaning up temporary files is not a serious task
+        let Ok(mut signals) = Signals::new([SIGINT]) else {
+            return;
         };
 
-        if let Some(lock) = lock {
-            let _guard = lock.lock().unwrap();
-            if let Some(path) = path {
-                if let Err(e) = remove_tmp_dir(&path) {
-                    show_error!(
-                        "{}",
-                        translate!(
-                            "sort-failed-to-delete-temporary-directory",
-                            "error" => e
-                        )
-                    );
-                }
+        for _ in signals.forever() {
+            let Ok(state) = state.lock() else {
+                return;
+            };
+            if let (Some(lock), Some(path)) = (state.lock.clone(), state.path.clone())
+                && lock.lock().is_ok()
+            {
+                let _ = remove_tmp_dir(&path);
             }
+            // signal_hook::low_level::raise(SIGINT) is not required
         }
-
-        std::process::exit(2)
-    }) {
-        HANDLER_INSTALLED.store(false, Ordering::Release);
-        return Err(USimpleError::new(
-            2,
-            translate!("sort-failed-to-set-up-signal-handler", "error" => e),
-        ));
-    }
-
-    Ok(())
+    });
 }
 
 #[cfg(any(target_os = "redox", target_os = "wasi"))]
@@ -133,7 +118,7 @@ impl TmpDirWrapper {
         // Always attempt to install the signal handler so that Ctrl+C
         // triggers cleanup. Failure is non-fatal: sort still works,
         // just without SIGINT-triggered temp directory removal.
-        let _ = ensure_signal_handler_installed(state);
+        ensure_signal_handler_installed(state);
         Ok(())
     }
 

@@ -51,7 +51,7 @@ foldhash = { workspace = true }
 rustix = { workspace = true, features = ["system", "process"] }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
-ctrlc = { workspace = true }
+signal-hook = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

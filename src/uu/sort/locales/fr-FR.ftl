@@ -57,8 +57,6 @@ sort-error-disorder = {$file}:{$line_number}: désordre : {$line}
 sort-error-buffer-size-too-big = La taille du tampon {$size} ne rentre pas dans l'espace d'adressage
 sort-error-no-match-for-key = ^ aucune correspondance pour la clé
 sort-error-write-failed = échec d'écriture : {$output}
-sort-failed-to-delete-temporary-directory = échec de suppression du répertoire temporaire : {$error}
-sort-failed-to-set-up-signal-handler = échec de configuration du gestionnaire de signal : {$error}
 
 # Messages d'aide
 sort-help-help = Affiche les informations d'aide.

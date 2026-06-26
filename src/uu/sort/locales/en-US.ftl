@@ -57,8 +57,6 @@ sort-error-disorder = {$file}:{$line_number}: disorder: {$line}
 sort-error-buffer-size-too-big = Buffer size {$size} does not fit in address space
 sort-error-no-match-for-key = ^ no match for key
 sort-error-write-failed = write failed: {$output}
-sort-failed-to-delete-temporary-directory = failed to delete temporary directory: {$error}
-sort-failed-to-set-up-signal-handler = failed to set up signal handler: {$error}
 
 # Warning messages
 sort-warning-failed-to-set-locale = failed to set locale
