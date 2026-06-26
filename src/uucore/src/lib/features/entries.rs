@@ -83,7 +83,7 @@ unsafe extern "C" {
 pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
     let groups = rustix::process::getgroups()
         .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
-    let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
+    let egid = arg_id.unwrap_or_else(|| rustix::process::getegid().as_raw());
     Ok(sort_groups(groups, egid))
 }
 
