@@ -1316,7 +1316,6 @@ fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize)
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
     let r_box = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
