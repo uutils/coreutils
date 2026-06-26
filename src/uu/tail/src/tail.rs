@@ -255,19 +255,16 @@ fn tail_stdin(
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
+    if let Ok(mut stdin_handle) = same_file::Handle::stdin()
+        && let Ok(meta) = stdin_handle.as_file_mut().metadata()
+        && meta.file_type().is_dir()
     {
-        if let Ok(mut stdin_handle) = same_file::Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
-        }
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+        );
+        return Ok(());
     }
 
     // Check if stdin was closed before Rust reopened it as /dev/null
