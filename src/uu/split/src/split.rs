@@ -428,15 +428,12 @@ fn custom_write_all<T: Write>(
 /// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
 ///
 /// Note: The `buf` might end up with either partial or entire input content.
-fn get_input_size<R>(
+fn get_input_size(
     input: &OsString,
-    reader: &mut R,
+    reader: &mut impl Read,
     buf: &mut Vec<u8>,
     io_blksize: Option<u64>,
-) -> io::Result<u64>
-where
-    R: BufRead,
-{
+) -> io::Result<u64> {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
         custom_blksize
@@ -891,15 +888,12 @@ impl ManageOutFiles for OutFiles {
 /// Where CHUNKS
 /// * N
 /// * K/N
-fn n_chunks_by_byte<R>(
+fn n_chunks_by_byte(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+) -> UResult<()> {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
     let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
@@ -1034,15 +1028,12 @@ where
 /// Where CHUNKS
 /// * l/N
 /// * l/K/N
-fn n_chunks_by_line<R>(
+fn n_chunks_by_line(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl BufRead,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+) -> UResult<()> {
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
@@ -1165,15 +1156,12 @@ where
 /// Where CHUNKS
 /// * r/N
 /// * r/K/N
-fn n_chunks_by_line_round_robin<R>(
+fn n_chunks_by_line_round_robin(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl BufRead,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+) -> UResult<()> {
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1262,10 +1250,7 @@ where
     }
 }
 
-fn line_bytes<R>(settings: &Settings, reader: &mut R, chunk_size: usize) -> UResult<()>
-where
-    R: BufRead,
-{
+fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize) -> UResult<()> {
     let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
     let mut next_writer = || -> UResult<_> {
         let name = filename_iterator.next().ok_or_else(|| {
