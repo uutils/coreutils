@@ -607,10 +607,23 @@ pub enum CharByte {
     Byte(u8),
 }
 
-impl_from_for_enum!(CharByte:
-    char => Char;
-    u8 => Byte, ref
-);
+impl From<char> for CharByte {
+    fn from(value: char) -> Self {
+        Self::Char(value)
+    }
+}
+
+impl From<u8> for CharByte {
+    fn from(value: u8) -> Self {
+        Self::Byte(value)
+    }
+}
+
+impl From<&u8> for CharByte {
+    fn from(value: &u8) -> Self {
+        Self::Byte(*value)
+    }
+}
 
 struct Utf8ChunkIterator<'a> {
     iter: Box<dyn Iterator<Item = CharByte> + 'a>,
