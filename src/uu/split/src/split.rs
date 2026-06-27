@@ -967,20 +967,8 @@ fn n_chunks_by_byte(
                 }
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf);
-
-            match n_bytes_read {
-                Ok(n_bytes) => {
-                    num_bytes -= n_bytes as u64;
-                }
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
-                    ));
-                }
-            }
-
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf).map_err(|e| USimpleError::new(1,translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => e)))?;
+            num_bytes -= n_bytes_read as u64;
             if let Some(chunk_number) = kth_chunk {
                 if i == chunk_number {
                     stdout_writer.write_all(&buf)?;
