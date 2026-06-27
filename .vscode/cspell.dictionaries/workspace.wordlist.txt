@@ -1,6 +1,7 @@
 # * cargo
 cdylib
 doctest
+libloading
 
 # * uutils project
 uutils
@@ -186,6 +187,7 @@ execvp
 fdatasync
 freeaddrinfo
 getaddrinfo
+dlopen
 getegid
 geteuid
 getgid
@@ -201,6 +203,7 @@ inode
 inodes
 isatty
 lchown
+libsystemd
 pathlen
 setgid
 setgroups

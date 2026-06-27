@@ -24,9 +24,6 @@ fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs", "termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lints]
 workspace = true
 

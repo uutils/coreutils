@@ -25,9 +25,6 @@ jiff = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["libc", "utmpx", "uptime"] }
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lints]
 workspace = true
 

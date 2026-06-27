@@ -29,9 +29,6 @@ uucore = { workspace = true, features = [] }
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true }
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lints]
 workspace = true
 
