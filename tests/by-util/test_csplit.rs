@@ -1582,3 +1582,22 @@ fn test_write_error_dev_full_keep_files() {
     assert!(at.file_exists("xx00"));
     assert_eq!(at.read("xx00"), "1\n");
 }
+
+/// Test that a failed split-file creation reports the filename.
+#[test]
+#[cfg(unix)]
+fn test_create_error_reports_filename() {
+    // Root can open a mode-000 file for writing, so File::create would not fail.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a\nb\nc\n");
+    // Pre-create the first split with no write permission so File::create fails.
+    at.touch("xx00");
+    at.set_mode("xx00", 0o000);
+
+    ucmd.args(&["input", "2"])
+        .fails()
+        .stderr_is("csplit: xx00: Permission denied\n");
+}
