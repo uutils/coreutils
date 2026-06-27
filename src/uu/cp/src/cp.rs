@@ -1993,6 +1993,15 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+/// Decide whether `source` and `dest` are the same directory entry, as opposed
+/// to merely being two different hard links to the same inode.
+fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
+    canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+        .ok()
+        .zip(canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok())
+        .is_some_and(|(s, d)| s == d)
+}
+
 /// Decide whether source and destination files are the same and
 /// copying is forbidden.
 ///
@@ -2505,12 +2514,14 @@ fn copy_file(
         }
     }
 
+    // Path resolution is the last condition checked, only reached in the rare
+    // hardlink `--remove-destination` case rather than on every file `cp` touches.
     if are_hardlinks_to_same_file(source, dest)
-        && source != dest
         && matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
         )
+        && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
     }

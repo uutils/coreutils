@@ -3706,6 +3706,21 @@ fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
 }
 
 #[test]
+fn test_remove_destination_with_destination_being_relative_path_of_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "a";
+    let dest = "./a";
+    at.write(source, "hello");
+
+    ucmd.args(&["--remove-destination", source, dest])
+        .fails()
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists(source));
+    assert_eq!(at.read(source), "hello");
+}
+
+#[test]
 fn test_remove_destination_with_destination_being_a_symlink_to_source() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
