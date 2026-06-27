@@ -20,10 +20,11 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+fluent = { workspace = true }
+rustix = { workspace = true }
+thiserror = { workspace = true }
 unicode-width = { workspace = true }
 uucore = { workspace = true }
-thiserror = { workspace = true }
-fluent = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
