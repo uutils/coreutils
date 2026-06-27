@@ -36,12 +36,14 @@ pub extern crate time;
 use std::ffi::CString;
 use std::io::Result as IOResult;
 use std::marker::PhantomData;
+#[cfg(target_os = "linux")]
+use std::mem::size_of;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(target_os = "linux")]
 use crate::features::systemd_logind;
 
 pub use self::ut::*;
@@ -327,19 +329,28 @@ impl Utmpx {
     /// This will use the default location, or the path [`Utmpx::iter_all_records_from`]
     /// was most recently called with.
     ///
-    /// On systems with systemd-logind feature enabled at compile time,
-    /// this will use systemd-logind instead of traditional utmp files.
+    /// On Linux, this will use a populated traditional utmp file when available.
+    /// If the default utmp file is missing or empty, it will try systemd-logind
+    /// and fall back to traditional utmp if systemd-logind is unavailable.
     ///
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
     pub fn iter_all_records() -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(target_os = "linux")]
         {
-            // Use systemd-logind instead of traditional utmp when feature is enabled
-            UtmpxIter::new_systemd()
+            if traditional_utmp_is_usable(Path::new(DEFAULT_FILE)) {
+                let iter = UtmpxIter::new();
+                unsafe {
+                    #[cfg_attr(target_env = "musl", allow(deprecated))]
+                    setutxent();
+                }
+                iter
+            } else {
+                UtmpxIter::new_systemd_with_fallback_path(None)
+            }
         }
 
-        #[cfg(not(feature = "feat_systemd_logind"))]
+        #[cfg(not(target_os = "linux"))]
         {
             let iter = UtmpxIter::new();
             unsafe {
@@ -359,17 +370,18 @@ impl Utmpx {
     ///
     /// This function affects subsequent calls to [`Utmpx::iter_all_records`].
     ///
-    /// On systems with systemd-logind feature enabled at compile time,
-    /// if the path matches the default utmp file, this will use systemd-logind
-    /// instead of traditional utmp files.
+    /// On Linux, if the path matches the default utmp file and that file is
+    /// missing or empty, this will try systemd-logind first and fall back to
+    /// that file if systemd-logind is unavailable.
     ///
     /// The same caveats as for [`Utmpx::iter_all_records`] apply.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(target_os = "linux")]
         {
-            // Use systemd-logind for default utmp file when feature is enabled
-            if path.as_ref() == Path::new(DEFAULT_FILE) {
-                return UtmpxIter::new_systemd();
+            if path.as_ref() == Path::new(DEFAULT_FILE)
+                && !traditional_utmp_is_usable(path.as_ref())
+            {
+                return UtmpxIter::new_systemd_with_fallback_path(Some(path.as_ref()));
             }
         }
 
@@ -402,6 +414,24 @@ impl Utmpx {
 // ordinary race conditions are also very much possible.
 static LOCK: Mutex<()> = Mutex::new(());
 
+#[cfg(target_os = "linux")]
+fn traditional_utmp_is_usable(path: &Path) -> bool {
+    #[cfg(target_env = "musl")]
+    {
+        let _ = path;
+        false
+    }
+
+    #[cfg(not(target_env = "musl"))]
+    {
+        std::fs::metadata(path).is_ok_and(|metadata| {
+            metadata.is_file()
+                && metadata.len() >= size_of::<utmpx>() as u64
+                && std::fs::File::open(path).is_ok()
+        })
+    }
+}
+
 /// Iterator of login records
 pub struct UtmpxIter {
     #[allow(dead_code)]
@@ -409,7 +439,7 @@ pub struct UtmpxIter {
     /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(target_os = "linux")]
     systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
 }
 
@@ -422,37 +452,130 @@ impl UtmpxIter {
         Self {
             guard,
             phantom: PhantomData,
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             systemd_iter: None,
         }
     }
 
-    #[cfg(feature = "feat_systemd_logind")]
-    fn new_systemd() -> Self {
+    #[cfg(target_os = "linux")]
+    fn new_systemd_with_fallback_path(fallback_path: Option<&Path>) -> Self {
+        Self::new_systemd_with_fallback_path_using(
+            fallback_path,
+            systemd_logind::SystemdUtmpxIter::new,
+        )
+    }
+
+    #[cfg(target_os = "linux")]
+    fn new_systemd_with_fallback_path_using<F, E>(
+        fallback_path: Option<&Path>,
+        new_systemd_iter: F,
+    ) -> Self
+    where
+        F: FnOnce() -> Result<systemd_logind::SystemdUtmpxIter, E>,
+    {
         // PoisonErrors can safely be ignored
         let guard = LOCK
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let systemd_iter = match systemd_logind::SystemdUtmpxIter::new() {
-            Ok(iter) => iter,
-            Err(_) => {
-                // Like GNU coreutils: graceful degradation, not fallback to traditional utmp
-                // Return empty iterator rather than falling back  (GNU coreutils also returns 0 when /var/run/utmp is not present, so we don't need to propagate the error here)
-                systemd_logind::SystemdUtmpxIter::empty()
+        if let Ok(iter) = new_systemd_iter() {
+            Self {
+                guard,
+                phantom: PhantomData,
+                systemd_iter: Some(iter),
             }
-        };
-        Self {
-            guard,
-            phantom: PhantomData,
-            systemd_iter: Some(systemd_iter),
+        } else {
+            // Fall back to traditional utmp when systemd-logind is unavailable
+            unsafe {
+                if let Some(path) = fallback_path {
+                    let path = CString::new(path.as_os_str().as_bytes()).unwrap();
+                    #[cfg_attr(target_env = "musl", allow(deprecated))]
+                    utmpxname(path.as_ptr());
+                }
+                #[cfg_attr(target_env = "musl", allow(deprecated))]
+                setutxent();
+            }
+            Self {
+                guard,
+                phantom: PhantomData,
+                systemd_iter: None,
+            }
         }
+    }
+}
+
+#[cfg(all(test, target_os = "linux", not(target_env = "musl")))]
+mod tests {
+    use super::*;
+    use std::fs::{File, remove_file};
+    use std::io::Write;
+    use std::mem::zeroed;
+
+    fn write_utmpx_record(path: &Path, user: &str) {
+        // SAFETY: A zero-filled utmpx value is valid, and the initialized value is
+        // written as bytes without outliving it.
+        let mut record: utmpx = unsafe { zeroed() };
+        record.ut_type = USER_PROCESS;
+        for (destination, source) in record.ut_user.iter_mut().zip(user.bytes()) {
+            *destination = source as _;
+        }
+
+        // SAFETY: `record` remains alive for the duration of `write_all`, and the
+        // byte slice covers exactly its initialized object representation.
+        let bytes = unsafe {
+            std::slice::from_raw_parts((&raw const record).cast::<u8>(), size_of::<utmpx>())
+        };
+        File::create(path).unwrap().write_all(bytes).unwrap();
+    }
+
+    #[test]
+    fn systemd_failure_uses_explicit_fallback_path() {
+        let temporary_directory = std::env::temp_dir();
+        let unique = std::process::id();
+        let custom_path = temporary_directory.join(format!("uucore-custom-utmp-{unique}"));
+        let fallback_path = temporary_directory.join(format!("uucore-fallback-utmp-{unique}"));
+        write_utmpx_record(&custom_path, "custom");
+        write_utmpx_record(&fallback_path, "fallback");
+
+        let custom_record = Utmpx::iter_all_records_from(&custom_path)
+            .next()
+            .expect("custom utmp record");
+        assert_eq!(custom_record.user(), "custom");
+
+        let mut fallback_iter =
+            UtmpxIter::new_systemd_with_fallback_path_using(Some(&fallback_path), || {
+                Err::<systemd_logind::SystemdUtmpxIter, ()>(())
+            });
+        let fallback_record = fallback_iter.next().expect("fallback utmp record");
+        assert_eq!(fallback_record.user(), "fallback");
+
+        // Restore libc's process-global utmp path for other tests.
+        let default_path = CString::new(DEFAULT_FILE).unwrap();
+        unsafe {
+            utmpxname(default_path.as_ptr());
+        }
+        drop(fallback_iter);
+
+        remove_file(custom_path).unwrap();
+        remove_file(fallback_path).unwrap();
+    }
+
+    #[test]
+    fn traditional_utmp_requires_at_least_one_record() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("utmp");
+
+        File::create(&path).unwrap();
+        assert!(!traditional_utmp_is_usable(&path));
+
+        write_utmpx_record(&path, "user");
+        assert!(traditional_utmp_is_usable(&path));
     }
 }
 
 /// Wrapper type that can hold either traditional utmpx records or systemd records
 pub enum UtmpxRecord {
     Traditional(Box<Utmpx>),
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(target_os = "linux")]
     Systemd(systemd_logind::SystemdUtmpxCompat),
 }
 
@@ -461,7 +584,7 @@ impl UtmpxRecord {
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.record_type(),
         }
     }
@@ -470,7 +593,7 @@ impl UtmpxRecord {
     pub fn pid(&self) -> i32 {
         match self {
             Self::Traditional(utmpx) => utmpx.pid(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.pid(),
         }
     }
@@ -479,7 +602,7 @@ impl UtmpxRecord {
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.terminal_suffix(),
         }
     }
@@ -488,7 +611,7 @@ impl UtmpxRecord {
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.user(),
         }
     }
@@ -497,7 +620,7 @@ impl UtmpxRecord {
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.host(),
         }
     }
@@ -506,7 +629,7 @@ impl UtmpxRecord {
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.tty_device(),
         }
     }
@@ -515,7 +638,7 @@ impl UtmpxRecord {
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.login_time(),
         }
     }
@@ -526,7 +649,7 @@ impl UtmpxRecord {
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.exit_status(),
         }
     }
@@ -535,7 +658,7 @@ impl UtmpxRecord {
     pub fn is_user_process(&self) -> bool {
         match self {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => systemd.is_user_process(),
         }
     }
@@ -544,7 +667,7 @@ impl UtmpxRecord {
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(target_os = "linux")]
             Self::Systemd(systemd) => Ok(systemd.canon_host()),
         }
     }
@@ -553,10 +676,12 @@ impl UtmpxRecord {
 impl Iterator for UtmpxIter {
     type Item = UtmpxRecord;
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(target_os = "linux")]
         {
             if let Some(ref mut systemd_iter) = self.systemd_iter {
-                // We have a systemd iterator - use it exclusively (never fall back to traditional utmp)
+                // Once a systemd iterator was successfully created, use it exclusively.
+                // If systemd initialization failed, `systemd_iter` is None and we use
+                // traditional utmp below.
                 return systemd_iter.next().map(UtmpxRecord::Systemd);
             }
         }

@@ -17,9 +17,6 @@ readme.workspace = true
 [lints]
 workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
-
 [lib]
 path = "src/who.rs"
 test = false
