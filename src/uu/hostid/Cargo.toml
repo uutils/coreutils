@@ -3,7 +3,6 @@ name = "uu_hostid"
 description = "hostid ~ (uutils) display the numeric identifier of the current host"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/hostid"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/hostid.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

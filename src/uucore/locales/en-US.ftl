@@ -7,6 +7,7 @@ common-tip = tip
 common-usage = Usage
 common-help = help
 common-version = version
+common-write-error = write error
 
 # Common clap error messages
 clap-error-unexpected-argument = { $error_word }: unexpected argument '{ $arg }' found

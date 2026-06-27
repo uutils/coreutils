@@ -85,7 +85,7 @@ ls-help-dereference-dir-args = Ne pas suivre les liens symboliques sauf quand il
   donnés comme arguments de ligne de commande.
 ls-help-dereference-args = Ne pas suivre les liens symboliques sauf quand ils sont donnés comme arguments de ligne de commande.
 ls-help-no-group = Ne pas afficher le groupe en format long.
-ls-help-author = Afficher l'auteur en format long. Sur les plateformes supportées,
+ls-help-author = Afficher l'auteur en format long. Sur les plateformes prises en charge,
   l'auteur correspond toujours au propriétaire du fichier.
 ls-help-all-files = Ne pas ignorer les fichiers cachés (fichiers dont les noms commencent par '.').
 ls-help-almost-all = Dans un répertoire, ne pas ignorer tous les noms de fichiers qui commencent par '.',

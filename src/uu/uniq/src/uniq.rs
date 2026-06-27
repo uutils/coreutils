@@ -187,14 +187,11 @@ impl Uniq {
     }
 
     fn is_c_locale() -> bool {
-        for key in ["LC_ALL", "LC_CTYPE", "LANG"] {
-            if let Some(v) = std::env::var_os(key) {
-                if !v.is_empty() {
-                    return v == "C" || v == "POSIX";
-                }
-            }
-        }
-        true
+        ["LC_ALL", "LC_CTYPE", "LANG"]
+            .iter()
+            .find_map(|&key| std::env::var_os(key))
+            .filter(|v| !v.is_empty())
+            .is_none_or(|v| v == "C" || v == "POSIX")
     }
 
     fn key_end_index(&self, line: &[u8], key_start: usize) -> usize {

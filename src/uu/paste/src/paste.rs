@@ -244,13 +244,13 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
             }
             match bytes[i] {
                 b'0' => vec.push(Box::new([])),
-                b'\\' => vec.push(Box::new([b'\\'])),
-                b'n' => vec.push(Box::new([b'\n'])),
-                b't' => vec.push(Box::new([b'\t'])),
-                b'b' => vec.push(Box::new([b'\x08'])),
-                b'f' => vec.push(Box::new([b'\x0C'])),
-                b'r' => vec.push(Box::new([b'\r'])),
-                b'v' => vec.push(Box::new([b'\x0B'])),
+                b'\\' => vec.push(Box::new(*b"\\")),
+                b'n' => vec.push(Box::new(*b"\n")),
+                b't' => vec.push(Box::new(*b"\t")),
+                b'b' => vec.push(Box::new(*b"\x08")),
+                b'f' => vec.push(Box::new(*b"\x0C")),
+                b'r' => vec.push(Box::new(*b"\r")),
+                b'v' => vec.push(Box::new(*b"\x0B")),
                 _ => {
                     // Unknown escape: strip backslash, use the following character(s)
                     let remaining = &bytes[i..];

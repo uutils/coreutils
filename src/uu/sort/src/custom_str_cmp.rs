@@ -13,10 +13,7 @@ fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) ->
     if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
         return false;
     }
-    if ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()) {
-        return false;
-    }
-    true
+    !(ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()))
 }
 
 fn cmp_chars(a: u8, b: u8, ignore_case: bool) -> Ordering {

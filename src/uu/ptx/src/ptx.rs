@@ -217,10 +217,14 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        if let Ok(re) = Regex::new(&regex) {
-            if re.is_match("") {
-                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
-            }
+        let re = Regex::new(&regex).map_err(|error| {
+            USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+            )
+        })?;
+        if re.is_match("") {
+            return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
         }
 
         config.sentence_regex = Some(regex);
@@ -501,7 +505,7 @@ fn get_output_chunks(
     // and get the string.
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
-    assert!(max_before_size >= before.len());
+    assert!(max_before_size >= before.chars().count());
 
     // the after chunk
 

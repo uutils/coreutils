@@ -134,8 +134,7 @@ where
         // make code more testable
         .map(|m| (m, std::fs::canonicalize(&m.dev_name)))
         // Ignore non existing paths
-        .filter(|m| m.1.is_ok())
-        .map(|m| (m.0, m.1.ok().unwrap()))
+        .filter_map(|m| m.1.ok().map(|m1| (m.0, m1)))
         // Try to find canonicalized device name corresponding to entered path
         .find(|m| m.1.eq(&path))
         .map(|m| m.0);
@@ -156,20 +155,20 @@ impl Filesystem {
         let stat_path = if mount_info.mount_dir.is_empty() {
             #[cfg(unix)]
             {
-                mount_info.dev_name.clone().into()
+                mount_info.dev_name.as_ref()
             }
             #[cfg(windows)]
             {
                 // On windows, we expect the volume id
-                mount_info.dev_id.clone().into()
+                mount_info.dev_id.as_ref()
             }
         } else {
-            mount_info.mount_dir.clone()
+            mount_info.mount_dir.as_os_str()
         };
         #[cfg(unix)]
-        let usage = FsUsage::new(statfs(&stat_path).ok()?);
+        let usage = FsUsage::new(statfs(stat_path).ok()?);
         #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(&stat_path)).ok()?;
+        let usage = FsUsage::new(Path::new(stat_path)).ok()?;
         Some(Self {
             file,
             mount_info,
@@ -234,12 +233,10 @@ impl Filesystem {
     where
         P: AsRef<Path>,
     {
-        let file = path.as_ref().as_os_str().to_owned();
+        let path = path.as_ref();
+        let file = path.as_os_str().to_owned();
 
-        let canonical_path = path
-            .as_ref()
-            .canonicalize()
-            .map_err(|_| FsError::InvalidPath)?;
+        let canonical_path = path.canonicalize().map_err(|_| FsError::InvalidPath)?;
 
         let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
         let mount_dir = find_mount_point(&canonical_path).map_err(|_| FsError::MountMissing)?;

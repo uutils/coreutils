@@ -7,15 +7,11 @@
 
 // spell-checker:ignore backport
 
-#[cfg(unix)]
-use libc::mkfifo;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -42,8 +38,9 @@ macro_rules! has {
 }
 
 /// Information to uniquely identify a file
+#[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(unix)] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
     // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
     #[cfg(target_os = "wasi")] fs::Metadata,
@@ -53,7 +50,7 @@ impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file)?;
+        let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -72,9 +69,9 @@ impl FileInformation {
         #[cfg(unix)]
         {
             let stat = if dereference {
-                nix::sys::stat::stat(path.as_ref())
+                rustix::fs::stat(path.as_ref())
             } else {
-                nix::sys::stat::lstat(path.as_ref())
+                rustix::fs::lstat(path.as_ref())
             };
             Ok(Self(stat?))
         }
@@ -435,12 +432,11 @@ pub fn canonicalize<P: AsRef<Path>>(
                 }
                 result.pop();
             }
-            Err(e) => {
-                if miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
-                {
-                    return Err(e);
-                }
+            Err(e)
+                if (miss_mode == MissingHandling::Existing
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+            {
+                return Err(e);
             }
             _ => {}
         }
@@ -638,12 +634,7 @@ pub fn infos_refer_to_same_file(
     info1: IOResult<FileInformation>,
     info2: IOResult<FileInformation>,
 ) -> bool {
-    if let Ok(info1) = info1 {
-        if let Ok(info2) = info2 {
-            return info1 == info2;
-        }
-    }
-    false
+    info1.is_ok() && info1.ok() == info2.ok()
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
@@ -798,8 +789,7 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
         use mode::{S_IFDIR, S_IFMT};
-        use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_fd()).unwrap().st_mode as u32;
+        let mode = rustix::fs::fstat(stdin).unwrap().st_mode as u32;
         // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
         // sockets for directories.
         mode & S_IFMT == S_IFDIR
@@ -894,37 +884,6 @@ pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
 }
 
-/// Make a FIFO, also known as a named pipe.
-///
-/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
-/// which makes a [named
-/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
-///
-/// # Errors
-///
-/// If the named pipe cannot be created.
-///
-/// # Examples
-///
-/// ```ignore
-/// use uucore::fs::make_fifo;
-///
-/// make_fifo("my-pipe").expect("failed to create the named pipe");
-///
-/// std::thread::spawn(|| { std::fs::write("my-pipe", b"hello").unwrap(); });
-/// assert_eq!(std::fs::read("my-pipe").unwrap(), b"hello");
-/// ```
-#[cfg(unix)]
-pub fn make_fifo(path: &Path) -> std::io::Result<()> {
-    let name = CString::new(path.to_str().unwrap()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        Err(Error::from_raw_os_error(err))
-    } else {
-        Ok(())
-    }
-}
-
 // Redox's libc appears not to include the following utilities
 
 #[cfg(target_os = "redox")]
@@ -951,8 +910,6 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
-    #[cfg(unix)]
-    use std::os::unix::fs::FileTypeExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
@@ -1217,26 +1174,5 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn test_make_fifo() {
-        // Create the FIFO in a temporary directory.
-        let tempdir = tempdir().unwrap();
-        let path = tempdir.path().join("f");
-        assert!(make_fifo(&path).is_ok());
-
-        // Check that it is indeed a FIFO.
-        assert!(fs::metadata(&path).unwrap().file_type().is_fifo());
-
-        // Check that we can write to it and read from it.
-        //
-        // Write and read need to happen in different threads,
-        // otherwise `write` would block indefinitely while waiting
-        // for the `read`.
-        let path2 = path.clone();
-        std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
-        assert_eq!(fs::read(&path).unwrap(), b"foo");
     }
 }

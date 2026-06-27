@@ -137,6 +137,7 @@ fn test_delimiter_with_byte_and_char() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_too_large() {
     new_ucmd!()
         .args(&["-b1-18446744073709551615", "/dev/null"])
@@ -164,29 +165,32 @@ fn test_delimiter_with_more_than_one_char() {
 
 #[test]
 fn test_output_delimiter() {
-    // we use -d here to ensure output delimiter
-    // is applied to the current, and not just the default, input delimiter
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-delimiter=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+    for param in ["--output-delimiter=@", "--output-del=@", "-O@"] {
+        // with default field delimiter (tab)
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:\tb:\tc:\n")
+            .succeeds()
+            .stdout_only("a:@b:\n");
 
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-del=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+        // with custom field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .arg("-d:")
+            .pipe_in("a:\tb:\tc\n")
+            .succeeds()
+            .stdout_only("a@\tb\n");
+
+        // with no field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:b:c\n")
+            .succeeds()
+            .stdout_only("a:b:c\n");
+    }
 }
 
 #[test]
@@ -290,6 +294,7 @@ fn test_single_quote_pair_as_delimiter_is_invalid() {
     for args in [&["-d", "''", "-f2"][..], &["--delimiter=''", "-f2"][..]] {
         new_ucmd!()
             .args(args)
+            .ignore_stdin_write_error()
             .pipe_in("a''b\n")
             .fails()
             .stderr_contains("cut: the delimiter must be a single character")
@@ -569,6 +574,7 @@ fn test_multiple_mode_args() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_8bit_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -635,6 +641,7 @@ fn test_failed_write_is_reported() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_cut_non_utf8_paths() {
     use std::fs::File;
     use std::io::Write;

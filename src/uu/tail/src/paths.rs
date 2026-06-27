@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore tailable seekable stdlib (stdlib)
+// spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::text;
 use std::ffi::OsStr;
@@ -225,7 +225,7 @@ impl PathExtTail for Path {
         !matches!(self.parent(), Some(parent) if parent.is_dir())
     }
 
-    /// Return true if `path` is is a file type that can be tailed
+    /// Return true if `path` is a file type that can be tailed
     fn is_tailable(&self) -> bool {
         path_is_tailable(self)
     }

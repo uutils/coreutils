@@ -222,10 +222,11 @@ impl FormattedUptime {
     }
 
     fn get_human_readable_uptime(&self) -> String {
+        // Hours are not zero-padded (issue #13027); minutes always are.
         translate!(
         "uptime-format",
         "days" => self.days,
-        "time" => format!("{:02}:{:02}", self.hours, self.mins))
+        "time" => format!("{}:{:02}", self.hours, self.mins))
     }
 
     fn get_pretty_print_uptime(&self) -> String {
@@ -253,6 +254,7 @@ impl FormattedUptime {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(windows)]
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
     // SAFETY: always return u32
@@ -345,7 +347,10 @@ pub fn get_nusers(file: &str) -> usize {
 #[cfg(target_os = "windows")]
 pub fn get_nusers() -> usize {
     use std::ptr;
-    use windows_sys::Win32::System::RemoteDesktop::*;
+    use windows_sys::Win32::System::RemoteDesktop::{
+        WTS_CURRENT_SERVER_HANDLE, WTSEnumerateSessionsW, WTSFreeMemory,
+        WTSQuerySessionInformationW,
+    };
 
     let mut num_user = 0;
 
@@ -358,8 +363,8 @@ pub fn get_nusers() -> usize {
             WTS_CURRENT_SERVER_HANDLE,
             0,
             1,
-            &mut session_info_ptr,
-            &mut session_count,
+            &raw mut session_info_ptr,
+            &raw mut session_count,
         );
         if result == 0 {
             return 0;
@@ -375,8 +380,8 @@ pub fn get_nusers() -> usize {
                 WTS_CURRENT_SERVER_HANDLE,
                 session.SessionId,
                 5,
-                &mut buffer,
-                &mut bytes_returned,
+                &raw mut buffer,
+                &raw mut bytes_returned,
             );
             if result == 0 || buffer.is_null() {
                 continue;
@@ -387,10 +392,10 @@ pub fn get_nusers() -> usize {
                 num_user += 1;
             }
 
-            WTSFreeMemory(buffer as _);
+            WTSFreeMemory(buffer.cast());
         }
 
-        WTSFreeMemory(session_info_ptr as _);
+        WTSFreeMemory(session_info_ptr.cast());
     }
 
     num_user
@@ -409,7 +414,7 @@ pub fn format_nusers(n: usize) -> String {
     )
 }
 
-/// Get the number of users currently logged in in a human-readable format
+/// Get the number of users currently logged in, in a human-readable format
 ///
 /// # Returns
 ///
@@ -491,6 +496,28 @@ mod tests {
         assert_eq!("2 users", format_nusers(2));
     }
 
+    #[test]
+    fn test_human_readable_uptime_hours_not_zero_padded() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+        // Hours below 10 are not zero-padded (issue #13027).
+        assert_eq!(
+            "1:27",
+            FormattedUptime::new(3600 + 27 * 60).get_human_readable_uptime()
+        );
+        assert_eq!(
+            "9:05",
+            FormattedUptime::new(9 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
+        // Two-digit hours are unchanged.
+        assert_eq!(
+            "10:05",
+            FormattedUptime::new(10 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
+    }
+
     /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.
     /// This ensures the fallback mechanism added for issue #3621 works correctly.
     #[test]
@@ -517,11 +544,9 @@ mod tests {
         );
 
         // Boot time should be before current time
-        let now = Timestamp::now().as_second();
-        assert!(
-            (boot_time as i64) < now,
-            "Boot time should be before current time"
-        );
+        let boot_time = Timestamp::from_second(boot_time).unwrap();
+        let now = Timestamp::now();
+        assert!(boot_time < now, "Boot time should be before current time");
     }
 
     /// Test that get_uptime always succeeds on macOS due to sysctl fallback.

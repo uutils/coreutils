@@ -8,7 +8,7 @@
 use libfuzzer_sys::fuzz_target;
 use uu_printf::uumain;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::seq::IndexedRandom;
 use std::env;
 use std::ffi::OsString;
@@ -18,7 +18,7 @@ use uufuzz::{compare_result, generate_and_run_uumain, generate_random_string, ru
 
 static CMD_PATH: &str = "printf";
 
-fn generate_escape_sequence(rng: &mut impl Rng) -> String {
+fn generate_escape_sequence(rng: &mut impl RngExt) -> String {
     let escape_sequences = [
         "\\\"",
         "\\\\",

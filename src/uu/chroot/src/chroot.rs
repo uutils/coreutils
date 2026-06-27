@@ -8,16 +8,15 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{CString, OsStr};
+use std::ffi::OsStr;
 use std::io::{Error, ErrorKind};
-use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::libc::{self, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -172,8 +171,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             MissingHandling::Normal,
             ResolveMode::Logical,
         )
-        .unwrap()
-        .to_str()
+        // A NEWROOT that does not resolve is by definition not old `/`, so treat
+        // an Err as a non-match instead of unwrapping it.
+        .ok()
+        .as_deref()
+        .and_then(|p| p.to_str())
             != Some("/")
     {
         return Err(UUsageError::new(
@@ -391,17 +393,18 @@ fn set_supplemental_gids_with_strategy(
 
 /// Change the root, set the user ID, and set the group IDs for this process.
 fn set_context(options: &Options) -> UResult<()> {
-    enter_chroot(&options.newroot, options.skip_chdir)?;
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -409,6 +412,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
@@ -416,6 +420,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(&options.newroot, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -424,22 +429,9 @@ fn set_context(options: &Options) -> UResult<()> {
 }
 
 fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
-    let err = unsafe {
-        chroot(
-            CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| ChrootError::CannotEnter("root".into(), e.into()))?
-                .as_bytes_with_nul()
-                .as_ptr()
-                .cast(),
-        )
-    };
-
-    if err == 0 {
-        if !skip_chdir {
-            std::env::set_current_dir("/")?;
-        }
-        Ok(())
-    } else {
-        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
+    rustix::process::chroot(root).map_err(|e| ChrootError::CannotEnter(root.into(), e.into()))?;
+    if !skip_chdir {
+        std::env::set_current_dir("/")?;
     }
+    Ok(())
 }

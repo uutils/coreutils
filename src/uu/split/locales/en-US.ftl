@@ -15,6 +15,8 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
   - r/N like 'l' but use round robin distribution
   - r/K/N likewise but only output Kth of N to stdout
 
+# messages
+split-creating-file = creating file { $file }
 # Error messages
 split-error-suffix-not-parsable = invalid suffix length: { $value }
 split-error-suffix-contains-separator = invalid suffix { $value }, contains directory separator

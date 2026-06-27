@@ -2,8 +2,8 @@ head-about = Affiche les 10 premières lignes de chaque FICHIER sur la sortie st
   Avec plus d'un FICHIER, précède chacun d'un en-tête donnant le nom du fichier.
   Sans FICHIER, ou quand FICHIER est -, lit l'entrée standard.
 
-  Les arguments obligatoires pour les drapeaux longs sont obligatoires pour les drapeaux courts aussi.
-head-usage = head [DRAPEAU]... [FICHIER]...
+  Les arguments obligatoires pour les options longues sont obligatoires pour les options courtes aussi.
+head-usage = head [OPTION]... [FICHIER]...
 
 # Messages d'aide
 head-help-bytes = affiche les premiers NUM octets de chaque fichier ;

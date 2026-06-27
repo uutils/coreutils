@@ -233,12 +233,10 @@ fn prepare_relative_options(
         .map(PathBuf::from);
     let relative_to = canonicalize_relative_option(relative_to, can_mode, resolve_mode)?;
     let relative_base = canonicalize_relative_option(relative_base, can_mode, resolve_mode)?;
-    if let (Some(base), Some(to)) = (relative_base.as_deref(), relative_to.as_deref()) {
-        if !to.starts_with(base) {
-            return Ok((None, None));
-        }
+    match (relative_base.as_deref(), relative_to.as_deref()) {
+        (Some(b), Some(t)) if !t.starts_with(b) => Ok((None, None)),
+        _ => Ok((relative_to, relative_base)),
     }
-    Ok((relative_to, relative_base))
 }
 
 /// Prepare single `relative-*` option.

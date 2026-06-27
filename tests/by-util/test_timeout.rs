@@ -279,6 +279,9 @@ fn test_forward_sigint_to_child() {
             "trap 'echo got_int; exit 42' INT; sleep 5",
         ])
         .run_no_wait();
+    #[cfg(target_os = "macos")]
+    cmd.delay(1000);
+    #[cfg(not(target_os = "macos"))]
     cmd.delay(100);
     cmd.kill_with_custom_signal(nix::sys::signal::Signal::SIGINT);
     cmd.make_assertion()

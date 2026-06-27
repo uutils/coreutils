@@ -178,7 +178,8 @@ pub fn get_umask() -> u32 {
     // from /proc/self/status. But that's a lot of work.
     #[cfg(unix)]
     {
-        use nix::sys::stat::{Mode, umask};
+        use rustix::fs::Mode;
+        use rustix::process::umask;
 
         let mask = umask(Mode::empty());
         let _ = umask(mask);

@@ -6,16 +6,19 @@
 // spell-checker:ignore (ToDO) signalname pids killpg
 
 use clap::{Arg, ArgAction, Command};
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
-use std::io::Error;
+use rustix::process::{
+    Pid, Signal, kill_current_process_group, kill_process, kill_process_group,
+    test_kill_current_process_group, test_kill_process, test_kill_process_group,
+};
+use std::cmp::Ordering;
+use std::io;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::translate;
 
 use uucore::signals::{
     signal_by_name_or_value, signal_list_name_by_value, signal_list_value_by_name_or_number,
-    signal_name_by_value, signal_number_upper_bound,
+    signal_number_upper_bound,
 };
 use uucore::{format_usage, show};
 
@@ -66,18 +69,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 parse_signal_value(signal)?
             } else {
                 15_usize //SIGTERM
-            };
-
-            let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from EXIT
-            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
-            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
-                None
-            } else {
-                let sig = (sig as i32)
-                    .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
-                Some(sig)
             };
 
             let pids = parse_pids(&pids_or_signals)?;
@@ -226,6 +217,22 @@ fn list(signals: &Vec<String>) {
     }
 }
 
+fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
+    result.map_err(io::Error::from)
+}
+
+// rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
+// raw `libc::kill` for any value its safe constructor doesn't recognize.
+fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
+    let sig = i32::try_from(sig).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+    // SAFETY: plain FFI call; `kill` has no memory-safety preconditions.
+    if unsafe { libc::kill(pid as libc::pid_t, sig) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
+    }
+}
+
 fn parse_signal_value(signal_name: &str) -> UResult<usize> {
     let optional_signal_value = signal_by_name_or_value(signal_name);
     match optional_signal_value {
@@ -250,13 +257,46 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Option<Signal>, pids: &[i32]) {
+fn kill(sig: usize, pids: &[i32]) {
+    // Standard named signals use rustix's typed API; anything its safe
+    // constructor doesn't recognize (realtime/reserved) falls back to libc.
+    let named = (sig != 0)
+        .then(|| i32::try_from(sig).ok().and_then(Signal::from_named_raw))
+        .flatten();
     for &pid in pids {
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(
-                Error::from_raw_os_error(e as i32)
-                    .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
-            );
+        let result = match pid.cmp(&0) {
+            Ordering::Equal => match named {
+                _ if sig == 0 => rustix_to_io(test_kill_current_process_group()),
+                Some(s) => rustix_to_io(kill_current_process_group(s)),
+                None => raw_kill(0, sig),
+            },
+            Ordering::Greater => {
+                let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process(pid)),
+                    Some(s) => rustix_to_io(kill_process(pid, s)),
+                    None => raw_kill(pid.as_raw_nonzero().get(), sig),
+                }
+            }
+            Ordering::Less => {
+                let Some(abs_pid) = pid.checked_neg() else {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("kill-error-sending-signal", "pid" => pid),
+                    ));
+                    continue;
+                };
+                let pid =
+                    Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
+                match named {
+                    _ if sig == 0 => rustix_to_io(test_kill_process_group(pid)),
+                    Some(s) => rustix_to_io(kill_process_group(pid, s)),
+                    None => raw_kill(-pid.as_raw_nonzero().get(), sig),
+                }
+            }
+        };
+        if let Err(e) = result {
+            show!(e.map_err_context(|| translate!("kill-error-sending-signal", "pid" => pid)));
         }
     }
 }

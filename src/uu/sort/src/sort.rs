@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -38,8 +38,6 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
-#[cfg(not(target_os = "wasi"))]
-use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -286,7 +284,7 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: String,
+    threads: u64,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -460,7 +458,7 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: String::new(),
+            threads: 0,
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -668,10 +666,11 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
+            // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
+                .filter(|s| !s.trim_ascii_start().starts_with('+'))
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
@@ -697,7 +696,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
             self.write_debug(settings, writer)?;
         } else {
@@ -1371,13 +1370,12 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
-        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
-    }
+    let rlim_cur = getrlimit(Resource::Nofile)
+        .current
+        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
@@ -1410,8 +1408,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1770,7 +1766,6 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
@@ -2121,22 +2116,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    if matches.contains_id(options::PARALLEL) {
-        // "0" is default - threads = num of cores
-        settings.threads = matches
-            .get_one::<String>(options::PARALLEL)
-            .map_or_else(|| "0".to_string(), String::from);
-        #[cfg(not(target_os = "wasi"))]
-        {
-            let num_threads = match settings.threads.parse::<usize>() {
-                Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
-                Ok(n) => n,
-            };
-            let _ = rayon::ThreadPoolBuilder::new()
-                .num_threads(num_threads)
-                .build_global();
-        }
-    }
+    settings.threads = matches
+        .get_one::<u64>(options::PARALLEL)
+        .copied()
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+    #[cfg(not(target_os = "wasi"))]
+    let _ = rayon::ThreadPoolBuilder::new()
+        .num_threads(settings.threads as usize)
+        .build_global();
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -2543,6 +2530,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
+            .value_parser(clap::value_parser!(u64).range(1..))
             .value_name("NUM_THREADS"),
     )
     .arg(
@@ -2655,7 +2643,13 @@ fn compare_by<'a>(
     if global_settings.precomputed.fast_locale_collation {
         let a_key = a_line_data.collation_key(a.index);
         let b_key = b_line_data.collation_key(b.index);
-        let cmp = a_key.cmp(b_key);
+        let mut cmp = a_key.cmp(b_key);
+        // If collation keys are equal, fall back to lexicographic comparison
+        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        if cmp == Ordering::Equal {
+            // Reversing the order to match sort's sorting behaviour
+            cmp = b.line.cmp(a.line);
+        }
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -2834,11 +2828,12 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
+    // check for inf, -inf and nan
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
     for &allowed_prefix in ALLOWED_PREFIXES {
         if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -3141,7 +3136,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())

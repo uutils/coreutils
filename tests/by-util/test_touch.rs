@@ -622,6 +622,25 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+/// Regression test for https://github.com/uutils/coreutils/issues/11804
+///
+/// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
+/// because the i64 Unix timestamp (~-62 billion) overflowed the i32 `tv_sec`
+/// expected by the old nix-based implementation. After switching to rustix
+/// (which uses i64 `tv_sec` natively), this should succeed on all targets.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_touch_set_date_year_zero() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_year_zero";
+
+    ucmd.args(&["-d", "0000-01-01", file])
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file));
+}
+
 /// Test for setting the date by a relative time unit.
 #[test]
 fn test_touch_set_date_relative_smoke() {
@@ -691,10 +710,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 
     // From the GNU documentation:
@@ -716,10 +732,7 @@ fn test_touch_set_date_relative_smoke() {
     for time in times {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("f");
-        ucmd.args(&["-d", time, "f"])
-            .succeeds()
-            .no_stderr()
-            .no_stdout();
+        ucmd.args(&["-d", time, "f"]).succeeds().no_output();
     }
 }
 
@@ -774,6 +787,42 @@ fn test_touch_system_fails() {
         .args(&[file])
         .fails()
         .stderr_contains("setting times of '/'");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
+fn test_touch_fifo() {
+    // touch must not hang on a reader-less FIFO and must update its times.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-d", "2020-01-01 00:00:00", "fifo"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("fifo"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
+fn test_touch_dash_updates_stdout_file() {
+    // `touch -` must update the times of the file open as stdout (fd 1), even
+    // when it is read-only, and set them to "now" rather than a 1970 sentinel.
+    use std::fs::File;
+    use std::time::SystemTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("c");
+    // Age the file so the update to "now" is detectable.
+    let old = FileTime::from_unix_time(1_000_000, 0);
+    filetime::set_file_times(at.plus("c"), old, old).unwrap();
+
+    let file = File::open(at.plus("c")).unwrap();
+    ucmd.set_stdout(file).arg("-").succeeds();
+
+    let mtime = at.metadata("c").modified().unwrap();
+    let age = SystemTime::now().duration_since(mtime).unwrap();
+    assert!(age.as_secs() < 60, "touch - left mtime stale: {age:?}");
 }
 
 #[test]
@@ -966,6 +1015,16 @@ fn test_touch_invalid_date_format() {
 }
 
 #[test]
+fn test_touch_invalid_timestamp_leading_multibyte_char() {
+    for ts in ["€123456789", "€23456789012"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date ts format '{ts}'\n"));
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "freebsd"))]
 fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1060,4 +1119,39 @@ fn test_touch_device_files() {
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
         .succeeds()
         .no_output();
+}
+
+// Touching a symlink to an existing file must not truncate the target, like
+// GNU touch. The target exists, so this exercises the update_times path, not
+// the create path changed for #10019 — it guards the general "touch never
+// truncates" contract. The create-path fix itself is covered by the
+// create_without_truncate unit tests in src/touch.rs and the syscall-flag
+// check in util/check-safe-traversal.sh.
+#[test]
+#[cfg(unix)]
+fn test_touch_does_not_truncate_symlink_target() {
+    use std::os::unix::fs::symlink;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("victim", "do not truncate me");
+    symlink(at.plus("victim"), at.plus("link")).unwrap();
+
+    ucmd.arg("link").succeeds();
+
+    assert_eq!(at.read("victim"), "do not truncate me");
+}
+
+// Touching a dangling symlink creates its target as an empty file, like GNU.
+#[test]
+#[cfg(unix)]
+fn test_touch_through_dangling_symlink_creates_target() {
+    use std::os::unix::fs::symlink;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    symlink(at.plus("missing"), at.plus("link")).unwrap();
+
+    ucmd.arg("link").succeeds();
+
+    assert!(at.file_exists("missing"));
+    assert_eq!(at.read("missing"), "");
 }

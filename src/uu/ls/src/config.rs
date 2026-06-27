@@ -19,8 +19,9 @@ use term_grid::SPACES_IN_TAB;
 
 use uucore::{
     display::Quotable, error::UResult, format::human::SizeFormat, fsext::MetadataTimeField,
-    line_ending::LineEnding, parser::parse_glob, parser::parse_size::parse_size_non_zero_u64,
-    quoting_style::QuotingStyle, show_error, show_warning, time::format, translate,
+    line_ending::LineEnding, parser::parse_block_size, parser::parse_glob,
+    parser::parse_size::parse_size_non_zero_u64, quoting_style::QuotingStyle, show_error,
+    show_warning, time::format, translate,
 };
 
 use crate::{
@@ -123,6 +124,49 @@ const POSIXLY_CORRECT_BLOCK_SIZE: u64 = 512;
 const DEFAULT_BLOCK_SIZE: u64 = 1024;
 const DEFAULT_FILE_SIZE_BLOCK_SIZE: u64 = 1;
 
+/// Resolve `(file_size_block_size, block_size)` from environment variables.
+///
+/// `LS_BLOCK_SIZE` and `BLOCK_SIZE` affect both values.
+/// `BLOCKSIZE` only affects `block_size` (allocation display with `-s`).
+/// `POSIXLY_CORRECT` sets `block_size` to 512 as a last resort.
+/// `-k` (`opt_kb`) forces `block_size` to `DEFAULT_BLOCK_SIZE`.
+fn resolve_block_sizes_from_env(opt_kb: bool) -> (u64, u64) {
+    match parse_block_size::block_size_from_env(&["LS_BLOCK_SIZE", "BLOCK_SIZE"]) {
+        parse_block_size::BlockSizeEnv::Found(size) => {
+            if opt_kb {
+                (size, DEFAULT_BLOCK_SIZE)
+            } else {
+                (size, size)
+            }
+        }
+        parse_block_size::BlockSizeEnv::SetButInvalid => (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
+        parse_block_size::BlockSizeEnv::NotSet => {
+            // Neither LS_BLOCK_SIZE nor BLOCK_SIZE was set; check BLOCKSIZE
+            // which only affects allocation display, not file size.
+            match parse_block_size::block_size_from_env(&["BLOCKSIZE"]) {
+                parse_block_size::BlockSizeEnv::Found(size) => {
+                    if opt_kb {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    } else {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, size)
+                    }
+                }
+                parse_block_size::BlockSizeEnv::SetButInvalid => {
+                    // BLOCKSIZE was set but invalid: stop lookup, use defaults.
+                    (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                }
+                parse_block_size::BlockSizeEnv::NotSet => {
+                    if std::env::var_os("POSIXLY_CORRECT").is_some() && !opt_kb {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+                    } else {
+                        (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(crate) enum Dereference {
     None,
     DirArgs,
@@ -172,7 +216,7 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
-    pub(crate) indicator_style: IndicatorStyle,
+    pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     pub(crate) context: bool,
@@ -267,9 +311,9 @@ fn extract_sort(options: &clap::ArgMatches) -> Sort {
     };
 
     let sort_index = options
-        .get_one::<String>(options::SORT)
-        .and_then(|_| options.indices_of(options::SORT))
-        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+        .indices_of(options::SORT)
+        .and_then(|mut it| it.next_back())
+        .unwrap_or(0);
     let time_index = get_last_index(options::sort::TIME);
     let size_index = get_last_index(options::sort::SIZE);
     let none_index = get_last_index(options::sort::NONE);
@@ -383,9 +427,9 @@ fn extract_color(options: &clap::ArgMatches) -> bool {
     };
 
     let color_index = options
-        .get_one::<String>(options::COLOR)
-        .and_then(|_| options.indices_of(options::COLOR))
-        .map_or(0, |mut indices| indices.next_back().unwrap_or(0));
+        .indices_of(options::COLOR)
+        .and_then(|mut it| it.next_back())
+        .unwrap_or(0);
     let unsorted_all_index = get_last_index(options::files::UNSORTED_ALL);
 
     let color_enabled = match options.get_one::<String>(options::COLOR) {
@@ -554,34 +598,28 @@ fn extract_quoting_style(
 /// # Returns
 ///
 /// An [`IndicatorStyle`] variant representing the indicator style to use.
-fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
+fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => IndicatorStyle::None,
-            "file-type" => IndicatorStyle::FileType,
-            "classify" => IndicatorStyle::Classify,
-            "slash" => IndicatorStyle::Slash,
-            &_ => IndicatorStyle::None,
+            "none" => None,
+            "file-type" => Some(IndicatorStyle::FileType),
+            "classify" => Some(IndicatorStyle::Classify),
+            "slash" => Some(IndicatorStyle::Slash),
+            &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => IndicatorStyle::None,
-            "always" | "yes" | "force" => IndicatorStyle::Classify,
-            "auto" | "tty" | "if-tty" => {
-                if stdout().is_terminal() {
-                    IndicatorStyle::Classify
-                } else {
-                    IndicatorStyle::None
-                }
-            }
-            &_ => IndicatorStyle::None,
+            "never" | "no" | "none" => None,
+            "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
+            &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
-        IndicatorStyle::Slash
+        Some(IndicatorStyle::Slash)
     } else if options.get_flag(options::indicator_style::FILE_TYPE) {
-        IndicatorStyle::FileType
+        Some(IndicatorStyle::FileType)
     } else {
-        IndicatorStyle::None
+        None
     }
 }
 
@@ -704,61 +742,23 @@ impl Config {
             SizeFormat::Bytes
         };
 
-        let env_var_blocksize = std::env::var_os("BLOCKSIZE");
-        let env_var_block_size = std::env::var_os("BLOCK_SIZE");
-        let env_var_ls_block_size = std::env::var_os("LS_BLOCK_SIZE");
-        let env_var_posixly_correct = std::env::var_os("POSIXLY_CORRECT");
-        let mut is_env_var_blocksize = false;
-
-        let raw_block_size = if let Some(opt_block_size) = opt_block_size {
-            OsString::from(opt_block_size)
-        } else if let Some(env_var_ls_block_size) = env_var_ls_block_size {
-            env_var_ls_block_size
-        } else if let Some(env_var_block_size) = env_var_block_size {
-            env_var_block_size
-        } else if let Some(env_var_blocksize) = env_var_blocksize {
-            is_env_var_blocksize = true;
-            env_var_blocksize
-        } else {
-            OsString::from("")
-        };
-
-        let (file_size_block_size, block_size) = if !opt_si && !opt_hr && !raw_block_size.is_empty()
-        {
-            if let Ok(size) = parse_size_non_zero_u64(&raw_block_size.to_string_lossy()) {
-                match (is_env_var_blocksize, opt_kb) {
-                    (true, true) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE),
-                    (true, false) => (DEFAULT_FILE_SIZE_BLOCK_SIZE, size),
-                    (false, true) => {
-                        // --block-size overrides -k
-                        if opt_block_size.is_some() {
-                            (size, size)
-                        } else {
-                            (size, DEFAULT_BLOCK_SIZE)
-                        }
-                    }
-                    (false, false) => (size, size),
-                }
-            } else {
-                // only fail if invalid block size was specified with --block-size,
-                // ignore invalid block size from env vars
-                if let Some(invalid_block_size) = opt_block_size {
-                    return Err(Box::new(LsError::BlockSizeParseError(
-                        invalid_block_size.clone(),
-                    )));
-                }
-                if is_env_var_blocksize {
-                    (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-                } else {
-                    (DEFAULT_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-                }
-            }
-        } else if env_var_posixly_correct.is_some() {
-            if opt_kb {
+        let (file_size_block_size, block_size) = if let Some(opt_block_size) = opt_block_size {
+            // --block-size command-line argument: parse it, error on invalid
+            // If --block-size=si or --block-size=human-readable, skip numeric parsing
+            if opt_si {
+                (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
+            } else if opt_hr {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
+            } else if let Ok(size) = parse_size_non_zero_u64(opt_block_size) {
+                // --block-size overrides -k
+                (size, size)
             } else {
-                (DEFAULT_FILE_SIZE_BLOCK_SIZE, POSIXLY_CORRECT_BLOCK_SIZE)
+                return Err(Box::new(LsError::BlockSizeParseError(
+                    opt_block_size.clone(),
+                )));
             }
+        } else if !opt_si && !opt_hr {
+            resolve_block_sizes_from_env(opt_kb)
         } else if opt_si {
             (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
         } else {
@@ -782,13 +782,10 @@ impl Config {
         };
         let width = parse_width(options.get_one::<String>(options::WIDTH))?;
 
-        #[allow(clippy::needless_bool)]
         let mut show_control = if options.get_flag(options::HIDE_CONTROL_CHARS) {
             false
-        } else if options.get_flag(options::SHOW_CONTROL_CHARS) {
-            true
         } else {
-            !stdout().is_terminal()
+            options.get_flag(options::SHOW_CONTROL_CHARS) || !stdout().is_terminal()
         };
 
         let (mut quoting_style, mut locale_quoting) = extract_quoting_style(options, show_control);
@@ -954,7 +951,7 @@ impl Config {
         } else if options.get_flag(options::dereference::DIR_ARGS) {
             Dereference::DirArgs
         } else if options.get_flag(options::DIRECTORY)
-            || indicator_style == IndicatorStyle::Classify
+            || indicator_style == Some(IndicatorStyle::Classify)
             || format == Format::Long
         {
             Dereference::None
@@ -1057,19 +1054,19 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     Some(format::ISO.to_string() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
-                _ => match field.chars().next().unwrap() {
-                    '+' => {
-                        // recent/older formats are (optionally) separated by a newline
-                        let mut it = field[1..].split('\n');
-                        let recent = it.next().unwrap_or_default();
-                        let older = it.next();
-                        match it.next() {
-                            None => ok((recent, older)),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        }
+                // `field` can be empty here (e.g. --time-style=posix-), so test
+                // the prefix instead of unwrapping the first char.
+                _ if field.starts_with('+') => {
+                    // recent/older formats are (optionally) separated by a newline
+                    let mut it = field[1..].split('\n');
+                    let recent = it.next().unwrap_or_default();
+                    let older = it.next();
+                    match it.next() {
+                        None => ok((recent, older)),
+                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
-                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
-                },
+                }
+                _ => Err(LsError::TimeStyleParseError(String::from(field))),
             }
         }
     } else if options.get_flag(options::FULL_TIME) {

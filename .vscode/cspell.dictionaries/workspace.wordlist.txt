@@ -1,12 +1,9 @@
 # * cargo
 cdylib
-rlib
+doctest
 
 # * crates
-advapi
-advapi32-sys
 aho-corasick
-backtrace
 blake2b_simd
 rustix
 
@@ -103,7 +100,6 @@ chroot
 cksum
 csplit
 dircolors
-hashsum
 hostid
 logname
 mkdir
@@ -149,9 +145,7 @@ EROFS
 
 # * vars/fcntl
 F_GETFL
-    GETFL
 fcntl
-vmsplice
 
 # * vars/libc
 COMFOLLOW
@@ -184,7 +178,6 @@ IXUSR
 LINESIZE
 NAMESIZE
 RTLD_NEXT
-    RTLD
 RTMAX
 RTMIN
 SIGABRT
@@ -239,11 +232,12 @@ strlen
 syncfs
 umask
 waitpid
-wcslen
 
 # * vars/nix
-iovec
 unistd
+
+# * vars/rustix
+fcntl_getfl
 
 # * vars/signals
 SIGPIPE
@@ -366,15 +360,23 @@ uutests
 uutils
 
 # * function names
+sendfile
+execfn
+fadvise
+fstatfs
 getcwd
+mkfifoat
 setpipe
 
 # * other
+auxv
 getlimits
 weblate
 algs
 wasm
 wasip
+statx
+Statx
 
 # * stty terminal flags
 brkint
