@@ -840,13 +840,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // code should still be EXIT_ERR as does GNU cp
         } else {
             // Else we caught a fatal bubbled-up error, log it to stderr
-            show_error!("{error}");
+
+            if let CpError::IoErr(ref error) = error {
+                if error.kind() == io::ErrorKind::NotFound {
+                    show_error!(
+                        "{}",
+                        translate!("cp-error-cannot-stat", "source" => format!("'{}'",sources[0].display()))
+                    );
+                }
+            } else {
+                show_error!("{error}");
+            }
         }
         set_exit_code(EXIT_ERR);
     }
 
     Ok(())
 }
+
 
 impl ClobberMode {
     fn from_matches(matches: &ArgMatches) -> Self {
