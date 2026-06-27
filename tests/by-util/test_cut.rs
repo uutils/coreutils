@@ -291,6 +291,7 @@ fn test_single_quote_pair_as_delimiter_is_invalid() {
         new_ucmd!()
             .args(args)
             .pipe_in("a''b\n")
+            .ignore_stdin_write_error()
             .fails()
             .stderr_contains("cut: the delimiter must be a single character")
             .no_stdout();
