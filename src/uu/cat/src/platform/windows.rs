@@ -14,10 +14,10 @@ use windows_sys::Win32::Storage::FileSystem::{
 
 /// An unsafe overwrite occurs when the same file is used as both stdin and stdout
 /// and the stdout file is not empty.
-pub fn is_unsafe_overwrite<I: AsHandleRef, O: AsHandleRef>(input: &I, output: &O) -> bool {
-    is_same_file_by_path(input, output) &&
+pub fn is_safe_overwrite<I: AsHandleRef, O: AsHandleRef>(input: &I, output: &O) -> bool {
+    !is_same_file_by_path(input, output) ||
     // Check if the output file is empty
-    FileInformation::from_file(output).is_ok_and(|info| info.file_size() > 0)
+    !FileInformation::from_file(output).is_ok_and(|info| info.file_size() > 0)
 }
 
 /// Get the file path for a file handle
