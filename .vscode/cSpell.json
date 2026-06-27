@@ -40,7 +40,7 @@
   "enableGlobDot": true,
 
   // words to ignore (even if they are in the flagWords)
-  "ignoreWords": ["xffb"],
+  "ignoreWords": [],
 
   // words to always consider correct
   "words": []
