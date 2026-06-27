@@ -2210,7 +2210,7 @@ fn test_date_thai_locale_solar_calendar() {
         .parse()
         .unwrap();
 
-    // Since 1941, the year in the Thai solar calendar is the Gregorian year plus 543
+    // GNU date keeps %Y Gregorian in the Thai locale.
     let thai_year: i32 = new_ucmd!()
         .env("LC_ALL", "th_TH.UTF-8")
         .arg("+%Y")
@@ -2220,25 +2220,46 @@ fn test_date_thai_locale_solar_calendar() {
         .parse()
         .unwrap();
 
-    assert_eq!(thai_year, current_year + 543);
+    assert_eq!(thai_year, current_year);
 
-    // All months that have 31 days have names that end with "คม" (Thai characters)
-    let days_31_suffix = "\u{0E04}\u{0E21}"; // "คม" in Unicode
+    // GNU date uses the locale's alternate year for %EY in the Thai locale.
+    let thai_ey_year = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%EY")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
 
-    for month in ["01", "03", "05", "07", "08", "10", "12"] {
-        let month_result = new_ucmd!()
-            .env("LC_ALL", "th_TH.UTF-8")
-            .arg("--date")
-            .arg(format!("{current_year}-{month}-01"))
-            .arg("+%B")
-            .succeeds();
-        let month_name = month_result.stdout_str();
+    assert_eq!(thai_ey_year, "พ.ศ. 2569");
 
-        assert!(
-            month_name.trim().ends_with(days_31_suffix),
-            "Month {month} should end with 'คม', got: {month_name}"
-        );
-    }
+    let thai_ec = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%EC")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+
+    assert_eq!(thai_ec, "พ.ศ.");
+
+    let thai_ey = new_ucmd!()
+        .env("LC_ALL", "th_TH.UTF-8")
+        .arg("+%Ey")
+        .succeeds()
+        .stdout_str()
+        .trim()
+        .to_string();
+
+    assert_eq!(thai_ey, "2569");
+
+    // GNU date keeps the locale month/day names from LC_TIME here as well.
+    check_date(
+        "th_TH.UTF-8",
+        "2026-06-14",
+        "+%Y %EY %B %A",
+        "2026 พ.ศ. 2569 มิถุนายน อาทิตย์",
+    );
 
     // Check that --iso-8601 and --rfc-3339 use the Gregorian calendar
     let iso_result = new_ucmd!()
@@ -2291,18 +2312,19 @@ fn test_locale_calendar_conversions() {
         check_date("fa_IR.UTF-8", d, "+%Y-%m-%d", e);
     }
 
-    // Thai Buddhist (year + 543, same month/day)
+    // Thai locale keeps Gregorian %Y, but %EY uses the locale's alternate year.
     for (d, e) in [
-        ("2026-01-01", "2569-01-01"),
-        ("2026-01-26", "2569-01-26"),
-        ("2026-06-15", "2569-06-15"),
-        ("2026-12-31", "2569-12-31"),
-        ("2025-01-01", "2568-01-01"),
-        ("2024-02-29", "2567-02-29"),
-        ("2000-01-01", "2543-01-01"),
-        ("1970-01-01", "2513-01-01"),
+        ("2026-01-01", "พ.ศ. 2569-01-01"),
+        ("2026-01-26", "พ.ศ. 2569-01-26"),
+        ("2026-06-15", "พ.ศ. 2569-06-15"),
+        ("2026-12-31", "พ.ศ. 2569-12-31"),
+        ("2025-01-01", "พ.ศ. 2568-01-01"),
+        ("2024-02-29", "พ.ศ. 2567-02-29"),
+        ("2000-01-01", "พ.ศ. 2543-01-01"),
+        ("1970-01-01", "พ.ศ. 2513-01-01"),
     ] {
-        check_date("th_TH.UTF-8", d, "+%Y-%m-%d", e);
+        check_date("th_TH.UTF-8", d, "+%Y-%m-%d", d);
+        check_date("th_TH.UTF-8", d, "+%EY-%m-%d", e);
     }
 
     // Ethiopian (13 months, New Year on Sept 11)
@@ -2335,6 +2357,10 @@ fn test_locale_month_names() {
         ("ja_JP.UTF-8", "1月", "6月", "12月"),
         ("zh_CN.UTF-8", "一月", "六月", "十二月"),
     ] {
+        if !is_locale_available(loc) {
+            println!("Skipping locale month test for {loc} - locale not available");
+            continue;
+        }
         check_date(loc, "2026-01-15", "+%B", jan);
         check_date(loc, "2026-06-15", "+%B", jun);
         check_date(loc, "2026-12-15", "+%B", dec);
@@ -2358,6 +2384,10 @@ fn test_locale_abbreviated_month_names() {
         // Hungarian locale - the fix ensures no double periods
         ("hu_HU.UTF-8", "febr", "jún", "dec"),
     ] {
+        if !is_locale_available(loc) {
+            println!("Skipping abbreviated month test for {loc} - locale not available");
+            continue;
+        }
         check_date(loc, "2026-02-12", "+%b", feb);
         check_date(loc, "2026-06-14", "+%b", jun);
         check_date(loc, "2026-12-09", "+%b", dec);
@@ -2375,6 +2405,10 @@ fn test_locale_day_names() {
         ("ja_JP.UTF-8", "月曜日", "日曜日", "土曜日"),
         ("zh_CN.UTF-8", "星期一", "星期日", "星期六"),
     ] {
+        if !is_locale_available(loc) {
+            println!("Skipping day-name test for {loc} - locale not available");
+            continue;
+        }
         check_date(loc, "2026-01-26", "+%A", mon);
         check_date(loc, "2026-01-25", "+%A", sun);
         check_date(loc, "2026-01-24", "+%A", sat);
