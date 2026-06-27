@@ -13,8 +13,8 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[features]
-feat_systemd_logind = ["uucore/feat_systemd_logind"]
+[lints]
+workspace = true
 
 [lib]
 path = "src/who.rs"
@@ -26,9 +26,6 @@ clap = { workspace = true }
 rustix = { workspace = true, features = ["termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
 fluent = { workspace = true }
-
-[lints]
-workspace = true
 
 [[bin]]
 name = "who"

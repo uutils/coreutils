@@ -116,6 +116,7 @@ walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libloading = { workspace = true, optional = true }
 procfs = { workspace = true, optional = true }
 
 [target.'cfg(windows)'.dependencies]
@@ -154,7 +155,6 @@ fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []
 lines = []
-feat_systemd_logind = ["utmpx", "libc"]
 format = [
   "bigdecimal",
   "extendedbigdecimal",
@@ -215,7 +215,7 @@ sum = [
 openssl = ["dep:openssl"]
 update-control = ["parser"]
 utf8 = []
-utmpx = ["time", "time/macros", "libc", "dns-lookup"]
+utmpx = ["time", "time/macros", "libc", "dns-lookup", "dep:libloading"]
 version-cmp = []
 wide = []
 tty = []
