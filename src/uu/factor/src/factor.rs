@@ -74,36 +74,31 @@ fn write_factors_str(
 }
 
 fn parse_num(slice: &[u8]) -> UResult<Number> {
-    let err_invalid = |s: &str, force_quoting| {
-        let num = if force_quoting {
-            s.quote() // Force quoting if there are invalid characters.
-        } else {
-            s.maybe_quote()
-        };
+    let err_invalid = |s: &str| {
         USimpleError::new(
             1,
-            format!("warning: {num}: {}", translate!("factor-error-invalid-int")),
+            format!("{} {}", s.quote(), translate!("factor-error-invalid-int")),
         )
     };
-    let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string(), true))?;
+    let num = str::from_utf8(slice).map_err(|_| err_invalid(&NumError(slice).to_string()))?;
 
     match num.parse::<u64>() {
         Ok(x) => return Ok(Number::U64(x)),
         // If overflown, attempt a greater width
         Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
-        Err(_) => return Err(err_invalid(num, false)),
+        Err(_) => return Err(err_invalid(num)),
     }
 
     match num.parse::<u128>() {
         Ok(x) => return Ok(Number::U128(x)),
         // If overflown, attempt a greater width
         Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {}
-        Err(_) => return Err(err_invalid(num, false)),
+        Err(_) => return Err(err_invalid(num)),
     }
 
     num.parse::<BigUint>()
         .map(Number::BigUint)
-        .map_err(|_| err_invalid(num, false))
+        .map_err(|_| err_invalid(num))
 }
 
 /// This is a newtype wrapper over a potentially malformed UTF-8
@@ -118,22 +113,13 @@ impl Display for NumError<'_> {
     /// the invalid ones as escaped octal, like GNU. For example, the
     /// (escaped) string "\xFFabc\x1C" is formatted as "\377abc\034".
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match str::from_utf8(self.0) {
-            Ok(s) => write!(f, "{s}"),
-            Err(e) => {
-                let valid = e.valid_up_to();
-                let cont = valid + e.error_len().unwrap_or(1);
-                // SAFETY: `self.0` has been checked to contain valid
-                // UTF-8 sequences up to `valid`.
-                write!(f, "{}", unsafe {
-                    str::from_utf8_unchecked(&self.0[..valid])
-                })?;
-                for b in &self.0[valid..cont] {
-                    write!(f, "\\{b:03o}")?;
-                }
-                <Self as Display>::fmt(&Self(&self.0[cont..]), f)
+        for chunk in self.0.utf8_chunks() {
+            f.write_str(chunk.valid())?;
+            for &b in chunk.invalid() {
+                write!(f, "\\{b:03o}")?;
             }
         }
+        Ok(())
     }
 }
 

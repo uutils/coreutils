@@ -22,6 +22,9 @@ on:
       - 'GNUmakefile'
       - '.github/workflows/manpage-lint.yml'
 
+permissions:
+  contents: read
+
 jobs:
   manpage-lint:
     name: Validate manpages with mandoc
@@ -32,7 +35,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install prerequisites
         shell: bash

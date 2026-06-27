@@ -489,6 +489,15 @@ fn test_regex_newline() {
 }
 
 #[test]
+fn test_regex_catastrophic_backtracking() {
+    let input = "a".repeat(30) + "c";
+    new_ucmd!()
+        .args(&[input.as_str(), ":", "\\(a\\+a\\+\\)\\+b"])
+        .fails_with_code(1)
+        .stdout_only("\n");
+}
+
+#[test]
 fn test_substr() {
     new_ucmd!()
         .args(&["substr", "abc", "1", "1"])

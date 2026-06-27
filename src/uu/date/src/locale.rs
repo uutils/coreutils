@@ -12,14 +12,7 @@
 macro_rules! cfg_langinfo {
     ($($item:item)*) => {
         $(
-            #[cfg(any(
-                target_os = "linux",
-                target_vendor = "apple",
-                target_os = "freebsd",
-                target_os = "netbsd",
-                target_os = "openbsd",
-                target_os = "dragonfly"
-            ))]
+            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
             $item
         )*
     }
@@ -28,16 +21,15 @@ macro_rules! cfg_langinfo {
 cfg_langinfo! {
     use std::ffi::CStr;
     use std::sync::OnceLock;
-    use nix::libc;
 
     #[cfg(test)]
     use std::sync::Mutex;
 
     /// glibc's `_DATE_FMT` has been stable for the last 12 years
     /// being added upstream to libc TODO: update to libc
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "cygwin"))]
     const DATE_FMT: libc::nl_item = 0x2006c;
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "cygwin")))]
     const DATE_FMT: libc::nl_item = libc::D_T_FMT;
 }
 
@@ -118,14 +110,12 @@ cfg_langinfo! {
 }
 
 /// On platforms without nl_langinfo support, use 24-hour format by default
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 pub fn get_locale_default_format() -> &'static str {
     "%a %b %e %X %Z %Y"
 }

@@ -17,6 +17,7 @@ pub const FROM: &str = "from";
 pub const FROM_DEFAULT: &str = "none";
 pub const FROM_UNIT: &str = "from-unit";
 pub const FROM_UNIT_DEFAULT: &str = "1";
+pub const GROUPING: &str = "grouping";
 pub const HEADER: &str = "header";
 pub const HEADER_DEFAULT: &str = "1";
 pub const INVALID: &str = "invalid";
@@ -55,7 +56,8 @@ pub struct NumfmtOptions {
     pub round: RoundMethod,
     pub suffix: Option<String>,
     pub unit_separator: String,
-    pub max_whitespace: usize,
+    pub grouping: bool,
+    pub explicit_unit_separator: bool,
     pub format: FormatOptions,
     pub invalid: InvalidModes,
     pub zero_terminated: bool,

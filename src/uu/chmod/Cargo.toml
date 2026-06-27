@@ -3,7 +3,6 @@ name = "uu_chmod"
 description = "chmod ~ (uutils) change mode of FILE"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/chmod"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,7 @@ workspace = true
 
 [lib]
 path = "src/chmod.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }

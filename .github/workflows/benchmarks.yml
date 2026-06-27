@@ -21,6 +21,7 @@ jobs:
   benchmarks:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
     strategy:
@@ -35,7 +36,9 @@ jobs:
           uu_dd,
           uu_df,
           uu_du,
+          uu_echo,
           uu_expand,
+          uu_expr,
           uu_fold,
           uu_hostname,
           uu_join,
@@ -48,6 +51,8 @@ jobs:
           uu_shuf,
           uu_sort,
           uu_split,
+          uu_tee,
+          uu_timeout,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
@@ -59,7 +64,7 @@ jobs:
           uu_false
         ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
 
@@ -69,7 +74,7 @@ jobs:
 
       - name: Run sccache-cache
         id: sccache-setup
-        uses: mozilla-actions/sccache-action@v0.0.9
+        uses: mozilla-actions/sccache-action@v0.0.10
         continue-on-error: true
       - name: Export sccache
         if: steps.sccache-setup.outcome == 'success'

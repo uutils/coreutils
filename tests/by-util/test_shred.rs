@@ -75,6 +75,20 @@ fn test_shred_remove_unlink() {
 }
 
 #[test]
+fn test_shred_remove_unlink_relative_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("dir1/dir2");
+    at.write("dir1/dir2/file1", "test data");
+
+    ucmd.arg("--remove=unlink")
+        .arg("dir1/dir2/file1")
+        .succeeds();
+
+    assert!(!at.file_exists("dir1/dir2/file1"));
+}
+
+#[test]
 fn test_shred_remove_wipe() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -419,4 +433,28 @@ fn test_gnu_shred_passes_different_counts() {
     // First and last should be random
     result.stderr_contains("pass 1/19 (random)");
     result.stderr_contains("pass 19/19 (random)");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    scene
+        .ucmd()
+        .arg("a/")
+        .fails()
+        .stderr_contains("Not a directory");
+}
+
+#[test]
+fn test_shred_trailing_slash_on_dir() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("d");
+    scene
+        .ucmd()
+        .arg("d/")
+        .fails()
+        .stderr_contains("Is a directory");
 }

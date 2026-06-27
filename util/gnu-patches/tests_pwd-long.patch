@@ -1,0 +1,28 @@
+Index: gnu/tests/pwd/pwd-long.sh
+===================================================================
+--- gnu.orig/tests/pwd/pwd-long.sh
++++ gnu/tests/pwd/pwd-long.sh
+@@ -19,7 +19,6 @@
+
+ . "${srcdir=.}/tests/init.sh";
+ print_ver_ pwd
+-uses_strace_
+
+ require_readable_root_
+ require_perl_
+@@ -27,11 +26,10 @@
+ ARGV_0=$0
+ export ARGV_0
+
+-# Disable the getcwd syscall if possible, so more of our code is exercised.
+-no_sys_getcwd() {
+-  strace -f -o /dev/null -e 'getcwd' -e fault=all:error=ENOSYS "$@"
+-}
+-no_sys_getcwd true || no_sys_getcwd() { "$@"; }
++# uutils: our pwd has no userspace getcwd reimplementation like GNU's; it
++# relies on the kernel getcwd(), which already handles paths longer than
++# PATH_MAX. So run pwd directly instead of disabling the getcwd syscall.
++no_sys_getcwd() { "$@"; }
+
+ # Don't use CuTmpdir here, since File::Temp's use of rmtree can't
+ # remove the deep tree we create.

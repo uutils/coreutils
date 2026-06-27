@@ -94,6 +94,7 @@ cp-error-failed-to-create-directory = Failed to create directory: { $error }
 cp-error-backup-format = cp: { $error }
   Try '{ $exec } --help' for more information.
 cp-error-setting-attributes = setting attributes for { $path }
+cp-error-write = write error
 
 # Debug enum strings
 cp-debug-enum-no = no
@@ -109,10 +110,8 @@ cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zeros
 cp-warning-source-specified-more-than-once = source { $file_type } { $source } specified more than once
 
 # Verbose and debug messages
-cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = skipped { $path }
 cp-verbose-removed = removed { $path }
-cp-verbose-created-directory = { $source } -> { $dest }
 cp-debug-copy-offload = copy offload: { $offload }, reflink: { $reflink }, sparse detection: { $sparse }
 
 # Prompts

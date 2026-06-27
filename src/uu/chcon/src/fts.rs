@@ -3,13 +3,18 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore (vars) RDONLY CLOEXEC
+
 #![cfg(any(target_os = "linux", target_os = "android"))]
 
 use std::ffi::{CStr, CString, OsStr};
 use std::marker::PhantomData;
+use std::os::fd::OwnedFd;
 use std::os::raw::{c_int, c_long, c_short};
 use std::path::Path;
 use std::{io, iter, ptr, slice};
+
+use rustix::fs::{Mode, OFlags, open};
 
 use crate::errors::{Error, Result};
 use crate::os_str_to_c_string;
@@ -98,8 +103,16 @@ impl FTS {
             Ok(())
         }
     }
-}
 
+    pub(crate) fn current_dir_fd(&self) -> io::Result<OwnedFd> {
+        open(
+            Path::new("."),
+            OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(io::Error::from)
+    }
+}
 impl Drop for FTS {
     fn drop(&mut self) {
         // SAFETY: We assume calling fts_close() is safe with a non-null `fts`

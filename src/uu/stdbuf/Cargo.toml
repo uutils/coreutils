@@ -4,7 +4,6 @@ name = "uu_stdbuf"
 description = "stdbuf ~ (uutils) run COMMAND with modified standard stream buffering"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/stdbuf"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -18,14 +17,18 @@ workspace = true
 
 [lib]
 path = "src/stdbuf.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
-libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.8.0", path = "src/libstdbuf" }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.9.0", path = "src/libstdbuf" }
 
 # "feat_external_libstdbuf": use an external libstdbuf.so for stdbuf instead of embedding it into
 # the stdbuf binary.

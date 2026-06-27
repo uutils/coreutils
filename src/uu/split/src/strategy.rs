@@ -5,7 +5,7 @@
 //! Determine the strategy for breaking up the input (file or stdin) into chunks
 //! based on the command line options
 
-use crate::{OPT_BYTES, OPT_LINE_BYTES, OPT_LINES, OPT_NUMBER};
+use crate::cli::options;
 use clap::{ArgMatches, parser::ValueSource};
 use thiserror::Error;
 use uucore::{
@@ -144,6 +144,9 @@ impl NumberType {
             (Some("l"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::Lines(num_chunks))
             }
             (Some("l"), Some(k_str), Some(n_str), None) => {
@@ -159,6 +162,9 @@ impl NumberType {
             (Some("r"), Some(n_str), None, None) => {
                 let num_chunks = parse_size_u64(n_str)
                     .map_err(|_| NumberTypeError::NumberOfChunks(n_str.to_string()))?;
+                if num_chunks == 0 {
+                    return Err(NumberTypeError::NumberOfChunks(n_str.to_string()));
+                }
                 Ok(Self::RoundRobin(num_chunks))
             }
             (Some("r"), Some(k_str), Some(n_str), None) => {
@@ -238,10 +244,10 @@ impl Strategy {
         // overrides_with_all() due to obsolete lines value option
         match (
             obs_lines,
-            matches.value_source(OPT_LINES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_LINE_BYTES) == Some(ValueSource::CommandLine),
-            matches.value_source(OPT_NUMBER) == Some(ValueSource::CommandLine),
+            matches.value_source(options::LINES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::LINE_BYTES) == Some(ValueSource::CommandLine),
+            matches.value_source(options::NUMBER) == Some(ValueSource::CommandLine),
         ) {
             (Some(v), false, false, false, false) => {
                 let v = parse_size_u64_max(v).map_err(|_| {
@@ -257,19 +263,19 @@ impl Strategy {
             }
             (None, false, false, false, false) => Ok(Self::Lines(1000)),
             (None, true, false, false, false) => {
-                get_and_parse(matches, OPT_LINES, Self::Lines, StrategyError::Lines)
+                get_and_parse(matches, options::LINES, Self::Lines, StrategyError::Lines)
             }
             (None, false, true, false, false) => {
-                get_and_parse(matches, OPT_BYTES, Self::Bytes, StrategyError::Bytes)
+                get_and_parse(matches, options::BYTES, Self::Bytes, StrategyError::Bytes)
             }
             (None, false, false, true, false) => get_and_parse(
                 matches,
-                OPT_LINE_BYTES,
+                options::LINE_BYTES,
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
             (None, false, false, false, true) => {
-                let s = matches.get_one::<String>(OPT_NUMBER).unwrap();
+                let s = matches.get_one::<String>(options::NUMBER).unwrap();
                 let number_type = NumberType::from(s).map_err(StrategyError::NumberType)?;
                 Ok(Self::Number(number_type))
             }
@@ -344,6 +350,18 @@ mod tests {
         assert_eq!(
             NumberType::from("r/xyz").unwrap_err(),
             NumberTypeError::NumberOfChunks("xyz".to_string())
+        );
+        assert_eq!(
+            NumberType::from("0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("l/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
+        );
+        assert_eq!(
+            NumberType::from("r/0").unwrap_err(),
+            NumberTypeError::NumberOfChunks("0".to_string())
         );
         assert_eq!(
             NumberType::from("r/123/xyz").unwrap_err(),

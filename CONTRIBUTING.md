@@ -11,6 +11,8 @@ check out these documents:
 - Our community's [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 - [DEVELOPMENT.md](./DEVELOPMENT.md) for setting up your development
   environment.
+- Our [Review Guidelines](https://uutils.github.io/reviews/) for what we expect
+  from a pull request and how reviews are done.
 
 Now follows a very important warning:
 
@@ -38,6 +40,7 @@ parts for getting started:
 - [`docs`](https://github.com/uutils/coreutils/tree/main/docs/src): the documentation for the website
 - [`tests/uutests/`](https://github.com/uutils/coreutils/tree/main/tests/uutests/):
   Crate implementing the various functions to test uutils commands.
+- [`fuzz/`](https://github.com/uutils/coreutils/tree/main/fuzz/): The differential fuzzers.
 
 Each utility is defined as a separate crate. The structure of each of these
 crates is as follows:
@@ -68,7 +71,8 @@ We have the following goals with our development:
 - **Performant**: Our utilities should be written in fast idiomatic Rust. We aim
   to match or exceed the performance of the GNU utilities.
 - **Well-tested**: We should have a lot of tests to be able to guarantee
-  reliability and compatibility.
+  reliability and compatibility. Code coverage should not regress; new
+  behavior should come with tests that cover it.
 
 ## How to Help
 
@@ -193,6 +197,19 @@ naming of variables and functions.
 If you edit a piece of code, make sure to update any comments that need to
 change as a result. The only thing worse than having no comments is having
 outdated comments!
+
+## AI policy
+
+AI-assisted contributions are allowed, but the same standards apply as for
+any other patch. If you use an AI tool to help write a change, you are still
+responsible for it: you should understand every line you submit and be able
+to explain and justify the change in review. Be especially careful that the
+output is not derived from GNU coreutils or other GPL code - AI assistants
+are trained on GPL sources and can reproduce them verbatim, which this
+project cannot accept. Keep patches small and focused
+so they are easy to review, and self-review the diff carefully before opening
+a pull request - reviewers are there to double-check a human's work, not an
+LLM's output.
 
 ## Git Etiquette
 

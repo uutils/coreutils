@@ -3,7 +3,6 @@ name = "uu_numfmt"
 description = "numfmt ~ (uutils) reformat NUMBER"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/numfmt"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -20,7 +19,12 @@ path = "src/numfmt.rs"
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser", "ranges"] }
+uucore = { workspace = true, features = [
+  "parser",
+  "ranges",
+  "i18n-common",
+  "i18n-decimal",
+] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }

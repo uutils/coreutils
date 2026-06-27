@@ -34,14 +34,14 @@ jobs:
           - { os: macos-latest   , features: "feat_os_unix" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -56,6 +56,18 @@ jobs:
           ubuntu-*)
             # selinux headers needed for testing
             sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev
+            # Locales required by tests/by-util/test_date.rs and
+            # tests/by-util/test_dd.rs (fr_FR is the ISO-8859-1 variant
+            # used by test_iso8859_1_case_conversion).
+            sudo locale-gen --keep-existing fr_FR
+            sudo locale-gen --keep-existing fr_FR.UTF-8
+            sudo locale-gen --keep-existing es_ES.UTF-8
+            sudo locale-gen --keep-existing en_US.UTF-8
+            sudo locale-gen --keep-existing fa_IR.UTF-8 # Iran
+            sudo locale-gen --keep-existing am_ET.UTF-8 # Ethiopia
+            sudo locale-gen --keep-existing th_TH.UTF-8 # Thailand
+            sudo locale-gen --keep-existing hu_HU.UTF-8 # Hungary
+            sudo update-locale
           ;;
           macos-*)
             # needed for testing
@@ -73,7 +85,7 @@ jobs:
     name: L10n/Fluent Syntax Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Setup Python
@@ -125,13 +137,13 @@ jobs:
     name: L10n/Clap Error Localization Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -288,13 +300,13 @@ jobs:
     name: L10n/French Integration Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -399,13 +411,13 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -552,13 +564,13 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -886,13 +898,13 @@ jobs:
     name: L10n/Locale Support Verification
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -1118,13 +1130,13 @@ jobs:
     name: L10n/Embedded Locale Regression Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -1144,7 +1156,7 @@ jobs:
     name: L10n/Locale Embedding - Cat Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1175,7 +1187,7 @@ jobs:
     name: L10n/Locale Embedding - Ls Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1206,7 +1218,7 @@ jobs:
     name: L10n/Locale Embedding - Multicall Binary
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1239,7 +1251,7 @@ jobs:
     name: L10n/Locale Embedding - Cargo Install
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1247,7 +1259,7 @@ jobs:
         key: cargo-install-locale-embedding
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.10
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'

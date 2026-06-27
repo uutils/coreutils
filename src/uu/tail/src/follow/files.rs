@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore tailable seekable stdlib (stdlib)
+// spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::args::Settings;
 use crate::chunks::BytesChunkBuffer;
@@ -147,7 +147,7 @@ impl FileHandling {
             }
 
             let mut writer = BufWriter::new(stdout().lock());
-            chunks.print(&mut writer)?;
+            chunks.write(&mut writer)?;
             writer.flush()?;
 
             self.last.replace(path.to_owned());

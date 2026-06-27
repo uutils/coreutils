@@ -44,7 +44,7 @@ cp-help-one-file-system = rester sur ce système de fichiers
 cp-help-sparse = contrôler la création de fichiers épars. Voir ci-dessous
 cp-help-selinux = définir le contexte de sécurité SELinux du fichier de destination au type par défaut
 cp-help-context = comme -Z, ou si CTX est spécifié, définir le contexte de sécurité SELinux ou SMACK à CTX
-cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalité n'est pas supportée par GNU coreutils.
+cp-help-progress = Afficher une barre de progression. Note : cette fonctionnalité n'est pas prise en charge par GNU coreutils.
 cp-help-copy-contents = Non implémenté : copier le contenu des fichiers spéciaux lors de la récursion
 
 # Messages d'erreur
@@ -78,8 +78,8 @@ cp-error-not-all-files-copied = Tous les fichiers n'ont pas été copiés
 cp-error-reflink-always-sparse-auto = `--reflink=always` ne peut être utilisé qu'avec --sparse=auto
 cp-error-file-exists = { $path } : Le fichier existe
 cp-error-invalid-backup-argument = --backup est mutuellement exclusif avec -n ou --update=none-fail
-cp-error-reflink-not-supported = --reflink n'est supporté que sur linux et macOS
-cp-error-sparse-not-supported = --sparse n'est supporté que sur linux
+cp-error-reflink-not-supported = --reflink n'est pris en charge que sur linux et macOS
+cp-error-sparse-not-supported = --sparse n'est pris en charge que sur linux
 cp-error-not-a-directory = { $path } n'est pas un répertoire
 cp-error-selinux-not-enabled = SELinux n'était pas activé lors de la compilation !
 cp-error-selinux-set-context = échec de la définition du contexte de sécurité de { $path } : { $error }
@@ -98,7 +98,7 @@ cp-error-backup-format = cp : { $error }
 cp-debug-enum-no = non
 cp-debug-enum-yes = oui
 cp-debug-enum-avoided = évité
-cp-debug-enum-unsupported = non supporté
+cp-debug-enum-unsupported = non pris en charge
 cp-debug-enum-unknown = inconnu
 cp-debug-enum-zeros = zéros
 cp-debug-enum-seek-hole = SEEK_HOLE
@@ -108,10 +108,8 @@ cp-debug-enum-seek-hole-zeros = SEEK_HOLE + zéros
 cp-warning-source-specified-more-than-once = { $file_type } source { $source } spécifié plus d'une fois
 
 # Messages verbeux et de débogage
-cp-verbose-copied = { $source } -> { $dest }
 cp-debug-skipped = { $path } ignoré
-cp-verbose-removed = removed { $path }
-cp-verbose-created-directory = { $source } -> { $dest }
+cp-verbose-removed = supprimé { $path }
 cp-debug-copy-offload = copy offload : { $offload }, reflink : { $reflink }, sparse detection : { $sparse }
 
 # Invites

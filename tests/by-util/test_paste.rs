@@ -417,6 +417,7 @@ fn test_data() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("f1", "1\n2\n");
@@ -432,6 +433,7 @@ fn test_non_utf8_delimiter() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_paste_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -448,24 +450,17 @@ fn test_paste_non_utf8_paths() {
 }
 
 #[cfg(target_os = "linux")]
-fn make_broken_pipe() -> std::fs::File {
-    use std::os::unix::io::FromRawFd;
-
-    let mut fds: [libc::c_int; 2] = [0, 0];
-    assert_eq!(
-        unsafe { libc::pipe(fds.as_mut_ptr()) },
-        0,
-        "Failed to create pipe"
-    );
-
+fn make_broken_pipe() -> std::io::PipeWriter {
+    let (read, write) = std::io::pipe().expect("Failed to create pipe");
     // Drop the read end so writes fail with EPIPE.
-    let _ = unsafe { std::fs::File::from_raw_fd(fds[0]) };
-
-    unsafe { std::fs::File::from_raw_fd(fds[1]) }
+    drop(read);
+    // Return the write end of the pipe
+    write
 }
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_write_error_dev_full() {
     use std::fs::File;
 
@@ -482,6 +477,7 @@ fn test_dev_zero_write_error_dev_full() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
 fn test_dev_zero_closed_pipe() {
     new_ucmd!()
         .arg("/dev/zero")

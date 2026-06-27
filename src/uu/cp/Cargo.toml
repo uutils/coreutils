@@ -3,7 +3,6 @@ name = "uu_cp"
 description = "cp ~ (uutils) copy SOURCE to DESTINATION"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/cp"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,12 +16,12 @@ workspace = true
 
 [lib]
 path = "src/cp.rs"
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "buf-copy",
@@ -32,12 +31,17 @@ uucore = { workspace = true, features = [
   "parser",
   "perms",
   "mode",
+  "safe-copy",
   "update-control",
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 exacl = { workspace = true, optional = true }

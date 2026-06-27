@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -15,15 +15,13 @@ use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, Command};
 use ini::Ini;
 use native_int_str::{
-    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation_owned,
+    Convert, NCvt, NativeIntStr, NativeIntString, NativeStr, from_native_int_representation,
+    from_native_int_representation_owned, get_single_native_int_value,
 };
 #[cfg(unix)]
 use nix::libc;
 #[cfg(unix)]
-use nix::sys::signal::{
-    SigHandler::{SigDfl, SigIgn},
-    SigSet, SigmaskHow, Signal, signal, sigprocmask,
-};
+use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
@@ -37,13 +35,18 @@ use std::io;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
+use std::mem::zeroed;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
+use uucore::signals::{
+    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
+    signal_number_upper_bound,
+};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -63,12 +66,10 @@ pub enum EnvError {
     EnvParsingOfVariableMissingClosingBrace(usize),
     #[error("{}", translate!("env-error-missing-variable", "position" => .0))]
     EnvParsingOfMissingVariable(usize),
-    #[error("{}", translate!("env-error-missing-closing-brace-after-value", "position" => .0))]
-    EnvParsingOfVariableMissingClosingBraceAfterValue(usize),
+    #[error("{}", translate!("env-error-only-braced-variable", "position" => .0))]
+    EnvParsingOfVariableOnlyBracedName(usize),
     #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
-    #[error("{}", translate!("env-error-expected-brace-or-colon", "position" => .0, "char" => .1.clone()))]
-    EnvParsingOfVariableExceptedBraceOrColon(usize, String),
     #[error("")]
     EnvReachedEnd,
     #[error("")]
@@ -295,16 +296,18 @@ fn build_signal_request(
 }
 
 #[cfg(unix)]
-fn signal_from_value(sig_value: usize) -> UResult<Signal> {
-    Signal::try_from(sig_value as i32).map_err(|_| {
-        USimpleError::new(
-            125,
-            translate!(
-                "env-error-invalid-signal",
-                "signal" => sig_value.to_string().quote()
-            ),
-        )
-    })
+fn signal_is_valid(sig: usize) -> bool {
+    if Signal::try_from(sig as i32).is_err() {
+        // nix::sys::signal does not know about real-time signals, so check that
+        // ourselves.
+        if let Some((rtmin, rtmax)) = realtime_signal_bounds() {
+            return sig >= rtmin && sig <= rtmax;
+        }
+
+        return false;
+    }
+
+    true
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -319,12 +322,8 @@ fn load_config_file(opts: &mut Options) -> UResult<()> {
             Ini::load_from_file(file)
         };
 
-        let conf = conf.map_err(|e| {
-            USimpleError::new(
-                1,
-                translate!("env-error-config-file", "file" => file.maybe_quote(), "error" => e),
-            )
-        })?;
+        let conf =
+            conf.map_err(|e| USimpleError::new(1, format!("{}: {e}", file.maybe_quote())))?;
 
         for (_, prop) in &conf {
             // ignore all INI section lines (treat them as comments)
@@ -464,39 +463,41 @@ pub fn uu_app() -> Command {
 }
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
-    split_iterator::split(text).map_err(|e| match e {
-        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => USimpleError::new(125, e.to_string()),
-        EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
-            USimpleError::new(125, e.to_string())
+    split_iterator::split(text).map_err(|e| {
+        let var_error = |pos: usize| {
+            // Find the '$' that started this variable reference and format
+            // the error like GNU: "only ${VARNAME} expansion is supported, error at: $..."
+            let dollar = get_single_native_int_value('$');
+            let dollar_pos = text[..pos]
+                .iter()
+                .rposition(|&c| Some(c) == dollar)
+                .unwrap_or(pos);
+            let rest = from_native_int_representation(Cow::Borrowed(&text[dollar_pos..]));
+            USimpleError::new(
+                125,
+                translate!("env-error-only-braced-variable-at", "rest" => rest.to_string_lossy()),
+            )
+        };
+        match e {
+            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+                USimpleError::new(125, e.to_string())
+            }
+            EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+            EnvError::EnvParsingOfVariableMissingClosingBrace(pos)
+            | EnvError::EnvParsingOfMissingVariable(pos)
+            | EnvError::EnvParsingOfVariableOnlyBracedName(pos)
+            | EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => var_error(pos),
+            _ => USimpleError::new(
+                125,
+                translate!("env-error-generic", "error" => format!("{e:?}")),
+            ),
         }
-        EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
-            USimpleError::new(125, e.to_string())
-        }
-        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
-        EnvError::EnvParsingOfVariableMissingClosingBrace(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfMissingVariable(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableMissingClosingBraceAfterValue(pos) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        EnvError::EnvParsingOfVariableExceptedBraceOrColon(pos, _) => USimpleError::new(
-            125,
-            translate!("env-error-variable-name-issue", "position" => pos, "error" => e),
-        ),
-        _ => USimpleError::new(
-            125,
-            translate!("env-error-generic", "error" => format!("{e:?}")),
-        ),
     })
 }
 
@@ -513,12 +514,28 @@ fn check_and_handle_string_args(
     prefix_to_test: &str,
     all_args: &mut Vec<OsString>,
     do_debug_print_args: Option<&Vec<OsString>>,
+    require_non_empty_payload: bool,
+    strip_optional_leading_equals: bool,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
     if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
+        if require_non_empty_payload && remaining_arg.is_empty() {
+            return Ok(false);
+        }
+
         if let Some(input_args) = do_debug_print_args {
             debug_print_args(input_args); // do it here, such that its also printed when we get an error/panic during parsing
         }
+
+        let remaining_arg = if strip_optional_leading_equals {
+            if let Some(stripped_remaining_arg) = remaining_arg.strip_prefix(&*NCvt::convert("=")) {
+                stripped_remaining_arg
+            } else {
+                remaining_arg
+            }
+        } else {
+            remaining_arg
+        };
 
         let arg_strings = parse_args_from_str(remaining_arg)?;
         all_args.extend(
@@ -574,7 +591,12 @@ impl EnvAppData {
             options::UNSET,
         ];
         let short_flags_with_args = ['a', 'C', 'f', 'u'];
+        let mut consumed_split_payload_arg: Option<usize> = None;
         for (n, arg) in original_args.iter().enumerate() {
+            if consumed_split_payload_arg == Some(n) {
+                consumed_split_payload_arg = None;
+                continue;
+            }
             let arg_str = arg.to_string_lossy();
             // Stop processing env flags once we reach the command or -- argument
             if 0 < n
@@ -589,13 +611,21 @@ impl EnvAppData {
             }
             expecting_arg = false;
             match arg {
-                b if check_and_handle_string_args(b, "--split-string", &mut all_args, None)? => {
+                b if check_and_handle_string_args(
+                    b,
+                    "--split-string",
+                    &mut all_args,
+                    None,
+                    true,
+                    true,
+                )? =>
+                {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-S", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-S", &mut all_args, None, true, false)? => {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-vS", &mut all_args, None)? => {
+                b if check_and_handle_string_args(b, "-vS", &mut all_args, None, true, false)? => {
                     self.do_debug_printing = true;
                     self.had_string_argument = true;
                 }
@@ -604,11 +634,38 @@ impl EnvAppData {
                     "-vvS",
                     &mut all_args,
                     Some(original_args),
+                    true,
+                    false,
                 )? =>
                 {
                     self.do_debug_printing = true;
                     self.do_input_debug_printing = Some(false); // already done
                     self.had_string_argument = true;
+                }
+                b if b == "--split-string" || b == "-S" || b == "-vS" || b == "-vvS" => {
+                    let Some(next_arg) = original_args.get(n + 1) else {
+                        all_args.push(arg.clone());
+                        continue;
+                    };
+
+                    if b == "-vS" || b == "-vvS" {
+                        self.do_debug_printing = true;
+                    }
+                    if b == "-vvS" {
+                        debug_print_args(original_args);
+                        self.do_input_debug_printing = Some(false);
+                    }
+
+                    let native_next_arg = NCvt::convert(next_arg);
+                    let arg_strings = parse_args_from_str(native_next_arg.as_ref())?;
+                    all_args.extend(
+                        arg_strings
+                            .into_iter()
+                            .map(from_native_int_representation_owned),
+                    );
+                    self.had_string_argument = true;
+                    expecting_arg = false;
+                    consumed_split_payload_arg = Some(n + 1);
                 }
                 _ => {
                     if let Some(flag) = arg_str.strip_prefix("--") {
@@ -714,8 +771,6 @@ impl EnvAppData {
             &signal_apply_all,
         )?;
 
-        apply_change_directory(&opts)?;
-
         // NOTE: we manually set and unset the env vars below rather than using Command::env() to more
         //       easily handle the case where no command is given
 
@@ -754,6 +809,7 @@ impl EnvAppData {
             }
         }
 
+        apply_change_directory(&opts)?;
         if opts.program.is_empty() {
             // no program provided, so just dump all env vars to stdout
             print_all_env_vars(opts.line_ending)?;
@@ -1076,15 +1132,16 @@ fn apply_signal_action<F>(
     signal_fn: F,
 ) -> UResult<()>
 where
-    F: Fn(Signal) -> UResult<()>,
+    F: Fn(usize) -> UResult<()>,
 {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
-        let Ok(sig) = signal_from_value(sig_value) else {
+        if !signal_is_valid(sig_value) {
             return Ok(());
-        };
-        signal_fn(sig)?;
+        }
+
+        signal_fn(sig_value)?;
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
@@ -1100,9 +1157,14 @@ where
 }
 
 #[cfg(unix)]
-fn ignore_signal(sig: Signal) -> UResult<()> {
+fn ignore_signal(sig: usize) -> UResult<()> {
     // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    let result = unsafe { signal(sig, SigIgn) };
+    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
+    // libc::signal directly.
+    let result = unsafe {
+        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
+        nix::errno::Errno::result(res)
+    };
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
@@ -1113,8 +1175,13 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 }
 
 #[cfg(unix)]
-fn reset_signal(sig: Signal) -> UResult<()> {
-    let result = unsafe { signal(sig, SigDfl) };
+fn reset_signal(sig: usize) -> UResult<()> {
+    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
+    // libc::signal directly.
+    let result = unsafe {
+        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
+        nix::errno::Errno::result(res)
+    };
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
@@ -1125,9 +1192,42 @@ fn reset_signal(sig: Signal) -> UResult<()> {
 }
 
 #[cfg(unix)]
-fn block_signal(sig: Signal) -> UResult<()> {
-    let mut set = SigSet::empty();
-    set.add(sig);
+fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
+    // nix::sys::signal::Signal does not cover real time signals, so we need to build
+    // sigset_t manually using libc.
+    let mut sigset: libc::sigset_t = unsafe { zeroed() };
+
+    if let Err(err) = unsafe { nix::errno::Errno::result(libc::sigemptyset(&raw mut sigset)) } {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => err.desc()
+            ),
+        ));
+    }
+
+    if let Err(err) =
+        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
+    {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => err.desc()
+            ),
+        ));
+    }
+
+    Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
+}
+
+#[cfg(unix)]
+fn block_signal(sig: usize) -> UResult<()> {
+    let set = sigset_from_signal_value(sig)?;
+
     if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
         return Err(USimpleError::new(
             125,
@@ -1152,7 +1252,7 @@ fn list_signal_handling(log: &SignalActionLog) {
             SignalActionKind::Ignore => "IGNORE",
             SignalActionKind::Block => "BLOCK",
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?");
+        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
         eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
     }
 }
@@ -1243,24 +1343,42 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("variable name issue (at 10): Missing closing brace")
+                .contains("only ${VARNAME} expansion is supported, error at: ${FOO")
         );
 
-        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value"));
+        let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value}"));
         assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
                 .to_string()
-                .contains("variable name issue (at 17): Missing closing brace after default value")
+                .contains("only ${VARNAME} expansion is supported")
         );
 
+        let result = parse_args_from_str(&NCvt::convert(r"echo $FOO"));
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
         let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 7): Unexpected character: '1', expected variable name must not start with 0..9"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported, error at: ${1FOO}")
+        );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("variable name issue (at 10): Unexpected character: '?', expected a closing brace ('}') or colon (':')"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("only ${VARNAME} expansion is supported")
+        );
     }
 }

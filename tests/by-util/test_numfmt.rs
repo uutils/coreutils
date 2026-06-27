@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (paths) gnutest ronna quetta
+
+// spell-checker:ignore (paths) gnutest ronna quetta unitless
 
 use uutests::new_ucmd;
 
@@ -11,10 +12,12 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+// This test failed when fixing #11653.
+// Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
 #[test]
 fn test_should_not_round_floats() {
     new_ucmd!()
-        .args(&["0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
+        .args(&["--", "0.99", "1.01", "1.1", "1.22", ".1", "-0.1"])
         .succeeds()
         .stdout_is("0.99\n1.01\n1.1\n1.22\n0.1\n-0.1\n");
 }
@@ -314,6 +317,14 @@ fn test_should_report_invalid_number_with_interior_junk() {
         .pipe_in("1x0K")
         .fails()
         .stderr_is("numfmt: invalid suffix in input: '1x0K'\n");
+}
+
+#[test]
+fn test_should_report_invalid_number_with_sign_after_decimal() {
+    new_ucmd!()
+        .args(&["--", "-0.-1"])
+        .fails_with_code(2)
+        .stderr_is("numfmt: invalid number: '-0.-1'\n");
 }
 
 #[test]
@@ -624,6 +635,16 @@ fn test_round() {
 }
 
 #[test]
+fn test_to_unitless_small_values_use_display_rounding() {
+    new_ucmd!()
+        .args(&[
+            "--to=si", "--", "0.4", "0.5", "0.6", "1.4", "3.14", "-0.4", "-0.5", "-0.6", "-1.4",
+        ])
+        .succeeds()
+        .stdout_only("0\n0\n1\n1\n3\n-0\n-0\n-1\n-1\n");
+}
+
+#[test]
 fn test_round_with_to_unit() {
     for (method, exp) in [
         ("from-zero", ["6", "-6", "5.9", "-5.9", "5.86", "-5.86"]),
@@ -647,6 +668,24 @@ fn test_round_with_to_unit() {
             .succeeds()
             .stdout_only(exp.join("\n") + "\n");
     }
+}
+
+#[test]
+fn test_to_unit_with_unitless_small_value_uses_display_rounding() {
+    new_ucmd!()
+        .args(&["--to=iec", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["--to=si", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("1\n");
+
+    new_ucmd!()
+        .args(&["--to=none", "--to-unit=689", "701"])
+        .succeeds()
+        .stdout_only("2\n");
 }
 
 #[test]
@@ -1015,6 +1054,19 @@ fn test_format_with_precision_and_to_arg() {
 }
 
 #[test]
+fn test_format_with_precision_and_unitless_to_arg() {
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.1f", "3.14"])
+        .succeeds()
+        .stdout_is("4.0\n");
+
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.1f", "--round=down", "3.14"])
+        .succeeds()
+        .stdout_is("3.0\n");
+}
+
+#[test]
 fn test_format_preserve_trailing_zeros_if_no_precision_is_specified() {
     let values = vec!["10.0", "0.0100"];
 
@@ -1106,6 +1158,14 @@ fn test_format_grouping_conflicts_with_to_option() {
 }
 
 #[test]
+fn test_grouping_conflicts_with_format_option() {
+    new_ucmd!()
+        .args(&["--format=%f", "--grouping"])
+        .fails_with_code(1)
+        .stderr_contains("--grouping cannot be combined with --format");
+}
+
+#[test]
 fn test_zero_terminated_command_line_args() {
     new_ucmd!()
         .args(&["--zero-terminated", "--to=si", "1000"])
@@ -1152,6 +1212,7 @@ fn test_zero_terminated_embedded_newline() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_delimiter() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1200,6 +1261,68 @@ fn test_debug_warnings() {
         .succeeds()
         .stdout_is("4.0K\n")
         .stderr_is("numfmt: --header ignored with command-line input\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--debug", "--grouping", "--from=si", "4.0K"])
+        .succeeds()
+        .stdout_is("4000\n")
+        .stderr_is("numfmt: grouping has no effect in this locale\n");
+}
+
+#[test]
+fn test_debug_reports_failed_conversions_summary() {
+    new_ucmd!()
+        .args(&[
+            "--invalid=fail",
+            "--debug",
+            "--to=si",
+            "1000",
+            "Foo",
+            "3000",
+        ])
+        .fails_with_code(2)
+        .stdout_is("1.0k\nFoo\n3.0k\n")
+        .stderr_is(
+            "numfmt: invalid number: 'Foo'\nnumfmt: failed to convert some of the input numbers\n",
+        );
+}
+
+#[test]
+fn test_invalid_fail_with_fields_does_not_duplicate_output() {
+    new_ucmd!()
+        .args(&["--invalid=fail", "--field=2", "--from=si", "--to=iec"])
+        .pipe_in("A 1K x\nB Foo y\nC 3G z\n")
+        .fails_with_code(2)
+        .stdout_is("A 1000 x\nB Foo y\nC 2.8G z\n")
+        .stderr_is("numfmt: invalid number: 'Foo'\n");
+}
+
+#[test]
+fn test_abort_with_fields_preserves_partial_output() {
+    new_ucmd!()
+        .args(&["--field=3", "--from=auto", "Hello 40M World 90G"])
+        .fails_with_code(2)
+        .stdout_is("Hello 40M ")
+        .stderr_is("numfmt: invalid number: 'World'\n");
+}
+
+#[test]
+fn test_rejects_malformed_number_forms() {
+    new_ucmd!()
+        .args(&["--from=si", "12.K"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.K'");
+
+    new_ucmd!()
+        .args(&["--from=si", "--delimiter=,", "12.  2"])
+        .fails_with_code(2)
+        .stderr_contains("invalid number: '12.  2'");
+
+    new_ucmd!()
+        .arg("..1")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input: '..1'");
 }
 
 #[test]
@@ -1238,6 +1361,21 @@ fn test_empty_delimiter_multi_char_unit_separator() {
 }
 
 #[test]
+fn test_whitespace_mode_parses_custom_unit_separator_inputs() {
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=::"])
+        .pipe_in("4::K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+
+    new_ucmd!()
+        .args(&["--from=iec", "--unit-separator=\u{a0}"])
+        .pipe_in("4\u{a0}K\n")
+        .succeeds()
+        .stdout_only("4096\n");
+}
+
+#[test]
 fn test_empty_delimiter_whitespace_rejection() {
     new_ucmd!()
         .args(&["-d", "", "--from=auto", "2  K"])
@@ -1273,6 +1411,98 @@ fn test_null_byte_input_multiline() {
         .stdout_is("1000\n3000");
 }
 
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "-9923868"])
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument");
+}
+
+// https://github.com/uutils/coreutils/issues/11653
+// GNU rejects `-9923868` as an invalid short option (leading `-9`) and
+// requires `--` separator; uutils accepts it as a negative positional number.
+#[test]
+fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
+    new_ucmd!()
+        .args(&["--to=iec", "--", "-9923868"])
+        .succeeds()
+        .stdout_is("-9.5M\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11654
+// uutils parses large integers through f64, losing precision past 2^53.
+#[test]
+fn test_large_integer_precision_loss_issue_11654() {
+    new_ucmd!()
+        .args(&["--from=iec", "9153396227555392131"])
+        .succeeds()
+        .stdout_is("9153396227555392131\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11655
+// uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
+// as "invalid suffix in input".
+#[test]
+fn test_scientific_notation_rejected_by_gnu_issue_11655() {
+    new_ucmd!()
+        .arg("1e9")
+        .fails_with_code(2)
+        .stderr_contains("invalid suffix in input");
+}
+
+#[test]
+fn test_to_auto_rejected_at_parse_time() {
+    new_ucmd!()
+        .args(&["--to=auto", "100"])
+        .fails_with_code(1)
+        .stderr_contains("invalid argument 'auto' for '--to'");
+}
+
+// https://github.com/uutils/coreutils/issues/11663
+// `--from-unit` multiplication with fractional input rounds to an integer;
+// GNU preserves the fractional digits.
+#[test]
+fn test_from_unit_fractional_precision_issue_11663() {
+    new_ucmd!()
+        .args(&["--from=iec", "--from-unit=959", "--", "-615484.454"])
+        .succeeds()
+        .stdout_is("-590249591.386\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11664
+// Zero-padded `--format` places padding zeros before the sign for negative
+// numbers; GNU (and C printf) puts the sign first.
+#[test]
+fn test_zero_pad_sign_order_issue_11664() {
+    new_ucmd!()
+        .args(&["--from=none", "--format=%018.2f", "--", "-9869647"])
+        .succeeds()
+        .stdout_is("-00000009869647.00\n");
+}
+
+#[test]
+fn test_to_unit_prefix_selection() {
+    new_ucmd!()
+        .args(&["--to=iec-i", "--to-unit=885", "100000"])
+        .succeeds()
+        .stdout_is("113\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11667
+// `--format='%.0f'` with `--to=<scale>` still prints one fractional digit;
+// the precision specifier `.0` is ignored.
+#[test]
+fn test_format_precision_zero_with_to_scale_issue_11667() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.0f", "5183776"])
+        .succeeds()
+        .stdout_is("5M\n");
+}
+
 #[test]
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
@@ -1281,4 +1511,142 @@ fn test_invalid_utf8_input() {
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
+}
+
+#[test]
+fn test_format_value_too_large_issue_11936() {
+    // value * 10^precision needing 20+ digits should be rejected
+    let cases = [
+        (vec!["--format=%5.1f", "1000000000000000000"], "1e+18/1"),
+        (vec!["--format=%.2f", "100000000000000000"], "1e+17/2"),
+        (vec!["--format=%.3f", "10000000000000000"], "1e+16/3"),
+    ];
+    for (args, hint) in cases {
+        new_ucmd!()
+            .args(&args)
+            .fails_with_code(2)
+            .stderr_contains("value/precision too large")
+            .stderr_contains(hint);
+    }
+}
+
+#[test]
+fn test_format_value_below_large_threshold_ok() {
+    // one below the cutoff still formats
+    new_ucmd!()
+        .args(&["--format=%5.1f", "999999999999999999"])
+        .succeeds()
+        .stdout_is("999999999999999999.0\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_output() {
+    // Output uses the locale separator
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1,5K\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_input_comma() {
+    // fr_FR should take '1,5' as a number
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1,5"])
+        .succeeds()
+        .stdout_is("1,500\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_fr_rejects_period() {
+    // '.' isn't valid in fr_FR, should bail
+    new_ucmd!()
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args(&["--format=%.3f", "1.5"])
+        .fails()
+        .stderr_contains("invalid");
+}
+
+#[test]
+fn test_locale_c_uses_period() {
+    // C locale should still use '.' as usual
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["--to=iec", "1500"])
+        .succeeds()
+        .stdout_is("1.5K\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11935
+// the rejection path bypasses --invalid=warn/ignore/fail handling
+#[test]
+fn test_ignores_invalid_mode_issue11935() {
+    new_ucmd!()
+        .args(&["--invalid=warn", "100", "1e5", "200"])
+        .succeeds()
+        .stderr_is("numfmt: invalid suffix in input: '1e5'\n")
+        .stdout_is("100\n1e5\n200\n");
+}
+
+#[test]
+fn test_iec_format_precision_cap() {
+    // gnu zero pads after 3 decimals on iec
+    let cases = [
+        ("1500", "1.46500K"),
+        ("999999", "976.56200K"),
+        ("310174", "302.90500K"),
+    ];
+    for (input, expected) in cases {
+        new_ucmd!()
+            .args(&["--to=iec", "--format=%.5f", input])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+}
+
+#[test]
+fn test_si_format_precision_no_cap() {
+    // si shouldn't get the cap, full precision
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.5f", "1234567"])
+        .succeeds()
+        .stdout_is("1.23457M\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11937
+// numfmt: --format width accounting diverges from GNU for multi-byte --suffix
+#[test]
+fn test_multibyte_suffix_issue11937() {
+    new_ucmd!()
+        .args(&["--suffix=€", "--format=%10.2f", "692"])
+        .succeeds()
+        .stdout_is("   692.00€\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.65536f", "1"])
+        .succeeds()
+        .stdout_is("1\n");
+}
+
+#[test]
+fn test_format_precision_too_large_on_zero() {
+    new_ucmd!()
+        .args(&["--format=%.40f", "0"])
+        .fails()
+        .code_is(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
+        );
+    new_ucmd!()
+        .args(&["--format=%.18f", "0"])
+        .succeeds()
+        .stdout_only("0.000000000000000000\n");
 }

@@ -5,7 +5,9 @@
 
 // spell-checker:ignore getloadavg behaviour loadavg uptime upsecs updays upmins uphours boottime nusers utmpxname gettime clockid couldnt
 
-use clap::{Arg, ArgAction, Command, ValueHint, builder::ValueParser};
+use clap::{Arg, ArgAction, Command};
+#[cfg(unix)]
+use clap::{ValueHint, builder::ValueParser};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 #[cfg(unix)]

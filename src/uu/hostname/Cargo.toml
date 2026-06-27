@@ -3,7 +3,6 @@ name = "uu_hostname"
 description = "hostname ~ (uutils) display or set the host name of the current host"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/hostname"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -12,11 +11,16 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
+[package.metadata.cargo-udeps.ignore]
+normal = ["uucore_procs"]
+
 [lints]
 workspace = true
 
 [lib]
 path = "src/hostname.rs"
+test = false
+doctest = false
 
 [dependencies]
 clap = { workspace = true }
@@ -36,9 +40,6 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
-
-[package.metadata.cargo-udeps.ignore]
-normal = ["uucore_procs"]
 
 [[bench]]
 name = "hostname_bench"

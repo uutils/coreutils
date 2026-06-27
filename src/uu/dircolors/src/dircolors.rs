@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) clrtoeol dircolors eightbit endcode fnmatch leftcode multihardlink rightcode setenv sgid suid colorterm disp
+// spell-checker:ignore (ToDO) dircolors eightbit fnmatch setenv colorterm disp cshell
 
 use std::borrow::Borrow;
 use std::env;
@@ -30,28 +30,25 @@ mod options {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-pub enum OutputFmt {
+enum OutputFmt {
     Shell,
     CShell,
     Display,
-    Unknown,
 }
 
-pub fn guess_syntax() -> OutputFmt {
-    match env::var("SHELL") {
-        Ok(ref s) if !s.is_empty() => {
-            let shell_path: &Path = s.as_ref();
-            if let Some(name) = shell_path.file_name() {
-                if name == "csh" || name == "tcsh" {
-                    OutputFmt::CShell
-                } else {
-                    OutputFmt::Shell
-                }
-            } else {
-                OutputFmt::Shell
-            }
-        }
-        _ => OutputFmt::Unknown,
+fn guess_syntax<T: AsRef<Path>>(path: T) -> Option<OutputFmt> {
+    let shell_path = path.as_ref();
+
+    if shell_path.as_os_str().is_empty() {
+        return None;
+    }
+
+    let is_cshell = |name| name == "csh" || name == "tcsh";
+
+    if shell_path.file_name().is_some_and(is_cshell) {
+        Some(OutputFmt::CShell)
+    } else {
+        Some(OutputFmt::Shell)
     }
 }
 
@@ -60,20 +57,18 @@ fn get_colors_format_strings(fmt: &OutputFmt) -> (String, String) {
         OutputFmt::Shell => "LS_COLORS='".to_string(),
         OutputFmt::CShell => "setenv LS_COLORS '".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     let suffix = match fmt {
         OutputFmt::Shell => "';\nexport LS_COLORS".to_string(),
         OutputFmt::CShell => "'".to_string(),
         OutputFmt::Display => String::new(),
-        OutputFmt::Unknown => unreachable!(),
     };
 
     (prefix, suffix)
 }
 
-pub fn generate_type_output(fmt: &OutputFmt) -> String {
+fn generate_type_output(fmt: &OutputFmt) -> String {
     match fmt {
         OutputFmt::Display => FILE_TYPES
             .iter()
@@ -154,86 +149,56 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Ok(());
     }
 
-    let mut out_format = if matches.get_flag(options::C_SHELL) {
+    let out_format = if matches.get_flag(options::C_SHELL) {
         OutputFmt::CShell
     } else if matches.get_flag(options::BOURNE_SHELL) {
         OutputFmt::Shell
     } else if matches.get_flag(options::PRINT_LS_COLORS) {
         OutputFmt::Display
     } else {
-        OutputFmt::Unknown
+        env::var_os("SHELL")
+            .and_then(|path| guess_syntax(&path))
+            .ok_or_else(|| {
+                USimpleError::new(1, translate!("dircolors-error-no-shell-environment"))
+            })?
     };
 
-    if out_format == OutputFmt::Unknown {
-        match guess_syntax() {
-            OutputFmt::Unknown => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("dircolors-error-no-shell-environment"),
-                ));
-            }
-            fmt => out_format = fmt,
-        }
-    }
-
-    let result;
-    if files.is_empty() {
-        writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
-        return Ok(());
-        /*
-        // Check if data is being piped into the program
-        if std::io::stdin().is_terminal() {
-            // No data piped, use default behavior
+    match files.as_slice() {
+        [] => {
             writeln!(stdout(), "{}", generate_ls_colors(&out_format, ":"))?;
-            return Ok(());
-        } else {
-            // Data is piped, process the input from stdin
-            let fin = BufReader::new(std::io::stdin());
-            result = parse(fin.lines().map_while(Result::ok), &out_format, "-");
+            Ok(())
         }
-         */
-    } else if files.len() > 1 {
-        return Err(UUsageError::new(
+        [_file_arg, extra, ..] => Err(UUsageError::new(
             1,
-            translate!("dircolors-error-extra-operand", "operand" => files[1].quote()),
-        ));
-    } else if files[0] == "-" {
-        let fin = BufReader::new(std::io::stdin());
-        // For example, for echo "owt 40;33"|dircolors -b -
-        result = parse(
-            fin.lines().map_while(Result::ok),
-            &out_format,
-            &files[0].to_string_lossy(),
-        );
-    } else {
-        let path = Path::new(&files[0]);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
-            ));
-        }
-        match File::open(path) {
-            Ok(f) => {
-                let fin = BufReader::new(f);
-                result = parse(
+            translate!("dircolors-error-extra-operand", "operand" => extra.quote()),
+        )),
+        [file_arg] => {
+            let result = if *file_arg == "-" {
+                let fin = BufReader::new(std::io::stdin());
+                // For example, for echo "owt 40;33"|dircolors -b -
+                parse(fin.lines().map_while(Result::ok), &out_format, "-")
+            } else {
+                let path = Path::new(&file_arg);
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        2,
+                        translate!("dircolors-error-expected-file-got-directory", "path" => path.quote()),
+                    ));
+                }
+                let file = File::open(path)
+                    .map_err(|e| USimpleError::new(1, format!("{}: {e}", path.maybe_quote())))?;
+                let fin = BufReader::new(file);
+                parse(
                     fin.lines().map_while(Result::ok),
                     &out_format,
                     &path.to_string_lossy(),
-                );
-            }
-            Err(e) => {
-                return Err(USimpleError::new(1, format!("{}: {e}", path.maybe_quote())));
-            }
-        }
-    }
+                )
+            };
 
-    match result {
-        Ok(s) => {
-            writeln!(stdout(), "{s}")?;
+            let string = result.map_err(|s| USimpleError::new(1, s))?;
+            writeln!(stdout(), "{string}")?;
             Ok(())
         }
-        Err(s) => Err(USimpleError::new(1, s)),
     }
 }
 
@@ -335,7 +300,8 @@ impl StrUtils for str {
     }
 
     fn fnmatch(&self, pat: &str) -> bool {
-        parse_glob::from_str(pat).unwrap().matches(self)
+        // An invalid glob never matches (GNU ignores it); don't unwrap the Err.
+        parse_glob::from_str(pat).is_ok_and(|glob| glob.matches(self))
     }
 }
 
@@ -364,7 +330,7 @@ where
     let mut state = ParseState::Global;
     let mut saw_colorterm_match = false;
 
-    for (num, line) in (1..).zip(user_input.into_iter()) {
+    for (num, line) in (1..).zip(user_input) {
         let line = line.borrow().purify();
         if line.is_empty() {
             continue;
@@ -485,7 +451,7 @@ fn escape(s: &str) -> String {
     result
 }
 
-pub fn generate_dircolors_config() -> String {
+fn generate_dircolors_config() -> String {
     let mut config = String::new();
 
     config.push_str(
@@ -539,7 +505,7 @@ pub fn generate_dircolors_config() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::escape;
+    use super::*;
 
     #[test]
     fn test_escape() {
@@ -547,5 +513,16 @@ mod tests {
         assert_eq!("'\\''", escape("'"));
         assert_eq!("\\:", escape(":"));
         assert_eq!("\\:", escape("\\:"));
+    }
+
+    #[test]
+    fn test_guess_syntax() {
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("/path/csh"));
+        assert_eq!(Some(OutputFmt::CShell), guess_syntax("csh"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/path/bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("bash"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("/asd/bar"));
+        assert_eq!(Some(OutputFmt::Shell), guess_syntax("foo"));
+        assert_eq!(None, guess_syntax(""));
     }
 }
