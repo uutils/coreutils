@@ -526,6 +526,29 @@ fn test_zero_head_count_file_touch_output_positive_existing() {
 }
 
 #[test]
+fn test_output_not_truncated_when_input_missing() {
+    // A failure to read the input must leave an existing -o file untouched
+    // instead of truncating it first (data-loss regression, GHSA-5g6r-45q4-3p5r).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    ucmd.args(&["-o", "out", "does-not-exist"])
+        .fails_with_code(1)
+        .stderr_contains("does-not-exist");
+    assert_eq!(at.read("out"), "keep me\n");
+}
+
+#[test]
+fn test_output_not_truncated_when_random_source_missing() {
+    // Same guarantee when the random source can't be opened.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    at.write("in", "a\nb\nc\n");
+    ucmd.args(&["-o", "out", "--random-source=does-not-exist", "in"])
+        .fails_with_code(1);
+    assert_eq!(at.read("out"), "keep me\n");
+}
+
+#[test]
 fn test_zero_head_count_echo() {
     new_ucmd!()
         .arg("-n0")
