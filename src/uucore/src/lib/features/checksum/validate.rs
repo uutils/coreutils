@@ -833,9 +833,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let Some(line_info) = LineInfo::parse(line, cached_line_format) else {
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_info =
+        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
