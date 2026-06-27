@@ -285,6 +285,8 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             ));
         }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file_buf, 0, None, rustix::fs::Advice::Sequential);
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }

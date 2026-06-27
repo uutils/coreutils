@@ -302,6 +302,8 @@ fn open(path: &OsString) -> UResult<BufReader<Input>> {
         Ok(BufReader::new(Input::Stdin(stdin())))
     } else {
         let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(BufReader::new(Input::File(f)))
     }
 }
