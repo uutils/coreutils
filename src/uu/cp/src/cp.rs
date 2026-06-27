@@ -841,7 +841,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             // Else we caught a fatal bubbled-up error, log it to stderr
 
-            if let CpError::IoErr(ref error) = error {
+            if let CpError::IoErr(error) = error {
                 if error.kind() == io::ErrorKind::NotFound {
                     show_error!(
                         "{}",
