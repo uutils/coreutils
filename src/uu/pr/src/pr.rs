@@ -1357,24 +1357,20 @@ fn write_columns(
     for row in table {
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
-            if cell.is_none() && options.merge_files_print.is_some() {
-                write_offset_spaces(out, options.offset_spaces)?;
-                out.write_all(
-                    get_line_for_printing(options, &blank_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
-            } else if cell.is_none() {
-                not_found_break = true;
-                break;
-            } else if cell.is_some() {
-                let file_line = cell.unwrap();
+            let line_to_print = match cell {
+                None if options.merge_files_print.is_some() => &blank_line,
+                None => {
+                    not_found_break = true;
+                    break;
+                }
+                Some(file_line) => file_line,
+            };
 
-                write_offset_spaces(out, options.offset_spaces)?;
-                out.write_all(
-                    get_line_for_printing(options, file_line, columns, i, line_width, indexes)
-                        .as_bytes(),
-                )?;
-            }
+            write_offset_spaces(out, options.offset_spaces)?;
+            out.write_all(
+                get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
+                    .as_bytes(),
+            )?;
         }
         if not_found_break && feed_line_present {
             break;
