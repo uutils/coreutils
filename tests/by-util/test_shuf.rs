@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable
+// spell-checker:ignore (ToDO) unwritable GHSA
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;
