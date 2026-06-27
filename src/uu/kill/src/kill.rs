@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) signalname pids killpg
+// spell-checker:ignore (ToDO) signalname pids killpg NOPESIG
 
 use clap::{Arg, ArgAction, Command};
 use rustix::process::{
@@ -44,7 +44,7 @@ pub enum Mode {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_ignore();
-    let obs_signal = handle_obsolete(&mut args);
+    let obs_signal = handle_obsolete(&mut args)?;
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -130,7 +130,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
+fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
     // Sanity check - need at least the program name and one argument
     if args.len() >= 2 {
         // Old signal can only be in the first argument position
@@ -138,18 +138,30 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         if let Some(signal) = slice.strip_prefix('-') {
             // With '-', a signal name must start with an uppercase char
             if signal.chars().next().is_some_and(char::is_lowercase) {
-                return None;
+                return Ok(None);
             }
             // Check if it is a valid signal
-            let opt_signal = signal_by_name_or_value(signal);
-            if opt_signal.is_some() {
+            if let Some(signal_value) = signal_by_name_or_value(signal) {
                 // remove the signal before return
                 args.remove(1);
-                return opt_signal;
+                return Ok(Some(signal_value));
+            }
+            // Not a known signal. If the argument still looks like an obsolete
+            // signal specification (a number, or a multi-character uppercase
+            // name), reject it like GNU instead of letting it fall through to
+            // be parsed as a negative PID and silently signalled with SIGTERM.
+            let first = signal.chars().next();
+            let looks_like_signal = first.is_some_and(|c| c.is_ascii_digit())
+                || (signal.len() > 1 && first.is_some_and(|c| c.is_ascii_uppercase()));
+            if looks_like_signal {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("kill-error-invalid-signal", "signal" => signal.quote()),
+                ));
             }
         }
     }
-    None
+    Ok(None)
 }
 
 fn table() {
@@ -298,5 +310,40 @@ fn kill(sig: usize, pids: &[i32]) {
         if let Err(e) = result {
             show!(e.map_err_context(|| translate!("kill-error-sending-signal", "pid" => pid)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle_obsolete;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn test_handle_obsolete() {
+        // A valid obsolete signal (name or number) is consumed; SIGKILL is 9
+        // on every supported platform.
+        let mut a = args(&["kill", "-KILL", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), Some(9));
+        assert_eq!(a, args(&["kill", "123"]));
+
+        let mut a = args(&["kill", "-9", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), Some(9));
+        assert_eq!(a, args(&["kill", "123"]));
+
+        // Things that look like a signal but aren't must error, not fall
+        // through to be read as a negative PID and signalled with SIGTERM.
+        assert!(handle_obsolete(&mut args(&["kill", "-65", "123"])).is_err());
+        assert!(handle_obsolete(&mut args(&["kill", "-NOPESIG", "123"])).is_err());
+
+        // A lowercase leading char is never an obsolete signal; leave args as-is.
+        let mut a = args(&["kill", "-foo", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), None);
+        assert_eq!(a, args(&["kill", "-foo", "123"]));
+
+        // Not enough arguments to carry an obsolete signal.
+        assert_eq!(handle_obsolete(&mut args(&["kill"])).unwrap(), None);
     }
 }

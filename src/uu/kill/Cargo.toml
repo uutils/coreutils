@@ -16,7 +16,6 @@ workspace = true
 
 [lib]
 path = "src/kill.rs"
-test = false
 doctest = false
 
 [dependencies]
