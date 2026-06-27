@@ -73,21 +73,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
-                Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
-            } else {
-                kill(sig, &pids);
-                Ok(())
+                return Err(USimpleError::new(1, translate!("kill-error-no-process-id")));
             }
+
+            kill(sig, &pids);
         }
-        Mode::Table => {
-            table();
-            Ok(())
-        }
-        Mode::List => {
-            list(&pids_or_signals);
-            Ok(())
-        }
+        Mode::Table => table(),
+        Mode::List => list(&pids_or_signals),
     }
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
