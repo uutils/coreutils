@@ -186,11 +186,12 @@ impl Options {
 
         let iflag = matches.get_flag(options::INITIAL);
         let utf8 = !matches.get_flag(options::NO_UTF8);
-
-        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
-            Some(s) => s.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
@@ -268,11 +269,12 @@ pub fn uu_app() -> Command {
             .action(ArgAction::Append)
             .hide(true)
             .value_hint(clap::ValueHint::FilePath)
+            .default_value("-")
             .value_parser(clap::value_parser!(OsString)),
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
