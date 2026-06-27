@@ -26,12 +26,9 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin}
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::translate;
-
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
-
-use uucore::uio_error;
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -1339,32 +1336,16 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            // todo: distinct read error and write error
+            io::copy(&mut reader, &mut writer)?;
+            Ok(())
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            // todo: distinct read error and write error
+            io::copy(&mut reader, &mut writer)?;
+            Ok(())
         }
         Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
-    }
-}
-
-fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
-    match io::copy(reader, writer) {
-        Ok(_) => Ok(()),
-        // TODO Since the writer object controls the creation of
-        // new files, we need to rely on the `io::Result`
-        // returned by its `write()` method to communicate any
-        // errors to this calling scope. If a new file cannot be
-        // created because we have exceeded the number of
-        // allowable filenames, we use `ErrorKind::Other` to
-        // indicate that. A special error message needs to be
-        // printed in that case.
-        Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-        Err(e) => Err(uio_error!(
-            e,
-            "{}",
-            translate!("split-error-input-output-error")
-        )),
     }
 }
