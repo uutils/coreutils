@@ -27,7 +27,7 @@ jobs:
         job:
           - { os: windows-latest, distribution: Ubuntu-24.04, features: feat_os_unix}
     steps:
-    - uses: actions/checkout@1044a6dea927916f2c38ba5aeffbc0a847b1221a
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       with:
         persist-credentials: false
     - name: Install WSL2
