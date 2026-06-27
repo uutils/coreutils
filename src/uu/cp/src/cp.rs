@@ -858,7 +858,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-
 impl ClobberMode {
     fn from_matches(matches: &ArgMatches) -> Self {
         if matches.get_flag(options::FORCE) {
