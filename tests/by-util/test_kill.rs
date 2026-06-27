@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX GHSA
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -228,6 +228,25 @@ fn test_kill_set_bad_signal_name() {
         .arg("IAMNOTASIGNAL")
         .fails()
         .stderr_contains("'IAMNOTASIGNAL': invalid signal");
+}
+
+#[test]
+fn test_kill_out_of_range_signal_is_rejected_not_sent() {
+    // An out-of-range signal number must be rejected up front (like GNU), not
+    // fall through to be parsed as a negative PID and signalled with the
+    // default SIGTERM. Regression for GHSA-3jmh-xh36-pj6v.
+    for bad in ["-65", "-129"] {
+        let mut target = Target::new();
+        new_ucmd!()
+            .arg(bad)
+            .arg(format!("{}", target.pid()))
+            .fails_with_code(1)
+            .stderr_contains("invalid signal");
+        // The target must have survived: kill it for real and confirm it was
+        // the SIGKILL we just sent, not an earlier stray SIGTERM.
+        target.child.kill().expect("cannot kill surviving target");
+        assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    }
 }
 
 #[test]
