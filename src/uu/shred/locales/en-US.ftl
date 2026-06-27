@@ -45,6 +45,7 @@ shred-no-such-file-or-directory = {$file}: No such file or directory
 shred-failed-to-open-for-writing-not-a-directory = {$file}: failed to open for writing: Not a directory
 shred-failed-to-open-for-writing-is-a-directory = {$file}: failed to open for writing: Is a directory
 shred-not-a-file = {$file}: Not a file
+shred-invalid-file-type = {$file}: invalid file type
 
 # Option help text
 shred-force-help = change permissions to allow writing if necessary
@@ -66,7 +67,9 @@ shred-pass-progress = {$file}: pass
 shred-couldnt-rename = {$file}: Couldn't rename to {$new_name}: {$error}
 shred-failed-to-open-for-writing = {$file}: failed to open for writing
 shred-file-write-pass-failed = {$file}: File write pass failed
+shred-failed-to-close-file = {$file}: failed to close file
 shred-failed-to-remove-file = {$file}: failed to remove file
+shred-failed-to-truncate-file = {$file}: failed to truncate file
 
 # File I/O error messages
 shred-failed-to-clone-file-handle = failed to clone file handle
