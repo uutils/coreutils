@@ -94,7 +94,7 @@ impl Range {
     /// Merge any overlapping ranges. Adjacent ranges are *NOT* merged.
     ///
     /// Is guaranteed to return only disjoint ranges in a sorted order.
-    fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
+    pub fn merge(mut ranges: Vec<Self>) -> Vec<Self> {
         ranges.sort();
 
         // merge overlapping ranges

@@ -12,7 +12,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
@@ -62,12 +62,127 @@ impl<'a> From<&'a OsString> for Delimiter<'a> {
     }
 }
 
-fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
-    if complement {
-        Range::from_list(list).map(|r| uucore::ranges::complement(&r))
-    } else {
-        Range::from_list(list)
+/// GNU's range-list diagnostics, worded for field mode (`-f`/`-F`) or for
+/// byte/character mode (`-b`/`-c`).
+struct RangeErrors {
+    numbered_from_1: &'static str,
+    invalid_range: &'static str,
+    invalid_value: &'static str,
+    too_large: &'static str,
+}
+
+const FIELD_ERRORS: RangeErrors = RangeErrors {
+    numbered_from_1: "cut-error-field-numbered-from-1",
+    invalid_range: "cut-error-invalid-field-range",
+    invalid_value: "cut-error-invalid-field-value",
+    too_large: "cut-error-field-number-too-large",
+};
+
+const POSITION_ERRORS: RangeErrors = RangeErrors {
+    numbered_from_1: "cut-error-position-numbered-from-1",
+    invalid_range: "cut-error-invalid-position-range",
+    invalid_value: "cut-error-invalid-position-value",
+    too_large: "cut-error-position-too-large",
+};
+
+/// Fill in a message that names the offending text. Quoting it also keeps the
+/// number away from Fluent's numeric formatting.
+fn about(key: &str, text: &str) -> String {
+    translate!(key, "value" => text.quote())
+}
+
+/// Split the leading run of ASCII digits off `s`, returning it along with the
+/// rest of `s`. The run is empty when `s` does not start with a digit.
+fn split_digits(s: &str) -> (&str, &str) {
+    s.split_at(s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len()))
+}
+
+/// Parse one endpoint of a range, `default` standing in for an omitted one.
+/// GNU rejects `usize::MAX` itself, so the highest value taken is `MAX - 1`.
+fn parse_endpoint(digits: &str, default: usize, errors: &RangeErrors) -> Result<usize, String> {
+    if digits.is_empty() {
+        return Ok(default);
     }
+    match digits.parse::<usize>() {
+        Ok(n) if n != usize::MAX => Ok(n),
+        _ => Err(about(errors.too_large, digits)),
+    }
+}
+
+/// Parse a single `N`, `N-`, `-N` or `N-M` item into a range.
+fn parse_range(item: &str, errors: &RangeErrors) -> Result<Range, String> {
+    let (low_digits, rest) = split_digits(item);
+    // GNU reports everything it could not consume, not just the first byte.
+    if low_digits.is_empty() && !rest.starts_with('-') {
+        return Err(about(errors.invalid_value, item));
+    }
+    let Some(high_part) = rest.strip_prefix('-') else {
+        // No dash at all: a lone number, or trailing junk after it.
+        if !rest.is_empty() {
+            return Err(about(errors.invalid_value, rest));
+        }
+        let n = parse_endpoint(low_digits, 0, errors)?;
+        return Ok(Range { low: n, high: n });
+    };
+
+    let (high_digits, tail) = split_digits(high_part);
+    if !tail.is_empty() {
+        // A second dash makes the item a malformed range, anything else a bad
+        // value.
+        return Err(if tail.starts_with('-') {
+            translate!(errors.invalid_range)
+        } else {
+            about(errors.invalid_value, tail)
+        });
+    }
+    if low_digits.is_empty() && high_digits.is_empty() {
+        return Err(translate!("cut-error-invalid-range-no-endpoint", "range" => item));
+    }
+
+    let low = parse_endpoint(low_digits, 1, errors)?;
+    let high = parse_endpoint(high_digits, usize::MAX - 1, errors)?;
+    if low > high {
+        return Err(translate!("cut-error-invalid-decreasing-range"));
+    }
+    Ok(Range { low, high })
+}
+
+/// Parse a range list, reporting GNU's exact diagnostics.
+///
+/// GNU distinguishes its messages by mode and by the kind of problem, which the
+/// shared [`Range::from_list`] parser does not, so the list is parsed here and
+/// the resulting ranges are merged directly.
+fn parse_range_list(list: &str, is_field: bool) -> Result<Vec<Range>, String> {
+    let errors = if is_field {
+        &FIELD_ERRORS
+    } else {
+        &POSITION_ERRORS
+    };
+    let mut ranges = Vec::new();
+
+    for item in list.split([',', ' ']) {
+        // A stray separator leaves an empty item, which GNU reads as position
+        // zero -- the same complaint as an explicit `0`.
+        if item.is_empty() {
+            return Err(translate!(errors.numbered_from_1));
+        }
+        let range = parse_range(item, errors)?;
+        if range.low == 0 {
+            return Err(translate!(errors.numbered_from_1));
+        }
+        ranges.push(range);
+    }
+
+    Ok(Range::merge(ranges))
+}
+
+fn list_to_ranges(list: &str, complement: bool, is_field: bool) -> Result<Vec<Range>, String> {
+    let ranges = parse_range_list(list, is_field)?;
+    Ok(if complement {
+        uucore::ranges::complement(&ranges)
+    } else {
+        ranges
+    })
 }
 
 /// Write the parts of `line` selected by `ranges`, treating every byte as a
@@ -683,7 +798,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
-            return Err(USimpleError::new(
+            return Err(UUsageError::new(
                 1,
                 translate!("cut-error-delimiter-and-whitespace-conflict"),
             ));
@@ -700,7 +815,7 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
                 let single_utf8_char = os_string.to_str().is_some_and(|s| s.chars().count() == 1);
                 let single_locale_char = mb_char_len(bytes) == bytes.len();
                 if !single_utf8_char && !single_locale_char {
-                    return Err(USimpleError::new(
+                    return Err(UUsageError::new(
                         1,
                         translate!("cut-error-delimiter-must-be-single-character"),
                     ));
@@ -769,7 +884,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let list = matches
         .get_one::<String>(mode_arg)
         .expect("should be ensured by get_mode_arg");
-    let ranges = list_to_ranges(list, complement).map_err(|e| USimpleError::new(1, e))?;
+    let ranges = list_to_ranges(list, complement, mode_arg == options::FIELDS)
+        .map_err(|e| UUsageError::new(1, e))?;
 
     let mode = match mode_arg {
         options::BYTES => Mode::Bytes(
@@ -829,13 +945,13 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
     let mode_arg = match mode_args_and_counts.as_slice() {
         [(arg, 1)] => *arg,
         [] => {
-            return Err(USimpleError::new(
+            return Err(UUsageError::new(
                 1,
                 translate!("cut-error-missing-mode-arg"),
             ));
         }
         _ => {
-            return Err(USimpleError::new(
+            return Err(UUsageError::new(
                 1,
                 translate!("cut-error-multiple-mode-args"),
             ));
@@ -849,8 +965,9 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
                 "cut-error-delimiter-only-with-fields",
             ),
             (
+                // GNU words `-w` as a delimiter too, so it shares the message.
                 matches.get_flag(options::WHITESPACE_DELIMITED),
-                "cut-error-whitespace-only-with-fields",
+                "cut-error-delimiter-only-with-fields",
             ),
             (
                 matches.get_flag(options::ONLY_DELIMITED),
@@ -860,7 +977,7 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
 
         for (is_triggered, msg_key) in checks {
             if is_triggered {
-                return Err(USimpleError::new(1, translate!(msg_key)));
+                return Err(UUsageError::new(1, translate!(msg_key)));
             }
         }
     }
