@@ -184,6 +184,14 @@ fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
                     quoted.push_str("\\\\");
                 } else if c.is_ascii() && c.is_control() {
                     push_basic_escape(&mut quoted, c as u8);
+                } else if c.is_control() {
+                    // Non-ASCII control characters (the C1 range, e.g.
+                    // U+0085 NEL) are not printable; octal-escape their
+                    // UTF-8 bytes like GNU does for non-printable chars.
+                    let mut buf = [0u8; 4];
+                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
+                        let _ = write!(quoted, "\\{byte:03o}");
+                    }
                 } else {
                     quoted.push(c);
                 }

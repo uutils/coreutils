@@ -2794,6 +2794,7 @@ mod quoting {
             at.touch("it's");
             at.touch("say \"hi\"");
             at.touch("tab\there");
+            at.touch("nel\u{0085}here");
 
             let out = ucmd
                 .env("LC_ALL", "en_US.UTF-8")
@@ -2819,6 +2820,11 @@ mod quoting {
             assert!(
                 out.contains(&format!("{lq}tab\\there{rq}")),
                 "{style}: tab should be escaped as \\t: {out:?}"
+            );
+            // Non-ASCII (C1) control characters are octal-escaped by byte.
+            assert!(
+                out.contains(&format!("{lq}nel\\302\\205here{rq}")),
+                "{style}: U+0085 should be octal-escaped: {out:?}"
             );
         }
 
