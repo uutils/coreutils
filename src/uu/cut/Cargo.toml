@@ -20,7 +20,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["ranges"] }
+uucore = { workspace = true, features = ["ranges", "i18n-charmap"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
 fluent = { workspace = true }

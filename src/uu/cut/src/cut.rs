@@ -13,6 +13,7 @@ use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, std
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
+use uucore::i18n::charmap::mb_char_len;
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 
@@ -29,6 +30,8 @@ struct Options<'a> {
     out_delimiter: Option<&'a [u8]>,
     line_ending: LineEnding,
     field_opts: Option<FieldOptions<'a>>,
+    /// `-n`: in byte mode, do not split multi-byte characters.
+    byte_no_split: bool,
 }
 
 enum Delimiter<'a> {
@@ -92,6 +95,107 @@ fn cut_bytes<R: Read, W: Write>(
             let low = low - 1;
             let high = high.min(line.len());
             out.write_all(&line[low..high])?;
+        }
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Fill `spans` with the byte spans `[start, end)` of `line`'s characters, using
+/// the current locale's encoding. Invalid/incomplete sequences count as one
+/// byte. `spans` is cleared first; its capacity is reused across calls.
+fn char_spans_into(line: &[u8], spans: &mut Vec<(usize, usize)>) {
+    spans.clear();
+    let mut i = 0;
+    while i < line.len() {
+        let len = mb_char_len(&line[i..]).clamp(1, line.len() - i);
+        spans.push((i, i + len));
+        i += len;
+    }
+}
+
+/// Character mode (`-c`): ranges index whole (possibly multi-byte) characters.
+fn cut_characters<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
+    let newline_char = opts.line_ending.into();
+    let mut buf_in = BufReader::new(reader);
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+
+    let result = buf_in.for_byte_record(newline_char, |line| {
+        char_spans_into(line, &mut spans);
+        let mut print_delim = false;
+        for &Range { low, high } in ranges {
+            if low > spans.len() {
+                break;
+            }
+            if print_delim {
+                out.write_all(out_delim)?;
+            } else if opts.out_delimiter.is_some() {
+                print_delim = true;
+            }
+            let high = high.min(spans.len());
+            out.write_all(&line[spans[low - 1].0..spans[high - 1].1])?;
+        }
+        out.write_all(&[newline_char])?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+
+    Ok(())
+}
+
+/// Byte mode with `-n`: ranges index bytes, but a multi-byte character is
+/// emitted in full when (and only when) the range includes its last byte.
+fn cut_bytes_no_split<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    opts: &Options,
+) -> UResult<()> {
+    let newline_char = opts.line_ending.into();
+    let mut buf_in = BufReader::new(reader);
+    let out_delim = opts.out_delimiter.unwrap_or(b"\t");
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+
+    let result = buf_in.for_byte_record(newline_char, |line| {
+        char_spans_into(line, &mut spans);
+        let mut print_delim = false;
+        for &Range { low, high } in ranges {
+            if low > line.len() {
+                break;
+            }
+            let high = high.min(line.len());
+            // A character's last byte is at 1-based position `end` (exclusive 0-based end).
+            // Emit the output delimiter lazily, only once this range has actually
+            // selected a character, so a range that matches nothing adds no delimiter.
+            let mut range_emitted = false;
+            for &(start, end) in &spans {
+                if end >= low && end <= high {
+                    if !range_emitted {
+                        if print_delim {
+                            out.write_all(out_delim)?;
+                        } else if opts.out_delimiter.is_some() {
+                            print_delim = true;
+                        }
+                        range_emitted = true;
+                    }
+                    out.write_all(&line[start..end])?;
+                }
+            }
         }
         out.write_all(&[newline_char])?;
         Ok(true)
@@ -458,8 +562,10 @@ where
             }
 
             show_if_err!(match mode {
+                Mode::Bytes(ranges, opts) if opts.byte_no_split =>
+                    cut_bytes_no_split(stdin(), &mut out, ranges, opts),
                 Mode::Bytes(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
-                Mode::Characters(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Characters(ranges, opts) => cut_characters(stdin(), &mut out, ranges, opts),
                 Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
             });
 
@@ -482,8 +588,12 @@ where
                     .map_err_context(|| filename.maybe_quote().to_string())
                     .and_then(|file| {
                         match &mode {
-                            Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) => {
-                                cut_bytes(file, &mut out, ranges, opts)
+                            Mode::Bytes(ranges, opts) if opts.byte_no_split => {
+                                cut_bytes_no_split(file, &mut out, ranges, opts)
+                            }
+                            Mode::Bytes(ranges, opts) => cut_bytes(file, &mut out, ranges, opts),
+                            Mode::Characters(ranges, opts) => {
+                                cut_characters(file, &mut out, ranges, opts)
                             }
                             Mode::Fields(ranges, opts) => cut_fields(file, &mut out, ranges, opts),
                         }
@@ -514,12 +624,16 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
-                // For delimiter `-d` option value - allow both UTF-8 (possibly multi-byte) characters
-                // and Non UTF-8 (and not ASCII) single byte "characters", like `b"\xAD"` to align with GNU behavior
+                // For delimiter `-d` option value - allow a single character: a UTF-8
+                // character in a UTF-8 locale, or a single (possibly multi-byte)
+                // character of the current locale's encoding, e.g. a 2-byte GB18030
+                // character or any single byte like `b"\xAD"`, to align with GNU.
                 let bytes = os_str_as_bytes(os_string)?;
-                if os_string.to_str().is_some_and(|s| s.chars().count() > 1)
-                    || os_string.to_str().is_none() && bytes.len() > 1
-                {
+                let is_single_char = match os_string.to_str() {
+                    Some(s) => s.chars().count() == 1,
+                    None => mb_char_len(bytes) == bytes.len(),
+                };
+                if !is_single_char {
                     return Err(USimpleError::new(
                         1,
                         translate!("cut-error-delimiter-must-be-single-character"),
@@ -583,6 +697,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
+    // `-n`: only meaningful with `-b`; keeps multi-byte characters intact.
+    let byte_no_split = matches.get_flag(options::NOTHING);
 
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
     // is expected. The number of those arguments is used for parsing a cutting
@@ -610,6 +726,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         out_delimiter,
                         line_ending,
                         field_opts: None,
+                        byte_no_split,
                     },
                 )
             })
@@ -623,6 +740,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         out_delimiter,
                         line_ending,
                         field_opts: None,
+                        byte_no_split,
                     },
                 )
             })
@@ -639,6 +757,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                             delimiter,
                             only_delimited,
                         }),
+                        byte_no_split,
                     },
                 )
             })
@@ -776,7 +895,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::NOTHING)
                 .short('n')
-                .help("(ignored)")
+                .help(translate!("cut-help-no-split-multibyte"))
                 .action(ArgAction::SetTrue),
         )
 }
