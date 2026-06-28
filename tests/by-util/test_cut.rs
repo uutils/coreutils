@@ -45,14 +45,85 @@ const COMPLEX_SEQUENCE: &str = "9-,6-7,-2,4";
 
 #[test]
 fn test_no_args() {
-    new_ucmd!().fails().stderr_is(
-        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
-    );
+    new_ucmd!()
+        .fails()
+        .stderr_contains("cut: you must specify a list of bytes, characters, or fields");
 }
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_range_error_messages() {
+    // Mode-aware diagnostics for invalid ranges.
+    let cases: &[(&[&str], &str)] = &[
+        (
+            &["-c0"],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (
+            &["-b0-7"],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (&["-f0-9"], "cut: fields are numbered from 1"),
+        (&["-f", ""], "cut: fields are numbered from 1"),
+        (
+            &["-c", ""],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (&["-f", "q"], "cut: invalid field value 'q'"),
+        (&["-c", "zz"], "cut: invalid byte/character position 'zz'"),
+        (&["-f", "9-4"], "cut: invalid decreasing range"),
+        (&["-c", "-"], "cut: invalid range with no endpoint: -"),
+        (&["-f", "8,-"], "cut: invalid range with no endpoint: -"),
+        // The offending text is what could not be consumed, not the whole item.
+        (&["-f", "7k"], "cut: invalid field value 'k'"),
+        (&["-f", "4-w2"], "cut: invalid field value 'w2'"),
+        (
+            &["-c", "3x-5"],
+            "cut: invalid byte/character position 'x-5'",
+        ),
+        // A leading sign is not part of a number here.
+        (&["-f", "+6"], "cut: invalid field value '+6'"),
+        // A second dash makes it a malformed range instead.
+        (&["-f", "2-5-8"], "cut: invalid field range"),
+        (&["-c", "3--6"], "cut: invalid byte or character range"),
+        // `usize::MAX` itself is rejected, and so is anything above it.
+        (
+            &["-f", "18446744073709551615"],
+            "cut: field number '18446744073709551615' is too large",
+        ),
+        (
+            &["-c", "4-77777777777777777777777"],
+            "cut: byte/character offset '77777777777777777777777' is too large",
+        ),
+    ];
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .stderr_contains(*expected);
+    }
+}
+
+#[test]
+fn test_field_only_options_without_fields() {
+    new_ucmd!()
+        .args(&["-s", "-c7"])
+        .fails_with_code(1)
+        .stderr_contains(
+            "cut: suppressing non-delimited lines makes sense\n\tonly when operating on fields",
+        );
+}
+
+#[test]
+fn test_delimiter_and_whitespace_are_exclusive() {
+    new_ucmd!()
+        .args(&["-w", "-d,", "-f3"])
+        .fails_with_code(1)
+        .stderr_contains("cut: -d and -w are mutually exclusive");
 }
 
 #[test]
@@ -109,16 +180,19 @@ fn test_whitespace_with_explicit_delimiter() {
 
 #[test]
 fn test_whitespace_with_byte() {
+    // `-w` counts as an input delimiter for the purpose of this diagnostic.
     new_ucmd!()
         .args(&["-w", "-b", COMPLEX_SEQUENCE])
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("cut: an input delimiter makes sense\n\tonly when operating on fields");
 }
 
 #[test]
 fn test_whitespace_with_char() {
     new_ucmd!()
         .args(&["-c", COMPLEX_SEQUENCE, "-w"])
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("cut: an input delimiter makes sense\n\tonly when operating on fields");
 }
 
 #[test]
@@ -127,8 +201,9 @@ fn test_delimiter_with_byte_and_char() {
         new_ucmd!()
             .args(&[conflicting_arg, COMPLEX_SEQUENCE, "-d="])
             .fails_with_code(1)
-            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option can only be used when printing a sequence of fields\n")
-;
+            .stderr_contains(
+                "cut: an input delimiter makes sense\n\tonly when operating on fields",
+            );
     }
 }
 
@@ -562,9 +637,9 @@ fn test_multiple_mode_args() {
         vec!["-b1", "-c2", "-f3"],
     ] {
         new_ucmd!()
-        .args(&args)
-        .fails()
-        .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
+            .args(&args)
+            .fails()
+            .stderr_contains("cut: only one list may be specified");
     }
 }
 
