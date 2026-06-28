@@ -45,7 +45,6 @@ install-error-extra-operand = opérande supplémentaire { $operand }
   { $usage }
 install-error-invalid-mode = Chaîne de mode invalide : { $error }
 install-error-mutually-exclusive-target = Les options --target-directory et --no-target-directory sont mutuellement exclusives
-install-error-mutually-exclusive-compare-preserve = Les options --compare et --preserve-timestamps sont mutuellement exclusives
 install-error-mutually-exclusive-compare-strip = Les options --compare et --strip sont mutuellement exclusives
 install-error-missing-file-operand = opérande de fichier manquant
 install-error-missing-destination-operand = opérande de fichier de destination manquant après { $path }

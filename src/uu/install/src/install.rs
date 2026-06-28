@@ -396,13 +396,6 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     }
     .to_string();
 
-    if preserve_timestamps && compare {
-        show_error!(
-            "{}",
-            translate!("install-error-mutually-exclusive-compare-preserve")
-        );
-        return Err(1.into());
-    }
     if compare && strip {
         show_error!(
             "{}",
@@ -1310,6 +1303,12 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
 
     // Check if the file sizes differ.
     if from_meta.len() != to_meta.len() {
+        return true;
+    }
+
+    // When preserving timestamps, a difference in modification time also
+    // requires a copy so the destination ends up with the source's timestamp.
+    if b.preserve_timestamps && from_meta.modified().ok() != to_meta.modified().ok() {
         return true;
     }
 
