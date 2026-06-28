@@ -2877,6 +2877,17 @@ fn test_copy_dir_symlink() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_copy_windows_dir_symlink_preserves_directory_type() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    at.symlink_dir("dir", "dir-link");
+    ucmd.args(&["-r", "dir-link", "copy"]).succeeds();
+    assert_eq!(at.resolve_link("copy"), "dir");
+    assert!(at.plus("copy").is_dir());
+}
+
+#[test]
 #[cfg(not(target_os = "freebsd"))] // FIXME: fix this test for FreeBSD
 #[cfg(feature = "ln")]
 fn test_copy_dir_with_symlinks() {

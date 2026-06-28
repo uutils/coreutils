@@ -13,6 +13,8 @@ use std::fs::{self, Metadata, OpenOptions, Permissions};
 use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
 #[cfg(unix)]
 use std::os::unix::net::UnixListener;
+#[cfg(windows)]
+use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
@@ -1934,6 +1936,7 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
+    #[cfg(windows)] source_metadata: &Metadata,
     #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
     #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
@@ -1959,7 +1962,13 @@ fn symlink_file(
     }
     #[cfg(windows)]
     {
-        std::os::windows::fs::symlink_file(source, dest).map_err(|e| {
+        let create_symlink = if source_is_directory_for_symlink(source_metadata) {
+            std::os::windows::fs::symlink_dir
+        } else {
+            std::os::windows::fs::symlink_file
+        };
+
+        create_symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
                 e,
                 translate!("cp-error-cannot-create-symlink",
@@ -1975,6 +1984,14 @@ fn symlink_file(
         }
         Ok(())
     }
+}
+
+/// Returns true when `source_metadata` should be recreated as a directory symlink.
+#[cfg(windows)]
+fn source_is_directory_for_symlink(source_metadata: &Metadata) -> bool {
+    const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+
+    source_metadata.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
@@ -2318,7 +2335,13 @@ fn handle_copy_mode(
             if dest.exists() && options.overwrite == OverwriteMode::Clobber(ClobberMode::Force) {
                 fs::remove_file(dest)?;
             }
-            symlink_file(source, dest, symlinked_files)?;
+            symlink_file(
+                source,
+                dest,
+                #[cfg(windows)]
+                source_metadata,
+                symlinked_files,
+            )?;
         }
         CopyMode::Update => {
             if dest.exists() {
@@ -2793,7 +2816,14 @@ fn copy_helper(
     }
 
     if source_metadata.is_symlink() {
-        copy_link(source, dest, symlinked_files, options)?;
+        copy_link(
+            source,
+            dest,
+            #[cfg(windows)]
+            source_metadata,
+            symlinked_files,
+            options,
+        )?;
     } else {
         // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
         // In that case source_metadata was obtained via lstat, so a path swap
@@ -2872,6 +2902,7 @@ fn copy_node(
 fn copy_link(
     source: &Path,
     dest: &Path,
+    #[cfg(windows)] source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     options: &Options,
 ) -> CopyResult<()> {
@@ -2882,7 +2913,13 @@ fn copy_link(
     if dest.is_symlink() || dest.is_file() {
         delete_path(dest, options)?;
     }
-    symlink_file(&link, dest, symlinked_files)?;
+    symlink_file(
+        &link,
+        dest,
+        #[cfg(windows)]
+        source_metadata,
+        symlinked_files,
+    )?;
     copy_attributes(
         source,
         dest,
@@ -2958,6 +2995,8 @@ fn disk_usage_directory(p: &Path) -> io::Result<u64> {
 #[cfg(test)]
 mod tests {
 
+    #[cfg(windows)]
+    use crate::source_is_directory_for_symlink;
     use crate::{Attributes, Preserve, aligned_ancestors, localize_to_target};
     use std::path::Path;
 
@@ -3027,5 +3066,37 @@ mod tests {
                 xattr: Preserve::No { explicit: true }
             }
         );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_source_is_directory_for_symlink_detects_directory_symlinks() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let target = temp_dir.path().join("target");
+        let symlink = temp_dir.path().join("target-link");
+
+        std::fs::create_dir(&target).unwrap();
+        if std::os::windows::fs::symlink_dir(&target, &symlink).is_err() {
+            return;
+        }
+
+        let metadata = symlink.symlink_metadata().unwrap();
+        assert!(source_is_directory_for_symlink(&metadata));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_source_is_directory_for_symlink_rejects_file_symlinks() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let target = temp_dir.path().join("target");
+        let symlink = temp_dir.path().join("target-link");
+
+        std::fs::write(&target, b"data").unwrap();
+        if std::os::windows::fs::symlink_file(&target, &symlink).is_err() {
+            return;
+        }
+
+        let metadata = symlink.symlink_metadata().unwrap();
+        assert!(!source_is_directory_for_symlink(&metadata));
     }
 }
