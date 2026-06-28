@@ -8067,3 +8067,13 @@ fn test_cp_p_preserves_posix_acls() {
         "cp -p must preserve POSIX ACLs (GNU tests/cp/acl regression)",
     );
 }
+
+#[test]
+fn test_progressbar_inexistent_source() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-g")
+        .arg("inexistent1")
+        .arg("inexistent2")
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
+}
