@@ -31,6 +31,7 @@ clap = { workspace = true }
 compare = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
+memmap2 = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 self_cell = { workspace = true }
