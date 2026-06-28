@@ -491,6 +491,33 @@ fn test_install_preserve_timestamps() {
     );
 }
 
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_preserve_timestamps() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let dest = "dest_file";
+
+    // Same contents, but destination has a newer timestamp than the source.
+    at.write(source, "data");
+    at.write(dest, "data");
+    let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    filetime::set_file_mtime(at.plus(source), FileTime::from_system_time(old)).unwrap();
+
+    // With --preserve-timestamps, the timestamp difference forces the copy so
+    // the destination ends up with the source's modification time.
+    ucmd.args(&["-C", "--preserve-timestamps", source, dest])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(
+        at.metadata(source).modified().ok(),
+        at.metadata(dest).modified().ok()
+    );
+}
+
 // These two tests are failing but should work
 #[test]
 fn test_install_copy_file() {
@@ -1856,11 +1883,12 @@ fn test_install_compare_option() {
         .args(&["-Cv", first, second])
         .succeeds()
         .stdout_contains(format!("removed '{second}'\n'{first}' -> '{second}'"));
+    // -C and --preserve-timestamps are no longer mutually exclusive
     scene
         .ucmd()
         .args(&["-C", "--preserve-timestamps", first, second])
-        .fails_with_code(1)
-        .stderr_contains("Options --compare and --preserve-timestamps are mutually exclusive");
+        .succeeds()
+        .no_output();
     scene
         .ucmd()
         .args(&["-C", "--strip", "--strip-program=echo", first, second])

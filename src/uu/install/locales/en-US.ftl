@@ -46,7 +46,6 @@ install-error-extra-operand = extra operand { $operand }
 install-error-not-permitted = cannot remove { $path }: Operation not permitted
 install-error-invalid-mode = Invalid mode string: { $error }
 install-error-mutually-exclusive-target = Options --target-directory and --no-target-directory are mutually exclusive
-install-error-mutually-exclusive-compare-preserve = Options --compare and --preserve-timestamps are mutually exclusive
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
