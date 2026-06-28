@@ -52,12 +52,23 @@ fn get_encoding() -> &'static MbEncoding {
 }
 
 /// Byte length of the first character in `bytes` under the current locale encoding.
+///
+/// The ASCII fast path is kept small and `#[inline]` so callers looping over a
+/// buffer (e.g. `cut -c`) pay only a byte comparison per ASCII byte, even in
+/// build profiles without cross-crate LTO. The multi-byte dispatch is outlined.
+#[inline]
 pub fn mb_char_len(bytes: &[u8]) -> usize {
     debug_assert!(!bytes.is_empty());
     let b0 = bytes[0];
     if b0 <= 0x7F {
         return 1;
     }
+    mb_char_len_multibyte(bytes, b0)
+}
+
+/// Cold slow path of [`mb_char_len`] for bytes that start a multi-byte sequence.
+#[cold]
+fn mb_char_len_multibyte(bytes: &[u8], b0: u8) -> usize {
     match get_encoding() {
         MbEncoding::Utf8 => utf8_len(bytes, b0),
         MbEncoding::Gb18030 => gb18030_len(bytes, b0),
