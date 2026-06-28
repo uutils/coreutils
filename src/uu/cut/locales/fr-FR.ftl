@@ -97,6 +97,7 @@ cut-help-characters = alias pour le mode caractère
 cut-help-delimiter = spécifier le caractère délimiteur qui sépare les champs dans la source d'entrée. Par défaut Tab.
 cut-help-whitespace-delimited = Utiliser tout nombre d'espaces (Espace, Tab) pour séparer les champs dans la source d'entrée (extension FreeBSD).
 cut-help-fields = filtrer les colonnes de champs depuis la source d'entrée
+cut-help-fields-merged = comme -f, mais fusionne les délimiteurs adjacents ; le délimiteur par défaut est l'espacement et le délimiteur de sortie une espace
 cut-help-complement = inverser le filtre - au lieu d'afficher seulement les colonnes filtrées, afficher toutes sauf ces colonnes
 cut-help-only-delimited = en mode champ, afficher seulement les lignes qui contiennent le délimiteur
 cut-help-zero-terminated = au lieu de filtrer les colonnes basées sur la ligne, filtrer les colonnes basées sur \\0 (caractère NULL)

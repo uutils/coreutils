@@ -42,6 +42,8 @@ enum Delimiter<'a> {
 struct FieldOptions<'a> {
     delimiter: Delimiter<'a>,
     only_delimited: bool,
+    /// `--whitespace-delimited=trimmed`: strip leading/trailing blanks per line.
+    whitespace_trimmed: bool,
 }
 
 enum Mode<'a> {
@@ -394,6 +396,80 @@ fn cut_chars<R: Read, W: Write>(
     Ok(())
 }
 
+/// Write the fields of `line` selected by `ranges`, separated by `out_delim`.
+///
+/// `line` may or may not end with `newline_char`; either way the output is
+/// terminated, unless the line has no delimiter and `only_delimited` drops it.
+fn write_fields_line<W: Write, M: Matcher>(
+    line: &[u8],
+    out: &mut W,
+    matcher: &M,
+    ranges: &[Range],
+    only_delimited: bool,
+    newline_char: u8,
+    out_delim: &[u8],
+) -> std::io::Result<()> {
+    let mut fields_pos = 1;
+    let mut low_idx = 0;
+    let mut delim_search = Searcher::new(matcher, line).peekable();
+    let mut print_delim = false;
+
+    if delim_search.peek().is_none() {
+        if !only_delimited {
+            // Always write the entire line, even if it doesn't end with `newline_char`
+            out.write_all(line)?;
+            if line.is_empty() || line[line.len() - 1] != newline_char {
+                out.write_all(&[newline_char])?;
+            }
+        }
+
+        return Ok(());
+    }
+
+    for &Range { low, high } in ranges {
+        if low - fields_pos > 0 {
+            // current field is not in the range, so jump to the field corresponding to the
+            // beginning of the range if any
+            low_idx = match delim_search.nth(low - fields_pos - 1) {
+                Some((_, last)) => last,
+                None => break,
+            };
+        }
+
+        // at this point, current field is the first in the range
+        for _ in 0..=high - low {
+            // skip printing delimiter if this is the first matching field for this line
+            if print_delim {
+                out.write_all(out_delim)?;
+            } else {
+                print_delim = true;
+            }
+
+            if let Some((first, last)) = delim_search.next() {
+                // print the current field up to the next field delim
+                let segment = &line[low_idx..first];
+
+                out.write_all(segment)?;
+
+                low_idx = last;
+                fields_pos = high + 1;
+            } else {
+                // this is the last field in the line, so print the rest
+                let segment = &line[low_idx..];
+
+                out.write_all(segment)?;
+
+                if line[line.len() - 1] == newline_char {
+                    return Ok(());
+                }
+                break;
+            }
+        }
+    }
+
+    out.write_all(&[newline_char])
+}
+
 /// Output delimiter is explicitly specified
 fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     reader: R,
@@ -407,65 +483,15 @@ fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
     let mut buf_in = BufReader::new(reader);
 
     let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
-        let mut fields_pos = 1;
-        let mut low_idx = 0;
-        let mut delim_search = Searcher::new(matcher, line).peekable();
-        let mut print_delim = false;
-
-        if delim_search.peek().is_none() {
-            if !only_delimited {
-                // Always write the entire line, even if it doesn't end with `newline_char`
-                out.write_all(line)?;
-                if line.is_empty() || line[line.len() - 1] != newline_char {
-                    out.write_all(&[newline_char])?;
-                }
-            }
-
-            return Ok(true);
-        }
-
-        for &Range { low, high } in ranges {
-            if low - fields_pos > 0 {
-                // current field is not in the range, so jump to the field corresponding to the
-                // beginning of the range if any
-                low_idx = match delim_search.nth(low - fields_pos - 1) {
-                    Some((_, last)) => last,
-                    None => break,
-                };
-            }
-
-            // at this point, current field is the first in the range
-            for _ in 0..=high - low {
-                // skip printing delimiter if this is the first matching field for this line
-                if print_delim {
-                    out.write_all(out_delim)?;
-                } else {
-                    print_delim = true;
-                }
-
-                if let Some((first, last)) = delim_search.next() {
-                    // print the current field up to the next field delim
-                    let segment = &line[low_idx..first];
-
-                    out.write_all(segment)?;
-
-                    low_idx = last;
-                    fields_pos = high + 1;
-                } else {
-                    // this is the last field in the line, so print the rest
-                    let segment = &line[low_idx..];
-
-                    out.write_all(segment)?;
-
-                    if line[line.len() - 1] == newline_char {
-                        return Ok(true);
-                    }
-                    break;
-                }
-            }
-        }
-
-        out.write_all(&[newline_char])?;
+        write_fields_line(
+            line,
+            out,
+            matcher,
+            ranges,
+            only_delimited,
+            newline_char,
+            out_delim,
+        )?;
         Ok(true)
     });
 
@@ -666,8 +692,52 @@ fn cut_fields_newline_char_delim<R: Read, W: Write>(
         current_field_idx += 1;
     }
 
-    if has_data && !suppressed {
+    // With -s, a record that produced no selected field must not emit a line.
+    if has_data && !suppressed && (first_field_printed || !only_delimited) {
         out.write_all(&[newline_char])?;
+    }
+
+    Ok(())
+}
+
+/// `--whitespace-delimited=trimmed`: strip leading/trailing blanks from each
+/// line, then split on runs of blanks. With no internal blank the line is
+/// undelimited (suppressed under `-s`).
+fn cut_fields_whitespace_trimmed<R: Read, W: Write>(
+    reader: R,
+    out: &mut W,
+    ranges: &[Range],
+    only_delimited: bool,
+    newline_char: u8,
+    out_delim: &[u8],
+) -> UResult<()> {
+    let is_blank = |&b: &u8| b == b' ' || b == b'\t';
+    let matcher = WhitespaceMatcher {};
+    let mut buf_in = BufReader::new(reader);
+
+    // Trimming is the only difference from the plain whitespace path: once the
+    // outer blanks are gone, the remaining blank runs are ordinary delimiters.
+    let result = buf_in.for_byte_record(newline_char, |line| {
+        let start = line.iter().position(|b| !is_blank(b)).unwrap_or(line.len());
+        let end = line
+            .iter()
+            .rposition(|b| !is_blank(b))
+            .map_or(start, |p| p + 1);
+
+        write_fields_line(
+            &line[start..end],
+            out,
+            &matcher,
+            ranges,
+            only_delimited,
+            newline_char,
+            out_delim,
+        )?;
+        Ok(true)
+    });
+
+    if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
     }
 
     Ok(())
@@ -716,16 +786,28 @@ fn cut_fields<R: Read, W: Write>(
             }
         }
         Delimiter::Whitespace => {
-            let matcher = WhitespaceMatcher {};
-            cut_fields_explicit_out_delim(
-                reader,
-                out,
-                &matcher,
-                ranges,
-                field_opts.only_delimited,
-                newline_char,
-                opts.out_delimiter.unwrap_or(b"\t"),
-            )
+            let out_delim = opts.out_delimiter.unwrap_or(b"\t");
+            if field_opts.whitespace_trimmed {
+                cut_fields_whitespace_trimmed(
+                    reader,
+                    out,
+                    ranges,
+                    field_opts.only_delimited,
+                    newline_char,
+                    out_delim,
+                )
+            } else {
+                let matcher = WhitespaceMatcher {};
+                cut_fields_explicit_out_delim(
+                    reader,
+                    out,
+                    &matcher,
+                    ranges,
+                    field_opts.only_delimited,
+                    newline_char,
+                    out_delim,
+                )
+            }
         }
     }
 }
@@ -794,7 +876,9 @@ where
 /// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 /// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
 fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
-    let whitespace_delimited = matches.get_flag(options::WHITESPACE_DELIMITED);
+    let whitespace_delimited = matches
+        .get_one::<String>(options::WHITESPACE_DELIMITED)
+        .is_some();
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
@@ -848,6 +932,8 @@ mod options {
     pub const CHARACTERS: &str = "characters";
     pub const DELIMITER: &str = "delimiter";
     pub const FIELDS: &str = "fields";
+    // -F: field mode that merges whitespace (or -d) runs, default output is a space.
+    pub const FIELDS_MERGED: &str = "fields-merged";
     pub const ZERO_TERMINATED: &str = "zero-terminated";
     pub const ONLY_DELIMITED: &str = "only-delimited";
     pub const OUTPUT_DELIMITER: &str = "output-delimiter";
@@ -879,13 +965,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let suppress_split = matches.get_flag(options::NOTHING);
+    // `--whitespace-delimited[=trimmed]` (`-w`): the optional value selects trimming.
+    let whitespace_trimmed = matches
+        .get_one::<String>(options::WHITESPACE_DELIMITED)
+        .is_some_and(|value| value == "trimmed");
 
     let mode_arg = get_mode_arg(&matches)?;
     let list = matches
         .get_one::<String>(mode_arg)
         .expect("should be ensured by get_mode_arg");
-    let ranges = list_to_ranges(list, complement, mode_arg == options::FIELDS)
-        .map_err(|e| UUsageError::new(1, e))?;
+    let is_field = matches!(mode_arg, options::FIELDS | options::FIELDS_MERGED);
+    let ranges = list_to_ranges(list, complement, is_field).map_err(|e| UUsageError::new(1, e))?;
 
     let mode = match mode_arg {
         options::BYTES => Mode::Bytes(
@@ -914,6 +1004,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 field_opts: Some(FieldOptions {
                     delimiter,
                     only_delimited,
+                    whitespace_trimmed,
+                }),
+                suppress_split,
+            },
+        ),
+        // `-F`: like `-f`, but consecutive delimiters merge, the delimiter
+        // defaults to whitespace, and the output delimiter defaults to a space.
+        options::FIELDS_MERGED => Mode::Fields(
+            ranges,
+            Options {
+                out_delimiter: out_delimiter.or(Some(b" ")),
+                line_ending,
+                field_opts: Some(FieldOptions {
+                    delimiter: if matches.contains_id(options::DELIMITER) {
+                        delimiter
+                    } else {
+                        Delimiter::Whitespace
+                    },
+                    only_delimited,
+                    whitespace_trimmed,
                 }),
                 suppress_split,
             },
@@ -930,17 +1040,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
-// is expected.
+// `-F`, is expected.
 //
-// Returns `options::BYTES`, `options::CHARACTERS`, or `options::FIELDS`.
+// Returns `options::BYTES`, `options::CHARACTERS`, `options::FIELDS`, or
+// `options::FIELDS_MERGED`.
 fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
-    let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
-        .into_iter()
-        .filter_map(|arg| {
-            let count = matches.indices_of(arg)?.count();
-            (count > 0).then_some((arg, count))
-        })
-        .collect();
+    let mode_args_and_counts: Vec<_> = [
+        options::BYTES,
+        options::CHARACTERS,
+        options::FIELDS,
+        options::FIELDS_MERGED,
+    ]
+    .into_iter()
+    .filter_map(|arg| {
+        let count = matches.indices_of(arg)?.count();
+        (count > 0).then_some((arg, count))
+    })
+    .collect();
 
     let mode_arg = match mode_args_and_counts.as_slice() {
         [(arg, 1)] => *arg,
@@ -966,7 +1082,9 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
             ),
             (
                 // GNU words `-w` as a delimiter too, so it shares the message.
-                matches.get_flag(options::WHITESPACE_DELIMITED),
+                matches
+                    .get_one::<String>(options::WHITESPACE_DELIMITED)
+                    .is_some(),
                 "cut-error-delimiter-only-with-fields",
             ),
             (
@@ -1030,15 +1148,28 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::WHITESPACE_DELIMITED)
                 .short('w')
+                .long(options::WHITESPACE_DELIMITED)
                 .help(translate!("cut-help-whitespace-delimited"))
-                .value_name("WHITESPACE")
-                .action(ArgAction::SetTrue),
+                .value_name("trimmed")
+                .value_parser(["", "trimmed"])
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("")
+                .action(ArgAction::Set),
         )
         .arg(
             Arg::new(options::FIELDS)
                 .short('f')
                 .long(options::FIELDS)
                 .help(translate!("cut-help-fields"))
+                .allow_hyphen_values(true)
+                .value_name("LIST")
+                .action(ArgAction::Append),
+        )
+        .arg(
+            Arg::new(options::FIELDS_MERGED)
+                .short('F')
+                .help(translate!("cut-help-fields-merged"))
                 .allow_hyphen_values(true)
                 .value_name("LIST")
                 .action(ArgAction::Append),
