@@ -6,16 +6,16 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs;
-#[cfg(target_os = "linux")]
-use std::fs::File;
+use std::fs::{self, File};
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::process;
+use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -766,16 +766,25 @@ const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
 #[cfg(not(windows))]
 const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 
-fn strip_source_file() -> &'static str {
-    if cfg!(target_os = "freebsd") {
-        "helloworld_freebsd"
-    } else if cfg!(target_os = "macos") {
-        "helloworld_macos"
-    } else if cfg!(target_arch = "arm") || cfg!(target_arch = "aarch64") {
-        "helloworld_android"
-    } else {
-        "helloworld_linux"
-    }
+fn strip_source_file() -> PathBuf {
+    use std::io::Write as _;
+    static BINARY: OnceLock<PathBuf> = OnceLock::new();
+    BINARY
+        .get_or_init(|| {
+            let dir = std::env::temp_dir();
+            let source = dir.join("hello.rs");
+            let binary = dir.join("hello_bin");
+            let mut file = File::create(&source).unwrap();
+            file.write_all(b"fn main() {}").unwrap();
+            process::Command::new("rustc")
+                .arg("-o")
+                .arg(&binary)
+                .arg(&source)
+                .status()
+                .unwrap();
+            binary
+        })
+        .clone()
 }
 
 #[test]
