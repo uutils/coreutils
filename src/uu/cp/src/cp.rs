@@ -835,20 +835,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (sources, target) = parse_path_args(paths, &options)?;
 
     if let Err(error) = copy(&sources, &target, &options) {
-        if let CpError::NotAllFilesCopied = error {
-            // Error::NotAllFilesCopied is non-fatal, but the error
-            // code should still be EXIT_ERR as does GNU cp
-        } else {
-            // Else we caught a fatal bubbled-up error, log it to stderr
-
-            if let CpError::IoErr(error) = error {
-                if error.kind() == io::ErrorKind::NotFound {
-                    show_error!(
-                        "{}",
-                        translate!("cp-error-cannot-stat", "source" => format!("'{}'",sources[0].display()))
-                    );
-                }
-            } else {
+        match error {
+            CpError::NotAllFilesCopied => {
+                // non-fatal; exit code still EXIT_ERR
+            }
+            CpError::IoErr(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
+                show_error!(
+                    "{}",
+                    translate!(
+                        "cp-error-cannot-stat",
+                        "source" => format!("'{}'", sources[0].display())
+                    )
+                );
+            }
+            _ => {
                 show_error!("{error}");
             }
         }
