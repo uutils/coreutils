@@ -938,10 +938,9 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
-            if !paths.contains(&p) {
-                paths.push(p);
-            }
+            // Keep every entry: duplicates are handled later via inode tracking
+            // (which -l disables), matching GNU. Missing files must each report.
+            paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 
