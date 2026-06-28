@@ -39,6 +39,7 @@ install-error-invalid-user = utilisateur invalide : { $user }
 install-error-invalid-group = groupe invalide : { $group }
 install-error-omitting-directory = omission du répertoire { $path }
 install-error-not-a-directory = échec de l'accès à { $path } : N'est pas un répertoire
+install-error-existing-file-not-directory = impossible de créer le répertoire { $path } : Le fichier existe
 install-error-override-directory-failed = impossible d'écraser le répertoire { $dir } avec un non-répertoire { $file }
 install-error-same-file = { $file1 } et { $file2 } sont le même fichier
 install-error-extra-operand = opérande supplémentaire { $operand }

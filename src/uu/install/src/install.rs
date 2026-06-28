@@ -115,6 +115,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 
+    #[error("{}", translate!("install-error-existing-file-not-directory", "path" => .0.quote()))]
+    ExistingFileNotADirectory(PathBuf),
+
     #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
 
@@ -499,8 +502,13 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
         Err(InstallError::DirNeedsArg.into())
     } else {
         for path in paths.iter().map(Path::new) {
-            // if the path already exist, don't try to create it again
-            if !path.exists() {
+            // if the path already exist, check if it's a file
+            if path.exists() {
+                if !path.is_dir() {
+                    show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
+                    continue;
+                }
+            } else {
                 // Special case to match GNU's behavior:
                 // install -d foo/. should work and just create foo/
                 // std::fs::create_dir("foo/."); fails in pure Rust
