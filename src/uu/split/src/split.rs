@@ -670,56 +670,50 @@ impl<'a> LineChunkWriter<'a> {
         }
         settings.instantiate_current_writer(&filename, true)
     }
-}
-
-impl Write for LineChunkWriter<'_> {
-    /// Implements `--lines=NUMBER`
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    /// Implements `--lines=NUMBER`. GNU is unbuffered.
+    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
         // iteration of this loop writes to the underlying writer that
         // corresponds to the current chunk number.
-        let mut prev = 0;
-        let mut total_bytes_written = 0;
-        let sep = self.settings.separator;
-        for i in memchr::memchr_iter(sep, buf) {
-            // If we have exceeded the number of lines to write in the
-            // current chunk, then start a new chunk and its
-            // corresponding writer.
-            if self.num_lines_remaining_in_current_chunk == 0 {
-                self.num_chunks_written += 1;
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                self.num_lines_remaining_in_current_chunk = self.chunk_size;
+        let mut io_blk = vec![0u8; io_blksize];
+        while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
+            && !buf.is_empty()
+        {
+            let mut prev = 0;
+            let sep = self.settings.separator;
+            for i in memchr::memchr_iter(sep, buf) {
+                // If we have exceeded the number of lines to write in the
+                // current chunk, then start a new chunk and its
+                // corresponding writer.
+                if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.num_chunks_written += 1;
+                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
+                }
+
+                // Write the line, starting from *after* the previous
+                // separator character and ending *after* the current
+                // separator character.
+                custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
+                prev = i + 1;
+                self.num_lines_remaining_in_current_chunk -= 1;
             }
 
-            // Write the line, starting from *after* the previous
-            // separator character and ending *after* the current
-            // separator character.
-            let num_bytes_written = custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
-            total_bytes_written += num_bytes_written;
-            prev = i + 1;
-            self.num_lines_remaining_in_current_chunk -= 1;
-        }
-
-        // There might be bytes remaining in the buffer, and we write
-        // them to the current chunk. But first, we may need to rotate
-        // the current chunk in case it has already reached its line
-        // limit.
-        if prev < buf.len() {
-            if self.num_lines_remaining_in_current_chunk == 0 {
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                self.num_lines_remaining_in_current_chunk = self.chunk_size;
-            }
-            let num_bytes_written =
+            // There might be bytes remaining in the buffer, and we write
+            // them to the current chunk. But first, we may need to rotate
+            // the current chunk in case it has already reached its line
+            // limit.
+            if prev < buf.len() {
+                if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
+                }
                 custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
-            total_bytes_written += num_bytes_written;
+            }
         }
-        Ok(total_bytes_written)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        Ok(())
     }
 }
 
@@ -1333,9 +1327,7 @@ fn split(settings: &Settings) -> UResult<()> {
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            // todo: distinct read error and write error
-            io::copy(&mut reader, &mut writer)?;
-            Ok(())
+            Ok(writer.copy(&mut reader, io_blksize)?)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
