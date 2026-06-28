@@ -1896,7 +1896,6 @@ fn test_files0_from_2a() {
 
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
-#[cfg(unix)]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_files0_from_non_utf8() {
     use std::os::unix::ffi::OsStringExt;
