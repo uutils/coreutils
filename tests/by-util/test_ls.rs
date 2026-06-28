@@ -2726,6 +2726,8 @@ fn test_ls_recursive_1() {
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use uutests::at_and_ucmd;
+    use uutests::util::is_locale_available;
     use uutests::util_name;
 
     /// Create a directory with "dirname", then for each check, assert that the
@@ -2771,6 +2773,72 @@ mod quoting {
             ],
             &[],
         );
+    }
+
+    // Regression test for GNU tests/ls/quoting-utf8.sh: in a UTF-8 locale the
+    // locale/clocale quoting styles use Unicode quotation marks U+2018/U+2019
+    // and must not escape embedded apostrophes or double quotes; in the C
+    // locale they fall back to ASCII single/double quotes.
+    #[test]
+    fn test_ls_quoting_locale_utf8() {
+        if !is_locale_available("en_US.UTF-8") {
+            return;
+        }
+
+        let lq = "\u{2018}";
+        let rq = "\u{2019}";
+
+        for style in ["locale", "clocale"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch("hello world");
+            at.touch("it's");
+            at.touch("say \"hi\"");
+            at.touch("tab\there");
+
+            let out = ucmd
+                .env("LC_ALL", "en_US.UTF-8")
+                .arg(format!("--quoting-style={style}"))
+                .arg("-1")
+                .succeeds()
+                .stdout_move_str();
+
+            assert!(
+                out.contains(&format!("{lq}hello world{rq}")),
+                "{style}: 'hello world' not quoted with Unicode quotes: {out:?}"
+            );
+            // Embedded apostrophe and double quote must stay unescaped.
+            assert!(
+                out.contains(&format!("{lq}it's{rq}")),
+                "{style}: embedded apostrophe should not be escaped: {out:?}"
+            );
+            assert!(
+                out.contains(&format!("{lq}say \"hi\"{rq}")),
+                "{style}: embedded double quote should not be escaped: {out:?}"
+            );
+            // Control characters are still C-escaped.
+            assert!(
+                out.contains(&format!("{lq}tab\\there{rq}")),
+                "{style}: tab should be escaped as \\t: {out:?}"
+            );
+        }
+
+        // In the C locale, locale uses ASCII single quotes and clocale uses
+        // ASCII double quotes.
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("hello world");
+        ucmd.env("LC_ALL", "C")
+            .arg("--quoting-style=locale")
+            .arg("-1")
+            .succeeds()
+            .stdout_contains("'hello world'");
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("hello world");
+        ucmd.env("LC_ALL", "C")
+            .arg("--quoting-style=clocale")
+            .arg("-1")
+            .succeeds()
+            .stdout_contains("\"hello world\"");
     }
 
     #[test]
