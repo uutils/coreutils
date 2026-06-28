@@ -600,9 +600,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             translate!("install-error-missing-file-operand"),
         ));
     }
-    if b.no_target_dir && paths.len() > 2 {
+    if b.no_target_dir
+        && let Some(extra) = paths.get(2)
+    {
         return Err(InstallError::ExtraOperand(
-            paths[2].clone(),
+            extra.clone(),
             format_usage(&translate!("install-usage")),
         )
         .into());
@@ -1440,12 +1442,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
 fn derive_context_from_parent(parent_context: &str) -> String {
     // Parse the parent context (format: user:role:type:level)
     let parts: Vec<&str> = parent_context.split(':').collect();
-    if parts.len() >= 3 {
-        let user = parts[0];
-        let role = parts[1];
-        let parent_type = parts[2];
-        let level = if parts.len() > 3 { parts[3] } else { "" };
-
+    if let [user, role, parent_type, ..] = parts.as_slice() {
         // Based on the GNU test expectations, when creating files in tmp-related directories,
         // `install -Z` should create files with user_home_t context (like restorecon would).
         // This is a specific policy behavior that the test expects.
@@ -1458,10 +1455,10 @@ fn derive_context_from_parent(parent_context: &str) -> String {
             parent_type
         };
 
-        if level.is_empty() {
-            format!("{user}:{role}:{derived_type}")
-        } else {
+        if let Some(level) = parts.get(3) {
             format!("{user}:{role}:{derived_type}:{level}")
+        } else {
+            format!("{user}:{role}:{derived_type}")
         }
     } else {
         // Fallback if we can't parse the parent context
