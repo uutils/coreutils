@@ -97,6 +97,7 @@ cut-help-characters = alias for character mode
 cut-help-delimiter = specify the delimiter character that separates fields in the input source. Defaults to Tab.
 cut-help-whitespace-delimited = Use any number of whitespace (Space, Tab) to separate fields in the input source (FreeBSD extension).
 cut-help-fields = filter field columns from the input source
+cut-help-fields-merged = like -f, but merge adjacent delimiters; the delimiter defaults to whitespace and the output delimiter to a space
 cut-help-complement = invert the filter - instead of displaying only the filtered columns, display all but those columns
 cut-help-only-delimited = in field mode, only print lines which contain the delimiter
 cut-help-zero-terminated = instead of filtering columns based on line, filter columns based on \\0 (NULL character)

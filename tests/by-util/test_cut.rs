@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd
+// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -682,6 +682,90 @@ fn test_output_delimiter_with_adjacent_ranges() {
         .pipe_in("abcd\n")
         .succeeds()
         .stdout_only("ab:cd\n");
+}
+
+#[test]
+fn test_fields_merged() {
+    // -F: merge adjacent delimiters, default delimiter whitespace, output a space.
+    new_ucmd!()
+        .args(&["-F", "1,3"])
+        .pipe_in("one\ttwo   three\n")
+        .succeeds()
+        .stdout_only("one three\n");
+    new_ucmd!()
+        .args(&["-F", "1,3", "-O", "+"])
+        .pipe_in("one\ttwo   three\n")
+        .succeeds()
+        .stdout_only("one+three\n");
+    // -F with an explicit delimiter still uses a space as the output delimiter.
+    new_ucmd!()
+        .args(&["-F", "2,4", "-d", ";"])
+        .pipe_in("p;q;r;s\n")
+        .succeeds()
+        .stdout_only("q s\n");
+}
+
+#[test]
+fn test_fields_merged_conflicts_with_fields() {
+    new_ucmd!()
+        .args(&["-f", "3", "-F", "5"])
+        .fails_with_code(1)
+        .stderr_contains("cut: only one list may be specified");
+}
+
+#[test]
+fn test_whitespace_delimited_long_and_trimmed() {
+    // Long form behaves like -w (leading blanks make an empty first field).
+    new_ucmd!()
+        .args(&["--whitespace-delimited", "-f1,2"])
+        .pipe_in("   alpha beta\n")
+        .succeeds()
+        .stdout_only("\talpha\n");
+    // =trimmed strips leading/trailing blanks before splitting.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=trimmed", "-f1,2"])
+        .pipe_in("  hello world  \n")
+        .succeeds()
+        .stdout_only("hello\tworld\n");
+    // With -s a single (undelimited) field is suppressed.
+    new_ucmd!()
+        .args(&["-s", "--whitespace-delimited=trimmed", "-f1"])
+        .pipe_in("   solo   \n")
+        .succeeds()
+        .stdout_only("");
+    // Without -s an undelimited line is printed whole, whatever field is asked
+    // for, while a blank-only line collapses to an empty one.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=trimmed", "-f4"])
+        .pipe_in("  loner\n\t\n one two\n")
+        .succeeds()
+        .stdout_only("loner\n\n\n");
+    // Only `trimmed` is a valid value.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=middle", "-f1"])
+        .fails_with_code(1);
+}
+
+#[test]
+fn test_unset_locale_is_byte_oriented() {
+    // With no locale set the POSIX default is C, so characters are bytes.
+    // "ж" is d0 b6, and -c3 must take just the b6.
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .args(&["-c3"])
+        .pipe_in(&b"p\xd0\xb6t\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xb6\n");
+}
+
+#[test]
+fn test_newline_delim_suppress_missing_field() {
+    // -s with the newline as delimiter must not emit a spurious blank line.
+    new_ucmd!()
+        .args(&["-s", "-d", "\n", "-f3"])
+        .pipe_in("solo\n")
+        .succeeds()
+        .stdout_only("");
 }
 
 #[test]
