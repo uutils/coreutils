@@ -74,12 +74,14 @@ fn clone<P>(source: P, dest: P, fallback: CloneFallback, nofollow: bool) -> std:
 where
     P: AsRef<Path>,
 {
-    let src_file = open_source(&source, nofollow)?;
-    let dst_file = create_dest_restrictive(&dest, false)?;
-    if ioctl_ficlone(dst_file, src_file).is_err() {
+    let mut src_file = open_source(&source, nofollow)?;
+    let mut dst_file = create_dest_restrictive(&dest, false)?;
+    if ioctl_ficlone(&dst_file, &src_file).is_err() {
+        // todo: use fd instead of Path to avoid TOCTOU race
         return match fallback {
             CloneFallback::Error => Err(std::io::Error::last_os_error()),
-            CloneFallback::FSCopy => fs_copy(source, dest, nofollow),
+            // already nofollow
+            CloneFallback::FSCopy => buf_copy::copy_stream(&mut src_file, &mut dst_file),
             CloneFallback::SparseCopy => sparse_copy(source, dest, nofollow),
             CloneFallback::SparseCopyWithoutHole => {
                 sparse_copy_without_hole(source, dest, nofollow)
