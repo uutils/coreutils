@@ -637,13 +637,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let res = if file_name == "-" {
         let stdin = io::stdin();
-        csplit(&options, &patterns, stdin.lock()).map_err(|e| e.into())
+        csplit(&options, &patterns, stdin.lock()).map_err(Into::into)
     } else {
         let file = File::open(file_name)
             .map_err_context(|| format!("cannot open {} for reading", file_name.quote()));
 
         match file {
-            Ok(f) => csplit(&options, &patterns, BufReader::new(f)).map_err(|e| e.into()),
+            Ok(f) => csplit(&options, &patterns, BufReader::new(f)).map_err(Into::into),
             Err(e) => Err(e),
         }
     };
