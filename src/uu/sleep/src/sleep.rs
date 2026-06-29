@@ -70,6 +70,15 @@ fn sleep(args: &[&str]) -> UResult<()> {
     if arg_error {
         return Err(UUsageError::new(1, ""));
     }
+
+    #[cfg(all(unix, not(target_os = "redox")))]
+    {
+        if sleep_dur == Duration::MAX {
+            nix::unistd::pause();
+            return Ok(());
+        }
+    }
+
     thread::sleep(sleep_dur);
     Ok(())
 }
