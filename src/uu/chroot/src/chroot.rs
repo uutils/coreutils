@@ -203,8 +203,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         commands
     };
 
-    assert!(!command.is_empty());
-    let chroot_command = command[0];
+    let chroot_command = *command.first().unwrap();
 
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
