@@ -34,6 +34,11 @@ fn du_balanced_tree(
 
 /* too much variance
 /// Benchmark du -a (all files) on balanced tree
+/// MEASURES BUG #9146: stdout buffering inefficiency
+///
+/// CURRENT: Each of ~81 entries triggers 3 stdout writes = ~243 syscalls.
+/// With BufWriter, this becomes ~3-5 buffered flushes total.
+/// Performance should improve significantly after fix.
 #[divan::bench(args = [(4, 3, 10)])]
 fn du_all_balanced_tree(
     bencher: Bencher,
@@ -75,6 +80,11 @@ fn du_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
 }
 
 /// Benchmark du -a on wide directory structures
+/// MEASURES BUG #9146: stdout buffering inefficiency
+///
+/// CURRENT: Each of ~5,500 entries (5,000 files + 500 dirs) triggers 3 stdout writes
+/// = ~16,500 syscalls. With BufWriter, this becomes ~3-5 buffered flushes total.
+/// Performance should improve dramatically after fix.
 #[divan::bench(args = [(5000, 500)])]
 fn du_all_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
     bencher
@@ -126,6 +136,36 @@ fn du_max_depth_balanced_tree(
     let temp_dir = TempDir::new().unwrap();
     fs_tree::create_balanced_tree(temp_dir.path(), depth, dirs_per_level, files_per_dir);
     bench_du_with_args(bencher, &temp_dir, &["--max-depth=2"]);
+}
+
+/// STRESS TEST: Benchmark du -a on large directory structure
+/// MEASURES BUFWRITER SCALING: Tests if 64KiB buffer benefits scale linearly
+///
+/// EXPECTED: ~161 entries (dirs+files) with ~483 potential stdout writes
+/// With BufWriter: Should complete with ~3-5 syscalls regardless of entry count
+/// This test validates that the optimization scales to larger real-world directories
+/// and that memory usage remains bounded (64KiB buffer).
+#[divan::bench(args = [(3, 5, 6)])]
+fn du_all_stress_balanced_tree(
+    bencher: Bencher,
+    (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
+) {
+    let temp_dir = TempDir::new().unwrap();
+    fs_tree::create_balanced_tree(temp_dir.path(), depth, dirs_per_level, files_per_dir);
+    bench_du_with_args(bencher, &temp_dir, &["-a"]);
+}
+
+/// STRESS TEST: Benchmark du -a on extremely wide directory structure\
+/// MEASURES BUFWRIDER UNDER EXTREME LOAD: Tests worst-case for stdout frequency
+///
+///    EXPECTED: ~2,500 entries = ~7,500 potential stdout writes without buffering
+/// This is the scenario that most directly exposes the issue #9146 performance bottleneck.
+/// Success is measured not just by time, but by consistent performance regardless of entry count.
+#[divan::bench(args = [(2000, 500)])]
+fn du_all_extreme_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
+    let temp_dir = TempDir::new().unwrap();
+    fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+    bench_du_with_args(bencher, &temp_dir, &["-a"]);
 }
 
 fn main() {
