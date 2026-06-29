@@ -106,6 +106,9 @@ pub struct Options {
 
     /// `-Z, --context`
     pub context: Option<String>,
+
+    /// `--exchange` atomically exchange source and destination
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -122,6 +125,7 @@ impl Default for Options {
             progress_bar: false,
             debug: false,
             context: None,
+            exchange: false,
         }
     }
 }
@@ -152,6 +156,7 @@ static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
 static OPT_CONTEXT: &str = "context";
 static OPT_SELINUX: &str = "selinux";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -219,6 +224,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
         context,
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -330,6 +336,12 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
                 .help(translate!("mv-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(translate!("mv-help-exchange"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -561,6 +573,10 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
+    if opts.exchange {
+        return exchange_paths(&paths, opts);
+    }
+
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
@@ -568,6 +584,43 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     match paths.len() {
         2 => handle_two_paths(&paths[0], &paths[1], opts),
         _ => handle_multiple_paths(&paths, opts),
+    }
+}
+
+/// Atomically exchange two paths with `--exchange` (renameat2 `RENAME_EXCHANGE`).
+fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+    if paths.len() != 2 {
+        return Err(UUsageError::new(
+            1,
+            translate!("mv-error-exchange-two-operands"),
+        ));
+    }
+    let (from, to) = (&paths[0], &paths[1]);
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use rustix::fs::{CWD, RenameFlags, renameat_with};
+        renameat_with(CWD, from, CWD, to, RenameFlags::EXCHANGE)
+            .map_err(io::Error::from)
+            .map_err_context(|| {
+                translate!("mv-error-cannot-move", "source" => from.quote(), "target" => to.quote())
+            })?;
+        if opts.verbose {
+            println!(
+                "{}",
+                translate!("mv-verbose-exchanged", "from" => from.quote(), "to" => to.quote())
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    {
+        let _ = (from, to, opts);
+        Err(USimpleError::new(
+            1,
+            translate!("mv-error-exchange-not-supported"),
+        ))
     }
 }
 

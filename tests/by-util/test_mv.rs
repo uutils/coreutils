@@ -3224,3 +3224,79 @@ fn test_mv_cross_device_preserves_ownership_recursive() {
         "nested file gid should be preserved after cross-device move"
     );
 }
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_file_and_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("leaf", "payload");
+    at.mkdir("branch");
+
+    ucmd.arg("-T")
+        .arg("--exchange")
+        .arg("leaf")
+        .arg("branch")
+        .succeeds()
+        .no_output();
+
+    // After the swap the names trade places.
+    assert!(at.dir_exists("leaf"));
+    assert!(at.file_exists("branch"));
+    assert_eq!(at.read("branch"), "payload");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "1");
+    at.write("second", "2");
+
+    ucmd.arg("--exchange")
+        .arg("-v")
+        .arg("first")
+        .arg("second")
+        .succeeds()
+        .stdout_contains("exchanged");
+
+    assert_eq!(at.read("first"), "2");
+    assert_eq!(at.read("second"), "1");
+}
+
+#[test]
+fn test_mv_exchange_wrong_operand_count() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("only", "x");
+
+    // A single operand is rejected.
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .fails()
+        .code_is(1);
+
+    // Three operands are rejected too.
+    scene.fixtures.write("two", "y");
+    scene.fixtures.write("three", "z");
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .arg("two")
+        .arg("three")
+        .fails()
+        .code_is(1);
+}
+
+#[test]
+fn test_mv_exchange_missing_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("present", "data");
+
+    ucmd.arg("--exchange")
+        .arg("present")
+        .arg("absent")
+        .fails()
+        .code_is(1);
+}
