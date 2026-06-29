@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang libcrypto FIPS -->
 <div class="oranda-hide">
 <div align="center">
 
@@ -131,6 +131,22 @@ and `libclang` are installed on your system. Then, run the following command:
 ```
 cargo build --release --features unix,feat_selinux
 ```
+
+To speed up the checksum utilities (`md5sum`, `sha1sum`, `sha224sum`, `sha256sum`,
+`sha384sum`, `sha512sum`, and `cksum`) by using OpenSSL's `libcrypto` instead of
+the pure-Rust digest crates, enable the `openssl` feature:
+```
+cargo build --release --features unix,openssl
+```
+By default OpenSSL is built from source and statically linked into the
+binary (mirroring how `expr` links `oniguruma`), so no runtime dependency
+on system libcrypto/libssl is added. To link dynamically against the system
+libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+
+The speedup is largest on CPUs without SHA-NI hardware acceleration. The
+feature is a no-op on Windows (the pure-Rust implementations are always used
+there) and is automatically bypassed at runtime for any algorithm libcrypto
+refuses (for example, MD5 in strict FIPS mode).
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For
