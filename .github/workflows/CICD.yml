@@ -836,8 +836,8 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # Linux: exercises both vendored (static) and OPENSSL_NO_VENDOR=1
-          # (dynamic against system libcrypto). ubuntu-latest ships libssl-dev.
+          # Linux: exercises OPENSSL_NO_VENDOR=1 (dynamic against system libcrypto). ubuntu-latest ships libssl-dev.
+          # static binaries are tested and published on make.yml
           - { os: ubuntu-latest, features: feat_os_unix, dynamic: true }
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
@@ -848,7 +848,6 @@ jobs:
     - uses: actions/checkout@v6
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -864,7 +863,8 @@ jobs:
     # from source and statically links it (mirrors how `expr` links
     # oniguruma). Runs the md5sum/sha*sum/cksum integration tests end-to-end
     # so we'd catch a wrong-digest regression, not just a type error.
-    - name: Test checksum utilities with OpenSSL (vendored / static)
+    - name: Test checksum utilities with OpenSSL (vendored)
+      if: matrix.job.os == 'macos-latest'
       shell: bash
       env:
         RUST_BACKTRACE: "1"
@@ -872,22 +872,8 @@ jobs:
         cargo nextest run --hide-progress-bar --profile ci \
           --features "${{ matrix.job.features }},openssl" \
           -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
-    # Confirm the vendored build is actually statically linked. If this
-    # regresses, the `vendored` feature has stopped doing its job.
-    - name: Verify static linkage (vendored)
+    - name: Test checksum utilities with OpenSSL (dynamic)
       if: matrix.job.os == 'ubuntu-latest'
-      shell: bash
-      run: |
-        cargo build --release --features "${{ matrix.job.features }},openssl" --bin coreutils
-        if ldd target/release/coreutils 2>&1 | grep -iE 'libssl|libcrypto'; then
-          echo "ERROR: coreutils dynamically links libssl/libcrypto despite vendored feature"
-          exit 1
-        fi
-        echo "OK: no dynamic libssl/libcrypto linkage"
-    # Second linking mode: OPENSSL_NO_VENDOR=1 links dynamically against
-    # the system libcrypto/libssl.
-    - name: Test checksum utilities with OpenSSL (system / dynamic)
-      if: matrix.job.dynamic
       shell: bash
       env:
         OPENSSL_NO_VENDOR: "1"

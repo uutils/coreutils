@@ -83,7 +83,7 @@ jobs:
         mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
-      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
+      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar --features openssl"
       env:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
@@ -124,15 +124,22 @@ jobs:
         ! test -f /tmp/usr/local/share/zsh/site-functions/_install
         ! test -f /tmp/usr/local/share/bash-completion/completions/head.bash
         ! test -f /tmp/usr/local/share/fish/vendor_completions.d/cat.fish
-    - name: "`make install MULTICALL=n`"
+    - name: make install MULTICALL=n CARGOFLAGS="--features openssl"
       shell: bash
       run: |
         set -x
-        DESTDIR=/tmp/individual make PROFILE=release MULTICALL=n install
+        DESTDIR=/tmp/individual make PROFILE=release MULTICALL=n CARGOFLAGS="--features openssl" install
         # Check that *sum are present
         for s in {md5,b2,sha1,sha224,sha256,sha384,sha512}sum
           do test -e /tmp/individual/usr/local/bin/${s}
         done
+    - name: Verify static linkage (vendored)
+      shell: bash
+      run: |
+        if ldd target/release/cksum 2>&1 | grep -iE 'libssl|libcrypto'; then
+          echo "ERROR: cksum dynamically links libssl/libcrypto despite vendored feature"
+          exit 1
+        fi
     - name: "`make install MULTICALL=y LN=ln -svf`"
       shell: bash
       run: |

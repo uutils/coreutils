@@ -377,6 +377,7 @@ wasm
 wasip
 statx
 Statx
+libcrypto
 
 # * stty terminal flags
 brkint
