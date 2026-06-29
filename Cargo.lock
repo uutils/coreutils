@@ -3797,6 +3797,7 @@ dependencies = [
  "thiserror 2.0.18",
  "uucore",
  "uutils_term_grid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
