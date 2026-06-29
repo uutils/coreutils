@@ -184,10 +184,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
-    }
-
     let commands: Vec<&OsStr> = matches
         .get_many::<String>(options::COMMAND)
         .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());

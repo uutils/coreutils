@@ -46,14 +46,15 @@ fn test_enter_chroot_fails() {
 }
 
 #[test]
-fn test_no_such_directory() {
+#[cfg(target_os = "linux")]
+fn test_not_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch(at.plus_as_string("a"));
 
     ucmd.arg("a")
         .fails_with_code(125)
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n");
+        .stderr_contains("cannot chroot to 'a': Not a directory"); //todo: strip (os error N)
 }
 
 #[test]
