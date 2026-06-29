@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
+use memchr::memchr_iter;
 use rand::{
     RngExt as _,
     rngs::ThreadRng,
@@ -267,14 +268,13 @@ fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
     }
 }
 
-fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
+pub fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     // A single trailing separator is ignored.
     // If data is empty (and does not even contain a single 'sep'
     // to indicate the presence of an empty element), then behave
     // as if the input contained no elements at all.
-    const PREDICTED_LINE_LENGTH: usize = 64;
-    let predicted_capacity = data.len() / PREDICTED_LINE_LENGTH;
-    let mut elements = Vec::with_capacity(predicted_capacity);
+    let sep_count = memchr_iter(sep, data).count();
+    let mut elements = Vec::with_capacity(sep_count + 1);
     elements.extend(data.split(|&b| b == sep));
     let _ = elements.pop_if(|e| e.is_empty());
     elements
