@@ -1006,14 +1006,22 @@ fn n_chunks_by_byte(
 /// * l/K/N
 fn n_chunks_by_line(
     settings: &Settings,
-    reader: &mut impl BufRead,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
+    io_blksize: usize,
 ) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
+    let num_bytes = get_input_size(
+        &settings.input,
+        &mut reader,
+        initial_buf,
+        settings.io_blksize,
+    )?;
     let reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1134,10 +1142,13 @@ fn n_chunks_by_line(
 /// * r/K/N
 fn n_chunks_by_line_round_robin(
     settings: &Settings,
-    reader: &mut impl BufRead,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
+    io_blksize: usize,
 ) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1226,7 +1237,14 @@ where
     }
 }
 
-fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize) -> UResult<()> {
+fn line_bytes(
+    settings: &Settings,
+    reader: &mut impl Read,
+    chunk_size: usize,
+    io_blksize: usize,
+) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let reader = BufReader::with_capacity(io_blksize, reader);
     let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
     let mut next_writer = || -> UResult<_> {
         let name = filename_iterator.next().ok_or_else(|| {
@@ -1293,7 +1311,7 @@ fn line_bytes(settings: &Settings, reader: &mut impl BufRead, chunk_size: usize)
 }
 
 fn split(settings: &Settings) -> UResult<()> {
-    let r_box = if settings.input == "-" {
+    let mut reader = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
@@ -1304,7 +1322,6 @@ fn split(settings: &Settings) -> UResult<()> {
         Box::new(r) as Box<dyn Read>
     };
     let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
-    let mut reader = BufReader::with_capacity(io_blksize, r_box);
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
@@ -1314,16 +1331,26 @@ fn split(settings: &Settings) -> UResult<()> {
             n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
-            n_chunks_by_line(settings, &mut reader, num_chunks, None)
+            n_chunks_by_line(settings, &mut reader, num_chunks, None, io_blksize)
         }
-        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
-            n_chunks_by_line(settings, &mut reader, num_chunks, Some(chunk_number))
-        }
+        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => n_chunks_by_line(
+            settings,
+            &mut reader,
+            num_chunks,
+            Some(chunk_number),
+            io_blksize,
+        ),
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
-            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, None)
+            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, None, io_blksize)
         }
         Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
-            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, Some(chunk_number))
+            n_chunks_by_line_round_robin(
+                settings,
+                &mut reader,
+                num_chunks,
+                Some(chunk_number),
+                io_blksize,
+            )
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
@@ -1335,6 +1362,8 @@ fn split(settings: &Settings) -> UResult<()> {
             io::copy(&mut reader, &mut writer)?;
             Ok(())
         }
-        Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
+        Strategy::LineBytes(chunk_size) => {
+            line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
+        }
     }
 }
