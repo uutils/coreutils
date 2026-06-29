@@ -22,6 +22,7 @@ chmod-error-no-such-file = impossible d'accéder à {$file} : Aucun fichier ou r
 chmod-error-preserve-root = il est dangereux d'opérer récursivement sur {$file}
   chmod: utiliser --no-preserve-root pour outrepasser cette protection
 chmod-error-permission-denied = impossible d'accéder à {$file} : Permission refusée
+chmod-error-read-only-file-system = modification des permissions de {$file} : Système de fichiers en lecture seule
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
 chmod-error-missing-operand = opérande manquant
 
