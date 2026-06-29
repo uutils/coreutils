@@ -1,6 +1,6 @@
 name: Fuzzing
 
-# spell-checker:ignore (people) taiki-e
+# spell-checker:ignore (people) bamf taiki-e
 # spell-checker:ignore (misc) fuzzer
 
 env:
@@ -23,11 +23,17 @@ concurrency:
 jobs:
   uufuzz-examples:
     name: Build and test uufuzz examples
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # needs newer glibc
     steps:
     - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
+    - name: Update GNU coreutils
+      run: |
+        # curl fails
+        wget https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
+        sudo dpkg -i gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
+        /bin/true --version
     - name: Build uufuzz library
       run: |
         cd fuzz/uufuzz
@@ -52,11 +58,16 @@ jobs:
 
   fuzz-build:
     name: Build the fuzzers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # needs newer glibc
     steps:
     - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
+    - name: Update GNU coreutils
+      run: |
+        # curl fails
+        wget https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
+        sudo dpkg -i gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
@@ -72,7 +83,7 @@ jobs:
   fuzz-run:
     needs: fuzz-build
     name: Fuzz
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04 # needs newer glibc
     timeout-minutes: 5
     env:
       RUN_FOR: 60
@@ -103,6 +114,11 @@ jobs:
     - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
+    - name: Update GNU coreutils
+      run: |
+        # curl fails
+        wget https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
+        sudo dpkg -i gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb
     - name: Install `cargo-fuzz`
       uses: taiki-e/install-action@v2
       with:
@@ -199,7 +215,7 @@ jobs:
   fuzz-summary:
     needs: fuzz-run
     name: Fuzzing Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: always()
     steps:
       - uses: actions/checkout@v7.0.0

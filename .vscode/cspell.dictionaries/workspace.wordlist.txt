@@ -370,6 +370,7 @@ setpipe
 
 # * other
 auxv
+dpkg
 getlimits
 weblate
 algs
