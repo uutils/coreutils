@@ -38,6 +38,7 @@ du-help-si = comme -h, mais utiliser les puissances de 1000 et non 1024
 du-help-one-file-system = ignorer les répertoires sur des systèmes de fichiers différents
 du-help-threshold = exclure les entrées plus petites que TAILLE si positive, ou les entrées plus grandes que TAILLE si négative
 du-help-verbose = mode verbeux (option non présente dans GNU/Coreutils)
+du-help-dedupe-reflinks = compter le stockage partagé via des reflinks (copies CoW) une seule fois (Linux uniquement ; nécessite FIEMAP). Ajoute un surcoût important et est ignoré avec --apparent-size, --bytes, --inodes ou --count-links.
 du-help-exclude = exclure les fichiers qui correspondent au MOTIF
 du-help-exclude-from = exclure les fichiers qui correspondent à n'importe quel motif dans FICHIER
 du-help-files0-from = résumer l'utilisation du périphérique des noms de fichiers terminés par NUL spécifiés dans le fichier F ; si F est -, alors lire les noms depuis l'entrée standard
