@@ -1500,3 +1500,14 @@ fn test_chmod_symlink_two_links_same_dir() {
         .stdout_contains("mode of 'base/link2/file'");
     // cSpell:enable
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_chmod_permission_denied() {
+    let (_, mut ucmd) = at_and_ucmd!();
+
+    ucmd.args(&["+", "/"]).fails_with_code(1).stderr_is(
+        // spell-checker:disable-next-line
+        "chmod: changing permissions of '/': Operation not permitted\n",
+    );
+}

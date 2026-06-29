@@ -13,7 +13,9 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::fs::{FileInformation, display_permissions_unix};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
@@ -772,13 +774,13 @@ impl Chmoder {
     }
 
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
-        if fperm == mode {
-            // Use the helper method for consistent reporting
-            self.report_permission_change(file, fperm, mode);
-            Ok(())
-        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
+        // fs::set_permissions calls chmod which we need for the gnu test chmod/only-op.sh
+        if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                show_error!("{err}");
+                show_error!(
+                    "{}",
+                    translate!("chmod-permissions-changed", "file" => file.quote(), "errno" => strip_errno(&err))
+                );
             }
             if self.verbose {
                 println!(

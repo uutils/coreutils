@@ -29,3 +29,4 @@ chmod-verbose-neither-changed = neither symbolic link {$file} nor referent has b
 chmod-verbose-mode-retained = mode of {$file} retained as {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = failed to change mode of file {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode of {$file} changed from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
+chmod-permissions-changed = changing permissions of {$file}: {$errno}
