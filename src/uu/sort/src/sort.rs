@@ -2630,6 +2630,37 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
     }
 }
 
+/// Comparison used by the merge path.
+///
+/// This is result-identical to [`compare_by`], but for the whole-line locale-collation
+/// case it compares the two lines lazily with the ICU collator instead of relying on
+/// precomputed collation keys. Merging only performs O(n log k) comparisons (and none at
+/// all when merging a single file), so computing a full sort key for every line — as the
+/// regular sort path does to amortize O(n log n) comparisons — is pure overhead here.
+/// Skipping that per-line work (see `merge_without_limit`) is what makes `sort -m` of
+/// already-sorted input fast.
+pub fn merge_compare<'a>(
+    a: &Line<'a>,
+    b: &Line<'a>,
+    settings: &GlobalSettings,
+    a_line_data: &LineData<'a>,
+    b_line_data: &LineData<'a>,
+) -> Ordering {
+    #[cfg(feature = "i18n-collator")]
+    if settings.precomputed.fast_locale_collation {
+        // Mirror the `fast_locale_collation` branch of `compare_by`, but compare the line
+        // bytes directly rather than precomputed keys: `locale_cmp` (ICU `compare_utf8`)
+        // and the sort-key comparison agree on ordering by construction.
+        let mut cmp = locale_cmp(a.line, b.line);
+        if cmp == Ordering::Equal {
+            // Equal keys for inputs like `01` and `0_1`; fall back to (reversed) byte order.
+            cmp = b.line.cmp(a.line);
+        }
+        return if settings.reverse { cmp.reverse() } else { cmp };
+    }
+    compare_by(a, b, settings, a_line_data, b_line_data)
+}
+
 fn compare_by<'a>(
     a: &Line<'a>,
     b: &Line<'a>,

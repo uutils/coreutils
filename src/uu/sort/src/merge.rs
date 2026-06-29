@@ -30,7 +30,7 @@ use uucore::error::{FromIo, UResult};
 use crate::{
     GlobalSettings, Output, SortError,
     chunks::{self, Chunk, RecycledChunk},
-    compare_by, current_open_fd_count, fd_soft_limit, open,
+    current_open_fd_count, fd_soft_limit, merge_compare, open,
     tmp_dir::TmpDirWrapper,
 };
 
@@ -200,7 +200,13 @@ fn merge_without_limit<M: MergeInput + 'static, F: Iterator<Item = UResult<M>>>(
     }
 
     let reader_join_handle = thread::spawn({
-        let settings = settings.clone();
+        // The merge comparator (`merge_compare`) compares whole-line locale keys lazily
+        // with the ICU collator, so the reader does not need to precompute per-line sort
+        // keys. Disabling `fast_locale_collation` here turns `Line::create` into a no-op
+        // for that (whole-line, default) mode and avoids the dominant cost of merging
+        // already-sorted input. Other modes are unaffected (the flag is already false).
+        let mut settings = settings.clone();
+        settings.precomputed.fast_locale_collation = false;
         move || {
             reader(
                 &request_receiver,
@@ -332,7 +338,7 @@ impl FileMerger<'_> {
                 let current_line = &contents.lines[file.line_idx];
                 if settings.unique {
                     if let Some(prev) = &prev {
-                        let cmp = compare_by(
+                        let cmp = merge_compare(
                             &prev.chunk.lines()[prev.line_idx],
                             current_line,
                             settings,
@@ -383,7 +389,7 @@ struct FileComparator<'a> {
 
 impl Compare<MergeableFile> for FileComparator<'_> {
     fn compare(&self, a: &MergeableFile, b: &MergeableFile) -> Ordering {
-        let mut cmp = compare_by(
+        let mut cmp = merge_compare(
             &a.current_chunk.lines()[a.line_idx],
             &b.current_chunk.lines()[b.line_idx],
             self.settings,
