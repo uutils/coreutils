@@ -648,8 +648,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
-    if res.is_err() {
+    if let Err(ref e) = res {
+        uucore::show_error!("{}", e);
         println!("0");
+        std::process::exit(1);
     }
 
     res
