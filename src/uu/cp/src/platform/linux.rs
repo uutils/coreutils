@@ -31,10 +31,8 @@ where
 {
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
-    if ioctl_ficlone(&dst, &src).is_err() {
-        // faster than io::copy's copy_file_range and sendfile
-        buf_copy::copy_stream(&mut src, &mut dst)?;
-    }
+    // remove copy_file_range from io::copy for proper --reflink=never support
+    buf_copy::copy_stream(&mut src, &mut dst)?;
     Ok(())
 }
 
