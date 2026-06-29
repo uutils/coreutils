@@ -31,6 +31,44 @@ fn test_format_and_equal_width() {
 }
 
 #[test]
+fn test_format_precision_too_large() {
+    // A precision near usize::MAX used to overflow the precision arithmetic
+    // shared with the float formatters; it must be rejected as invalid.
+    for spec in ["%.18446744073709551615e", "%.9999999999999999999a"] {
+        new_ucmd!()
+            .args(&[format!("--format={spec}"), "1".to_string()])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("invalid precision");
+    }
+}
+
+#[test]
+fn test_format_extreme_exponent_does_not_overflow() {
+    // A value with an exponent that does not fit in an i32 used to overflow the
+    // hex-float exponent math; it must now fail cleanly without panicking.
+    new_ucmd!()
+        .args(&[
+            "--format=%a",
+            "5e8123456789012345678",
+            "5e8123456789012345678",
+        ])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("number too large to format");
+}
+
+#[test]
+fn test_equal_width_huge_exponent_does_not_overflow() {
+    // Equal-width padding adds the integral-digit count to the precision; a value
+    // with an astronomically large exponent must saturate instead of overflowing.
+    new_ucmd!()
+        .args(&["-w", "1e9223372036854775807", "1e-9223372036854775807", "1"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])
