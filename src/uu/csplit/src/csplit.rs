@@ -649,8 +649,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::show_error!("{}", e);
 
         // Print 0 second
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
+        let mut handle = io::stdout();
         let _ = writeln!(handle, "0");
 
         uucore::error::set_exit_code(1);
