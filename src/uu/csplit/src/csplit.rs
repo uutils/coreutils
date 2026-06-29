@@ -179,7 +179,7 @@ where
                             return Err(CsplitError::LineOutOfRangeOnRepetition(
                                 pattern_as_str,
                                 ith - 1,
-                            ));
+                                ));
                         }
                         Err(err) => return Err(err),
                         // continue the splitting process
@@ -211,7 +211,7 @@ where
                             return Err(CsplitError::MatchNotFoundOnRepetition(
                                 pattern_as_str,
                                 ith - 1,
-                            ));
+                                ));
                         }
                         (Err(err), _) => return Err(err),
                         // continue the splitting process
@@ -634,14 +634,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Borrow::borrow)
         .collect();
     let options = CsplitOptions::new(&matches)?;
-    if file_name == "-" {
+    
+    let res = if file_name == "-" {
         let stdin = io::stdin();
-        Ok(csplit(&options, &patterns, stdin.lock())?)
+        csplit(&options, &patterns, stdin.lock()).map_err(|e| e.into())
     } else {
         let file = File::open(file_name)
-            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
-        Ok(csplit(&options, &patterns, BufReader::new(file))?)
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()));
+        
+        match file {
+            Ok(f) => csplit(&options, &patterns, BufReader::new(f)).map_err(|e| e.into()),
+            Err(e) => Err(e),
+        }
+    };
+
+    if res.is_err() {
+        println!("0");
     }
+
+    res
 }
 
 pub fn uu_app() -> Command {
