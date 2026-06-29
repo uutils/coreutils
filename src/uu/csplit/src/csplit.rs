@@ -639,19 +639,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let stdin = io::stdin();
         csplit(&options, &patterns, stdin.lock()).map_err(Into::into)
     } else {
-        let file = File::open(file_name)
-            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()));
-
-        match file {
-            Ok(f) => csplit(&options, &patterns, BufReader::new(f)).map_err(Into::into),
-            Err(e) => Err(e),
-        }
+        File::open(file_name)
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))
+            .and_then(|file| csplit(&options, &patterns, BufReader::new(file)).map_err(Into::into))
     };
 
     if let Err(ref e) = res {
+        // Print error first
         uucore::show_error!("{}", e);
-        println!("0");
-        std::process::exit(1);
+
+        // Print 0 second
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        let _ = writeln!(handle, "0");
+
+        uucore::error::set_exit_code(1);
+        return Ok(());
     }
 
     res
