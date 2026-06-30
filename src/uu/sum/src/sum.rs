@@ -143,10 +143,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             bsd_sum(reader)
         }
         .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
-        
+
         if print_names {
             write!(out_buf, "{sum:0width$} {blocks:width$} ")?;
-            // Fixed: Use cross-platform .as_encoded_bytes() for safe inline byte vector writing
             out_buf.write_all(file.as_encoded_bytes())?;
             out_buf.write_all(b"\n")?;
         } else {
@@ -155,7 +154,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let stdout_handle = stdout();
-    
+
     let mut written = 0;
     while written < out_buf.len() {
         match rustix::io::write(stdout_handle.as_fd(), &out_buf[written..]) {
