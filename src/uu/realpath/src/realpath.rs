@@ -294,12 +294,11 @@ fn resolve_path(
     relative_to: Option<&Path>,
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
-    for component in p.components() {
-        if let Some(name) = component.as_os_str().to_str() {
-            if name.len() > 255 {
-                return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
-            }
-        }
+    if p.components()
+        .map(|c| c.as_os_str().len())
+        .any(|len| len > 255)
+    {
+        return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
     }
 
     let abs = canonicalize(p, can_mode, resolve)?;
