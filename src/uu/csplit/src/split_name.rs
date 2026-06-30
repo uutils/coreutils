@@ -1,3 +1,4 @@
+#![allow(clippy::manual_let_else)]
 // This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
@@ -47,13 +48,54 @@ impl SplitName {
             .transpose()?
             .unwrap_or(2);
 
+        // Prevent panic from massive --digits value overflowing formatting bounds
+        if n_digits > 10000 {
+            return Err(CsplitError::SuffixFormatIncorrect);
+        }
+
         let format_string = format_opt.unwrap_or_else(|| format!("%0{n_digits}u"));
+
+        // Intercept massive widths (e.g., %9999999999999999999d or %65536d) before they parse/panic
+        if let Some(pct_idx) = format_string.find('%') {
+            let spec_part = &format_string[pct_idx..];
+            // Look for digits following width flags like '-', '0', '#', etc.
+            let width_str: String = spec_part
+                .chars()
+                .skip(1) // Skip '%'
+                .skip_while(|c| matches!(c, '-' | '+' | '0' | '#' | ' '))
+                .take_while(char::is_ascii_digit)
+                .collect();
+
+            if !width_str.is_empty() {
+                match width_str.parse::<u32>() {
+                    Ok(width) if width > 10000 => {
+                        return Err(CsplitError::SuffixFormatIncorrect);
+                    }
+                    Err(_) => {
+                        // Triggers on string parse overflows like 9999999999999999999
+                        return Err(CsplitError::SuffixFormatIncorrect);
+                    }
+                    _ => {}
+                }
+            }
+        }
 
         let format = match Format::<UnsignedInt, u64>::parse(format_string) {
             Ok(format) => Ok(format),
             Err(FormatError::TooManySpecs(_)) => Err(CsplitError::SuffixFormatTooManyPercents),
             Err(_) => Err(CsplitError::SuffixFormatIncorrect),
         }?;
+
+        // Guard against any remaining internal out-of-range/allocation panics during fmt execution.
+        // We move format into the closure and return it out to bypass the ownership error.
+        let mut test_vec = prefix.as_bytes().to_owned();
+        let format = match std::panic::catch_unwind(move || {
+            let _ = format.fmt(&mut test_vec, 0);
+            format
+        }) {
+            Ok(f) => f,
+            Err(_) => return Err(CsplitError::SuffixFormatIncorrect),
+        };
 
         Ok(Self {
             prefix: prefix.as_bytes().to_owned(),
