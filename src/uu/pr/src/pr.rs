@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::translate;
@@ -194,15 +194,6 @@ enum PrError {
     // New variant that correctly formats the file path error like GNU pr
     #[error("pr: {path}: {msg}")]
     PathError { path: String, msg: String },
-}
-
-// Helper function to match GNU pr output styling by cleaning up standard OS strings
-fn strip_errno(err_msg: String) -> String {
-    if let Some(idx) = err_msg.find(" (os error") {
-        err_msg[..idx].to_string()
-    } else {
-        err_msg
-    }
 }
 
 pub fn uu_app() -> Command {
@@ -990,7 +981,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // and strip the OS error number to match GNU behavior.
     let buf = read_to_end(path).map_err(|e| PrError::PathError {
         path: path.to_string(),
-        msg: strip_errno(e.to_string()),
+        msg: strip_errno(&e),
     })?;
 
     let start_page = options.start_page;
@@ -1163,7 +1154,7 @@ fn get_file_line_groups(
         // Read the entire contents of the file into a buffer.
         let buf = read_to_end(path).map_err(|e| PrError::PathError {
             path: (*path).to_string(),
-            msg: strip_errno(e.to_string()),
+            msg: strip_errno(&e),
         })?;
 
         // Split the text into pages and collect each line for subsequent grouping.
