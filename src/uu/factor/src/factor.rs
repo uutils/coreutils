@@ -154,7 +154,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let print_exponents = matches.get_flag(options::EXPONENTS);
 
     let stdout = stdout();
-    // We use a smaller buffer here to pass a gnu test. 4KiB appears to be the default pipe size for bash.
+    // We use a smaller buffer here to pass a GNU compatibility test.
+    // 4 KiB matches the standard block buffering size (BUFSIZ) used by GNU factor when writing to a pipe.
     let mut w = io::BufWriter::with_capacity(4 * 1024, stdout.lock());
 
     if let Some(values) = matches.get_many::<String>(options::NUMBER) {
