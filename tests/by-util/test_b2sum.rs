@@ -159,6 +159,23 @@ fn test_check_b2sum_length_option_8() {
 }
 
 #[test]
+fn test_check_b2sum_status_reports_no_properly_formatted_lines() {
+    let invalid_checksum = concat!(
+        "bedfbb90d858c2d67b7ee8f7523be3d3b54004ef9e4f02f2",
+        "ad79a1d05bfdfe49b81e3c92ebf99b504102b6bf003fa342",
+        "587f5b3124c205f55204e8c4b4ce7d7c",
+    );
+
+    new_ucmd!()
+        .arg("-c")
+        .arg("--status")
+        .pipe_in(invalid_checksum)
+        .fails()
+        .no_stdout()
+        .stderr_contains("b2sum: 'standard input': no properly formatted checksum lines found");
+}
+
+#[test]
 fn test_invalid_b2sum_length_option_not_multiple_of_8() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
