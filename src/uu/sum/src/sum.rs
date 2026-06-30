@@ -9,7 +9,7 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
-use std::os::unix::io::AsFd; // Fixed: Import AsFd for safe rustix integration
+use std::os::unix::io::AsFd;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
@@ -17,7 +17,6 @@ use uucore::translate;
 
 use uucore::{format_usage, show};
 
-// Fixed to 8 KiB (equivalent to `std::sys::io::DEFAULT_BUF_SIZE` on most targets)
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
 fn bsd_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
@@ -159,7 +158,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     
     let mut written = 0;
     while written < out_buf.len() {
-        // Fixed: Pass stdout_handle.as_fd() directly to satisfy rustix's AsFd trait constraint
         match rustix::io::write(stdout_handle.as_fd(), &out_buf[written..]) {
             Ok(n) => written += n,
             Err(e) => {
