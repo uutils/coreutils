@@ -190,6 +190,7 @@ whitespace
 wordlist
 wordlists
 xattrs
+xffb
 xpass
 
 # * abbreviations
