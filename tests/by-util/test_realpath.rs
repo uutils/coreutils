@@ -458,6 +458,16 @@ fn test_realpath_trailing_slash() {
         .args(&["-m", "link_no_dir/"])
         .succeeds()
         .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
+    scene
+        .ucmd()
+        .arg("nonexistent/.")
+        .fails()
+        .stderr_contains("No such file or directory\n");
+    scene
+        .ucmd()
+        .arg("nonexistent/./")
+        .fails()
+        .stderr_contains("No such file or directory\n");
 }
 
 #[test]
