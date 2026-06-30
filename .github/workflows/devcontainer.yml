@@ -30,4 +30,4 @@ jobs:
       with:
         push: never
         runCmd: |
-            echo -n "Dummy"
+            cargo check
