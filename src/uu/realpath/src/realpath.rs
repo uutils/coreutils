@@ -316,12 +316,16 @@ fn resolve_path(
             let parent_path = if has_trailing_slash {
                 p_str.trim_end_matches('/').to_string()
             } else {
-                p_str.rsplit_once('/').map_or("", |x| x.0).to_string()
+                p_str
+                    .rsplit_once('/')
+                    .map_or("", |(before, _)| before)
+                    .to_string()
             };
 
             if !parent_path.is_empty() {
                 let parent = Path::new(&parent_path);
-                if !parent.exists() {
+                // Fix: Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
+                if !parent.exists() && parent.symlink_metadata().is_err() {
                     return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
                 }
             }
