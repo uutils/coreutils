@@ -1,0 +1,33 @@
+name: Devcontainer
+
+# spell-checker:ignore devcontainers nextest
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: read # to fetch code (actions/checkout)
+
+# End the current execution if there is a new changeset in the PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Verify devcontainer
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+    - uses: actions/checkout@v7.0.0
+      with:
+        persist-credentials: false
+    - name: Run test in devcontainer
+      uses: devcontainers/ci@v0.3
+      with:
+        push: never
+        runCmd: |
+            echo -n "Example"
