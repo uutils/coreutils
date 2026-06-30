@@ -54,31 +54,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
     };
-    let file: File;
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
-        // Windows reports a permission denied error when trying to read a directory.
-        // So we check manually beforehand. On other systems, we avoid this extra check for performance.
+        // some platforms cannot catch this as read error. Needs additional cost by stat
         #[cfg(windows)]
         {
-            use std::path::Path;
-
-            let path = Path::new(input);
-            if path.is_dir() {
+            let input = std::path::Path::new(input);
+            if input.is_dir() {
                 return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
             }
-
-            file = File::open(path)?;
         }
-        #[cfg(not(windows))]
-        {
-            file = File::open(input)?;
-        }
-        // advise the OS we will access the data sequentially if available.
-        // offset 0 => from the start of the file. None => for the whole file.
+        let file = File::open(input)?;
+        // advise the OS we will access the data sequentially if possible
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
 
