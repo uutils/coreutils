@@ -9,8 +9,9 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
+use std::os::unix::io::AsFd; // Fixed: Import AsFd for safe rustix integration
 use std::path::Path;
-use uucore::display::{OsWrite, Quotable};
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
@@ -127,6 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let print_names = files.len() > 1 || files[0] != "-";
     let width = if sysv { 1 } else { 5 };
 
+    let mut out_buf = Vec::new();
+
     for file in &files {
         let reader = match open(file) {
             Ok(f) => f,
@@ -141,15 +144,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             bsd_sum(reader)
         }
         .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
-        let mut stdout = stdout().lock();
+        
         if print_names {
-            write!(stdout, "{sum:0width$} {blocks:width$} ")?;
-            stdout.write_all_os(file)?;
-            stdout.write_all(b"\n")?;
+            write!(out_buf, "{sum:0width$} {blocks:width$} ")?;
+            // Fixed: Use cross-platform .as_encoded_bytes() for safe inline byte vector writing
+            out_buf.write_all(file.as_encoded_bytes())?;
+            out_buf.write_all(b"\n")?;
         } else {
-            writeln!(stdout, "{sum:0width$} {blocks:width$}")?;
+            writeln!(out_buf, "{sum:0width$} {blocks:width$}")?;
         }
     }
+
+    let stdout_handle = stdout();
+    
+    let mut written = 0;
+    while written < out_buf.len() {
+        // Fixed: Pass stdout_handle.as_fd() directly to satisfy rustix's AsFd trait constraint
+        match rustix::io::write(stdout_handle.as_fd(), &out_buf[written..]) {
+            Ok(n) => written += n,
+            Err(e) => {
+                return Err(USimpleError::new(
+                    1,
+                    format!("write error: {}", std::io::Error::from(e)),
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
