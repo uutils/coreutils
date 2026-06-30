@@ -1019,3 +1019,11 @@ fn test_merge_empty_input() {
         .succeeds()
         .no_output();
 }
+
+#[test]
+fn test_file_not_found_error_message() {
+    new_ucmd!()
+        .arg("aha")
+        .fails_with_code(1)
+        .stderr_is("pr: aha: No such file or directory\n");
+}
