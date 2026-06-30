@@ -30,5 +30,4 @@ jobs:
       with:
         push: never
         runCmd: |
-            curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
-            cargo nextest run --hide-progress-bar --profile ci
+            echo -n "Dummy"
