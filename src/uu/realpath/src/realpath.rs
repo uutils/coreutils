@@ -35,7 +35,7 @@ const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
-
+const MAX_PATH: usize = 255;
 const ARG_FILES: &str = "files";
 
 /// Custom parser that validates `OsString` is not empty
@@ -294,9 +294,11 @@ fn resolve_path(
     relative_to: Option<&Path>,
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
-    if p.components()
-        .any(|c| c.as_os_str().to_str().is_some_and(|name| name.len() > 255))
-    {
+    if p.components().any(|c| {
+        c.as_os_str()
+            .to_str()
+            .is_some_and(|name| name.len() > MAX_PATH)
+    }) {
         return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
     }
 
