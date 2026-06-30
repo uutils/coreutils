@@ -302,6 +302,32 @@ fn resolve_path(
         return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
     }
 
+    // GNU realpath compatibility: If a path explicitly references a directory modifier
+    // via a trailing slash or directory shortcuts like `/.` or `/..`, the parent must exist.
+    if can_mode == MissingHandling::Normal {
+        let p_str = p.to_string_lossy();
+        let has_trailing_dot =
+            p_str.ends_with("/.") || p_str.ends_with("/..") || p_str == "." || p_str == "..";
+        let has_trailing_slash = p_str.ends_with('/');
+
+        if has_trailing_dot || has_trailing_slash {
+            // Reconstruct the expected parent path by stripping the trailing segment manually
+            // to bypass rust path normalization flaws on non-existent targets.
+            let parent_path = if has_trailing_slash {
+                p_str.trim_end_matches('/').to_string()
+            } else {
+                p_str.rsplit_once('/').map_or("", |x| x.0).to_string()
+            };
+
+            if !parent_path.is_empty() {
+                let parent = Path::new(&parent_path);
+                if !parent.exists() {
+                    return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+                }
+            }
+        }
+    }
+
     let abs = canonicalize(p, can_mode, resolve)?;
 
     let abs = process_relative(abs, relative_base, relative_to);
