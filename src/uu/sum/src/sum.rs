@@ -78,14 +78,15 @@ fn open(name: &OsString) -> UResult<Reader> {
 
         // Silent the warning as we want to the error message
         match path.metadata() {
-            Ok(_) => {
-                if path.is_dir() {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-                    ));
-                }
+            // some platforms cannot catch this as read error. Needs additional cost by stat
+            #[cfg(any(target_os = "wasi", target_os = "windows"))]
+            Ok(_) if path.is_dir() => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("sum-error-is-directory", "name" => name.maybe_quote()),
+                ));
             }
+            Ok(_) => {}
             Err(err) => {
                 if err.kind() == ErrorKind::NotFound {
                     return Err(USimpleError::new(
