@@ -324,7 +324,7 @@ fn resolve_path(
 
             if !parent_path.is_empty() {
                 let parent = Path::new(&parent_path);
-                // Fix: Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
+                // Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
                 if !parent.exists() && parent.symlink_metadata().is_err() {
                     return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
                 }
