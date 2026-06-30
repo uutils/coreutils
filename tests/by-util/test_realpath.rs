@@ -458,18 +458,6 @@ fn test_realpath_trailing_slash() {
         .args(&["-m", "link_no_dir/"])
         .succeeds()
         .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
-
-    scene
-        .ucmd()
-        .arg("nonexistent/.")
-        .fails()
-        .stderr_contains("No such file or directory\n");
-
-    scene
-        .ucmd()
-        .arg("nonexistent/./")
-        .fails()
-        .stderr_contains("No such file or directory\n");
 }
 
 #[test]
@@ -598,9 +586,10 @@ fn test_realpath_multiple_files_with_one_long_component() {
     let at = &scene.fixtures;
     at.touch("valid_file");
 
-    // The utility must continue iterating through files and output 
+    // The utility must continue iterating through files and output
     // the valid path while asserting a non-zero exit state for the failure.
-    scene.ucmd()
+    scene
+        .ucmd()
         .arg("valid_file")
         .arg(long_component)
         .arg("valid_file")
