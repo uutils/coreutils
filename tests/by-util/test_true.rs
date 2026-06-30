@@ -30,6 +30,19 @@ fn test_help() {
         .stdout_contains("true");
 }
 
+/// GH #10279: GNU `true --help` opens with the `Usage:` line. The previous
+/// uutils help template put the about text first, breaking config tools
+/// that grep the first line.
+#[test]
+fn test_help_starts_with_usage() {
+    let result = new_ucmd!().args(&["--help"]).succeeds();
+    let first_line = result.stdout_str().lines().next().unwrap_or("");
+    assert!(
+        first_line.starts_with("Usage:"),
+        "expected --help first line to start with 'Usage:', got {first_line:?}"
+    );
+}
+
 #[test]
 fn test_short_options() {
     for option in ["-h", "-V"] {
