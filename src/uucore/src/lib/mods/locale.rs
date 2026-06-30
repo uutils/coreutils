@@ -113,6 +113,13 @@ static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
 
@@ -466,6 +473,13 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
+        #[cfg_attr(
+            target_os = "android",
+            expect(
+                clippy::missing_const_for_thread_local,
+                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+            )
+        )]
         static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
     }
     if LOCALIZER_IS_SET.with(Cell::get) {
