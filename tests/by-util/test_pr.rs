@@ -959,6 +959,51 @@ fn test_zero_columns_shortcut() {
 }
 
 #[test]
+fn test_combined_digit_flags() {
+    // -3Ts, should be parsed correctly as -3 columns, -T (no pagination), -s, (comma separated)
+    let input = "a\nb\nc\n";
+    let expected = "a,b,c\n";
+    new_ucmd!()
+        .args(&["-3Ts,"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_plain_digit_arg_with_flags() {
+    // -3 -T -s, should be parsed identically
+    let input = "a\nb\nc\n";
+    let expected = "a,b,c\n";
+    new_ucmd!()
+        .args(&["-3", "-T", "-s,"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
+fn test_page_range_with_plus() {
+    // +2:3 should start on page 2 and end on page 3.
+    // Note: currently uutils uses 56-line content per page even with -T.
+    let mut input = String::new();
+    for i in 1..=200 {
+        input.push_str(&format!("line {i}\n"));
+    }
+
+    let mut expected = String::new();
+    for i in 57..=168 {
+        expected.push_str(&format!("line {i}\n"));
+    }
+
+    new_ucmd!()
+        .args(&["+2:3", "-T"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_zero_expand_tab_width() {
     let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
     new_ucmd!()

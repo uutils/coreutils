@@ -84,6 +84,7 @@ struct OutputOptions {
     col_sep_for_printing: String,
     line_width: Option<usize>,
     expand_tabs: Option<ExpandTabsOptions>,
+    omit_pagination: bool,
 }
 
 /// One line of an input file, annotated with file, page, and line number.
@@ -432,7 +433,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 /// # Arguments
 /// * `args` - Command line arguments
 fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
+    let column_page_option = Regex::new(r"^([-+])(\d+)(.*)$").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let e_regex = Regex::new(r"^-e").unwrap();
@@ -461,7 +462,23 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
 
     arguments
         .into_iter()
-        .filter(|i| !column_page_option.is_match(i))
+        .flat_map(|arg| {
+            if let Some(caps) = column_page_option.captures(&arg) {
+                let prefix = caps.get(1).unwrap().as_str();
+                let remainder = caps.get(3).unwrap().as_str();
+
+                let mut split = vec![];
+                if prefix == "-"
+                    && !remainder.is_empty()
+                    && !remainder.starts_with(|c: char| c.is_ascii_digit())
+                {
+                    split.push(format!("-{remainder}"));
+                }
+                split
+            } else {
+                vec![arg]
+            }
+        })
         .collect()
 }
 
@@ -901,7 +918,14 @@ fn build_options(
     let columns_to_print =
         merge_files_print.unwrap_or_else(|| column_mode_options.as_ref().map_or(1, |i| i.columns));
 
-    let line_width = if join_lines {
+    let s_flag_active = matches.value_source(options::COLUMN_CHAR_SEPARATOR)
+        == Some(clap::parser::ValueSource::CommandLine);
+    let s_string_flag_active = matches.value_source(options::COLUMN_STRING_SEPARATOR)
+        == Some(clap::parser::ValueSource::CommandLine);
+
+    let alignment_disabled = s_flag_active && !s_string_flag_active;
+
+    let line_width = if join_lines || alignment_disabled {
         None
     } else if columns_to_print > 1 {
         Some(
@@ -933,6 +957,7 @@ fn build_options(
         col_sep_for_printing,
         line_width,
         expand_tabs,
+        omit_pagination: matches.get_flag(options::OMIT_PAGINATION),
     })
 }
 
@@ -1208,7 +1233,11 @@ fn print_page(
             out.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
+
+    if !options.omit_pagination {
+        out.write_all(page_separator)?;
+    }
+
     out.flush()?;
     Ok(())
 }
@@ -1372,7 +1401,7 @@ fn write_columns(
                     .as_bytes(),
             )?;
         }
-        if not_found_break && feed_line_present {
+        if not_found_break && (feed_line_present || options.omit_pagination) {
             break;
         }
         out.write_all(line_separator)?;
