@@ -295,8 +295,7 @@ fn resolve_path(
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
     if p.components()
-        .map(|c| c.as_os_str().len())
-        .any(|len| len > 255)
+        .any(|c| c.as_os_str().to_str().is_some_and(|name| name.len() > 255))
     {
         return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
     }
