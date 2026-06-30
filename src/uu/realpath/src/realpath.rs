@@ -11,7 +11,7 @@ use clap::{
 };
 use std::{
     ffi::{OsStr, OsString},
-    io::{Write, stdout},
+    io::{Error, ErrorKind, Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
@@ -75,7 +75,7 @@ impl ValueParserFactory for NonEmptyOsStringParser {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    /*  the list of files */
+    /* the list of files */
 
     let paths: Vec<PathBuf> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -294,13 +294,15 @@ fn resolve_path(
     relative_to: Option<&Path>,
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
-    let abs = canonicalize(p, can_mode, resolve)?;
-    if can_mode == MissingHandling::Normal {
-        let path_str = p.to_string_lossy();
-        if path_str.ends_with("/.") || path_str.ends_with("/./") {
-            abs.metadata()?; // raise no such file or directory error
+    for component in p.components() {
+        if let Some(name) = component.as_os_str().to_str() {
+            if name.len() > 255 {
+                return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
+            }
         }
     }
+
+    let abs = canonicalize(p, can_mode, resolve)?;
 
     let abs = process_relative(abs, relative_base, relative_to);
 
