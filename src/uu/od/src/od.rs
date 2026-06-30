@@ -269,7 +269,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             od_options.line_bytes,
             PEEK_BUFFER_SIZE,
             od_options.byte_order,
-        );
+        )
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
 
         let output_info = OutputInfo::new(
             od_options.line_bytes,
