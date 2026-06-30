@@ -572,6 +572,14 @@ fn test_invalid_substr() {
 }
 
 #[test]
+fn test_substr_large_length_capacity_overflow_issue12574() {
+    new_ucmd!()
+        .args(&["substr", "abc", "1", &usize::MAX.to_string()])
+        .succeeds()
+        .stdout_only("abc\n");
+}
+
+#[test]
 fn test_escape() {
     new_ucmd!().args(&["+", "1"]).succeeds().stdout_only("1\n");
 
