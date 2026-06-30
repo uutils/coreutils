@@ -2038,26 +2038,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+            if line.as_slice() == STDIN_FILE.as_bytes() {
+                return Err(SortError::MinusInStdIn.into());
+            }
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
-                }
-                _ => {}
+                .into());
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(uucore::os_string_from_vec(line)?);
         }
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
