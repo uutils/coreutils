@@ -120,3 +120,27 @@ fn test_filename_proc_self_mem() {
 
     assert!(stderr == input_output || stderr == io);
 }
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_stdout_write_error_interruption() {
+    use std::process::{Command, Stdio};
+
+    let mut child = Command::new(uutests::util_exe("sum"))
+        .arg("-")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    drop(child.stdout.take());
+
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        let _ = writeln!(stdin, "1");
+    }
+
+    let status = child.wait().unwrap();
+
+    assert!(!status.success());
+}
