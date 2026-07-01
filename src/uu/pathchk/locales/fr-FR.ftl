@@ -9,10 +9,10 @@ pathchk-help-portability = vérifier pour tous les systèmes POSIX (équivalent 
 # Messages d'erreur
 pathchk-error-missing-operand = opérande manquant
 pathchk-error-empty-file-name = nom de fichier vide
-pathchk-error-posix-path-length-exceeded = limite { $limit } dépassée par la longueur { $length } du nom de fichier { $path }
-pathchk-error-posix-name-length-exceeded = limite { $limit } dépassée par la longueur { $length } du composant de nom de fichier { $component }
+pathchk-error-posix-path-length-exceeded = { $path }: limite { $limit } dépassée par la longueur { $length } du nom de fichier
+pathchk-error-posix-name-length-exceeded = { $component }: limite { $limit } dépassée par la longueur { $length } du composant de nom de fichier
 pathchk-error-leading-hyphen = tiret en début dans le composant de nom de fichier { $component }
-pathchk-error-path-length-exceeded = limite { $limit } dépassée par la longueur { $length } du nom de fichier { $path }
-pathchk-error-name-length-exceeded = limite { $limit } dépassée par la longueur { $length } du composant de nom de fichier { $component }
+pathchk-error-path-length-exceeded = { $path }: limite { $limit } dépassée par la longueur { $length } du nom de fichier
+pathchk-error-name-length-exceeded = { $component }: limite { $limit } dépassée par la longueur { $length } du composant de nom de fichier
 pathchk-error-empty-path-not-found = pathchk: '' : Aucun fichier ou répertoire de ce type
 pathchk-error-nonportable-character = caractère non portable '{ $character }' dans le composant de nom de fichier { $component }
