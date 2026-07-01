@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree FADV
-//spell-checker:ignore (libs) interner uclibc
+
+// spell-checker:ignore TAOCP indegree
+// spell-checker:ignore (libs) interner
+
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
@@ -35,25 +37,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .into_iter()
         .flatten();
 
-    let input = match (inputs.next(), inputs.next()) {
-        (None, _) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("tsort-error-at-least-one-input"),
-            ));
-        }
-        (Some(input), None) => input,
-        (Some(_), Some(extra)) => {
-            return Err(USimpleError::new(
-                1,
-                translate!(
-                    "tsort-error-extra-operand",
-                    "operand" => extra.quote(),
-                    "util" => "tsort"
-                ),
-            ));
-        }
-    };
+    let input = inputs.next().expect("default value should be set by clap");
+
+    if let Some(extra) = inputs.next() {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => extra.quote()
+            ),
+        ));
+    }
+
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
     if input == "-" {
