@@ -5,6 +5,7 @@ doctest
 # * crates
 aho-corasick
 blake2b_simd
+libloading
 rustix
 
 # * uutils project
