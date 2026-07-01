@@ -55,6 +55,7 @@ struct Uniq {
     slice_stop: Option<usize>,
     ignore_case: bool,
     zero_terminated: bool,
+    is_c_locale: bool,
 }
 
 #[derive(Default)]
@@ -202,7 +203,7 @@ impl Uniq {
                 if remainder.is_empty() {
                     return key_start;
                 }
-                if Self::is_c_locale() {
+                if self.is_c_locale {
                     // for C or POSIX we count bytes
                     key_start + remainder.len().min(limit)
                 } else if let Ok(valid) = std::str::from_utf8(remainder) {
@@ -680,6 +681,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         slice_stop: opt_parsed(options::CHECK_CHARS, &matches)?,
         ignore_case: matches.get_flag(options::IGNORE_CASE),
         zero_terminated: matches.get_flag(options::ZERO_TERMINATED),
+        is_c_locale: Uniq::is_c_locale(),
     };
 
     if uniq.show_counts && uniq.all_repeated {
