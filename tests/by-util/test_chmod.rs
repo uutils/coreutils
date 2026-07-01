@@ -5,7 +5,7 @@
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use uutests::at_and_ucmd;
 use uutests::util::{AtPath, TestScenario, UCommand};
 
@@ -1407,6 +1407,31 @@ fn test_chmod_recursive_uses_dirfd_for_subdirs() {
         !log.contains("openat(AT_FDCWD, \"x/y"),
         "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
     );
+}
+
+#[test]
+fn test_chmod_operator_only_still_calls_syscall() {
+    use uucore::process::geteuid;
+
+    // An operator with no permission letters ('+', '-', '=') leaves the mode
+    // bits unchanged, yet chmod must still issue the chmod(2) call so that a
+    // lack of permission is reported instead of silently succeeding. As a
+    // non-root user, '/' (owned by root) is a file we cannot chmod.
+    if geteuid() == 0 {
+        return;
+    }
+    if metadata("/").map_or(0, |m| m.uid()) != 0 {
+        return; // '/' is not root-owned in this environment
+    }
+
+    for op in ["+", "-", "="] {
+        new_ucmd!()
+            .arg(op)
+            .arg("/")
+            .fails()
+            .code_is(1)
+            .stderr_contains("changing permissions of '/'");
+    }
 }
 
 #[test]
