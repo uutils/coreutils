@@ -79,11 +79,8 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     target_env = "musl"
 ))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
-    match args.next() {
-        Some(ref s) if !s.is_empty() => PathBuf::from(s),
-        // the fallback is valid only for hardlinks
-        _ => std::env::current_exe().unwrap(),
-    }
+    PathBuf::from(args.next().unwrap())
+    // no fallback for empty args. current_exe() (/proc/self/exe) is valid only for hardlinks
 }
 /// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
 /// AppArmor, SELinux policies on hard-linked binaries
