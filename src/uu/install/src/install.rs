@@ -492,77 +492,77 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
-        Err(InstallError::DirNeedsArg.into())
-    } else {
-        for path in paths.iter().map(Path::new) {
-            // if the path already exist, check if it's a file
-            if path.exists() {
-                if !path.is_dir() {
-                    show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
-                    continue;
-                }
-            } else {
-                // Special case to match GNU's behavior:
-                // install -d foo/. should work and just create foo/
-                // std::fs::create_dir("foo/."); fails in pure Rust
-                // See also mkdir.rs for another occurrence of this
-                let path_to_create = dir_strip_dot_for_creation(path);
-                // Differently than the primary functionality
-                // (MainFunction::Standard), the directory functionality should
-                // create all ancestors (or components) of a directory
-                // regardless of the presence of the "-D" flag.
-                //
-                // NOTE: the GNU "install" sets the expected mode only for the
-                // target directory. All created ancestor directories will have
-                // the default mode. Hence it is safe to use fs::create_dir_all
-                // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                    .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
-                {
-                    show!(e);
-                    continue;
-                }
+        return Err(InstallError::DirNeedsArg.into());
+    }
 
-                // Set SELinux context for all created directories if needed
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if should_set_selinux_context(b) {
-                    let context = get_context_for_selinux(b);
-                    set_selinux_context_for_directories_install(path_to_create.as_path(), context);
-                }
-
-                if b.verbose {
-                    writeln!(
-                        stdout(),
-                        "{}",
-                        translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
-                    )?;
-                }
+    for path in paths.iter().map(Path::new) {
+        // if the path already exist, check if it's a file
+        if path.exists() {
+            if !path.is_dir() {
+                show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
+                continue;
             }
-
-            if mode::chmod(path, b.mode()).is_err() {
-                // Error messages are printed by the mode::chmod function!
-                uucore::error::set_exit_code(1);
+        } else {
+            // Special case to match GNU's behavior:
+            // install -d foo/. should work and just create foo/
+            // std::fs::create_dir("foo/."); fails in pure Rust
+            // See also mkdir.rs for another occurrence of this
+            let path_to_create = dir_strip_dot_for_creation(path);
+            // Differently than the primary functionality
+            // (MainFunction::Standard), the directory functionality should
+            // create all ancestors (or components) of a directory
+            // regardless of the presence of the "-D" flag.
+            //
+            // NOTE: the GNU "install" sets the expected mode only for the
+            // target directory. All created ancestor directories will have
+            // the default mode. Hence it is safe to use fs::create_dir_all
+            // and then only modify the target's dir mode.
+            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
+            ) {
+                show!(e);
                 continue;
             }
 
-            if b.privileged {
-                show_if_err!(chown_optional_user_group(path, b));
+            // Set SELinux context for all created directories if needed
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if should_set_selinux_context(b) {
+                let context = get_context_for_selinux(b);
+                set_selinux_context_for_directories_install(path_to_create.as_path(), context);
+            }
 
-                // Set SELinux context for directory if needed
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if b.default_context {
-                    show_if_err!(set_selinux_default_context(path));
-                } else if b.context.is_some() {
-                    let context = get_context_for_selinux(b);
-                    show_if_err!(set_selinux_security_context(path, context));
-                }
+            if b.verbose {
+                writeln!(
+                    stdout(),
+                    "{}",
+                    translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
+                )?;
             }
         }
-        // If the exit code was set, or show! has been called at least once
-        // (which sets the exit code as well), function execution will end after
-        // this return.
-        Ok(())
+
+        if mode::chmod(path, b.mode()).is_err() {
+            // Error messages are printed by the mode::chmod function!
+            uucore::error::set_exit_code(1);
+            continue;
+        }
+
+        if b.privileged {
+            show_if_err!(chown_optional_user_group(path, b));
+
+            // Set SELinux context for directory if needed
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if b.default_context {
+                show_if_err!(set_selinux_default_context(path));
+            } else if b.context.is_some() {
+                let context = get_context_for_selinux(b);
+                show_if_err!(set_selinux_security_context(path, context));
+            }
+        }
     }
+    // If the exit code was set, or show! has been called at least once
+    // (which sets the exit code as well), function execution will end after
+    // this return.
+    Ok(())
 }
 
 /// Test if the path is a new file path that can be
