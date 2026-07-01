@@ -88,6 +88,7 @@ impl Uniq {
 
         let mut next_buf = Vec::with_capacity(1024);
         let mut next_meta = LineMeta::default();
+        let mut line_out = Vec::with_capacity(1024);
 
         loop {
             if !Self::read_line(&mut reader, &mut next_buf, line_terminator)? {
@@ -98,7 +99,13 @@ impl Uniq {
 
             if self.keys_are_equal(&current_buf, &current_meta, &next_buf, &next_meta) {
                 if self.all_repeated {
-                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(
+                        writer,
+                        &mut line_out,
+                        &current_buf,
+                        group_count,
+                        first_line_printed,
+                    )?;
                     first_line_printed = true;
                     std::mem::swap(&mut current_buf, &mut next_buf);
                     std::mem::swap(&mut current_meta, &mut next_meta);
@@ -108,7 +115,13 @@ impl Uniq {
                 if (group_count == 1 && !self.repeats_only)
                     || (group_count > 1 && !self.uniques_only)
                 {
-                    self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+                    self.write_line(
+                        writer,
+                        &mut line_out,
+                        &current_buf,
+                        group_count,
+                        first_line_printed,
+                    )?;
                     first_line_printed = true;
                 }
                 std::mem::swap(&mut current_buf, &mut next_buf);
@@ -119,7 +132,13 @@ impl Uniq {
         }
 
         if (group_count == 1 && !self.repeats_only) || (group_count > 1 && !self.uniques_only) {
-            self.write_line(writer, &current_buf, group_count, first_line_printed)?;
+            self.write_line(
+                writer,
+                &mut line_out,
+                &current_buf,
+                group_count,
+                first_line_printed,
+            )?;
             first_line_printed = true;
         }
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
@@ -265,6 +284,7 @@ impl Uniq {
     fn write_line(
         &self,
         writer: &mut impl Write,
+        line_out: &mut Vec<u8>,
         line: &[u8],
         count: usize,
         first_line_printed: bool,
@@ -275,21 +295,20 @@ impl Uniq {
             write_line_terminator!(writer, line_terminator)?;
         }
 
-        let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
+        line_out.clear();
 
         if self.show_counts {
-            // Call the associated function (no &self) after the refactor above.
+            let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];
             let prefix = Self::build_count_prefix(count, &mut count_buf);
-            writer
-                .write_all(prefix)
-                .map_err_context(|| translate!("uniq-error-write-error"))?;
+            line_out.extend_from_slice(prefix);
         }
 
-        writer
-            .write_all(line)
-            .map_err_context(|| translate!("uniq-error-write-error"))?;
+        line_out.extend_from_slice(line);
+        line_out.push(line_terminator);
 
-        write_line_terminator!(writer, line_terminator)
+        writer
+            .write_all(line_out)
+            .map_err_context(|| translate!("uniq-error-write-error"))
     }
 
     const COUNT_PREFIX_WIDTH: usize = 7;
@@ -827,7 +846,7 @@ fn open_input_file(in_file_name: Option<&OsStr>) -> UResult<Box<dyn BufRead>> {
             let in_file = File::open(path).map_err_context(
                 || translate!("uniq-error-could-not-open", "path" => path.maybe_quote()),
             )?;
-            Box::new(BufReader::new(in_file))
+            Box::new(BufReader::with_capacity(OUTPUT_BUFFER_CAPACITY, in_file))
         }
         _ => Box::new(stdin().lock()),
     })
