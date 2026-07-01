@@ -517,9 +517,9 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             // target directory. All created ancestor directories will have
             // the default mode. Hence it is safe to use fs::create_dir_all
             // and then only modify the target's dir mode.
-            if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
-            {
+            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
+            ) {
                 show!(e);
                 continue;
             }
