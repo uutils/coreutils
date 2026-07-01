@@ -199,6 +199,10 @@ struct WordRef {
 enum PtxError {
     #[error("{0}")]
     ParseError(ParseIntError),
+    #[error("invalid gap width: '{0}'")]
+    InvalidGapWidth(String),
+    #[error("invalid line width: '{0}'")]
+    InvalidLineWidth(String),
 }
 
 impl UError for PtxError {}
@@ -246,20 +250,22 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
-        config.line_width = matches
-            .get_one::<String>(options::WIDTH)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        let s = matches.get_one::<String>(options::WIDTH).expect(err_msg);
+        let v: usize = s.parse().map_err(PtxError::ParseError)?;
+        if v > isize::MAX as usize {
+            return Err(PtxError::InvalidLineWidth(s.clone()).into());
+        }
+        config.line_width = v;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = matches
-            .get_one::<String>(options::GAP_SIZE)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        let s = matches.get_one::<String>(options::GAP_SIZE).expect(err_msg);
+        let v: usize = s.parse().map_err(PtxError::ParseError)?;
+        if v > isize::MAX as usize {
+            return Err(PtxError::InvalidGapWidth(s.clone()).into());
+        }
+        config.gap_size = v;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {

@@ -425,3 +425,25 @@ fn test_invalid_regex_word_trailing_backslash() {
 fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
 }
+
+#[test]
+fn test_gap_size_above_isize_max_is_rejected() {
+    // Values exceeding isize::MAX cause arithmetic overflow in the output
+    // chunk sizing; GNU ptx rejects them up front (#13184).
+    let too_big = format!("{}", isize::MAX as u64 + 1);
+    new_ucmd!()
+        .args(&["--gap-size", &too_big])
+        .pipe_in("hello world\n")
+        .fails()
+        .stderr_contains("invalid gap width");
+}
+
+#[test]
+fn test_line_width_above_isize_max_is_rejected() {
+    let too_big = format!("{}", isize::MAX as u64 + 1);
+    new_ucmd!()
+        .args(&["--width", &too_big])
+        .pipe_in("hello world\n")
+        .fails()
+        .stderr_contains("invalid line width");
+}
