@@ -307,7 +307,13 @@ impl Observer {
         let display_name = self.files.get(event_path).display_name.clone();
 
         match event.kind {
-            EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
+            // NOTE: `ModifyKind::Any` is emitted by the Windows `ReadDirectoryChangesW`
+            // backend (for `FILE_ACTION_MODIFIED`) and by the macOS/BSD `kqueue` backend
+            // (for `NOTE_WRITE`) whenever a watched file's contents change. Without it,
+            // appends are never followed on those platforms (see GH issue #4827).
+            // Linux inotify and the polling fallback report the more specific
+            // `Modify(Data(..))`/`Modify(Metadata(..))` instead, so this is a no-op there.
+            EventKind::Modify(ModifyKind::Any | ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
                     let is_tailable = new_md.is_tailable();
