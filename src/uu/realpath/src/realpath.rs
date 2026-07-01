@@ -299,7 +299,7 @@ fn resolve_path(
             .to_str()
             .is_some_and(|name| name.len() > MAX_PATH)
     }) {
-        return Err(Error::new(ErrorKind::InvalidInput, "File name too long"));
+        return Err(Error::new(ErrorKind::InvalidInput, translate!("File name too long")));
     }
 
     // GNU realpath compatibility: If a path explicitly references a directory modifier
