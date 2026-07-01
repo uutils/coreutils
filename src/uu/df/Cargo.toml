@@ -33,6 +33,9 @@ divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[target.'cfg(unix)'.dev-dependencies]
+rustix = { workspace = true, features = ["stdio"] }
+
 [[bin]]
 name = "df"
 path = "src/main.rs"
