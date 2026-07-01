@@ -9,7 +9,7 @@
 use std::{
     borrow::Cow,
     ffi::{OsStr, OsString},
-    io::{IsTerminal, stdout},
+    io::{self, IsTerminal, Write as _, stdout},
     num::IntErrorKind,
 };
 
@@ -574,12 +574,14 @@ fn extract_quoting_style(
     } else {
         // If set, the QUOTING_STYLE environment variable specifies a default style.
         if let Ok(style) = std::env::var("QUOTING_STYLE") {
-            match match_quoting_style_name(style.as_str(), show_control) {
-                Some(pair) => return pair,
-                None => eprintln!(
+            if let Some(pair) = match_quoting_style_name(style.as_str(), show_control) {
+                return pair;
+            } else {
+                let _ = writeln!(
+                    io::stderr(),
                     "{}",
                     translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
-                ),
+                );
             }
         }
 
