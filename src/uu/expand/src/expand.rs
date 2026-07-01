@@ -15,7 +15,7 @@ use std::str::from_utf8;
 use thiserror::Error;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -280,8 +280,10 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
     } else {
         let path_ref = Path::new(path);
+        // some platforms cannot catch this as read error. accept TOCTOU race.
+        #[cfg(any(target_os = "wasi", target_os = "windows"))]
         if path_ref.is_dir() {
-            return Err(USimpleError::new(
+            return Err(uucore::error::USimpleError::new(
                 1,
                 translate!("expand-error-is-directory", "file" => path.maybe_quote()),
             ));
