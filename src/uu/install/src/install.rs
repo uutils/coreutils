@@ -657,9 +657,17 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     while trimmed_bytes.ends_with(b"/") {
                         trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
                     }
-                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
-                    to_create_owned = PathBuf::from(trimmed_os_str);
-                    to_create_owned.as_path()
+                    if trimmed_bytes.is_empty() {
+                        // Path was entirely slashes (i.e. "/").  Stripping them
+                        // yields "" which resolves to the current directory and
+                        // causes a later unlink_at to delete the source file
+                        // instead of the intended destination (#13232).
+                        to_create
+                    } else {
+                        let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
+                        to_create_owned = PathBuf::from(trimmed_os_str);
+                        to_create_owned.as_path()
+                    }
                 }
                 _ => to_create,
             };
