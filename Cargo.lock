@@ -4120,6 +4120,7 @@ dependencies = [
  "clap",
  "fluent",
  "nix",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
