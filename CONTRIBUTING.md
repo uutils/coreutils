@@ -79,6 +79,21 @@ We have the following goals with our development:
 There are several ways to help and writing code is just one of them. Reporting
 issues and writing documentation are just as important as writing code.
 
+
+### Reference version of GNU coreutils
+
+We tries to be compatible with latest stable version of GNU coreutils,
+or sometimes backports change done at master branch of GNU.
+
+It is sometimes difficult to get latest version of it on many Linux distributions.
+But Canonical provides [latest GNU coreutils](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference)
+which can be used to compare our utils and with latest GNU coreutils before reporting any bug report. However,
+
+- The package is PATCHED. Thus, it can be different with upstream.
+- NEVER install the package to your system. It is not designed for daily usage. Manually download, extract [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
+and run it.
+- NOT accepting any bug reports and fixes of the package.
+
 ### Reporting Issues
 
 We can't fix bugs we don't know about, so good issues are super helpful! Here
@@ -91,6 +106,7 @@ are some tips for writing good issues:
 - Make sure to include all relevant information, such as:
   - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
+  - Did you test latest version of GNU coreutils?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
 - Be as specific as possible!
