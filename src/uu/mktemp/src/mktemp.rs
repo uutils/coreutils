@@ -18,7 +18,6 @@ use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
@@ -435,7 +434,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+    let path = res?;
+    match println_verbatim(&path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // We created the temporary file or directory but failed to print
+            // its name to stdout. Since the caller will never learn the name,
+            // the entry is unreachable, so remove it to match GNU mktemp.
+            // The tempfile builder's automatic cleanup was disabled via
+            // `keep()`, so removal must be done manually here. This is
+            // best-effort: if removal fails, still report the original
+            // print error.
+            if !dry_run {
+                let _ = if make_dir {
+                    fs::remove_dir(&path)
+                } else {
+                    fs::remove_file(&path)
+                };
+            }
+            Err(e).map_err_context(|| translate!("mktemp-error-failed-print"))
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
