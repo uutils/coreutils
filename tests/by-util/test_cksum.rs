@@ -3315,6 +3315,22 @@ fn test_check_shake256_no_length() {
         .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
 }
 
+#[test]
+fn test_shake_extremely_large_length_does_not_abort() {
+    // Regression test for #12869: an absurdly large `--length` used to
+    // trigger an unguarded allocation that aborts the process instead of
+    // returning a normal error.
+    new_ucmd!()
+        .args(&[
+            "--algorithm",
+            "shake128",
+            "--length",
+            "10011111117721172727",
+        ])
+        .pipe_in("")
+        .fails();
+}
+
 #[template]
 #[rstest]
 #[case::no_length(
