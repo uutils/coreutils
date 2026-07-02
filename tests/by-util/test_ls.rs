@@ -4256,6 +4256,33 @@ fn test_ls_align_unquoted_multiline() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_ls_color_no_leading_space_when_all_quoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("aa directory");
+    at.mkdir("bb directory");
+    at.touch("cc file");
+
+    let result = scene
+        .ucmd()
+        .arg("--color=always")
+        .arg("--quoting-style=shell-escape-always")
+        .arg("-T0")
+        .arg("--format=column")
+        .succeeds();
+
+    let stdout = result.stdout_str();
+    for line in stdout.lines() {
+        assert!(
+            !line.starts_with(' '),
+            "Line should not start with a space: {line:?}"
+        );
+    }
+}
+
+#[test]
 fn test_ls_ignore_hide() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
