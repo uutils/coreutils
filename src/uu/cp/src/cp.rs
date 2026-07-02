@@ -2533,7 +2533,16 @@ fn copy_file(
         )
         && !paths_are_same_entry(source, dest)
     {
-        fs::remove_file(dest)?;
+        // `source != dest` is not enough here: "a" and "./a" are different
+        // `Path`s but the very same directory entry, and removing it would
+        // destroy the only copy of the data (GHSA-9p9p-xh9v-6fvx). Only
+        // remove when `source` and `dest` are genuinely distinct directory
+        // entries that happen to be hard-linked to the same file.
+        let same_entry = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical).ok()
+            == canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok();
+        if !same_entry {
+            fs::remove_file(dest)?;
+        }
     }
 
     if initial_dest_metadata.is_some()

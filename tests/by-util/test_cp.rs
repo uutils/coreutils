@@ -3687,6 +3687,25 @@ fn test_cp_mode_hardlink_no_dereference() {
     assert_eq!(at.read_symlink("z"), "slink");
 }
 
+#[test]
+fn test_remove_destination_same_path_does_not_destroy_file() {
+    // Regression test for GHSA-9p9p-xh9v-6fvx: source and dest are the same
+    // directory entry, just spelled differently ("a" vs "./a"). cp must
+    // refuse with a "same file" error instead of deleting the file before
+    // detecting the source and destination are identical.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.write(file, "hello\n");
+
+    ucmd.args(&["--remove-destination", file, &format!("./{file}")])
+        .fails()
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists(file));
+    assert_eq!(at.read(file), "hello\n");
+}
+
 #[cfg(not(any(windows, target_os = "android")))]
 #[test]
 fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
