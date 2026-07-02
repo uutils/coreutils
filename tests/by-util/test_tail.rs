@@ -227,7 +227,6 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 fn test_n0_with_follow() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_file = "test.txt";
@@ -501,7 +500,6 @@ fn test_null_default() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -589,7 +587,6 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -625,7 +622,6 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
@@ -2011,11 +2007,7 @@ fn test_follow_name_remove() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ cp file backup && head file > file && sleep 1 && cp backup file
@@ -2052,11 +2044,7 @@ fn test_follow_name_truncate1() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
@@ -2099,7 +2087,6 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
     // `tail --follow=name file` is running.
