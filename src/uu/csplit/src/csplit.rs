@@ -242,13 +242,14 @@ struct SplitWriter<'a> {
 impl Drop for SplitWriter<'_> {
     fn drop(&mut self) {
         if self.options.elide_empty_files && self.size == 0 {
-            let file_name = self.options.split_name.get(self.counter);
-            // In the case of `echo a | csplit -z - %a%1`, the file
-            // `xx00` does not exist because the positive offset
-            // advanced past the end of the input. Since there is no
-            // file to remove in that case, `remove_file` would return
-            // an error, so we just ignore it.
-            let _ = remove_file(file_name);
+            if let Ok(file_name) = self.options.split_name.get(self.counter) {
+                // In the case of `echo a | csplit -z - %a%1`, the file
+                // `xx00` does not exist because the positive offset
+                // advanced past the end of the input. Since there is no
+                // file to remove in that case, `remove_file` would return
+                // an error, so we just ignore it.
+                let _ = remove_file(file_name);
+            }
         }
     }
 }
@@ -268,9 +269,10 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// Returns an error if creating the split file fails.
+    /// Returns an error if creating the split file fails, including when the
+    /// suffix format requests a field width too large to allocate.
     fn new_writer(&mut self) -> Result<(), CsplitError> {
-        let file_name = self.options.split_name.get(self.counter);
+        let file_name = self.options.split_name.get(self.counter)?;
         let file = File::create(&file_name)
             .map_err_context(|| file_name.clone())
             .map_err(CsplitError::from)?;
@@ -316,7 +318,7 @@ impl SplitWriter<'_> {
         if !self.dev_null {
             // Flush the writer to ensure all data is written and errors are detected
             if let Some(ref mut writer) = self.current_writer {
-                let file_name = self.options.split_name.get(self.counter - 1);
+                let file_name = self.options.split_name.get(self.counter - 1)?;
                 writer
                     .flush()
                     .map_err_context(|| file_name.clone())
@@ -339,7 +341,7 @@ impl SplitWriter<'_> {
     fn delete_all_splits(&self) -> io::Result<()> {
         let mut ret = Ok(());
         for ith in 0..self.counter {
-            let file_name = self.options.split_name.get(ith);
+            let file_name = self.options.split_name.get(ith)?;
             if let Err(err) = remove_file(file_name) {
                 ret = Err(err);
             }
