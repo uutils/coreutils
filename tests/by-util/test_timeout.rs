@@ -210,6 +210,10 @@ fn test_hex_timeout_ending_with_d() {
 }
 
 #[test]
+#[cfg_attr(
+    all(target_os = "macos", target_arch = "x86_64"),
+    ignore = "wontfix: intermittent failure in obsolete macOS x86_64 (macOS bug)."
+)]
 fn test_terminate_child_on_receiving_terminate() {
     let mut timeout_cmd = new_ucmd!()
         .args(&[
