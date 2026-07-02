@@ -101,6 +101,7 @@ cut-help-complement = invert the filter - instead of displaying only the filtere
 cut-help-only-delimited = in field mode, only print lines which contain the delimiter
 cut-help-zero-terminated = instead of filtering columns based on line, filter columns based on \\0 (NULL character)
 cut-help-output-delimiter = in field mode, replace the delimiter in output lines with this option's argument
+cut-help-no-split-multibyte = in byte mode, do not split multibyte characters
 
 # Error messages
 cut-error-is-directory = Is a directory
