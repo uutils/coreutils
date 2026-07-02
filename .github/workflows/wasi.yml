@@ -20,14 +20,22 @@ jobs:
   test_wasi:
     name: Tests
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
     steps:
     - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
       with:
-        targets: wasm32-wasip1
+        targets: ${{ matrix.job.target }}
     - uses: Swatinem/rust-cache@v2
+      with:
+        key: "${{ matrix.job.target }}"
     - name: Install wasmtime
       run: |
         curl https://wasmtime.dev/install.sh -sSf | bash
@@ -35,17 +43,19 @@ jobs:
     - name: Run unit tests
       env:
         CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
       run: |
-        # Get all utilities and exclude ones that don't compile for wasm32-wasip1
+        # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
         EXCLUDE="df|du|env|expr|more|tac|test"
         UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
-        cargo test --target wasm32-wasip1 --no-default-features $UTILS
+        cargo test --target ${{ matrix.job.target }} --no-default-features $UTILS
     - name: Run integration tests via wasmtime
+      if:  matrix.job.target == 'wasm32-wasip1'
       env:
-        RUSTFLAGS: --cfg wasi_runner
+        RUSTFLAGS: ${{ matrix.job.rust-flags }}
       run: |
         # Build the WASI binary
-        cargo build --target wasm32-wasip1 --no-default-features --features feat_wasm
+        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
@@ -54,8 +64,8 @@ jobs:
         #   ls md5sum mkdir mv nproc pathchk pr printenv ptx pwd readlink
         #   realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum
         #   sha512sum shred sleep sort split tail touch tsort uname uniq
-        #   vdir yes
-        UUTESTS_BINARY_PATH="$(pwd)/target/wasm32-wasip1/debug/coreutils.wasm" \
+        #   vdir
+        UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
         UUTESTS_WASM_RUNNER=wasmtime \
         cargo test --test tests -- \
           test_base32:: test_base64:: test_basenc:: test_basename:: \
@@ -64,4 +74,4 @@ jobs:
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \
           test_od:: test_paste:: test_printf:: test_shuf:: test_sum:: \
           test_tee:: test_tr:: test_true:: test_truncate:: \
-          test_unexpand:: test_unlink:: test_wc::
+          test_unexpand:: test_unlink:: test_wc:: test_yes::
