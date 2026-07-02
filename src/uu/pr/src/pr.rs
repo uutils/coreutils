@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::translate;
@@ -190,6 +190,10 @@ impl From<Utf8Error> for PrError {
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
+
+    // New variant that correctly formats the file path error like GNU pr
+    #[error("pr: {path}: {msg}")]
+    Path { path: String, msg: String },
 }
 
 pub fn uu_app() -> Command {
@@ -973,17 +977,28 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
 
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
-    //
-    // TODO Read incrementally.
-    let buf = read_to_end(path)?;
+    // If it fails, map the error to include the filename context
+    // and strip the OS error number to match GNU behavior.
+    let buf = read_to_end(path).map_err(|e| PrError::PathError {
+        path: path.to_string(),
+        msg: strip_errno(&e),
+    })?;
+
+    let start_page = options.start_page;
+    let mut page_counter = start_page;
 
     let pages = get_pages(options, 0, &buf);
 
-    // Split the text into pages, and then print each line in each page.
-    for page_with_page_number in pages {
-        let page_number = page_with_page_number.0 + 1;
-        let page = page_with_page_number.1;
-        print_page(&page, options, page_number)?;
+    if pages.is_empty() {
+        return Ok(0);
+    }
+
+    for (page_num, lines) in pages {
+        let new_page_number = page_num + 1;
+        if page_counter != new_page_number {
+            page_counter = new_page_number;
+        }
+        print_page(&lines, options, page_counter)?;
     }
 
     Ok(0)
@@ -1137,12 +1152,12 @@ fn get_file_line_groups(
     let mut all_lines = vec![];
     for (file_id, path) in paths.iter().enumerate() {
         // Read the entire contents of the file into a buffer.
-        //
-        // TODO Read incrementally.
-        let buf = read_to_end(path)?;
+        let buf = read_to_end(path).map_err(|e| PrError::PathError {
+            path: (*path).to_string(),
+            msg: strip_errno(&e),
+        })?;
 
-        // Split the text into pages and collect each line for
-        // subsequent grouping.
+        // Split the text into pages and collect each line for subsequent grouping.
         for (_, mut page) in get_pages(options, file_id, &buf) {
             all_lines.append(&mut page);
         }
