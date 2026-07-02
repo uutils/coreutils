@@ -845,7 +845,7 @@ jobs:
           # Windows is omitted: the `openssl` dep is `cfg(unix)`, so the
           # feature is a no-op there and there's nothing to exercise.
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
