@@ -29,11 +29,11 @@ use nix::sys::termios::{
 use rustix::termios::{Winsize, tcgetwinsize, tcsetwinsize};
 use std::cmp::Ordering;
 use std::fs::File;
-use std::io::{self, Stdin, stdin, stdout};
+use std::io::{self, Stdin, Write as _, stdin, stdout};
 use std::num::IntErrorKind;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
@@ -486,15 +486,26 @@ fn check_flag_group<T>(flag: &Flag<T>, remove: bool) -> bool {
     remove && flag.group.is_some()
 }
 
-fn print_special_setting(setting: &PrintSetting, fd: impl AsFd) -> io::Result<()> {
+fn print_special_setting(setting: &PrintSetting, fd: impl AsFd) -> Result<(), SttyError> {
     match setting {
         PrintSetting::Size => {
-            let size = tcgetwinsize(fd)?;
-            println!("{} {}", size.ws_row, size.ws_col);
+            let size = tcgetwinsize(fd).map_err(io::Error::from)?;
+            writeln!(stdout(), "{} {}", size.ws_row, size.ws_col).map_err(SttyError::Write)?;
         }
     }
     Ok(())
 }
+
+#[derive(Debug, thiserror::Error)]
+enum SttyError {
+    /// Wrapper around `io::Error`
+    #[error("{}", strip_errno(.0))]
+    Io(#[from] io::Error),
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(io::Error),
+}
+
+impl UError for SttyError {}
 
 /// Handles line wrapping for stty output to fit within terminal width
 struct WrappedPrinter {
@@ -526,29 +537,31 @@ impl WrappedPrinter {
         }
     }
 
-    fn print(&mut self, token: &str) {
+    fn print(&mut self, token: &str) -> Result<(), SttyError> {
         let token_len = self.prefix().chars().count() + token.chars().count();
         if self.current > 0 && self.current + token_len > self.width {
-            println!();
+            writeln!(stdout()).map_err(SttyError::Write)?;
             self.current = 0;
             self.first_in_line = true;
         }
 
-        print!("{}{token}", self.prefix());
+        write!(stdout(), "{}{token}", self.prefix()).map_err(SttyError::Write)?;
         self.current += token_len;
         self.first_in_line = false;
+        Ok(())
     }
 
     fn prefix(&self) -> &str {
         if self.first_in_line { "" } else { " " }
     }
 
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), SttyError> {
         if self.current > 0 {
-            println!();
+            writeln!(stdout()).map_err(SttyError::Write)?;
             self.current = 0;
             self.first_in_line = false;
         }
+        Ok(())
     }
 }
 
@@ -557,15 +570,15 @@ fn print_terminal_size(
     opts: &Options,
     window_size: Option<&Winsize>,
     term_size: Option<&Winsize>,
-) {
+) -> Result<(), SttyError> {
     let speed = termios.output_speed();
     let mut printer = WrappedPrinter::new(window_size);
-    printer.print(&translate!("stty-output-speed", "speed" => speed));
+    printer.print(&translate!("stty-output-speed", "speed" => speed))?;
     if opts.all {
         let term_size = term_size.as_ref().expect("terminal size should be set");
         printer.print(
             &translate!("stty-output-rows-columns", "rows" => term_size.ws_row, "columns" => term_size.ws_col),
-        );
+        )?;
     }
 
     #[cfg(any(
@@ -575,8 +588,9 @@ fn print_terminal_size(
         target_os = "linux",
         target_os = "redox"
     ))]
-    printer.print(&translate!("stty-output-line", "line" => termios.line_discipline));
-    printer.flush();
+    printer.print(&translate!("stty-output-line", "line" => termios.line_discipline))?;
+    printer.flush()?;
+    Ok(())
 }
 
 fn cc_to_index(option: &str) -> Option<S> {
@@ -718,7 +732,7 @@ fn print_control_chars(
     termios: &Termios,
     opts: &Options,
     term_size: Option<&Winsize>,
-) -> nix::Result<()> {
+) -> UResult<()> {
     if !opts.all {
         // Print only control chars that differ from sane defaults
         let mut printer = WrappedPrinter::new(term_size);
@@ -730,10 +744,10 @@ fn print_control_chars(
                 printer.print(&format!(
                     "{text} = {};",
                     control_char_to_string(current_val)?
-                ));
+                ))?;
             }
         }
-        printer.flush();
+        printer.flush()?;
         return Ok(());
     }
 
@@ -742,36 +756,39 @@ fn print_control_chars(
         printer.print(&format!(
             "{text} = {};",
             control_char_to_string(termios.control_chars[*cc_index as usize])?
-        ));
+        ))?;
     }
     printer.print(&translate!("stty-output-min-time",
         "min" => termios.control_chars[S::VMIN as usize],
         "time" => termios.control_chars[S::VTIME as usize]
-    ));
-    printer.flush();
+    ))?;
+    printer.flush()?;
     Ok(())
 }
 
-fn print_in_save_format(termios: &Termios) {
-    print!(
+fn print_in_save_format(termios: &Termios) -> Result<(), SttyError> {
+    write!(
+        stdout(),
         "{:x}:{:x}:{:x}:{:x}",
         termios.input_flags.bits(),
         termios.output_flags.bits(),
         termios.control_flags.bits(),
         termios.local_flags.bits()
-    );
+    )
+    .map_err(SttyError::Write)?;
     for cc in termios.control_chars {
-        print!(":{cc:x}");
+        write!(stdout(), ":{cc:x}").map_err(SttyError::Write)?;
     }
-    println!();
+    writeln!(stdout()).map_err(SttyError::Write)?;
+    Ok(())
 }
 
-fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
+fn print_settings(termios: &Termios, opts: &Options) -> UResult<()> {
     if opts.save {
-        print_in_save_format(termios);
+        print_in_save_format(termios)?;
     } else {
         let term_size = if opts.all {
-            Some(tcgetwinsize(&opts.file)?)
+            Some(tcgetwinsize(&opts.file).map_err(io::Error::from)?)
         } else {
             tcgetwinsize(&opts.file).ok()
         };
@@ -785,18 +802,18 @@ fn print_settings(termios: &Termios, opts: &Options) -> io::Result<()> {
 
         // GNU linked against glibc 2.42 provides us baudrate 51 which panics nix::sys::termios::cfgetospeed
         // so we repeat syscall until we replace nix with rustix...
-        let rustix_termios = rustix::termios::tcgetattr(&opts.file)?;
+        let rustix_termios = rustix::termios::tcgetattr(&opts.file).map_err(io::Error::from)?;
         print_terminal_size(
             &rustix_termios,
             opts,
             window_size.as_ref(),
             term_size.as_ref(),
-        );
+        )?;
         print_control_chars(termios, opts, window_size.as_ref())?;
-        print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref());
-        print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref());
-        print_flags(termios, opts, OUTPUT_FLAGS, window_size.as_ref());
-        print_flags(termios, opts, LOCAL_FLAGS, window_size.as_ref());
+        print_flags(termios, opts, CONTROL_FLAGS, window_size.as_ref())?;
+        print_flags(termios, opts, INPUT_FLAGS, window_size.as_ref())?;
+        print_flags(termios, opts, OUTPUT_FLAGS, window_size.as_ref())?;
+        print_flags(termios, opts, LOCAL_FLAGS, window_size.as_ref())?;
     }
     Ok(())
 }
@@ -806,7 +823,7 @@ fn print_flags<T: TermiosFlag>(
     opts: &Options,
     flags: &[Flag<T>],
     term_size: Option<&Winsize>,
-) {
+) -> Result<(), SttyError> {
     let mut printer = WrappedPrinter::new(term_size);
     for &Flag {
         name,
@@ -819,17 +836,17 @@ fn print_flags<T: TermiosFlag>(
         let val = flag.is_in(termios, group);
         if group.is_some() {
             if val && (!sane || opts.all) {
-                printer.print(name);
+                printer.print(name)?;
             }
         } else if opts.all || val != sane {
             if !val {
-                printer.print(&format!("-{name}"));
+                printer.print(&format!("-{name}"))?;
                 continue;
             }
-            printer.print(name);
+            printer.print(name)?;
         }
     }
-    printer.flush();
+    printer.flush()
 }
 
 /// Apply a single setting
