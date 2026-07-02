@@ -52,6 +52,7 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     let mut stdout = io::stdout().lock();
     stdout.write_all_os(text.as_ref())?;
     stdout.write_all(b"\n")?;
+    stdout.flush()?;
     Ok(())
 }
 
