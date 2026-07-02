@@ -14,12 +14,11 @@ use uucore::translate;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
