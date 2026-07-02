@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) retcode
+// spell-checker:ignore (ToDO) retcode rsplit
 
 use clap::{
     Arg, ArgAction, ArgMatches, Command,
@@ -11,7 +11,7 @@ use clap::{
 };
 use std::{
     ffi::{OsStr, OsString},
-    io::{Write, stdout},
+    io::{Error, ErrorKind, Write, stdout},
     path::{Path, PathBuf},
 };
 use uucore::fs::make_path_relative_to;
@@ -35,7 +35,7 @@ const OPT_CANONICALIZE: &str = "canonicalize";
 const OPT_CANONICALIZE_EXISTING: &str = "canonicalize-existing";
 const OPT_RELATIVE_TO: &str = "relative-to";
 const OPT_RELATIVE_BASE: &str = "relative-base";
-
+const MAX_PATH: usize = 255;
 const ARG_FILES: &str = "files";
 
 /// Custom parser that validates `OsString` is not empty
@@ -75,7 +75,7 @@ impl ValueParserFactory for NonEmptyOsStringParser {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    /*  the list of files */
+    /* the list of files */
 
     let paths: Vec<PathBuf> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -294,13 +294,45 @@ fn resolve_path(
     relative_to: Option<&Path>,
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
-    let abs = canonicalize(p, can_mode, resolve)?;
+    if p.components().any(|c| {
+        c.as_os_str()
+            .to_str()
+            .is_some_and(|name| name.len() > MAX_PATH)
+    }) {
+        return Err(Error::new(ErrorKind::InvalidInput, translate!("File name too long")));
+    }
+
+    // GNU realpath compatibility: If a path explicitly references a directory modifier
+    // via a trailing slash or directory shortcuts like `/.` or `/..`, the parent must exist.
     if can_mode == MissingHandling::Normal {
-        let path_str = p.to_string_lossy();
-        if path_str.ends_with("/.") || path_str.ends_with("/./") {
-            abs.metadata()?; // raise no such file or directory error
+        let p_str = p.to_string_lossy();
+        let has_trailing_dot =
+            p_str.ends_with("/.") || p_str.ends_with("/..") || p_str == "." || p_str == "..";
+        let has_trailing_slash = p_str.ends_with('/');
+
+        if has_trailing_dot || has_trailing_slash {
+            // Reconstruct the expected parent path by stripping the trailing segment manually
+            // to bypass rust path normalization flaws on non-existent targets.
+            let parent_path = if has_trailing_slash {
+                p_str.trim_end_matches('/').to_string()
+            } else {
+                p_str
+                    .rsplit_once('/')
+                    .map_or("", |(before, _)| before)
+                    .to_string()
+            };
+
+            if !parent_path.is_empty() {
+                let parent = Path::new(&parent_path);
+                // Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
+                if !parent.exists() && parent.symlink_metadata().is_err() {
+                    return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
+                }
+            }
         }
     }
+
+    let abs = canonicalize(p, can_mode, resolve)?;
 
     let abs = process_relative(abs, relative_base, relative_to);
 

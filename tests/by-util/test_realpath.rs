@@ -458,13 +458,11 @@ fn test_realpath_trailing_slash() {
         .args(&["-m", "link_no_dir/"])
         .succeeds()
         .stdout_contains(format!("{MAIN_SEPARATOR}no_dir\n"));
-
     scene
         .ucmd()
         .arg("nonexistent/.")
         .fails()
         .stderr_contains("No such file or directory\n");
-
     scene
         .ucmd()
         .arg("nonexistent/./")
@@ -578,4 +576,35 @@ fn test_realpath_canonicalize_vs_existing() {
             ucmd.fails();
         }
     }
+}
+
+#[test]
+fn test_realpath_component_too_long() {
+    // Create a single path component composed of 256 of A
+    let long_component = "A".repeat(256);
+    new_ucmd!()
+        .arg(long_component)
+        .fails()
+        .code_is(1)
+        .stderr_contains("File name too long");
+}
+
+#[test]
+fn test_realpath_multiple_files_with_one_long_component() {
+    let long_component = "A".repeat(256);
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("valid_file");
+
+    // The utility must continue iterating through files and output
+    // the valid path while asserting a non-zero exit state for the failure.
+    scene
+        .ucmd()
+        .arg("valid_file")
+        .arg(long_component)
+        .arg("valid_file")
+        .fails()
+        .code_is(1)
+        .stdout_contains("valid_file")
+        .stderr_contains("File name too long");
 }
