@@ -425,3 +425,8 @@ fn test_invalid_regex_word_trailing_backslash() {
 fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
 }
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!().arg("zxc").fails().stderr_contains("zxc");
+}
