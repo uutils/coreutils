@@ -48,8 +48,9 @@ use std::time::{Duration, Instant};
 
 use clap::{Arg, Command};
 use gcd::Gcd;
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult};
 #[cfg(unix)]
 use uucore::error::{USimpleError, set_exit_code};
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
@@ -164,6 +165,20 @@ impl Num {
             Self::Blocks(n) => n * block_size,
             Self::Bytes(n) => n,
         }
+    }
+}
+
+#[derive(Error, Debug)]
+enum DdError {
+    #[error("{}", translate!("dd-error-general-io", "error" => _0))]
+    IOError(#[from] io::Error),
+    #[error("{}", .0)]
+    OtherError(io::Error),
+}
+
+impl UError for DdError {
+    fn code(&self) -> i32 {
+        1
     }
 }
 
@@ -645,9 +660,11 @@ impl Dest {
     }
 
     #[cfg_attr(not(unix), allow(unused_variables))]
-    fn seek(&mut self, n: u64, obs: usize) -> io::Result<u64> {
+    fn seek(&mut self, n: u64, obs: usize) -> Result<u64, DdError> {
         match self {
-            Self::Stdout(stdout) => io::copy(&mut io::repeat(0).take(n), stdout),
+            Self::Stdout(stdout) => {
+                io::copy(&mut io::repeat(0).take(n), stdout).map_err(DdError::IOError)
+            }
             Self::File(f, _) => {
                 #[cfg(unix)]
                 if let Ok(Some(len)) = try_get_len_of_block_device(f)
@@ -662,12 +679,18 @@ impl Dest {
                     set_exit_code(1);
                     return Ok(len);
                 }
-                f.seek(SeekFrom::Current(n.try_into().unwrap()))
+                f.seek(SeekFrom::Current(n.try_into().map_err(|e| {
+                    DdError::IOError(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("invalid input: {e:?}"),
+                    ))
+                })?))
+                .map_err(DdError::IOError)
             }
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                read_and_discard(f, n, obs)
+                read_and_discard(f, n, obs).map_err(DdError::IOError)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -675,18 +698,18 @@ impl Dest {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => {
-                let pos = f.stream_position()?;
+                let pos = f.stream_position().unwrap_or_default();
                 // `set_len()` can fail with EINVAL on special outputs such as
                 // `/dev/null`; GNU `dd` ignores that. But on a regular file a
                 // truncate failure (e.g. ENOSPC, read-only fs) means silent data
                 // loss, so the error must surface there.
                 match f.set_len(pos) {
                     Ok(()) => Ok(()),
-                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
+                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e.into()),
                     Err(_) => Ok(()),
                 }
             }
@@ -834,8 +857,7 @@ impl<'a> Output<'a> {
     fn new_stdout(settings: &'a Settings) -> UResult<Self> {
         let fx = OwnedFileDescriptorOrHandle::from(io::stdout())?;
         let mut dst = Dest::Stdout(fx.into_file());
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-write-error"))?;
+        dst.seek(settings.seek, settings.obs)?;
         Ok(Self { dst, settings })
     }
 
@@ -872,19 +894,18 @@ impl<'a> Output<'a> {
             dst.set_len(settings.seek).ok();
         }
 
-        Self::prepare_file(dst, settings)
+        Ok(Self::prepare_file(dst, settings))
     }
 
-    fn prepare_file(dst: File, settings: &'a Settings) -> UResult<Self> {
+    fn prepare_file(dst: File, settings: &'a Settings) -> Self {
         let density = if settings.oconv.sparse {
             Density::Sparse
         } else {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
-        Ok(Self { dst, settings })
+        dst.seek(settings.seek, settings.obs).unwrap_or_default();
+        Self { dst, settings }
     }
 
     /// Instantiate this struct with file descriptor as a destination.
@@ -903,7 +924,7 @@ impl<'a> Output<'a> {
             .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
-        Self::prepare_file(fx.into_file(), settings)
+        Ok(Self::prepare_file(fx.into_file(), settings))
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
@@ -1029,7 +1050,7 @@ impl<'a> Output<'a> {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         self.dst.truncate()
     }
 }
@@ -1074,7 +1095,7 @@ impl BlockWriter<'_> {
     /// Errors are suppressed for special outputs (e.g. `/dev/null`) but
     /// propagated for regular files, so a failed truncate does not silently
     /// leave stale data behind. See [`Dest::truncate`].
-    fn truncate(&mut self) -> io::Result<()> {
+    fn truncate(&mut self) -> Result<(), DdError> {
         match self {
             Self::Unbuffered(o) => o.truncate(),
             Self::Buffered(o) => o.truncate(),
@@ -1112,7 +1133,7 @@ fn flush_caches_full_length(i: &Input, o: &Output) {
 ///
 /// If there is a problem reading from the input or writing to
 /// this output.
-fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
+fn dd_copy(mut i: Input, o: Output) -> Result<(), DdError> {
     // The read and write statistics.
     //
     // These objects are counters, initialized to zero. After each
@@ -1210,7 +1231,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // Create a common empty buffer with a capacity of the block size.
     // This is the max size needed.
     let mut buf = Vec::new();
-    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    buf.try_reserve(bsize)
+        .map_err(|e| DdError::OtherError(e.into()))?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
 
     // The main read/write loop.
     //
@@ -1299,7 +1321,7 @@ fn finalize<T>(
     prog_tx: &mpsc::Sender<ProgUpdate>,
     output_thread: thread::JoinHandle<T>,
     truncate: bool,
-) -> io::Result<()> {
+) -> Result<(), DdError> {
     // Flush the output in case a partial write has been buffered but
     // not yet written.
     let wstat_update = output.flush()?;
@@ -1538,7 +1560,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None if is_stdout_redirected_to_seekable_file() => Output::new_file_from_stdout(&settings)?,
         None => Output::new_stdout(&settings)?,
     };
-    dd_copy(i, o).map_err_context(|| translate!("dd-error-io-error"))
+    match dd_copy(i, o) {
+        Ok(_) => Ok(()),
+        Err(DdError::IOError(e)) => Err(e.into()),
+        Err(DdError::OtherError(e)) => {
+            Err(e).map_err_context(|| translate!("dd-error-write-error"))
+        }
+    }
 }
 
 pub fn uu_app() -> Command {
