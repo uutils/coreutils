@@ -40,7 +40,8 @@ use std::num::IntErrorKind;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::io::{AsRawFd, RawFd};
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use thiserror::Error;
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::num_parser::ExtendedParser;
 use uucore::translate;
@@ -555,19 +556,21 @@ fn print_special_setting(setting: &PrintSetting, fd: i32) -> UResult<()> {
         PrintSetting::Size => {
             let mut size = TermSize::default();
             unsafe { tiocgwinsz(fd, &raw mut size)? };
-            write_stdout(&format!("{} {}\n", size.rows, size.columns))?;
+            writeln!(stdout(), "{} {}", size.rows, size.columns).map_err(SttyError::Write)?;
         }
     }
     Ok(())
 }
 
-/// Write to stdout, reporting I/O errors as a proper error instead of
-/// panicking the way 'print!' family of macros does.
-fn write_stdout(text: &str) -> UResult<()> {
-    stdout()
-        .write_all(text.as_bytes())
-        .map_err_context(|| translate!("stty-error-write-error"))
+#[derive(Debug, Error)]
+enum SttyError {
+    /// A write to stdout failed. Report instead of panicking the way
+    /// 'print!' family of macros does.
+    #[error("{}: {}", translate!("stty-error-write-error"), strip_errno(.0))]
+    Write(io::Error),
 }
+
+impl UError for SttyError {}
 
 /// Handles line wrapping for stty output to fit within terminal width
 struct WrappedPrinter {
@@ -602,12 +605,12 @@ impl WrappedPrinter {
     fn print(&mut self, token: &str) -> UResult<()> {
         let token_len = self.prefix().chars().count() + token.chars().count();
         if self.current > 0 && self.current + token_len > self.width {
-            write_stdout("\n")?;
+            writeln!(stdout()).map_err(SttyError::Write)?;
             self.current = 0;
             self.first_in_line = true;
         }
 
-        write_stdout(&format!("{}{token}", self.prefix()))?;
+        write!(stdout(), "{}{token}", self.prefix()).map_err(SttyError::Write)?;
         self.current += token_len;
         self.first_in_line = false;
         Ok(())
@@ -619,7 +622,7 @@ impl WrappedPrinter {
 
     fn flush(&mut self) -> UResult<()> {
         if self.current > 0 {
-            write_stdout("\n")?;
+            writeln!(stdout()).map_err(SttyError::Write)?;
             self.current = 0;
             self.first_in_line = false;
         }
@@ -899,17 +902,20 @@ fn print_control_chars(
 }
 
 fn print_in_save_format(termios: &Termios) -> UResult<()> {
-    write_stdout(&format!(
+    write!(
+        stdout(),
         "{:x}:{:x}:{:x}:{:x}",
         termios.input_flags.bits(),
         termios.output_flags.bits(),
         termios.control_flags.bits(),
         termios.local_flags.bits()
-    ))?;
+    )
+    .map_err(SttyError::Write)?;
     for cc in termios.control_chars {
-        write_stdout(&format!(":{cc:x}"))?;
+        write!(stdout(), ":{cc:x}").map_err(SttyError::Write)?;
     }
-    write_stdout("\n")
+    writeln!(stdout()).map_err(SttyError::Write)?;
+    Ok(())
 }
 
 /// Gets terminal size using the tiocgwinsz ioctl system call.
