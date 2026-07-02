@@ -193,7 +193,7 @@ enum PrError {
 
     // New variant that correctly formats the file path error like GNU pr
     #[error("pr: {path}: {msg}")]
-    PathError { path: String, msg: String },
+    Path { path: String, msg: String },
 }
 
 pub fn uu_app() -> Command {
