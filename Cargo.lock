@@ -4079,6 +4079,7 @@ dependencies = [
  "fluent",
  "nix",
  "rustix",
+ "thiserror 2.0.21",
  "uucore",
 ]
 
