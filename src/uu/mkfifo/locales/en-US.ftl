@@ -9,6 +9,6 @@ mkfifo-help-context = like -Z, or if CTX is specified then set the SELinux or SM
 # Error messages
 mkfifo-error-invalid-mode = invalid mode: { $error }
 mkfifo-error-missing-operand = missing operand
-mkfifo-error-cannot-create-fifo = cannot create fifo { $path }: File exists
+mkfifo-error-cannot-create-fifo = cannot create fifo { $path }: { $error }
 mkfifo-error-cannot-set-permissions = cannot set permissions on { $path }: { $error }
 mkfifo-error-non-file-permission = mode must specify only file permission bits
