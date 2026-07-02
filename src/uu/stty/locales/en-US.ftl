@@ -16,6 +16,7 @@ stty-error-invalid-speed = invalid {$arg} '{$speed}'
 stty-error-invalid-argument = invalid argument '{$arg}'
 stty-error-invalid-integer-argument = invalid integer argument: {$value}
 stty-error-invalid-integer-argument-value-too-large = invalid integer argument: {$value}: Value too large for defined data type
+stty-error-write-error = write error
 
 # Output format strings
 stty-output-speed = speed {$speed} baud;
