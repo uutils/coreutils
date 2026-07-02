@@ -537,7 +537,7 @@ fn display_grid(
                     // ```
                     // FIXME: the Grid crate only supports &str, so can't display raw bytes
                     buf.clear();
-                    if quoted && !os_str_starts_with(&n, b"'") && !os_str_starts_with(&n, b"\"") {
+                    if quoted && !displayed_name_starts_with_quote(&n) {
                         buf.push(b' ');
                     }
                     buf.extend(n.as_encoded_bytes());
@@ -1023,7 +1023,7 @@ fn display_item_long(
             LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
 
-        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+        let needs_space = quoted && !displayed_name_starts_with_quote(&item_display.displayed);
 
         if config.dired {
             let mut dired_name_len = item_display.dired_name_len;
@@ -1410,6 +1410,26 @@ fn calculate_padding_collection(
 
 fn os_str_starts_with(haystack: &OsStr, needle: &[u8]) -> bool {
     os_str_as_bytes_lossy(haystack).starts_with(needle)
+}
+
+fn displayed_name_starts_with_quote(name: &OsStr) -> bool {
+    let bytes = os_str_as_bytes_lossy(name);
+    let bytes = strip_leading_ansi_sequences(&bytes);
+    bytes.starts_with(b"'") || bytes.starts_with(b"\"")
+}
+
+fn strip_leading_ansi_sequences(mut bytes: &[u8]) -> &[u8] {
+    while bytes.starts_with(b"\x1b[") {
+        let Some(end) = bytes[2..]
+            .iter()
+            .position(|&b| (0x40..=0x7e).contains(&b))
+            .map(|end| end + 2)
+        else {
+            break;
+        };
+        bytes = &bytes[end + 1..];
+    }
+    bytes
 }
 
 fn write_os_str<W: Write>(writer: &mut W, string: &OsStr) -> std::io::Result<()> {
