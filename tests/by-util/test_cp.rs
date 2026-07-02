@@ -7656,6 +7656,152 @@ fn test_cp_archive_deref_flag_ordering() {
     }
 }
 
+/// Regression test: -a keeps recursiveness when combined with -L/-H/-d.
+/// https://github.com/uutils/coreutils/issues/13207
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_preserves_recursive() {
+    for flags in ["-afL", "-aLf", "-aHL", "-adL"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("srcdir");
+        at.touch("srcdir/file.txt");
+        let dest = format!("dest_{}", &flags.replace('-', ""));
+        ucmd.args(&[flags, "srcdir", &dest]).succeeds();
+        assert!(
+            at.file_exists(format!("{dest}/file.txt")),
+            "failed for {flags}: destination file missing"
+        );
+    }
+}
+
+/// -aL should preserve file permissions (--preserve=all from -a).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_preserves_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("srcdir");
+    at.touch("srcdir/file.txt");
+    at.set_mode("srcdir/file.txt", 0o705);
+    ucmd.args(&["-aL", "srcdir", "dest"]).succeeds();
+    let mode = at.metadata("dest/file.txt").permissions().mode();
+    assert_eq!(
+        mode & 0o777,
+        0o705,
+        "-aL should preserve mode, got 0o{mode:o}"
+    );
+}
+
+/// -dL should preserve hardlinks (--preserve=links from -d survives -L override).
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_no_deref_preserve_with_deref_keeps_hardlinks() {
+    use std::os::linux::fs::MetadataExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    at.hard_link("file1", "file2");
+    at.mkdir("destdir");
+    ucmd.args(&["-dL", "file1", "file2", "destdir"]).succeeds();
+    // -dL: hardlink preserved → destdir/file1 should have nlink == 2
+    // (both file1 and file2 point to the same inode in destdir)
+    let nlink = at.metadata("destdir/file1").st_nlink();
+    assert_eq!(
+        nlink, 2,
+        "-dL should preserve hardlinks (expected nlink=2, got nlink={nlink})"
+    );
+}
+
+/// -aL inside a directory: inner symlinks should be dereferenced,
+/// while -a preserves them (last-flag-wins for dereference).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_symlinks_inside_dir() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -a (no deref): inner symlinks preserved
+    scene.ucmd().args(&["-a", "srcdir", "dest_a"]).succeeds();
+    assert!(
+        at.is_symlink("dest_a/link.txt"),
+        "-a: inner symlink should be preserved"
+    );
+
+    // -aL (last is -L, deref): inner symlinks dereferenced
+    scene.ucmd().args(&["-aL", "srcdir", "dest_aL"]).succeeds();
+    assert!(
+        !at.is_symlink("dest_aL/link.txt"),
+        "-aL: inner symlink should be dereferenced"
+    );
+
+    // -La (last is -a, no deref): inner symlinks preserved
+    scene.ucmd().args(&["-La", "srcdir", "dest_La"]).succeeds();
+    assert!(
+        at.is_symlink("dest_La/link.txt"),
+        "-La: inner symlink should be preserved"
+    );
+}
+
+/// -aH: inner symlinks preserved (a wins for recursive), CLI symlinks followed (H wins for CLI).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_cli_deref_inner_preserved() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -aH: CLI symlink dereferenced, inner symlinks preserved
+    scene.ucmd().args(&["-aH", "srcdir", "dest_aH"]).succeeds();
+    assert!(
+        at.is_symlink("dest_aH/link.txt"),
+        "-aH: inner symlink should be preserved (a wins for recursive)"
+    );
+
+    // -Ha: CLI + inner symlinks preserved (a wins since last)
+    scene.ucmd().args(&["-Ha", "srcdir", "dest_Ha"]).succeeds();
+    assert!(
+        at.is_symlink("dest_Ha/link.txt"),
+        "-Ha: inner symlink should be preserved (a is last)"
+    );
+}
+
+/// Precedence: repeating the same flag should take the last position.
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_repeated_flag_last_wins() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -aL -a: -a is last, inner symlinks preserved
+    scene
+        .ucmd()
+        .args(&["-aL", "-a", "srcdir", "dest"])
+        .succeeds();
+    assert!(
+        at.is_symlink("dest/link.txt"),
+        "-aL -a: last -a should preserve inner symlinks"
+    );
+
+    // -La -L: -L is last, inner symlinks dereferenced
+    scene
+        .ucmd()
+        .args(&["-La", "-L", "srcdir", "dest2"])
+        .succeeds();
+    assert!(
+        !at.is_symlink("dest2/link.txt"),
+        "-La -L: last -L should dereference inner symlinks"
+    );
+}
+
 #[test]
 fn test_cp_circular_symbolic_links_in_directory() {
     let source_dir = "source_dir";
