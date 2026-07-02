@@ -1432,6 +1432,37 @@ fn precision_format() {
 }
 
 #[test]
+fn suffix_format_huge_width_reports_memory_exhausted() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["--suffix-format", "%9999999999999999999d", "-", "1"])
+        .pipe_in("a\nb\nc\n")
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_only("csplit: memory exhausted\n")
+        .stderr_does_not_contain("panicked");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("counting splits")
+        .count();
+    assert_eq!(count, 0);
+}
+
+#[test]
+fn suffix_format_huge_width_elide_empty_drop_does_not_panic() {
+    new_ucmd!()
+        .args(&[
+            "-z",
+            "--suffix-format",
+            "%9999999999999999999d",
+            "-",
+            "%a%1",
+        ])
+        .pipe_in("a\n")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn zero_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("in");

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-use std::io;
+use std::io::{self, ErrorKind};
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
@@ -13,7 +13,9 @@ use uucore::translate;
 #[derive(Debug, Error)]
 pub enum CsplitError {
     #[error("IO error: {}", _0)]
-    IoError(#[from] io::Error),
+    IoError(io::Error),
+    #[error("{}", translate!("csplit-error-memory-exhausted"))]
+    MemoryExhausted,
     #[error("{}", translate!("csplit-error-line-out-of-range", "pattern" => _0.quote()))]
     LineOutOfRange(String),
     #[error("{}", translate!("csplit-error-line-out-of-range-on-repetition", "pattern" => _0.quote(), "repetition" => _1))]
@@ -38,6 +40,16 @@ pub enum CsplitError {
     NotRegularFile(String),
     #[error("{}", _0)]
     UError(Box<dyn UError>),
+}
+
+impl From<io::Error> for CsplitError {
+    fn from(error: io::Error) -> Self {
+        if error.kind() == ErrorKind::OutOfMemory {
+            Self::MemoryExhausted
+        } else {
+            Self::IoError(error)
+        }
+    }
 }
 
 impl From<Box<dyn UError>> for CsplitError {
