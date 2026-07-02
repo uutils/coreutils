@@ -6,13 +6,13 @@
 // spell-checker:ignore tailable stdlib (stdlib)
 
 use crate::args::Settings;
-use crate::chunks::BytesChunkBuffer;
+use crate::chunks::BytesChunk;
 use crate::paths::{HeaderPrinter, PathExtTail};
 use crate::text;
 use std::collections::HashMap;
 use std::collections::hash_map::Keys;
 use std::fs::{File, Metadata};
-use std::io::{BufRead, BufReader, BufWriter, Write, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::error::UResult;
 
@@ -136,26 +136,45 @@ impl FileHandling {
 
     /// Read new data from `path` and print it to stdout
     pub fn tail_file(&mut self, path: &Path, verbose: bool) -> UResult<bool> {
-        let mut chunks = BytesChunkBuffer::new(u64::MAX);
-        if let Some(reader) = self.get_mut(path).reader.as_mut() {
-            chunks.fill(reader)?;
-        }
-        if chunks.has_data() {
-            if self.needs_header(path, verbose) {
-                let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str());
-            }
+        let Some(mut reader) = self.get_mut(path).reader.take() else {
+            return Ok(false);
+        };
 
-            let mut writer = BufWriter::new(stdout().lock());
-            chunks.write(&mut writer)?;
-            writer.flush()?;
+        let result = self.print_new_data(path, verbose, &mut reader);
 
+        self.get_mut(path).reader = Some(reader);
+
+        if result? {
             self.last.replace(path.to_owned());
             self.update_metadata(path, None);
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    fn print_new_data(
+        &mut self,
+        path: &Path,
+        verbose: bool,
+        reader: &mut impl BufRead,
+    ) -> UResult<bool> {
+        let mut chunk = BytesChunk::new();
+        if chunk.fill(reader)?.is_none() {
+            return Ok(false);
+        }
+
+        if self.needs_header(path, verbose) {
+            let display_name = self.get(path).display_name.clone();
+            self.header_printer.print(display_name.as_str());
+        }
+
+        let mut writer = BufWriter::new(stdout().lock());
+        writer.write_all(chunk.get_buffer())?;
+        io::copy(&mut *reader, &mut writer)?;
+        writer.flush()?;
+
+        Ok(true)
     }
 
     /// Decide if printing `path` needs a header based on when it was last printed
