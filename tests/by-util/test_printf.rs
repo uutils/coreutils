@@ -802,6 +802,26 @@ fn test_overflow() {
 }
 
 #[test]
+fn test_extreme_exponent_does_not_overflow() {
+    // A value whose decimal exponent does not fit in an i32 used to overflow the
+    // exponent arithmetic in the float formatters (panic in debug, wrong value or
+    // bad allocation in release). It must now fail cleanly instead.
+    for spec in ["%a", "%e", "%g", "%f"] {
+        new_ucmd!()
+            .args(&[spec, "5e8123456789012345678"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("number too large to format");
+
+        new_ucmd!()
+            .args(&[spec, "7E-8123456789012345678"])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("number too large to format");
+    }
+}
+
+#[test]
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])

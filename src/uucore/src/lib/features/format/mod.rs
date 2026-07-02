@@ -146,6 +146,18 @@ fn check_width(width: usize) -> std::io::Result<()> {
     }
 }
 
+/// Reject a precision larger than printf/C allows (`i32::MAX`).
+///
+/// A precision near `usize::MAX` would otherwise overflow the precision/exponent
+/// arithmetic in the float formatters, so we cap it the way C `printf` does.
+pub(crate) fn check_precision(precision: usize) -> Result<(), FormatError> {
+    if precision as u64 > i32::MAX as u64 {
+        Err(FormatError::InvalidPrecision(precision.to_string()))
+    } else {
+        Ok(())
+    }
+}
+
 /// A single item to format
 pub enum FormatItem<C: FormatChar> {
     /// A format specifier
@@ -408,5 +420,31 @@ impl<F: Formatter<T>, T> Format<F, T> {
         self.formatter.fmt(&mut w, f)?;
         w.write_all(&self.suffix)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FormatError, check_precision};
+
+    #[test]
+    fn check_precision_caps_at_i32_max() {
+        // Anything up to i32::MAX is accepted.
+        assert!(check_precision(0).is_ok());
+        assert!(check_precision(42).is_ok());
+        assert!(check_precision(i32::MAX as usize).is_ok());
+
+        // Anything above i32::MAX is rejected, reporting the offending value.
+        let precision = i32::MAX as usize + 1;
+        match check_precision(precision) {
+            Err(FormatError::InvalidPrecision(reported)) => {
+                assert_eq!(reported, precision.to_string());
+            }
+            other => panic!("expected InvalidPrecision, got {other:?}"),
+        }
+        assert!(matches!(
+            check_precision(usize::MAX),
+            Err(FormatError::InvalidPrecision(_))
+        ));
     }
 }
