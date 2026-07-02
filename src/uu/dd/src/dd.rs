@@ -27,7 +27,6 @@ use uucore::translate;
 use std::cmp;
 use std::env;
 use std::ffi::OsString;
-#[cfg(unix)]
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -231,7 +230,7 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
+    fn skip(&mut self, n: u64, ibs: usize, name: &str) -> io::Result<u64> {
         match self {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
@@ -239,7 +238,7 @@ impl Source {
                 if m < n {
                     show_error!(
                         "{}",
-                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                        translate!("dd-error-cannot-skip-offset", "file" => name)
                     );
                 }
                 Ok(m)
@@ -253,7 +252,7 @@ impl Source {
                     // this case prints the stats but sets the exit code to 1
                     show_error!(
                         "{}",
-                        translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                        translate!("dd-error-cannot-skip-invalid", "file" => name)
                     );
                     set_exit_code(1);
                     return Ok(len);
@@ -263,10 +262,10 @@ impl Source {
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
-                        if pos > file_len {
+                        if file_len != 0 && pos > file_len {
                             show_error!(
                                 "{}",
-                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                                translate!("dd-error-cannot-skip-offset", "file" => name)
                             );
                         }
                         Ok(n)
@@ -278,7 +277,7 @@ impl Source {
                         if m < n {
                             show_error!(
                                 "{}",
-                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
+                                translate!("dd-error-cannot-skip-offset", "file" => name)
                             );
                         }
                         Ok(m)
@@ -286,14 +285,25 @@ impl Source {
                     _ => {
                         show_error!(
                             "{}",
-                            translate!("dd-error-cannot-skip-invalid", "file" => "standard input")
+                            translate!("dd-error-cannot-skip-invalid", "file" => name)
                         );
                         set_exit_code(1);
                         Ok(0)
                     }
                 }
             }
-            Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
+            Self::File(f) => {
+                // Get file length before seeking to avoid race condition
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
+                let pos = f.seek(SeekFrom::Current(n.try_into().unwrap()))?;
+                if file_len != 0 && pos > file_len {
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-offset", "file" => name)
+                    );
+                }
+                Ok(pos)
+            }
             #[cfg(unix)]
             Self::Fifo(f) => read_and_discard(f, n, ibs),
         }
@@ -386,7 +396,7 @@ impl<'a> Input<'a> {
         }
 
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings.ibs, "standard input")?;
         }
         Ok(Self { src, settings })
     }
@@ -409,7 +419,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings.ibs, &filename.to_string_lossy())?;
         }
         Ok(Self { src, settings })
     }
@@ -423,7 +433,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings.ibs, &filename.to_string_lossy())?;
         }
         Ok(Self { src, settings })
     }
