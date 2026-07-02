@@ -634,14 +634,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(Borrow::borrow)
         .collect();
     let options = CsplitOptions::new(&matches)?;
-    if file_name == "-" {
+
+    let res = if file_name == "-" {
         let stdin = io::stdin();
-        Ok(csplit(&options, &patterns, stdin.lock())?)
+        csplit(&options, &patterns, stdin.lock()).map_err(Into::into)
     } else {
-        let file = File::open(file_name)
-            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))?;
-        Ok(csplit(&options, &patterns, BufReader::new(file))?)
+        File::open(file_name)
+            .map_err_context(|| format!("cannot open {} for reading", file_name.quote()))
+            .and_then(|file| csplit(&options, &patterns, BufReader::new(file)).map_err(Into::into))
+    };
+
+    if let Err(ref e) = res {
+        // Print error first
+        uucore::show_error!("{}", e);
+
+        // Print 0 second
+        let mut handle = io::stdout();
+        let _ = writeln!(handle, "0");
+
+        uucore::error::set_exit_code(1);
+        return Ok(());
     }
+
+    res
 }
 
 pub fn uu_app() -> Command {
