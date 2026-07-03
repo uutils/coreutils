@@ -45,3 +45,20 @@ impl std::io::Write for Writer {
         }
     }
 }
+
+// todo: add .as_fd for std::io::copy's specialization for --bytes
+pub enum Reader {
+    File(std::fs::File),
+    Stdin(std::io::Stdin),
+}
+
+impl std::io::Read for Reader {
+    #[inline(always)]
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use rustix::io::read;
+        match self {
+            Self::File(r) => Ok(read(r, buf)?),
+            Self::Stdin(r) => Ok(read(r, buf)?),
+        }
+    }
+}

@@ -16,7 +16,7 @@ use crate::cli::ARG_PREFIX;
 use crate::cli::options;
 pub use crate::cli::uu_app;
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
-use crate::platform::Writer;
+use crate::platform::{Reader, Writer};
 use crate::strategy::{NumberType, Strategy, StrategyError};
 use clap::{ArgMatches, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
@@ -1312,14 +1312,14 @@ fn line_bytes(
 
 fn split(settings: &Settings) -> UResult<()> {
     let mut reader = if settings.input == "-" {
-        Box::new(stdin()) as Box<dyn Read>
+        Reader::Stdin(stdin())
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
             || translate!("split-error-cannot-open-for-reading", "file" => settings.input.quote()),
         )?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
-        Box::new(r) as Box<dyn Read>
+        Reader::File(r)
     };
     let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
 
