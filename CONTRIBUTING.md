@@ -79,20 +79,21 @@ We have the following goals with our development:
 There are several ways to help and writing code is just one of them. Reporting
 issues and writing documentation are just as important as writing code.
 
-
 ### Reference version of GNU coreutils
 
-We tries to be compatible with latest stable version of GNU coreutils,
-or sometimes backports change done at master branch of GNU.
+We try to stay compatible with the latest stable release of GNU coreutils,
+and sometimes backport changes from GNU's master branch as well.
 
-It is sometimes difficult to get latest version of it on many Linux distributions.
-But Canonical provides [latest GNU coreutils](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference)
-which can be used to compare our utils and with latest GNU coreutils before reporting any bug report. However,
+Since many Linux distributions ship an older GNU coreutils, Canonical
+provides a [more recent build](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference)
+you can use to compare our utilities against upstream before filing a bug
+report. A few caveats:
 
-- The package is PATCHED. Thus, it can be different with upstream.
-- NEVER install the package to your system. It is not designed for daily usage. Manually download, extract [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
-and run it.
-- NOT accepting any bug reports and fixes of the package.
+- The package is PATCHED, so it may differ from upstream.
+- NEVER install this package on your system — it isn't meant for daily use.
+  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
+  and run it from there.
+- Bug reports and fixes for this package itself are not accepted here.
 
 ### Reporting Issues
 
@@ -106,7 +107,7 @@ are some tips for writing good issues:
 - Make sure to include all relevant information, such as:
   - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
-  - Did you test latest version of GNU coreutils?
+  - Did you test against the latest version of GNU coreutils?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
 - Be as specific as possible!
