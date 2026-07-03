@@ -428,5 +428,8 @@ fn test_invalid_regex_word_unclosed_group() {
 
 #[test]
 fn test_missing_file_error_contains_filename() {
-    new_ucmd!().arg("zxc").fails().stderr_contains("zxc");
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
 }
