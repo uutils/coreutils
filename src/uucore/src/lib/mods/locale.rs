@@ -846,6 +846,68 @@ invalid-syntax = This is { $missing
         }
     }
 
+    /// Regression test: fallback bundle is correctly constructed on missing
+    /// utility-specific locales.
+    ///
+    /// Before the fix, `create_bundle` returned `Ok` whenever common uucore
+    /// strings were loaded — even if the utility-specific locale file was
+    /// missing.  This prevented `init_localization` from falling back to
+    /// embedded locales, so utility-specific message keys (e.g.
+    /// `wc-error-failed-to-print-result`) were returned verbatim instead of
+    /// being translated.
+    ///
+    /// After the fix, `create_bundle` requires the utility locale file to
+    /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
+    /// the embedded-locale fallback path to kick in.
+    ///
+    /// https://github.com/uutils/coreutils/issues/11854
+    #[test]
+    fn test_create_bundle_returns_err_when_util_locale_missing() {
+        // Build a temporary directory structure that mimics the repo layout
+        // so `find_uucore_locales_dir` can walk up and find common strings:
+        //
+        //   <temp>/uu/fake_util/locales/    <- locales_dir passed to create_bundle
+        //   <temp>/uucore/locales/en-US.ftl <- common strings (common-error)
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let temp_root = temp_dir.path();
+
+        fs::create_dir_all(temp_root.join("uu").join("fake_util").join("locales"))
+            .expect("Failed to create fake util locales dir");
+        fs::create_dir_all(temp_root.join("uucore").join("locales"))
+            .expect("Failed to create fake uucore locales dir");
+
+        fs::write(
+            temp_root.join("uucore").join("locales").join("en-US.ftl"),
+            "common-error = error\n",
+        )
+        .expect("Failed to write en-US.ftl");
+
+        let locales_dir = temp_root.join("uu").join("fake_util").join("locales");
+        let locale = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
+
+        // "fake_util" doesn't exist under src/uu/, so get_locales_dir fails
+        // and no utility-specific strings are loaded.  Common strings ARE
+        // loaded from the temp uucore locales dir above.
+        let result = create_bundle(&locale, &locales_dir, "fake_util");
+
+        assert!(
+            result.is_err(),
+            "create_bundle should return Err when the utility locale file is missing, \
+             even if common strings were loaded"
+        );
+
+        match result {
+            Err(LocalizationError::LocalesDirNotFound(msg)) => {
+                assert!(
+                    msg.contains("fake_util"),
+                    "error message should mention the utility name, got: {msg}"
+                );
+            }
+            Err(other) => panic!("Expected LocalesDirNotFound error, got: {other:?}"),
+            Ok(_) => panic!("Expected error, but create_bundle returned Ok"),
+        }
+    }
+
     #[test]
     fn test_localizer_format_primary_bundle() {
         let temp_dir = create_test_locales_dir();
