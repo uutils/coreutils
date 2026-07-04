@@ -1002,6 +1002,35 @@ fn test_directory_header_with_multiple_files_zero_output() {
 /// GNU `head` prints the `==> name <==` header only after the file is
 /// successfully opened. A file that exists but cannot be opened (e.g. no read
 /// permission) must therefore produce only an error and no header.
+/// Regression test for #13264: writing a long `-v` filename header to a
+/// full device must not panic.  The `print_verbatim` call used `.unwrap()`
+/// which panicked when stdout's internal buffer was flushed mid-write and
+/// returned an error.  A short filename stays buffered and its error surfaces
+/// at a later `?`-checked write, so we need a path longer than the buffer
+/// (~1024 bytes) to trigger the flush inside `print_verbatim`.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+fn test_verbose_long_filename_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    // Build a path > 1024 bytes that still resolves to an existing file.
+    // Repeated "./" segments are verbatim in the header but collapsed by the OS.
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+    assert!(long_path.len() > 1024);
+
+    let dev_full = OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    // Must not panic (which would exit 134). Any non-zero exit code is fine.
+    new_ucmd!()
+        .arg("-v")
+        .arg(&long_path)
+        .set_stdout(dev_full)
+        .fails();
+}
+
 #[cfg(unix)]
 #[test]
 fn test_unreadable_file_prints_no_header() {
