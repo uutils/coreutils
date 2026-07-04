@@ -938,6 +938,7 @@ fn test_skip_bytes_error() {
 // end without error, matching GNU od.
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: /dev/null is not a seekable device")]
 fn test_skip_bytes_past_end_of_seekable_device() {
     new_ucmd!()
         .arg("-j1")
