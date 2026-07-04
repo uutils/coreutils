@@ -879,7 +879,9 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
     }
 
     // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
-    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
+    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part)
+        .ok()
+        .and_then(|p| p.into_zoned())?;
     let zoned = parsed.datetime().to_zoned(tz).ok()?;
 
     // The trailing abbreviation only describes the *input* timezone. For display,
@@ -947,9 +949,17 @@ fn parse_date<S: AsRef<str> + Clone>(
     }
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
-        // Convert to system timezone for display
-        // (parse_datetime 0.13 returns Zoned in the input's timezone)
-        Ok(date) => {
+        // Convert to system timezone for display.
+        // parse_datetime returns the value in the input's timezone; the
+        // `Extended` variant covers years outside jiff's range, which `date`
+        // cannot represent, so treat it as an invalid input.
+        Ok(parsed) => {
+            let Some(date) = parsed.into_zoned() else {
+                return Err((
+                    input_str.into(),
+                    parse_datetime::ParseDateTimeError::InvalidInput,
+                ));
+            };
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
