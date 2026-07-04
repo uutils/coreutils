@@ -1836,8 +1836,21 @@ fn locale_is_available(locale: &str) -> bool {
         .env("LC_ALL", locale)
         .arg("charmap")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
-        .unwrap_or(false)
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
+}
+
+/// Skip the rest of the calling test if `locale` isn't installed on this system.
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+macro_rules! skip_unless_locale_available {
+    ($locale:expr, $label:expr) => {
+        if !locale_is_available($locale) {
+            println!(
+                "Skipping {} locale test — {} not available",
+                $label, $locale
+            );
+            return;
+        }
+    };
 }
 
 /// Test that %x uses the locale's D_FMT (e.g. French: "19.01.1997" not "01/19/97").
@@ -1853,10 +1866,7 @@ fn test_date_format_x_locale_aware() {
         .succeeds()
         .stdout_is("01/19/97\n");
 
-    if !locale_is_available("fr_FR.UTF-8") {
-        println!("Skipping French locale %x test — fr_FR.UTF-8 not available");
-        return;
-    }
+    skip_unless_locale_available!("fr_FR.UTF-8", "French %x");
     // French D_FMT (e.g. "19/01/1997" on Linux or "19.01.1997" on macOS)
     let expected = if cfg!(target_os = "macos") {
         "19.01.1997\n"
@@ -1887,10 +1897,7 @@ fn test_date_format_big_x_locale_aware() {
         .succeeds()
         .stdout_is("08:17:48\n");
 
-    if !locale_is_available("fr_FR.UTF-8") {
-        println!("Skipping French locale %X test — fr_FR.UTF-8 not available");
-        return;
-    }
+    skip_unless_locale_available!("fr_FR.UTF-8", "French %X");
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "fr_FR.UTF-8")
@@ -1914,10 +1921,7 @@ fn test_date_format_r_locale_aware() {
         .succeeds()
         .stdout_is("08:17:48 AM\n");
 
-    if !locale_is_available("en_US.UTF-8") {
-        println!("Skipping en_US locale %r test — en_US.UTF-8 not available");
-        return;
-    }
+    skip_unless_locale_available!("en_US.UTF-8", "en_US %r");
     new_ucmd!()
         .env("TZ", "UTC")
         .env("LC_ALL", "en_US.UTF-8")
@@ -1927,10 +1931,7 @@ fn test_date_format_r_locale_aware() {
         .succeeds()
         .stdout_is("08:17:48 AM\n");
 
-    if !locale_is_available("fr_FR.UTF-8") {
-        println!("Skipping fr_FR locale %r test — fr_FR.UTF-8 not available");
-        return;
-    }
+    skip_unless_locale_available!("fr_FR.UTF-8", "fr_FR %r");
     // French does not define AM/PM strings so it should fallback to %H:%M:%S like GNU `date` on Linux.
     // However, on macOS, `nl_langinfo(T_FMT_AMPM)` for fr_FR.UTF-8 returns "%I:%M:%S %p",
     // so it formatting outputs "08:17:48 AM"

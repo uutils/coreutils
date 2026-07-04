@@ -72,28 +72,7 @@ cfg_langinfo! {
 
     /// Retrieves the date/time format string from the system locale
     fn get_locale_format_string() -> Option<String> {
-        // In tests, acquire mutex to prevent race conditions with setlocale()
-        // which is process-global and not thread-safe
-        #[cfg(test)]
-        let _lock = LOCALE_MUTEX.lock().unwrap();
-
-        unsafe {
-            // Set locale from environment variables
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
-
-            // Get the date/time format string
-            let d_t_fmt_ptr = libc::nl_langinfo(DATE_FMT);
-            if d_t_fmt_ptr.is_null() {
-                return None;
-            }
-
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
-            if format.is_empty() {
-                return None;
-            }
-
-            Some(format.to_string())
-        }
+        query_nl_langinfo(DATE_FMT)
     }
 
     /// Ensures the format string includes timezone (%Z)
