@@ -1650,3 +1650,13 @@ fn test_format_precision_too_large_on_zero() {
         .succeeds()
         .stdout_only("0.000000000000000000\n");
 }
+
+// https://github.com/uutils/coreutils/issues/13272
+// argument following `--header` must not be interpreted as the option's value
+#[test]
+fn test_header_detached() {
+    new_ucmd!()
+        .args(&["--header", "1", "2"])
+        .succeeds()
+        .stdout_is("1\n2\n");
+}
