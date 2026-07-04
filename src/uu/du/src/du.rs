@@ -593,6 +593,11 @@ fn safe_du(
             my_stat.size += this_stat.size;
             my_stat.blocks += this_stat.blocks;
             my_stat.inodes += 1;
+            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, None) => a,
+                (None, b) => b,
+            };
             if options.all {
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
@@ -745,6 +750,12 @@ fn du_regular(
                                     my_stat.size += this_stat.size;
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
+                                    my_stat.latest_time =
+                                        match (my_stat.latest_time, this_stat.latest_time) {
+                                            (Some(a), Some(b)) => Some(a.max(b)),
+                                            (a, None) => a,
+                                            (None, b) => b,
+                                        };
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
@@ -754,6 +765,12 @@ fn du_regular(
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+                                my_stat.latest_time =
+                                    match (my_stat.latest_time, this_stat.latest_time) {
+                                        (Some(a), Some(b)) => Some(a.max(b)),
+                                        (a, None) => a,
+                                        (None, b) => b,
+                                    };
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
