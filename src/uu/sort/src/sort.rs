@@ -2632,7 +2632,7 @@ fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_dat
 
 /// Comparison used by the merge path.
 ///
-/// This is result-identical to [`compare_by`], but for the whole-line locale-collation
+/// This is result-identical to `compare_by`, but for the whole-line locale-collation
 /// case it compares the two lines lazily with the ICU collator instead of relying on
 /// precomputed collation keys. Merging only performs O(n log k) comparisons (and none at
 /// all when merging a single file), so computing a full sort key for every line — as the
