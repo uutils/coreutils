@@ -185,7 +185,9 @@ unintuitive
 unprefixed
 unportable
 unsync
+unwritable
 urand
+utimensat
 whitespace
 wordlist
 wordlists
