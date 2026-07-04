@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable callees
-// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC WRONLY CREAT
 
 mod error;
 #[cfg(unix)]
@@ -1287,22 +1287,37 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
-    // If the destination is a symlink, remove it first so the subsequent
-    // `fs::copy` does not follow the symlink and write to the target. The
-    // remaining race window (between this unlink and the open inside
-    // `fs::copy`) matches GNU mv; the separate pre-copy unlink of regular
-    // files was an additional window unique to uutils and has been removed.
-    // See issue #10015.
-    if to.is_symlink() {
-        fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
-            io::Error::new(err.kind(), inter_device_msg)
-        })?;
+    // GNU mv removes any pre-existing destination before performing a
+    // cross-device copy, so that the operation fails the same way a same-
+    // device `rename()` would fail when the destination directory forbids
+    // removing entries (see copy.c's "inter-device move failed ... unable
+    // to remove target"). Skip this when `to` doesn't exist (ENOENT is not
+    // an error here, matching GNU).
+    //
+    // This does not reopen the symlink-attack TOCTOU window that issue
+    // #10015 removed: the subsequent open of `to` (both here for symlink
+    // destinations and via `create_dest_restrictive` below) is done with
+    // `O_NOFOLLOW`, so an attacker who recreates `to` as a symlink between
+    // this unlink and that open gets `ELOOP` instead of a followed write.
+    if to.exists() || to.is_symlink() {
+        if let Err(err) = fs::remove_file(to) {
+            // GNU reports this as its own diagnostic ("inter-device move
+            // failed: ... unable to remove target: ..."), not wrapped in
+            // the generic "cannot move SRC to DEST: " context. Print it
+            // directly and signal "already reported" via the empty-message
+            // sentinel so the caller doesn't add that context too.
+            show!(USimpleError::new(
+                1,
+                translate!(
+                    "mv-error-inter-device-move-failed",
+                    "from" => from.quote(),
+                    "to" => to.quote(),
+                    "err" => uucore::error::strip_errno(&err),
+                ),
+            ));
+            return Err(io::Error::other(""));
+        }
     }
-    // For regular-file destinations we intentionally do NOT unlink here.
-    // `fs::copy` opens with `O_WRONLY|O_CREAT|O_TRUNC`, which truncates an
-    // existing regular file in place — matching GNU mv and avoiding the
-    // extra unlink/copy race window.
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
     #[cfg(unix)]

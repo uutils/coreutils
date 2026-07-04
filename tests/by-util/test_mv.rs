@@ -2616,11 +2616,14 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
-/// Regression for #10015: cross-device mv into a read-only destination
-/// directory must succeed when overwriting an existing writable file —
-/// the truncate happens in place via O_TRUNC, no directory-write
-/// permission is needed. Previously uutils unlinked first, which forced
-/// directory write permission and made this scenario fail.
+/// GNU mv always removes the pre-existing destination before performing a
+/// cross-device copy (see coreutils' copy.c: "inter-device move failed ...
+/// unable to remove target"), so that a cross-device move fails the same
+/// way a same-device `rename()` would when the destination directory
+/// forbids removing entries. This matches the GNU testsuite's
+/// `tests/mv/part-fail.sh`. Truncating the existing file in place (without
+/// removing it first) would incorrectly let this scenario succeed even
+/// though the destination directory is read-only.
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_truncate_in_readonly_dir() {
@@ -2643,20 +2646,26 @@ fn test_mv_cross_device_truncate_in_readonly_dir() {
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o555))
         .expect("Unable to set directory permissions");
 
-    scene
+    let result = scene
         .ucmd()
         .arg("-f")
         .arg("k")
         .arg(target_file_path.to_str().unwrap())
-        .succeeds()
-        .no_stderr();
+        .fails();
+
+    let stderr = result.stderr_str();
+    assert!(stderr.contains("Permission denied") || stderr.contains("permission denied"));
 
     set_permissions(other_fs_tempdir.path(), PermissionsExt::from_mode(0o755))
         .expect("Unable to restore directory permissions");
 
-    let copied = std::fs::read_to_string(&target_file_path).expect("read dst");
-    assert_eq!(copied, "source content");
-    assert!(!at.file_exists("k"), "source should be removed after mv");
+    // Neither the destination content nor the source should have changed.
+    let dst_content = std::fs::read_to_string(&target_file_path).expect("read dst");
+    assert_eq!(dst_content, "old content");
+    assert!(
+        at.file_exists("k"),
+        "source should still exist after a failed mv"
+    );
 }
 
 #[test]
