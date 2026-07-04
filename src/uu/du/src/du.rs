@@ -15,6 +15,8 @@ use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
+#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -39,8 +41,8 @@ use uucore::{format_usage, show, show_error, show_warning};
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
+    FileStandardInfo, GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -204,14 +206,25 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
     metadata.blocks()
 }
 
+// `File::open()` alone cannot open directories on Windows (`CreateFile`
+// fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
+// use that flag explicitly to be able to query directories as well as files.
+#[cfg(windows)]
+fn open_for_query(path: &Path) -> std::io::Result<File> {
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
 #[cfg(windows)]
 fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let Ok(file) = File::open(path) else {
-        return size_on_disk; // opening directories will fail
+    let Ok(file) = open_for_query(path) else {
+        return size_on_disk;
     };
 
     unsafe {
@@ -249,7 +262,7 @@ fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
 fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
-    let Ok(file) = File::open(path) else {
+    let Ok(file) = open_for_query(path) else {
         return result;
     };
 
