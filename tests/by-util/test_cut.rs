@@ -739,6 +739,10 @@ fn test_cut_fields_gb18030_complement_and_gaps() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: non-UTF-8 arguments can't be passed through wasmtime"
+)]
 fn test_cut_fields_single_byte_delimiter_in_mb_locale() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
