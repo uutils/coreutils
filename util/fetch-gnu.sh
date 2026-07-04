@@ -6,6 +6,7 @@ curl -L "${repo}/releases/download/v${ver}/coreutils-${ver}.tar.xz" | tar --stri
 # TODO stop backporting tests from master at GNU coreutils > $ver
 exit 0
 backport=(
+  nproc/nproc-quota.sh # remove LD_PRELOAD
 )
  for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
