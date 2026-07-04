@@ -194,8 +194,7 @@ impl Stat {
         // This is still needed for compatibility but should work since we're dealing with
         // the root path which should be accessible
         let std_metadata = fs::symlink_metadata(full_path)?;
-
-        let latest_time = time_field.and_then(|field| metadata_get_time(&std_metadata, field)); // NEW
+        let latest_time = time_field.and_then(|field| metadata_get_time(&std_metadata, field));
 
         Ok(Self {
             path: full_path.to_path_buf(),
@@ -302,6 +301,7 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
     }
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
 fn time_from_raw_stat(
     entry_stat: &uucore::safe_traversal::Metadata,
     time_field: MetadataTimeField,
@@ -501,7 +501,10 @@ fn safe_du(
             .time_field
             .and_then(|field| time_from_raw_stat(&safe_metadata, field));
 
+        // For safe traversal, we need to handle stats differently
+        // We can't use std::fs::Metadata since that requires the full path
         let this_stat = if is_dir {
+            // For directories, recurse using safe_du
             Stat {
                 path: path.join(&entry_name),
                 size: 0,
@@ -509,10 +512,13 @@ fn safe_du(
                 blocks: entry_stat.st_blocks as u64,
                 inodes: 1,
                 inode: file_info,
+                // We need a fake metadata - create one from symlink_metadata of parent
+                // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
                 latest_time,
             }
         } else {
+            // For files
             Stat {
                 path: path.join(&entry_name),
                 #[allow(clippy::unnecessary_cast)]
