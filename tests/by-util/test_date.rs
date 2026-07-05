@@ -1924,12 +1924,15 @@ fn test_date_negative_fractional_epoch_flooring() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/282 — parse_datetime rejects `HH:MM am/pm` forms (e.g. `2024-06-15 12:00 PM`, `2024-06-15 11:30am`). GNU date accepts them."]
 fn test_date_input_hhmm_ampm() {
-    for input in [
-        "2024-06-15 12:00 PM",
-        "2024-06-15 11:30am",
-        "2024-06-15 3:00 PM",
+    // GNU date accepts a 12-hour meridiem suffix on a combined date+time.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/282.
+    for (input, expected) in [
+        ("2024-06-15 12:00 PM", "12:00\n"),
+        ("2024-06-15 11:30am", "11:30\n"),
+        ("2024-06-15 3:00 PM", "15:00\n"),
+        ("2024-06-15 12:00 AM", "00:00\n"),
+        ("2024-06-15 3:00 p.m.", "15:00\n"),
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
@@ -1937,7 +1940,8 @@ fn test_date_input_hhmm_ampm() {
             .arg("-d")
             .arg(input)
             .arg("+%H:%M")
-            .succeeds();
+            .succeeds()
+            .stdout_is(expected);
     }
 }
 
