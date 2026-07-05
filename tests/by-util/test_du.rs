@@ -1198,7 +1198,7 @@ fn test_du_time_directory() {
         .arg("--time")
         .arg("d/old")
         .succeeds();
-    result.stdout_only(&format!("0\t2020-01-01 00:00\td{}old\n", separator));
+    result.stdout_only(format!("0\t2020-01-01 00:00\td{separator}old\n"));
 
     let result = ts.ucmd().env("TZ", "UTC").arg("--time").arg("d").succeeds();
     let stdout = result.stdout_str();
@@ -1219,11 +1219,11 @@ fn test_du_time_directory() {
     let stdout = result.stdout_str();
 
     assert!(
-        stdout.contains(&format!("2020-01-01 00:00\td{}old\n", separator)),
+        stdout.contains(&format!("2020-01-01 00:00\td{separator}old\n")),
         "{stdout}"
     );
     assert!(
-        stdout.contains(&format!("2023-01-01 00:00\td{}new\n", separator)),
+        stdout.contains(&format!("2023-01-01 00:00\td{separator}new\n")),
         "{stdout}"
     );
     assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
@@ -1285,18 +1285,17 @@ fn test_du_time_directory_nested() {
     let stdout = result.stdout_str();
 
     assert!(
-        stdout.contains(&format!("2020-01-01 00:00\td{}old\n", separator)),
+        stdout.contains(&format!("2020-01-01 00:00\td{separator}old\n")),
         "{stdout}"
     );
     assert!(
         stdout.contains(&format!(
-            "2023-01-01 00:00\td{}sub{}new\n",
-            separator, separator
+            "2023-01-01 00:00\td{separator}sub{separator}new\n"
         )),
         "{stdout}"
     );
     assert!(
-        stdout.contains(&format!("2023-01-01 00:00\td{}sub\n", separator)),
+        stdout.contains(&format!("2023-01-01 00:00\td{separator}sub\n")),
         "{stdout}"
     );
     assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
