@@ -28,6 +28,7 @@ uucore_procs = { workspace = true }
 unit-prefix = { workspace = true, optional = true }
 dns-lookup = { workspace = true, optional = true }
 dunce = { version = "1.0.4", optional = true }
+filetime = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
 jiff = { workspace = true, optional = true, features = [
@@ -142,7 +143,7 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "winapi-util", "windows-sys"]
+fs = ["dunce", "filetime", "libc", "winapi-util", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []

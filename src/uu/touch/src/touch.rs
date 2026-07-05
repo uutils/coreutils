@@ -10,9 +10,7 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-#[cfg(any(not(unix), target_os = "redox"))]
-use filetime::set_file_times;
-use filetime::{FileTime, set_symlink_file_times};
+use filetime::FileTime;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -602,7 +600,7 @@ fn update_times(
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
     if opts.no_deref && !is_stdout {
-        return set_symlink_file_times(path, atime, mtime).map_err_context(
+        return uucore::fs::set_file_times(path, atime, mtime, false).map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         );
     }
@@ -628,16 +626,18 @@ fn update_times(
             return Ok(());
         }
         // The write-FD approach fails on special files such as FIFOs (the
-        // write-only open returns ENXIO when there is no reader). Set the times
-        // by path with utimensat, which never opens the file and so never
-        // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
-        // would hang on a reader-less FIFO.
-        set_times_by_path(path, atime, mtime)
+        // write-only open returns ENXIO when there is no reader). Set the
+        // times by path (never opens the target, unlike
+        // `filetime::set_file_times`), so it does not block on a FIFO with
+        // no writer.
+        uucore::fs::set_file_times(path, atime, mtime, true).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        )
     }
 
     #[cfg(not(unix))]
     {
-        set_file_times(path, atime, mtime).map_err_context(
+        uucore::fs::set_file_times(path, atime, mtime, true).map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         )
     }
@@ -657,34 +657,6 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
             tv_nsec: mtime.nanoseconds() as _,
         },
     }
-}
-
-#[cfg(all(unix, not(target_os = "redox")))]
-/// Set file times by path using `utimensat`, following symlinks.
-///
-/// This never opens the file, so it does not block on special files such as
-/// FIFOs.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
-    let timestamps = build_timestamps(atime, mtime);
-    rustix::fs::utimensat(
-        rustix::fs::CWD,
-        path,
-        &timestamps,
-        rustix::fs::AtFlags::empty(),
-    )
-    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
-}
-
-#[cfg(target_os = "redox")]
-/// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
-///
-/// Falls back to `filetime::set_file_times`; unlike on other unixes this may
-/// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
-/// edge case the `utimensat` path guards against does not arise here.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
-    set_file_times(path, atime, mtime)
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 #[cfg(unix)]
