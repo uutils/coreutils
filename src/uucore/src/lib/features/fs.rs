@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport Ioctl
+// spell-checker:ignore backport Ioctl absolutized
 
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
