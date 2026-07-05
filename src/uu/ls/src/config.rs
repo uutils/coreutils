@@ -965,7 +965,8 @@ impl Config {
             match size_str.parse::<usize>() {
                 Ok(val) => Some(val),
                 Err(_) => {
-                    if let Some(clean_hex) = size_str.clone()
+                    if let Some(clean_hex) = size_str
+                        .clone()
                         .strip_prefix("0x")
                         .or_else(|| size_str.strip_prefix("0X"))
                     {
