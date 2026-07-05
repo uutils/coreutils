@@ -966,7 +966,14 @@ impl Config {
                 match size_str.parse::<usize>() {
                     Ok(val) => Some(val),
                     Err(_) => {
-                        return Err(Box::new(LsError::InvalidTabSize(15.to_string())));
+                        if let Some(clean_hex) = size_str.to_string()
+                            .strip_prefix("0x")
+                            .or_else(|| size_str.strip_prefix("0X"))
+                        {
+                            usize::from_str_radix(clean_hex, 16).ok()
+                        } else {
+                            return Err(Box::new(LsError::InvalidTabSize(size_str.to_string())));
+                        }
                     }
                 }
             } else {
