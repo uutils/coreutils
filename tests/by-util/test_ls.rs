@@ -5293,6 +5293,7 @@ fn test_symlink_target_extension_color() {
     assert!(target.contains("31m")); // 31 = red (our configured archive color)
 }
 
+#[test]
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
 
