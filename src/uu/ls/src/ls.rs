@@ -90,6 +90,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
+    #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
+    InvalidTabSize(String),
+
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
@@ -111,6 +114,7 @@ impl UError for LsError {
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_) => 2,
+            Self::InvalidTabSize(_) => 2,
         }
     }
 }
