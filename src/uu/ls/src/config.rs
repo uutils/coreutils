@@ -961,25 +961,22 @@ impl Config {
 
         let tab_size = if needs_color {
             Some(0)
-        } else {
-            if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
-                match size_str.parse::<usize>() {
-                    Ok(val) => Some(val),
-                    Err(_) => {
-                        if let Some(clean_hex) = size_str
-                            .to_string()
-                            .strip_prefix("0x")
-                            .or_else(|| size_str.strip_prefix("0X"))
-                        {
-                            usize::from_str_radix(clean_hex, 16).ok()
-                        } else {
-                            return Err(Box::new(LsError::InvalidTabSize(size_str.to_string())));
-                        }
+        } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+            match size_str.parse::<usize>() {
+                Ok(val) => Some(val),
+                Err(_) => {
+                    if let Some(clean_hex) = size_str.clone()
+                        .strip_prefix("0x")
+                        .or_else(|| size_str.strip_prefix("0X"))
+                    {
+                        usize::from_str_radix(clean_hex, 16).ok()
+                    } else {
+                        return Err(Box::new(LsError::InvalidTabSize(size_str.clone())));
                     }
                 }
-            } else {
-                None
             }
+        } else {
+            None
         };
 
         Ok(Self {
