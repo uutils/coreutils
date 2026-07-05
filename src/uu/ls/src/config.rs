@@ -668,8 +668,8 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
-impl Config {
-    fn parse_tab_size(size_str: &str) -> Result<usize, Box<LsError>> {
+/// Parses the tab size value from the command line
+fn parse_tab_size(size_str: &str) -> Result<usize, Box<LsError>> {
         size_str
             .parse::<usize>()
             .ok()
@@ -680,8 +680,9 @@ impl Config {
                     .and_then(|hex| usize::from_str_radix(hex, 16).ok())
             })
             .ok_or_else(|| Box::new(LsError::InvalidTabSize(size_str.to_string())))
-    }
+}
 
+impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
@@ -975,7 +976,7 @@ impl Config {
         let tab_size = if needs_color {
             Some(0)
         } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
-            match Self::parse_tab_size(size_str) {
+            match parse_tab_size(size_str) {
                 Ok(n) => Some(n),
                 Err(e) => return Err(e),
             }
