@@ -7557,3 +7557,13 @@ fn test_ls_al_no_capabilities_insufficient_on_wasi() {
         out.stdout_str()
     );
 }
+
+// https://github.com/uutils/coreutils/issues/13280
+// options `--sort`, `--format`, `--time`, and `--blocksize` may be detached
+#[test]
+fn test_long_options_detached() {
+    new_ucmd!().arg("--sort").arg("name").succeeds();
+    new_ucmd!().arg("--format").arg("single-column").succeeds();
+    new_ucmd!().arg("--time").arg("mtime").succeeds();
+    new_ucmd!().arg("--block-size").arg("512").succeeds();
+}
