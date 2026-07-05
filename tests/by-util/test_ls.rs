@@ -5293,13 +5293,26 @@ fn test_symlink_target_extension_color() {
     assert!(target.contains("31m")); // 31 = red (our configured archive color)
 }
 
-#[test]
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
 
     scene.ucmd().args(&["-T", "3"]).succeeds();
     scene.ucmd().args(&["--tabsize", "0"]).succeeds();
-    scene.ucmd().arg("--tabsize=-3").fails();
+    scene
+        .ucmd()
+        .arg("--tabsize=-3")
+        .fails()
+        .stderr_is("ls: invalid tab size: '-3'\n");
+    scene
+        .ucmd()
+        .arg("--tabsize=a")
+        .fails()
+        .stderr_is("ls: invalid tab size: 'a'\n");
+    scene
+        .ucmd()
+        .arg("--tabsize=3.14")
+        .fails()
+        .stderr_is("ls: invalid tab size: '3.14'\n");
     scene.ucmd().args(&["-T", "0xff"]).succeeds();
     scene.ucmd().arg("-T").fails();
 }
