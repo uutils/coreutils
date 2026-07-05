@@ -669,7 +669,7 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
 }
 
 /// Parses the tab size value from the command line
-fn parse_tab_size(size_str: &str) -> Result<usize, Box<LsError>> {
+fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
     size_str
         .parse::<usize>()
         .ok()
@@ -679,7 +679,7 @@ fn parse_tab_size(size_str: &str) -> Result<usize, Box<LsError>> {
                 .or_else(|| size_str.strip_prefix("0X"))
                 .and_then(|hex| usize::from_str_radix(hex, 16).ok())
         })
-        .ok_or_else(|| Box::new(LsError::InvalidTabSize(size_str.to_string())))
+        .ok_or_else(|| LsError::InvalidTabSize(size_str.to_string()))
 }
 
 impl Config {
@@ -976,10 +976,7 @@ impl Config {
         let tab_size = if needs_color {
             Some(0)
         } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
-            match parse_tab_size(size_str) {
-                Ok(n) => Some(n),
-                Err(e) => return Err(e),
-            }
+            Some(parse_tab_size(size_str)?)
         } else {
             None
         };
