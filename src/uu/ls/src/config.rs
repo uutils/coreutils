@@ -962,12 +962,17 @@ impl Config {
         let tab_size = if needs_color {
             Some(0)
         } else {
-            options
-                .get_one::<String>(options::format::TAB_SIZE)
-                .and_then(|size| size.parse::<usize>().ok())
-                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        }
-        .unwrap_or(SPACES_IN_TAB);
+            if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+                match size_str.parse::<usize>() {
+                    Ok(val) => Some(val),
+                    Err(_) => {
+                        return Err(Box::new(LsError::InvalidTabSize(15.to_string())));
+                    }
+                }
+            } else {
+                None
+            }
+        };
 
         Ok(Self {
             format,
@@ -1002,7 +1007,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
-            tab_size,
+            tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
 }
