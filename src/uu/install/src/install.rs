@@ -340,14 +340,6 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Determine behavior, given command line arguments.
-///
-/// If successful, returns a filled-out Behavior struct.
-///
-/// # Errors
-///
-/// In event of failure, returns an integer intended as a program return code.
-///
 /// Resolve an owner/group argument to a numeric id.
 ///
 /// First looks the value up by name (or by id) via `lookup`. When no matching
@@ -358,6 +350,14 @@ fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Opt
     lookup(value).ok().or_else(|| value.parse::<u32>().ok())
 }
 
+/// Determine behavior, given command line arguments.
+///
+/// If successful, returns a filled-out Behavior struct.
+///
+/// # Errors
+///
+/// In event of failure, returns an integer intended as a program return code.
+///
 fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
