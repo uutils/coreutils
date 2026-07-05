@@ -681,7 +681,7 @@ impl Config {
             })
             .ok_or_else(|| Box::new(LsError::InvalidTabSize(size_str.to_string())))
     }
-    
+
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
