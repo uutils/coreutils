@@ -1898,16 +1898,29 @@ fn test_date_strftime_narrow_width_on_wide_default() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/283 — GNU date floors negative fractional epochs (`@-1.5` -> -2); uutils truncates toward zero (-> -1)."]
 fn test_date_negative_fractional_epoch_flooring() {
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d")
-        .arg("@-1.5")
-        .arg("+%s")
-        .succeeds()
-        .stdout_is("-2\n");
+    // GNU date floors `%s` toward negative infinity for negative fractional
+    // epochs, while jiff truncates toward zero. See parse_datetime issue #283.
+    for (input, format, expected) in [
+        ("@-1.5", "+%s", "-2\n"),
+        ("@-0.25", "+%s", "-1\n"),
+        ("@-2.75", "+%s.%N", "-3.250000000\n"),
+        ("@-100.5", "+%s", "-101\n"),
+        // Positive fractions and whole seconds are unaffected.
+        ("@42.9", "+%s", "42\n"),
+        ("@-7", "+%s", "-7\n"),
+        // `%%s` stays a literal specifier and must not be substituted.
+        ("@-1.5", "+%%s=%s", "%s=-2\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
