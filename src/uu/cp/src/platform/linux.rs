@@ -32,8 +32,7 @@ where
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
     if ioctl_ficlone(&dst, &src).is_err() {
-        // faster than io::copy's copy_file_range and sendfile
-        buf_copy::copy_stream(&mut src, &mut dst)?;
+        buf_copy::copy_fast(&mut src, &mut dst)?;
     }
     Ok(())
 }
@@ -226,7 +225,7 @@ where
         dst_file.set_len(0)?;
     }
 
-    buf_copy::copy_stream(&mut src_file, &mut dst_file)
+    buf_copy::copy_fast(&mut src_file, &mut dst_file)
         .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     Ok(())
