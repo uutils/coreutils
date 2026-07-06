@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGRTMAX GHSA
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA
 use regex::Regex;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Child, Command};
@@ -169,6 +169,18 @@ fn test_kill_list_one_signal_from_name() {
         .stdout_matches(&Regex::new("\\b9\\b").unwrap());
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_list_sigio_alias() {
+    for signal in ["IO", "SIGIO"] {
+        new_ucmd!()
+            .arg("-l")
+            .arg(signal)
+            .succeeds()
+            .stdout_only(format!("{}\n", libc::SIGIO));
+    }
+}
+
 #[test]
 fn test_kill_list_one_signal_ignore_case() {
     // Use SIGKILL because it is 9 on all unixes.
@@ -228,6 +240,18 @@ fn test_kill_set_bad_signal_name() {
         .arg("IAMNOTASIGNAL")
         .fails()
         .stderr_contains("'IAMNOTASIGNAL': invalid signal");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_kill_accepts_sigio_alias_for_sending() {
+    for args in [["--signal=SIGIO", "999999999"], ["-SIGIO", "999999999"]] {
+        new_ucmd!()
+            .args(&args)
+            .fails_with_code(1)
+            .stderr_contains("sending signal")
+            .stderr_does_not_contain("invalid signal");
+    }
 }
 
 #[test]
