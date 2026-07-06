@@ -158,10 +158,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let default_shell: &'static OsStr = OsStr::new("/bin/sh");
-    let default_option: &'static OsStr = OsStr::new("-i");
-    let user_shell = std::env::var_os("SHELL");
-
     let options = Options::from(&matches)?;
 
     // We are resolving the path in case it is a symlink or /. or /../
@@ -188,30 +184,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
-    let commands: Vec<&OsStr> = matches
+    let mut cmd_iter = matches
         .get_many::<String>(options::COMMAND)
-        .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());
-
-    // TODO: refactor the args and command matching
-    // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
-    let command = if commands.is_empty() {
-        vec![
-            user_shell.as_deref().unwrap_or(default_shell),
-            default_option,
-        ]
-    } else {
-        commands
-    };
-
-    assert!(!command.is_empty());
-    let chroot_command = command[0];
-
+        .into_iter()
+        .flatten();
+    let chroot_command = cmd_iter.next().map_or_else(
+        || std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into()),
+        std::ffi::OsString::from,
+    );
+    let chroot_command = chroot_command.as_os_str();
+    let mut args: Vec<&OsStr> = cmd_iter.map(OsStr::new).collect();
+    if args.is_empty() {
+        args.push(OsStr::new("-i"));
+    }
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let err = process::Command::new(chroot_command)
-        .args(&command[1..])
-        .exec();
+    let err = process::Command::new(chroot_command).args(&args).exec();
 
     Err(if err.kind() == ErrorKind::NotFound {
         ChrootError::CommandNotFound(chroot_command.to_owned(), err)
