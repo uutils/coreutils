@@ -1026,8 +1026,7 @@ fn resolve_dereference(
         .find_map(|(_, opt, _)| DEREF_FLAGS.contains(opt).then_some(*opt));
 
     let dereference = match last_deref {
-        Some(options::DEREFERENCE) => true,
-        Some(_) => false,
+        Some(opt) => opt == options::DEREFERENCE,
         None => !recursive || is_link,
     };
 

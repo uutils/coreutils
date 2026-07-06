@@ -7656,7 +7656,7 @@ fn test_cp_archive_deref_flag_ordering() {
     }
 }
 
-/// Regression test: -a keeps recursiveness when combined with -L/-H/-d.
+/// Regression test: -a keeps recursion when combined with -L/-H/-d.
 /// https://github.com/uutils/coreutils/issues/13207
 #[test]
 #[cfg(unix)]
@@ -7699,11 +7699,12 @@ fn test_cp_no_deref_preserve_with_deref_keeps_hardlinks() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
     at.hard_link("file1", "file2");
-    at.mkdir("destdir");
-    ucmd.args(&["-dL", "file1", "file2", "destdir"]).succeeds();
-    // -dL: hardlink preserved → destdir/file1 should have nlink == 2
-    // (both file1 and file2 point to the same inode in destdir)
-    let nlink = at.metadata("destdir/file1").st_nlink();
+    at.mkdir("target_dir");
+    ucmd.args(&["-dL", "file1", "file2", "target_dir"])
+        .succeeds();
+    // -dL: hardlink preserved → target_dir/file1 should have nlink == 2
+    // (both file1 and file2 point to the same inode in target_dir)
+    let nlink = at.metadata("target_dir/file1").st_nlink();
     assert_eq!(
         nlink, 2,
         "-dL should preserve hardlinks (expected nlink=2, got nlink={nlink})"
