@@ -97,6 +97,7 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use rustix::time::{ClockId, clock_gettime};
 
