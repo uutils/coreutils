@@ -708,6 +708,35 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
+/// Expand `%x`, `%X`, `%r` into locale format strings from `nl_langinfo`
+/// before jiff sees them. `%%` is protected so `%%x` is not expanded.
+fn expand_locale_specifiers(format: &str) -> Cow<'_, str> {
+    const PLACEHOLDER: &str = "\x00PCT\x00";
+
+    if !format.contains("%x") && !format.contains("%X") && !format.contains("%r") {
+        return Cow::Borrowed(format);
+    }
+
+    let mut s = format.replace("%%", PLACEHOLDER);
+
+    if s.contains("%x") {
+        if let Some(date_fmt) = locale::get_locale_date_format() {
+            s = s.replace("%x", &date_fmt);
+        }
+    }
+    if s.contains("%X") {
+        if let Some(time_fmt) = locale::get_locale_time_format() {
+            s = s.replace("%X", &time_fmt);
+        }
+    }
+    if s.contains("%r") {
+        let ampm = locale::get_locale_time_ampm_format();
+        s = s.replace("%r", &ampm);
+    }
+
+    Cow::Owned(s.replace(PLACEHOLDER, "%%"))
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
@@ -715,6 +744,12 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
+    // Expand %x/%X/%r into the locale's D_FMT/T_FMT/T_FMT_AMPM before any other
+    // localization, so the composite specifiers get the same %b/%A treatment
+    // as if the user had spelled them out.
+    let format_string = expand_locale_specifiers(format_string);
+    let format_string = &*format_string;
+
     // Apply locale-aware name substitution (month/day names) before modifier
     // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
     // The owned String is kept in `localized` so `fmt` can borrow from it for the
