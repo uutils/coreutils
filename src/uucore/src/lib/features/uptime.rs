@@ -98,30 +98,11 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(target_os = "openbsd")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    use libc::CLOCK_BOOTTIME;
-    use libc::clock_gettime;
+    use rustix::time::{ClockId, clock_gettime};
 
-    use libc::c_int;
-    use libc::timespec;
+    let tp = clock_gettime(ClockId::Boottime);
 
-    let mut tp: timespec = timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-
-    // OpenBSD prototype: clock_gettime(clk_id: ::clockid_t, tp: *mut ::timespec) -> ::c_int;
-    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, &raw mut tp) };
-
-    if ret == 0 {
-        #[cfg(target_pointer_width = "64")]
-        let uptime: i64 = tp.tv_sec;
-        #[cfg(not(target_pointer_width = "64"))]
-        let uptime: i64 = tp.tv_sec.into();
-
-        Ok(uptime)
-    } else {
-        Err(UptimeError::SystemUptime)?
-    }
+    Ok(tp.tv_sec as i64)
 }
 
 /// Get the system uptime
