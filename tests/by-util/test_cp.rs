@@ -2905,6 +2905,48 @@ fn test_cp_sparse_auto_preserves_sparse_source_windows() {
     );
 }
 
+// `--reflink=auto` means "clone if possible, else plain copy" (GNU), so on
+// Windows — which has no reflink support — it must fall back to a plain copy
+// rather than fail.
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_reflink_auto_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "hello");
+
+    ucmd.args(&["--reflink=auto", "src", "dst"]).succeeds();
+
+    assert_eq!(at.read("dst"), "hello");
+}
+
+// `--reflink=always` (and bare `--reflink`, which defaults to `always`) must
+// still fail on Windows: cloning was explicitly required but is unsupported.
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_reflink_always_windows() {
+    for argument in ["--reflink=always", "--reflink"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("src", "hello");
+
+        ucmd.args(&[argument, "src", "dst"]).fails();
+    }
+}
+
+// `--debug` must report the sparse detection that actually happened: `zeros`
+// when the sparse copy ran (the test temp dir is NTFS, which supports it).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_debug_sparse_always_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "hello");
+
+    ucmd.args(&["--debug", "--sparse=always", "a", "b"])
+        .succeeds()
+        .stdout_contains(
+            "copy offload: unsupported, reflink: unsupported, sparse detection: zeros",
+        );
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(feature = "truncate")]
 #[test]

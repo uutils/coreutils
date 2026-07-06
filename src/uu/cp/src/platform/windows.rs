@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 // spell-checker:ignore reflink misalign deleters
 use std::fs::{File, OpenOptions};
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::os::windows::fs::{FileExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 
@@ -111,8 +111,22 @@ fn write_all_at(file: &File, mut buf: &[u8], mut offset: u64) -> std::io::Result
     Ok(())
 }
 
-/// Perform a sparse copy from the open `src_file` to `dest` for
-/// `--sparse=always`.
+/// Error from [`sparse_copy`], separating "the destination filesystem cannot
+/// do sparse files" — which callers handle by falling back to a plain copy —
+/// from real I/O failures.
+enum SparseCopyError {
+    /// The destination filesystem does not support sparse files (e.g. FAT).
+    Unsupported,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for SparseCopyError {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+/// Perform a sparse copy from the open `src_file` to `dest`.
 ///
 /// The destination is flagged sparse, sized to match the source, and only the
 /// blocks of the source that contain at least one non-zero byte are written;
@@ -120,9 +134,10 @@ fn write_all_at(file: &File, mut buf: &[u8], mut offset: u64) -> std::io::Result
 ///
 /// If the destination filesystem does not support sparse files (e.g. FAT), the
 /// `FSCTL_SET_SPARSE` call fails with `ERROR_INVALID_FUNCTION` or
-/// `ERROR_NOT_SUPPORTED` and we fall back to a full byte-for-byte copy so that
-/// the zero runs are written out as real zeros. Any other error is propagated.
-fn sparse_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
+/// `ERROR_NOT_SUPPORTED` and [`SparseCopyError::Unsupported`] is returned
+/// without any data having been copied; any other error is propagated as
+/// [`SparseCopyError::Io`].
+fn sparse_copy(src_file: &mut File, dest: &Path) -> Result<(), SparseCopyError> {
     let dst_file = OpenOptions::new()
         .write(true)
         .create(true)
@@ -134,19 +149,17 @@ fn sparse_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
 
     let size = src_file.metadata()?.len();
 
-    match uucore::fs::set_file_sparse(&dst_file) {
-        Ok(()) => {}
-        // Sparse files unsupported here: do a plain copy so the result is still
-        // a faithful copy of the source.
-        Err(e)
-            if e.raw_os_error() == Some(ERROR_INVALID_FUNCTION as i32)
-                || e.raw_os_error() == Some(ERROR_NOT_SUPPORTED as i32) =>
+    // Only the `FSCTL_SET_SPARSE` failure maps to `Unsupported`; the same os
+    // error codes from any later call are ordinary I/O errors.
+    uucore::fs::set_file_sparse(&dst_file).map_err(|e| {
+        if e.raw_os_error() == Some(ERROR_INVALID_FUNCTION as i32)
+            || e.raw_os_error() == Some(ERROR_NOT_SUPPORTED as i32)
         {
-            std::io::copy(src_file, &mut &dst_file)?;
-            return Ok(());
+            SparseCopyError::Unsupported
+        } else {
+            SparseCopyError::Io(e)
         }
-        Err(e) => return Err(e),
-    }
+    })?;
 
     dst_file.set_len(size)?;
 
@@ -168,6 +181,40 @@ fn sparse_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Plain byte-for-byte copy from the open `src_file` to `dest`, used when a
+/// sparse copy is not possible.
+///
+/// The source is rewound first, so this is safe to call after a sparse-copy
+/// attempt on the same handle.
+fn plain_copy(src_file: &mut File, dest: &Path) -> std::io::Result<()> {
+    src_file.seek(SeekFrom::Start(0))?;
+    let mut dst_file = OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .share_mode(FILE_SHARE_READ)
+        .open(dest)?;
+    std::io::copy(src_file, &mut dst_file)?;
+    Ok(())
+}
+
+/// Sparse-copy `src_file` to `dest`, falling back to a plain copy when the
+/// destination filesystem cannot do sparse files.
+///
+/// Returns the sparse-detection debug value describing what actually happened:
+/// [`SparseDebug::Zeros`] for a sparse copy, [`SparseDebug::Unsupported`] for
+/// the plain-copy fallback.
+fn sparse_copy_or_plain(src_file: &mut File, dest: &Path) -> std::io::Result<SparseDebug> {
+    match sparse_copy(src_file, dest) {
+        Ok(()) => Ok(SparseDebug::Zeros),
+        Err(SparseCopyError::Unsupported) => {
+            plain_copy(src_file, dest)?;
+            Ok(SparseDebug::Unsupported)
+        }
+        Err(SparseCopyError::Io(e)) => Err(e),
+    }
+}
+
 /// Whether the open `file` has the Windows sparse attribute set.
 ///
 /// Checked on the handle rather than the path so the decision applies to the
@@ -178,9 +225,10 @@ fn is_sparse(file: &File) -> std::io::Result<bool> {
 
 /// Copies `source` to `dest`, honoring `--sparse` on Windows.
 ///
-/// Windows has no copy-on-write reflink support, so any `--reflink` other than
-/// the default `never` is rejected. Sparse copies are implemented via the
-/// `FSCTL_SET_SPARSE` device control.
+/// Windows has no copy-on-write reflink support, so `--reflink=always` is
+/// rejected, while `--reflink=auto` ("clone if possible") falls back to the
+/// plain behavior like on other platforms without reflink support. Sparse
+/// copies are implemented via the `FSCTL_SET_SPARSE` device control.
 pub(crate) fn copy_on_write(
     source: &Path,
     dest: &Path,
@@ -188,7 +236,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<CopyDebug> {
-    if reflink_mode != ReflinkMode::Never {
+    if reflink_mode == ReflinkMode::Always {
         return Err(translate!("cp-error-reflink-not-supported")
             .to_string()
             .into());
@@ -203,9 +251,9 @@ pub(crate) fn copy_on_write(
     let context_err = |e| CpError::IoErrContext(e, context.to_owned());
     match sparse_mode {
         SparseMode::Always => {
-            copy_debug.sparse_detection = SparseDebug::Zeros;
             let mut src_file = File::open(source).map_err(context_err)?;
-            sparse_copy(&mut src_file, dest).map_err(context_err)?;
+            copy_debug.sparse_detection =
+                sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;
         }
         // `--sparse=auto` (the default) preserves holes only when the source is
         // already sparse, matching GNU. A sparse source is re-copied sparsely;
@@ -218,9 +266,12 @@ pub(crate) fn copy_on_write(
         SparseMode::Auto => {
             let mut src_file = File::open(source).map_err(context_err)?;
             if is_sparse(&src_file).map_err(context_err)? {
-                copy_debug.sparse_detection = SparseDebug::Zeros;
-                sparse_copy(&mut src_file, dest).map_err(context_err)?;
+                copy_debug.sparse_detection =
+                    sparse_copy_or_plain(&mut src_file, dest).map_err(context_err)?;
             } else {
+                // `fs::copy` (`CopyFileExW`) keeps the kernel copy path, ReFS
+                // block cloning and SMB offload on this — the default — copy
+                // path; see the PR discussion for the TOCTOU trade-off.
                 std::fs::copy(source, dest).map_err(context_err)?;
             }
         }
