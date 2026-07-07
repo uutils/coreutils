@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport Ioctl absolutized
 
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
@@ -22,9 +22,21 @@ use std::io::{Error, ErrorKind, Result as IOResult};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::MAX_PATH;
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+#[cfg(windows)]
+use windows_sys::Win32::System::IO::DeviceIoControl;
+#[cfg(windows)]
+use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
@@ -865,6 +877,112 @@ pub mod sane_blksize {
     }
 }
 
+/// Disk geometry of a volume, as reported by the Windows `GetDiskFreeSpaceW`
+/// API. Cluster counts are in clusters, not bytes.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+pub struct DiskFreeSpace {
+    pub sectors_per_cluster: u32,
+    pub bytes_per_sector: u32,
+    pub free_clusters: u32,
+    pub total_clusters: u32,
+}
+
+/// Safe wrapper around the Windows `GetVolumePathNameW` API.
+///
+/// Returns the mount-point root of the volume holding `path` (e.g. `C:\` or
+/// `C:\mount\`), handling both plain drive letters and volumes mounted on a
+/// directory.
+#[cfg(windows)]
+pub fn volume_path_name(path: &Path) -> IOResult<PathBuf> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // The returned mount point is a prefix of the (absolutized) input, so
+    // sizing the buffer to the input — with the documented MAX_PATH + 1
+    // minimum — means it cannot be too small, even for long paths.
+    let mut root = vec![0u16; wide.len().max(MAX_PATH as usize + 1)];
+    // SAFETY: `wide` is a valid null-terminated wide string, and `root` is a
+    // valid output buffer of `root.len()` u16s.
+    let ok = unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    let len = root.iter().position(|&c| c == 0).unwrap_or(root.len());
+    Ok(PathBuf::from(OsString::from_wide(&root[..len])))
+}
+
+/// Safe wrapper around the Windows `GetDiskFreeSpaceW` API for the volume
+/// rooted at `root` (as returned by [`volume_path_name`]).
+///
+/// The trailing separator the API requires on drive and UNC roots is appended
+/// if missing.
+#[cfg(windows)]
+pub fn disk_free_space(root: &Path) -> IOResult<DiskFreeSpace> {
+    let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
+    if !matches!(wide.last(), Some(&sep) if sep == u16::from(b'\\') || sep == u16::from(b'/')) {
+        wide.push(u16::from(b'\\'));
+    }
+    wide.push(0);
+
+    let mut info = DiskFreeSpace {
+        sectors_per_cluster: 0,
+        bytes_per_sector: 0,
+        free_clusters: 0,
+        total_clusters: 0,
+    };
+    // SAFETY: `wide` is a valid null-terminated wide string; the four
+    // out-params are valid `u32` pointers.
+    let ok = unsafe {
+        GetDiskFreeSpaceW(
+            wide.as_ptr(),
+            &raw mut info.sectors_per_cluster,
+            &raw mut info.bytes_per_sector,
+            &raw mut info.free_clusters,
+            &raw mut info.total_clusters,
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(info)
+}
+
+/// Flag `file` as sparse using the Windows `FSCTL_SET_SPARSE` control code.
+///
+/// Once a file is marked sparse, regions within its length that are never
+/// written are not allocated on disk and read back as zeros. On filesystems
+/// without sparse support the call fails with `ERROR_INVALID_FUNCTION` or
+/// `ERROR_NOT_SUPPORTED`.
+#[cfg(windows)]
+pub fn set_file_sparse(file: &fs::File) -> IOResult<()> {
+    let mut bytes_returned: u32 = 0;
+    // SAFETY: `file.as_raw_handle()` is a valid, open file handle owned by `file`.
+    // `FSCTL_SET_SPARSE` takes no input or output buffer, so the buffer pointers
+    // are null with zero lengths; `bytes_returned` is a valid out-parameter.
+    let ok = unsafe {
+        DeviceIoControl(
+            // `as_raw_handle()` yields the std `*mut c_void`; `.cast()` reinterprets
+            // it as the windows-sys `HANDLE` without an identity `as` pointer cast
+            // (which clippy::ptr_as_ptr flags).
+            file.as_raw_handle().cast(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &raw mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(())
+}
+
 /// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
 ///
 /// If the `file` path contains a filename, this function returns `Some(filename)` where `filename` is
@@ -1174,5 +1292,44 @@ mod tests {
     fn test_get_file_name() {
         let file_path = PathBuf::from("~/foo.txt");
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_volume_path_name() {
+        let temp = env::temp_dir();
+        let root = volume_path_name(&temp).unwrap();
+        assert!(path_ends_with_terminator(&root));
+        assert!(temp.starts_with(&root));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_disk_free_space() {
+        let root = volume_path_name(&env::temp_dir()).unwrap();
+        let info = disk_free_space(&root).unwrap();
+        assert!(info.sectors_per_cluster > 0);
+        assert!(info.bytes_per_sector > 0);
+
+        // The trailing separator required by the underlying API is appended
+        // when missing, so a bare drive path works too.
+        let stripped = root
+            .to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_owned();
+        let info = disk_free_space(Path::new(&stripped)).unwrap();
+        assert!(info.bytes_per_sector > 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_set_file_sparse() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
+
+        let file = tempfile::NamedTempFile::new().unwrap();
+        set_file_sparse(file.as_file()).unwrap();
+        let attributes = file.as_file().metadata().unwrap().file_attributes();
+        assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
     }
 }
