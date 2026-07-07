@@ -283,10 +283,16 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        for platform in ["unix", "macos", "windows", "unix_android"] {
+        // macOS uses the generic Unix feature set; there is no dedicated `feat_os_macos`.
+        for (platform, features) in [
+            ("unix", "feat_os_unix"),
+            ("macos", "feat_os_unix"),
+            ("windows", "feat_os_windows"),
+            ("unix_android", "feat_os_unix_android"),
+        ] {
             let platform_utils: Vec<String> = String::from_utf8(
                 process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features=feat_os_{platform}"))
+                    .arg(format!("--features={features}"))
                     .output()?
                     .stdout,
             )
