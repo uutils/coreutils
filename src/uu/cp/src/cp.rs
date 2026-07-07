@@ -696,12 +696,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 // -d sets this option
                 .help(translate!("cp-help-no-dereference"))
                 .action(ArgAction::SetTrue),
@@ -710,24 +704,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .overrides_with_all([
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CLI_SYMBOLIC_LINKS)
                 .short('H')
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-cli-symbolic-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -735,24 +717,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-archive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 .short('d')
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                ])
                 .help(translate!("cp-help-no-dereference-preserve-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -1028,6 +998,53 @@ impl Attributes {
     }
 }
 
+/// Flags in the mutual-exclusion group for symlink handling.
+/// The last one on the command line determines dereference behavior.
+/// Note: CLI_SYMBOLIC_LINKS (-H) is excluded here — it only affects
+/// CLI-level symlinks, not recursive traversal.
+const DEREF_FLAGS: &[&str] = &[
+    options::DEREFERENCE,
+    options::NO_DEREFERENCE,
+    options::ARCHIVE,
+    options::NO_DEREFERENCE_PRESERVE_LINKS,
+];
+
+/// Resolves `(dereference, cli_dereference)` from the overriding order.
+///
+/// Both values follow last-flag-wins semantics over the mutual-exclusion
+/// group of symlink-handling flags (-L/-H/-P/-a/-d). When no dereference
+/// flag is present, `dereference` falls back to its default: don't follow
+/// links during recursive copies (unless `--link`).
+fn resolve_dereference(
+    recursive: bool,
+    is_link: bool,
+    overriding_order: &[(usize, &str, Vec<&String>)],
+) -> (bool, bool) {
+    let last_deref = overriding_order
+        .iter()
+        .rev()
+        .find_map(|(_, opt, _)| DEREF_FLAGS.contains(opt).then_some(*opt));
+
+    let dereference = match last_deref {
+        Some(opt) => opt == options::DEREFERENCE,
+        None => !recursive || is_link,
+    };
+
+    let cli_dereference = overriding_order
+        .iter()
+        .rev()
+        .find_map(|(_, opt, _)| match *opt {
+            options::CLI_SYMBOLIC_LINKS | options::DEREFERENCE => Some(true),
+            options::ARCHIVE | options::NO_DEREFERENCE | options::NO_DEREFERENCE_PRESERVE_LINKS => {
+                Some(false)
+            }
+            _ => None,
+        })
+        .unwrap_or(false);
+
+    (dereference, cli_dereference)
+}
+
 impl Options {
     #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
@@ -1046,6 +1063,8 @@ impl Options {
         }
 
         let recursive = matches.get_flag(options::RECURSIVE) || matches.get_flag(options::ARCHIVE);
+
+        let copy_mode = CopyMode::from_matches(matches);
 
         let backup_mode = match backup_control::determine_backup_mode(matches) {
             Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
@@ -1079,14 +1098,11 @@ impl Options {
             return Err(CpError::NotADirectory(dir.clone()));
         }
         // cp follows POSIX conventions for overriding options such as "-a",
-        // "-d", "--preserve", and "--no-preserve". We can use clap's
-        // override-all behavior to achieve this, but there's a challenge: when
-        // clap overrides an argument, it removes all traces of it from the
-        // match. This poses a problem because flags like "-a" expand to "-dR
-        // --preserve=all", and we only want to override the "--preserve=all"
-        // part. Additionally, we need to handle multiple occurrences of the
-        // same flags. To address this, we create an overriding order from the
-        // matches here.
+        // "-d", "--preserve", and "--no-preserve": the last flag on the
+        // command line wins. We build an `overriding_order` vector of all
+        // overriding options (including dereference flags) sorted by their
+        // command-line index, then derive attributes and dereference behavior
+        // from the last relevant entry.
         let mut overriding_order: Vec<(usize, &str, Vec<&String>)> = vec![];
         // We iterate through each overriding option, adding each occurrence of
         // the option along with its value and index as a tuple, and push it to
@@ -1097,6 +1113,9 @@ impl Options {
             options::ARCHIVE,
             options::PRESERVE_DEFAULT_ATTRIBUTES,
             options::NO_DEREFERENCE_PRESERVE_LINKS,
+            options::DEREFERENCE,
+            options::NO_DEREFERENCE,
+            options::CLI_SYMBOLIC_LINKS,
         ] {
             if let (Ok(Some(val)), Some(index)) = (
                 matches.try_get_one::<bool>(option),
@@ -1133,6 +1152,11 @@ impl Options {
             }
         }
         overriding_order.sort_by_key(|a| a.0);
+
+        // dereference and cli_dereference follow last-flag-wins semantics
+        // over the mutual-exclusion group of symlink-handling flags.
+        let (dereference, cli_dereference) =
+            resolve_dereference(recursive, copy_mode == CopyMode::Link, &overriding_order);
 
         let mut attributes = Attributes::NONE;
 
@@ -1194,16 +1218,9 @@ impl Options {
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
             copy_contents: matches.get_flag(options::COPY_CONTENTS),
-            cli_dereference: matches.get_flag(options::CLI_SYMBOLIC_LINKS),
-            copy_mode: CopyMode::from_matches(matches),
-            // No dereference is set with -p, -d and --archive
-            dereference: !(matches.get_flag(options::NO_DEREFERENCE)
-                || matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.get_flag(options::ARCHIVE)
-                // cp normally follows the link only when not copying recursively or when
-                // --link (-l) is used
-                || (recursive && CopyMode::from_matches(matches)!= CopyMode::Link ))
-                || matches.get_flag(options::DEREFERENCE),
+            cli_dereference,
+            copy_mode,
+            dereference,
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
             update: update_mode,
