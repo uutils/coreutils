@@ -224,10 +224,6 @@ fn list(signals: &Vec<String>) {
     }
 }
 
-fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
-    result.map_err(io::Error::from)
-}
-
 // rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
 // raw `libc::kill` for any value its safe constructor doesn't recognize.
 fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
@@ -273,15 +269,15 @@ fn kill(sig: usize, pids: &[i32]) {
     for &pid in pids {
         let result = match pid.cmp(&0) {
             Ordering::Equal => match named {
-                _ if sig == 0 => rustix_to_io(test_kill_current_process_group()),
-                Some(s) => rustix_to_io(kill_current_process_group(s)),
+                _ if sig == 0 => test_kill_current_process_group().map_err(io::Error::from),
+                Some(s) => kill_current_process_group(s).map_err(io::Error::from),
                 None => raw_kill(0, sig),
             },
             Ordering::Greater => {
                 let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
                 match named {
-                    _ if sig == 0 => rustix_to_io(test_kill_process(pid)),
-                    Some(s) => rustix_to_io(kill_process(pid, s)),
+                    _ if sig == 0 => test_kill_process(pid).map_err(io::Error::from),
+                    Some(s) => kill_process(pid, s).map_err(io::Error::from),
                     None => raw_kill(pid.as_raw_nonzero().get(), sig),
                 }
             }
@@ -296,8 +292,8 @@ fn kill(sig: usize, pids: &[i32]) {
                 let pid =
                     Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
                 match named {
-                    _ if sig == 0 => rustix_to_io(test_kill_process_group(pid)),
-                    Some(s) => rustix_to_io(kill_process_group(pid, s)),
+                    _ if sig == 0 => test_kill_process_group(pid).map_err(io::Error::from),
+                    Some(s) => kill_process_group(pid, s).map_err(io::Error::from),
                     None => raw_kill(-pid.as_raw_nonzero().get(), sig),
                 }
             }
