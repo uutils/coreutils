@@ -146,21 +146,28 @@ fn create_bundle(
     // Disable Unicode directional isolate characters
     bundle.set_use_isolating(false);
 
-    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| {
+    let mut try_add_resource_from = |dir_opt: Option<PathBuf>| -> bool {
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .and_then(|ftl| FluentResource::try_new(ftl).ok())
+            .map(|ftl| match FluentResource::try_new(ftl) {
+                Ok(resource) => resource,
+                // Use the partial resource which contains all successfully parsed messages
+                Err((partial, _)) => partial,
+            })
         {
             // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
             bundle.add_resource_overriding(Box::leak(Box::new(resource)));
+            true
+        } else {
+            false
         }
     };
 
     // Load common strings from uucore locales directory
     try_add_resource_from(find_uucore_locales_dir(locales_dir));
     // Then, try to load utility-specific strings from the utility's locale directory
-    try_add_resource_from(get_locales_dir(util_name).ok());
+    let util_loaded = try_add_resource_from(get_locales_dir(util_name).ok());
 
     // checksum binaries also require fluent files from the checksum_common crate
     if [
@@ -178,8 +185,12 @@ fn create_bundle(
         try_add_resource_from(get_locales_dir("checksum_common").ok());
     }
 
-    // If we have at least one resource, return the bundle
-    if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
+    // Require that the utility locale file was actually loaded.
+    // If only common strings were loaded (but utility strings weren't),
+    // return Err so init_localization can fall back to embedded locales.
+    if util_loaded
+        && (bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")))
+    {
         Ok(bundle)
     } else {
         Err(LocalizationError::LocalesDirNotFound(format!(
@@ -298,7 +309,9 @@ fn create_english_bundle_from_embedded(
         bundle.add_resource_overriding(resource);
     }
 
-    // Return the bundle if we have either common strings or utility-specific strings
+    // Return the bundle if we have at least common or utility-specific strings.
+    // For embedded locales this is the last resort, so accept partial bundles
+    // rather than failing entirely.
     if bundle.has_message("common-error") || bundle.has_message(&format!("{util_name}-about")) {
         Ok(bundle)
     } else {
@@ -830,6 +843,68 @@ invalid-syntax = This is { $missing
             Err(other) => {
                 panic!("Expected ParseResource error, but got: {other:?}");
             }
+        }
+    }
+
+    /// Regression test: fallback bundle is correctly constructed on missing
+    /// utility-specific locales.
+    ///
+    /// Before the fix, `create_bundle` returned `Ok` whenever common uucore
+    /// strings were loaded — even if the utility-specific locale file was
+    /// missing.  This prevented `init_localization` from falling back to
+    /// embedded locales, so utility-specific message keys (e.g.
+    /// `wc-error-failed-to-print-result`) were returned verbatim instead of
+    /// being translated.
+    ///
+    /// After the fix, `create_bundle` requires the utility locale file to
+    /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
+    /// the embedded-locale fallback path to kick in.
+    ///
+    /// https://github.com/uutils/coreutils/issues/11854
+    #[test]
+    fn test_create_bundle_returns_err_when_util_locale_missing() {
+        // Build a temporary directory structure that mimics the repo layout
+        // so `find_uucore_locales_dir` can walk up and find common strings:
+        //
+        //   <temp>/uu/fake_util/locales/    <- locales_dir passed to create_bundle
+        //   <temp>/uucore/locales/en-US.ftl <- common strings (common-error)
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let temp_root = temp_dir.path();
+
+        fs::create_dir_all(temp_root.join("uu").join("fake_util").join("locales"))
+            .expect("Failed to create fake util locales dir");
+        fs::create_dir_all(temp_root.join("uucore").join("locales"))
+            .expect("Failed to create fake uucore locales dir");
+
+        fs::write(
+            temp_root.join("uucore").join("locales").join("en-US.ftl"),
+            "common-error = error\n",
+        )
+        .expect("Failed to write en-US.ftl");
+
+        let locales_dir = temp_root.join("uu").join("fake_util").join("locales");
+        let locale = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
+
+        // "fake_util" doesn't exist under src/uu/, so get_locales_dir fails
+        // and no utility-specific strings are loaded.  Common strings ARE
+        // loaded from the temp uucore locales dir above.
+        let result = create_bundle(&locale, &locales_dir, "fake_util");
+
+        assert!(
+            result.is_err(),
+            "create_bundle should return Err when the utility locale file is missing, \
+             even if common strings were loaded"
+        );
+
+        match result {
+            Err(LocalizationError::LocalesDirNotFound(msg)) => {
+                assert!(
+                    msg.contains("fake_util"),
+                    "error message should mention the utility name, got: {msg}"
+                );
+            }
+            Err(other) => panic!("Expected LocalesDirNotFound error, got: {other:?}"),
+            Ok(_) => panic!("Expected error, but create_bundle returned Ok"),
         }
     }
 
