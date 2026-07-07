@@ -283,7 +283,6 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        // macOS uses the generic Unix feature set; there is no dedicated `feat_os_macos`.
         for (platform, features) in [
             ("unix", "feat_os_unix"),
             ("macos", "feat_os_unix"),
