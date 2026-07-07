@@ -21,7 +21,7 @@ use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
 use uucore::backup_control::{self, BackupMode};
-use uucore::buf_copy::copy_stream;
+use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError};
@@ -977,7 +977,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
-    copy_stream(&mut src, &mut dst)?;
+    copy_fast(&mut src, &mut dst)?;
 
     Ok(())
 }
@@ -1032,7 +1032,7 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .mode(0o600)
         .open(to)?;
 
-    copy_stream(&mut handle, &mut dest).map_err(|err| {
+    copy_fast(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
 
