@@ -83,3 +83,10 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
 pub fn get_locale_encoding() -> UEncoding {
     get_collating_locale().1
 }
+
+/// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.
+pub fn get_ctype_encoding() -> UEncoding {
+    static CTYPE_ENCODING: OnceLock<UEncoding> = OnceLock::new();
+
+    *CTYPE_ENCODING.get_or_init(|| get_locale_from_env("LC_CTYPE").1)
+}

@@ -633,6 +633,22 @@ fn test_split_obs_lines_as_other_option_value() {
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
+#[test]
+fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["-n", "l/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "r/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+}
+
 /// Test for using more than one obsolete lines option (standalone)
 /// last one wins
 #[test]
@@ -2075,4 +2091,15 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_io_error() {
+    // /proc/self/mem causes EIO
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        //todo: add file path with proper distinction of input/output
+        .stderr_contains("Input/output error\n");
 }

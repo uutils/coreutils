@@ -165,29 +165,32 @@ fn test_delimiter_with_more_than_one_char() {
 
 #[test]
 fn test_output_delimiter() {
-    // we use -d here to ensure output delimiter
-    // is applied to the current, and not just the default, input delimiter
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-delimiter=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+    for param in ["--output-delimiter=@", "--output-del=@", "-O@"] {
+        // with default field delimiter (tab)
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:\tb:\tc:\n")
+            .succeeds()
+            .stdout_only("a:@b:\n");
 
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-del=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+        // with custom field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .arg("-d:")
+            .pipe_in("a:\tb:\tc\n")
+            .succeeds()
+            .stdout_only("a@\tb\n");
+
+        // with no field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:b:c\n")
+            .succeeds()
+            .stdout_only("a:b:c\n");
+    }
 }
 
 #[test]

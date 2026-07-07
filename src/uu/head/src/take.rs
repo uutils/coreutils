@@ -104,7 +104,10 @@ pub fn copy_all_but_n_bytes(
         loop {
             // Try to buffer at least enough to write the entire first buffer.
             let front_buffer = buffers.front();
-            if front_buffer.is_some_and(|b| buffered_bytes >= n + b.remaining_bytes()) {
+            if front_buffer.is_some_and(|b| {
+                n.checked_add(b.remaining_bytes())
+                    .is_some_and(|needed| buffered_bytes >= needed)
+            }) {
                 break;
             }
             let mut new_buffer = empty_buffer_pool.pop().unwrap_or_else(TakeAllBuffer::new);
@@ -263,7 +266,10 @@ pub fn copy_all_but_n_lines<R: Read, W: Write>(
             // First check if we have enough lines buffered that we can write out the entire
             // front buffer. If so, break.
             let front_buffer = buffers.front();
-            if front_buffer.is_some_and(|b| buffered_terminated_lines > n + b.terminated_lines()) {
+            if front_buffer.is_some_and(|b| {
+                n.checked_add(b.terminated_lines())
+                    .is_some_and(|needed| buffered_terminated_lines > needed)
+            }) {
                 break;
             }
             // Else we need to try to buffer more data...

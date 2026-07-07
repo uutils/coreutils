@@ -295,6 +295,12 @@ fn resolve_path(
     relative_base: Option<&Path>,
 ) -> std::io::Result<()> {
     let abs = canonicalize(p, can_mode, resolve)?;
+    if can_mode == MissingHandling::Normal {
+        let path_str = p.to_string_lossy();
+        if path_str.ends_with("/.") || path_str.ends_with("/./") {
+            abs.metadata()?; // raise no such file or directory error
+        }
+    }
 
     let abs = process_relative(abs, relative_base, relative_to);
 

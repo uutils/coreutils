@@ -31,7 +31,10 @@ where
 {
     let mut src = open_source(source, source_nofollow)?;
     let mut dst = create_dest_restrictive(dest, false)?;
-    std::io::copy(&mut src, &mut dst).map(|_| ())
+    if ioctl_ficlone(&dst, &src).is_err() {
+        buf_copy::copy_fast(&mut src, &mut dst)?;
+    }
+    Ok(())
 }
 
 /// The fallback behavior for [`clone`] on failed system call.
@@ -222,7 +225,7 @@ where
         dst_file.set_len(0)?;
     }
 
-    buf_copy::copy_stream(&mut src_file, &mut dst_file)
+    buf_copy::copy_fast(&mut src_file, &mut dst_file)
         .map_err(|e| std::io::Error::other(format!("{e}")))?;
 
     Ok(())

@@ -47,6 +47,12 @@ selinux = { workspace = true, optional = true }
 exacl = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs"] }
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }
+
 [[bin]]
 name = "cp"
 path = "src/main.rs"

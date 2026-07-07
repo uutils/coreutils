@@ -938,10 +938,9 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
-            if !paths.contains(&p) {
-                paths.push(p);
-            }
+            // Keep every entry: duplicates are handled later via inode tracking
+            // (which -l disables), matching GNU. Missing files must each report.
+            paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 
@@ -1233,9 +1232,12 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
                 // the string starts with +, and ignore "locale".
                 Ok(s) => {
                     let s = s.strip_prefix("posix-").unwrap_or(s.as_str());
-                    let s = match s.chars().next().unwrap() {
-                        '+' => s.split('\n').next().unwrap(),
-                        _ => s,
+                    // `s` can be empty here (e.g. TIME_STYLE=posix-), so test the
+                    // prefix instead of unwrapping the first char.
+                    let s = if s.starts_with('+') {
+                        s.split('\n').next().unwrap()
+                    } else {
+                        s
                     };
                     match s {
                         "locale" => None,
@@ -1251,9 +1253,9 @@ fn parse_time_style(s: Option<&String>) -> UResult<String> {
             "full-iso" => Ok(format::FULL_ISO.to_string()),
             "long-iso" => Ok(format::LONG_ISO.to_string()),
             "iso" => Ok(format::ISO.to_string()),
-            _ => match s.chars().next().unwrap() {
-                '+' => Ok(s[1..].to_string()),
-                _ => Err(DuError::InvalidTimeStyleArg(s).into()),
+            _ => match s.strip_prefix('+') {
+                Some(rest) => Ok(rest.to_string()),
+                None => Err(DuError::InvalidTimeStyleArg(s).into()),
             },
         },
         None => Ok(format::LONG_ISO.to_string()),

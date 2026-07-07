@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -70,28 +70,40 @@ fn sysv_sum(mut reader: impl Read) -> std::io::Result<(usize, u16)> {
     Ok((blocks_read, ret as u16))
 }
 
-fn open(name: &OsString) -> UResult<Box<dyn Read>> {
+fn open(name: &OsString) -> UResult<Reader> {
     if name == "-" {
-        Ok(Box::new(stdin()) as Box<dyn Read>)
+        Ok(Reader::Stdin(stdin()))
     } else {
         let path = Path::new(name);
-        if path.is_dir() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-is-directory", "name" => name.maybe_quote()),
-            ));
-        }
+
         // Silent the warning as we want to the error message
-        if path.metadata().is_err() {
-            return Err(USimpleError::new(
-                2,
-                translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
-            ));
+        match path.metadata() {
+            Ok(_) => {
+                if path.is_dir() {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-is-directory", "name" => name.maybe_quote()),
+                    ));
+                }
+            }
+            Err(err) => {
+                if err.kind() == ErrorKind::NotFound {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
+                    ));
+                } else if path.to_string_lossy().ends_with(['/', '\\']) {
+                    return Err(USimpleError::new(
+                        1,
+                        translate!("sum-error-not-a-directory", "name" => name.maybe_quote()),
+                    ));
+                }
+            }
         }
         let f = File::open(path).map_err_context(String::new)?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-        Ok(Box::new(f) as Box<dyn Read>)
+        Ok(Reader::File(f))
     }
 }
 
@@ -127,8 +139,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             sysv_sum(reader)
         } else {
             bsd_sum(reader)
-        }?;
-
+        }
+        .map_err(|e| USimpleError::new(1, format!("{}: {1}", file.display(), strip_errno(&e))))?;
         let mut stdout = stdout().lock();
         if print_names {
             write!(stdout, "{sum:0width$} {blocks:width$} ")?;
@@ -168,4 +180,18 @@ pub fn uu_app() -> Command {
                 .help(translate!("sum-help-sysv-compatible"))
                 .action(ArgAction::SetTrue),
         )
+}
+
+enum Reader {
+    Stdin(std::io::Stdin),
+    File(File),
+}
+
+impl Read for Reader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
 }

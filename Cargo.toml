@@ -1,7 +1,7 @@
 # coreutils (uutils)
 # * see the repository LICENSE, README, and CONTRIBUTING files for more information
 
-# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
+# spell-checker:ignore (libs) bigdecimal datetime foldhash serde gethostid kqueue libcrypto libselinux mangen memmap uuhelp startswith constness expl unnested logind cfgs interner getauxval
 
 [package]
 name = "coreutils"
@@ -26,6 +26,31 @@ unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
 ## project-specific feature shortcodes
 expensive_tests = []
+# Opt-in: use OpenSSL (libcrypto) for md5/sha1/sha2-family digests in the
+# checksum utilities instead of the pure-Rust crates. Provides large speedups
+# on CPUs without SHA-NI.
+#
+# Enable with: `cargo build --release --features unix,openssl`
+#
+# By default OpenSSL is built from source and statically linked (via the
+# `vendored` feature of the `openssl` crate), mirroring how `expr` links
+# oniguruma. To link against the system libcrypto/libssl dynamically instead,
+# set `OPENSSL_NO_VENDOR=1` at build time.
+#
+# The `?/openssl` entries propagate the choice into each standalone checksum
+# crate only when that crate is itself enabled, so disabling this feature
+# genuinely turns OpenSSL off everywhere. On Windows the feature is a no-op
+# and the pure-Rust implementations are used regardless.
+openssl = [
+  "cksum?/openssl",
+  "md5sum?/openssl",
+  "sha1sum?/openssl",
+  "sha224sum?/openssl",
+  "sha256sum?/openssl",
+  "sha384sum?/openssl",
+  "sha512sum?/openssl",
+  "uucore/openssl",
+]
 # "test_risky_names" == enable tests that create problematic file names (would make a network share inaccessible to Windows, breaks SVN on Mac OS, etc.)
 test_risky_names = []
 # * only build `uudoc` when `--feature uudoc` is activated
@@ -272,11 +297,8 @@ feat_os_unix_musl = [
   "feat_require_unix_hostid",
   "feat_require_unix_utmpx",
 ]
-# "feat_os_windows" == set of utilities which can be built/run on modern/usual windows platforms
-feat_os_windows = [
-  "feat_Tier1", ## == "feat_os_windows_legacy" + "hostname"
-  "stdbuf",
-]
+# "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
+feat_os_windows = ["feat_Tier1", "stdbuf"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
@@ -352,15 +374,6 @@ feat_os_unix_redox = [
   "stat",
   "uname",
 ]
-# "feat_os_windows_legacy" == slightly restricted set of utilities which can be built/run on early windows platforms (eg, "WinXP")
-feat_os_windows_legacy = [
-  "feat_common_core",
-  #
-  "arch",
-  "nproc",
-  "sync",
-  "whoami",
-]
 ##
 # * bypass/override ~ translate 'test' feature name to avoid dependency collision with rust core 'test' crate (o/w surfaces as compiler errors during testing)
 test = ["uu_test"]
@@ -401,7 +414,7 @@ compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
 ctor = "1.0.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
-divan = { package = "codspeed-divan-compat", version = "4.4.1" }
+divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.13.0"
 file_diff = "1.0.0"
@@ -420,7 +433,7 @@ icu_decimal = { version = "2.0.0", default-features = false }
 icu_locale = { version = "2.0.0", default-features = false }
 icu_provider = { version = "2.0.0", default-features = false }
 indicatif = "0.18.0"
-itertools = "0.14.0"
+itertools = "0.15.0"
 itoa = "1.0.15"
 jiff = "0.2.18"
 jiff-icu = "0.2.2"
@@ -437,9 +450,9 @@ num-bigint = "0.4.4"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.14.0"
-phf = "0.13.1"
-phf_codegen = "0.13.1"
+parse_datetime = "0.15.0"
+phf = "0.14.0"
+phf_codegen = "0.14.0"
 platform-info = "2.0.3"
 pretty_assertions = "1.4.1"
 procfs = "0.18"
@@ -453,7 +466,7 @@ rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 # raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
-rustix = { version = "1.1.4", features = ["param", "use-libc-auxv"] }
+rustix = { version = "1.1.4", features = ["param", "use-libc-auxv", "time"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"
@@ -484,6 +497,7 @@ blake3 = "1.5.1"
 sm3 = "0.5.0"
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.11.0"
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Fluent dependencies
 fluent = "0.17.0"

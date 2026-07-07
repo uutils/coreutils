@@ -1635,3 +1635,28 @@ fn test_float_precision_greater_than_16bits() {
         .succeeds()
         .stdout_is("1\n");
 }
+
+#[test]
+fn test_format_precision_too_large_on_zero() {
+    new_ucmd!()
+        .args(&["--format=%.40f", "0"])
+        .fails()
+        .code_is(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
+        );
+    new_ucmd!()
+        .args(&["--format=%.18f", "0"])
+        .succeeds()
+        .stdout_only("0.000000000000000000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/13272
+// argument following `--header` must not be interpreted as the option's value
+#[test]
+fn test_header_detached() {
+    new_ucmd!()
+        .args(&["--header", "1", "2"])
+        .succeeds()
+        .stdout_is("1\n2\n");
+}

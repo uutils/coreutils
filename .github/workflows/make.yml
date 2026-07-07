@@ -1,7 +1,7 @@
 name: make
 
 # spell-checker:ignore (abbrev/names) CACHEDIR taiki
-# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
+# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
@@ -34,6 +34,9 @@ concurrency:
 jobs:
   build_makefile:
     name: Build/Makefile and measure binary size
+    env:
+      # to reduce the size:
+      RUSTFLAGS: "-C force-unwind-tables=no -C strip=symbols -Clink-arg=-z -Clink-arg=pack-relative-relocs"
     permissions:
       contents: write # Publish individual binaries
     runs-on: ${{ matrix.job.os }}
@@ -43,7 +46,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
@@ -144,7 +147,6 @@ jobs:
       run: |
         # Check that libstdbuf is present too
         mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
-        strip -s /tmp/individual/usr/local/bin/*
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
       uses: softprops/action-gh-release@v3
@@ -286,7 +288,7 @@ jobs:
         job:
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -357,7 +359,7 @@ jobs:
       run: |
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -443,7 +445,7 @@ jobs:
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2

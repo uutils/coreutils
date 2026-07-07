@@ -42,6 +42,7 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
+    i18n::{UEncoding, get_ctype_encoding},
     os_str_as_bytes_lossy,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
@@ -168,6 +169,41 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
     let bytes = os_str_as_bytes_lossy(name);
+
+    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
+    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
+    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
+    // embedded apostrophes and double quotes are left untouched; only control
+    // characters, backslashes and invalid bytes are escaped.
+    if get_ctype_encoding() == UEncoding::Utf8 {
+        let mut quoted = String::with_capacity(name.len() + 6);
+        quoted.push('\u{2018}');
+        for chunk in bytes.utf8_chunks() {
+            for c in chunk.valid().chars() {
+                if c == '\\' {
+                    quoted.push_str("\\\\");
+                } else if c.is_ascii() && c.is_control() {
+                    push_basic_escape(&mut quoted, c as u8);
+                } else if c.is_control() {
+                    // Non-ASCII control characters (the C1 range, e.g.
+                    // U+0085 NEL) are not printable; octal-escape their
+                    // UTF-8 bytes like GNU does for non-printable chars.
+                    let mut buf = [0u8; 4];
+                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
+                        let _ = write!(quoted, "\\{byte:03o}");
+                    }
+                } else {
+                    quoted.push(c);
+                }
+            }
+            for &byte in chunk.invalid() {
+                let _ = write!(quoted, "\\{byte:03o}");
+            }
+        }
+        quoted.push('\u{2019}');
+        return OsString::from(quoted);
+    }
+
     let mut quoted = String::with_capacity(name.len() + 2);
     match style {
         LocaleQuoting::Single => quoted.push('\''),

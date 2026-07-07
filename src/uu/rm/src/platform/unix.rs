@@ -11,7 +11,7 @@ use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{IsTerminal, stdin};
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
@@ -264,6 +264,29 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
     }
 }
 
+/// `None` when `path` has no parent (the filesystem root). A directory whose
+/// own device differs from this is a mount point, which `--preserve-root=all`
+/// refuses to cross.
+fn parent_device(path: &Path) -> Option<u64> {
+    let parent = match path.parent() {
+        // A bare name like "b" has an empty parent, meaning the current dir.
+        Some(p) if p.as_os_str().is_empty() => Path::new("."),
+        Some(p) => p,
+        None => return None,
+    };
+    fs::metadata(parent).ok().map(|m| m.dev())
+}
+
+/// GNU prints two lines, not one, when `--preserve-root=all` stops at a device
+/// boundary.
+fn show_preserve_root_all_skip(path: &Path) {
+    show_error!(
+        "{}",
+        translate!("rm-error-skipping-different-device", "file" => path.quote())
+    );
+    show_error!("{}", translate!("rm-error-and-preserve-root-all-in-effect"));
+}
+
 pub fn safe_remove_dir_recursive(
     path: &Path,
     options: &Options,
@@ -271,15 +294,25 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    let initial_mode = match fs::symlink_metadata(path) {
+    let (initial_mode, root_dev) = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
-        Ok(metadata) => metadata.permissions().mode(),
+        // root_dev is the tree-root device, captured once and compared against
+        // every subdirectory for --one-file-system (not recomputed per level).
+        Ok(metadata) => (metadata.permissions().mode(), metadata.dev()),
         Err(e) => {
             return show_removal_error(e, path);
         }
     };
+
+    // A directory named directly on the command line is itself a mount point
+    // when its device differs from its parent's; the recursion below only ever
+    // sees its children, so this boundary has to be caught here.
+    if options.preserve_root_all && parent_device(path).is_some_and(|dev| dev != root_dev) {
+        show_preserve_root_all_skip(path);
+        return true;
+    }
 
     // Try to open the directory using DirFd for secure traversal
     let dir_fd = match DirFd::open(path, SymlinkBehavior::Follow) {
@@ -301,7 +334,8 @@ pub fn safe_remove_dir_recursive(
         }
     };
 
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options);
+    // Entries of the root directory have the root itself as their parent.
+    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev, root_dev);
 
     // After processing all children, remove the directory itself
     if error {
@@ -338,7 +372,13 @@ pub fn safe_remove_dir_recursive(
 }
 
 #[cfg(not(target_os = "redox"))]
-pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    path: &Path,
+    dir_fd: &DirFd,
+    options: &Options,
+    root_dev: u64,
+    parent_dev: u64,
+) -> bool {
     // Read directory entries using safe traversal
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
@@ -372,6 +412,28 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
+            // st_dev's type varies by platform (i32 on macOS, u64 on Linux).
+            #[allow(clippy::unnecessary_cast)]
+            let entry_dev = entry_stat.st_dev as u64;
+
+            if options.one_fs && entry_dev != root_dev {
+                show_error!(
+                    "{}",
+                    translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
+                );
+                error = true;
+                continue;
+            }
+
+            // --preserve-root=all compares against the immediate parent rather
+            // than the tree root, so a mount nested anywhere in the tree is
+            // caught even when --one-file-system is not in effect.
+            if options.preserve_root_all && entry_dev != parent_dev {
+                show_preserve_root_all_skip(&entry_path);
+                error = true;
+                continue;
+            }
+
             // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
                 && !is_dir_empty(&entry_path)
@@ -404,7 +466,13 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(&entry_path, &child_dir_fd, options);
+            let child_error = safe_remove_dir_recursive_impl(
+                &entry_path,
+                &child_dir_fd,
+                options,
+                root_dev,
+                entry_dev,
+            );
             error |= child_error;
 
             // Ask user permission if needed for this subdirectory
@@ -431,7 +499,13 @@ pub fn safe_remove_dir_recursive_impl(path: &Path, dir_fd: &DirFd, options: &Opt
 }
 
 #[cfg(target_os = "redox")]
-pub fn safe_remove_dir_recursive_impl(_path: &Path, _dir_fd: &DirFd, _options: &Options) -> bool {
+pub fn safe_remove_dir_recursive_impl(
+    _path: &Path,
+    _dir_fd: &DirFd,
+    _options: &Options,
+    _root_dev: u64,
+    _parent_dev: u64,
+) -> bool {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
     true // Return error

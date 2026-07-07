@@ -429,6 +429,46 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_offset_too_large() {
+    let arg = "2147483648";
+    new_ucmd!()
+        .args(&["-o", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-o MARGIN' invalid line offset: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_offset_large_value_does_not_abort_under_memory_limit() {
+    use rlimit::Resource;
+    use std::process::Stdio;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-t", "-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
+}
+
+#[test]
+fn test_offset_invalid() {
+    new_ucmd!()
+        .args(&["--indent=-5"])
+        .fails_with_code(1)
+        .stderr_is("pr: '-o MARGIN' invalid line offset: '-5'\n");
+
+    new_ucmd!()
+        .args(&["-o", "abc"])
+        .fails_with_code(1)
+        .stderr_is("pr: '-o MARGIN' invalid line offset: 'abc'\n");
+}
+
+#[test]
 fn test_with_date_format() {
     let whitespace = " ".repeat(50);
     let blank_lines = "\n".repeat(61);
@@ -969,4 +1009,13 @@ fn test_negative_expand_tabs() {
         .arg("-e=-1")
         .fails_with_code(1)
         .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_merge_empty_input() {
+    new_ucmd!()
+        .args(&["-m", "/dev/null", "/dev/null"])
+        .succeeds()
+        .no_output();
 }

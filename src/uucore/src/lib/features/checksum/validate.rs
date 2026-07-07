@@ -508,10 +508,10 @@ fn get_raw_expected_digest(checksum: &str, len_hint: Option<HashLength>) -> Opti
 
     // If the length of the string matches the one to be expected (in case it's
     // given) AND the digest can be decoded as hexadecimal, just go with it.
-    if checks_hint(checksum.len() / 2) {
-        if let Ok(raw_ck) = hex::decode(checksum) {
-            return Some(raw_ck);
-        }
+    if checks_hint(checksum.len() / 2)
+        && let Ok(raw_ck) = hex::decode(checksum)
+    {
+        return Some(raw_ck);
     }
 
     // If the checksum cannot be decoded as hexadecimal, interpret it as Base64
@@ -833,9 +833,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let Some(line_info) = LineInfo::parse(line, cached_line_format) else {
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_info =
+        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)

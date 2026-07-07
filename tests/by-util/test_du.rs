@@ -189,6 +189,21 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_time_style_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("a");
+    ts.ucmd()
+        .args(&["--time", "--time-style=", "a"])
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+    ts.ucmd()
+        .args(&["--time", "a"])
+        .env("TIME_STYLE", "posix-")
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+}
+
+#[test]
 fn test_du_zero_env_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1606,6 +1621,7 @@ fn test_du_files0_from() {
 
 #[test]
 fn test_du_files0_from_ignore_duplicate_file_names() {
+    // The same file listed twice is counted once via inode tracking.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file = "testfile";
@@ -1617,6 +1633,41 @@ fn test_du_files0_from_ignore_duplicate_file_names() {
         .arg("--files0-from=filelist")
         .succeeds()
         .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_duplicate_file_names_with_count_links() {
+    // With -l the inode dedup is disabled, so a repeated name is listed each time.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("-l")
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_missing_file_listed_twice() {
+    // A missing file listed twice must be reported each time, not deduplicated.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("filelist", "missing\0missing\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_is(
+            "du: cannot access 'missing': No such file or directory\n\
+             du: cannot access 'missing': No such file or directory\n",
+        );
 }
 
 #[test]

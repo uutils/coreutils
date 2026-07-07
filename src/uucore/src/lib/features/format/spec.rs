@@ -158,9 +158,7 @@ impl Spec {
         let start = *rest;
 
         // Check for a positional specifier (%m$)
-        let Some(position) = eat_argument_position(rest, &mut index) else {
-            return Err(&start[..index]);
-        };
+        let position = eat_argument_position(rest, &mut index).ok_or(&start[..index])?;
 
         let flags = Flags::parse(rest, &mut index);
 
@@ -193,9 +191,7 @@ impl Spec {
         // We ignore the length. It's not really relevant to printf
         let _ = Self::parse_length(rest, &mut index);
 
-        let Some(type_spec) = rest.get(index) else {
-            return Err(&start[..index]);
-        };
+        let type_spec = rest.get(index).ok_or(&start[..index])?;
         index += 1;
         *rest = &start[index..];
 
