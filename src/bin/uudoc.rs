@@ -285,7 +285,6 @@ fn main() -> io::Result<()> {
         let mut map = HashMap::new();
         for (platform, features) in [
             ("unix", "feat_os_unix"),
-            ("macos", "feat_os_unix"),
             ("windows", "feat_os_windows"),
             ("unix_android", "feat_os_unix_android"),
         ] {
@@ -352,7 +351,7 @@ fn main() -> io::Result<()> {
                 "| {:<16} | {:<5} | {:<5} | {:<7} | {:<7} | {:<7} |",
                 format!("**{name}**"),
                 check_supported(name, "linux"),
-                check_supported(name, "macos"),
+                check_supported(name, "unix"),
                 check_supported(name, "windows"),
                 check_supported(name, "unix"),
                 check_supported(name, "unix_android"),
@@ -493,7 +492,8 @@ impl MDWriter<'_, '_> {
             ("linux", "linux"),
             // freebsd is disabled for now because mdbook does not use font-awesome 5 yet.
             // ("unix", "freebsd"),
-            ("macos", "apple"),
+            // macOS uses the same feature set as generic Unix.
+            ("unix", "apple"),
             ("windows", "windows"),
         ] {
             if self.name.contains("sum")
