@@ -7443,3 +7443,38 @@ fn test_ls_al_no_capabilities_insufficient_on_wasi() {
         out.stdout_str()
     );
 }
+
+/// Regression tests for #13280: --sort, --format, --time, --block-size must
+/// accept their argument with a space (not only with '=').
+#[test]
+fn test_sort_accepts_space_separated_argument() {
+    // --sort name (space, not =) must work like --sort=name
+    new_ucmd!()
+        .args(&["--sort", "name"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_format_accepts_space_separated_argument() {
+    new_ucmd!()
+        .args(&["--format", "long"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_time_accepts_space_separated_argument() {
+    new_ucmd!()
+        .args(&["--time", "mtime"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_block_size_accepts_space_separated_argument() {
+    new_ucmd!()
+        .args(&["--block-size", "1K"])
+        .succeeds()
+        .no_stderr();
+}
