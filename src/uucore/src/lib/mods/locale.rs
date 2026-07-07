@@ -150,11 +150,9 @@ fn create_bundle(
         if let Some(resource) = dir_opt
             .map(|dir| dir.join(format!("{locale}.ftl")))
             .and_then(|locale_path| fs::read_to_string(locale_path).ok())
-            .map(|ftl| match FluentResource::try_new(ftl) {
-                Ok(resource) => resource,
-                // Use the partial resource which contains all successfully parsed messages
-                Err((partial, _)) => partial,
-            })
+            // On parse errors, use the partial resource which contains all
+            // successfully parsed messages
+            .map(|ftl| FluentResource::try_new(ftl).unwrap_or_else(|(partial, _)| partial))
         {
             // use Box::leak to provide 'static lifetime for shared FluentBundle between threads
             bundle.add_resource_overriding(Box::leak(Box::new(resource)));
