@@ -147,6 +147,50 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     fn valid_decoding_multiple(&self) -> usize {
         self.valid_decoding_multiple
     }
+
+    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
+        // GNU decodes a trailing group of 2 or 3 characters by padding it with
+        // '=' as if it had been terminated properly. It only reports the input
+        // as invalid if the quantum's unused bits are non-zero (non-canonical);
+        // a canonical trailing group (unused bits already zero) decodes cleanly
+        // with no error. A lone leftover character can't represent any byte, so
+        // there is nothing to decode in that case.
+        if !self.use_padding
+            || remainder.is_empty()
+            || remainder.len() == 1
+            || remainder.contains(&b'=')
+        {
+            return None;
+        }
+
+        let mut padded = remainder.to_vec();
+        let missing = self.valid_decoding_multiple - padded.len();
+        padded.extend(std::iter::repeat_n(b'=', missing));
+
+        let had_invalid_tail = base64_simd::STANDARD.decode_to_vec(&padded).is_err();
+
+        Some(PadResult {
+            chunk: padded,
+            had_invalid_tail,
+        })
+    }
+
+    fn decode_final_chunk(&self, chunk: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        if !self.use_padding {
+            return self.decode_into_vec(chunk, output);
+        }
+
+        // Only the very last quantum gets GNU's leniency about non-zero unused
+        // padding bits; everything earlier in the stream still goes through the
+        // strict decoder in decode_into_vec.
+        match base64_simd::forgiving_decode_to_vec(chunk) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(USimpleError::new(1, "error: invalid input")),
+        }
+    }
 }
 
 // Re-export for the faster decoding/encoding logic
@@ -262,6 +306,13 @@ pub trait SupportsFastDecodeAndEncode {
     /// before the final decode attempt. The default implementation opts out.
     fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
         None
+    }
+
+    /// Decodes the very last chunk of the stream (the output of `pad_remainder`,
+    /// or the raw leftover buffer if that returned `None`). Defaults to
+    /// `decode_into_vec`;
+    fn decode_final_chunk(&self, chunk: &[u8], output: &mut Vec<u8>) -> UResult<()> {
+        self.decode_into_vec(chunk, output)
     }
 }
 
