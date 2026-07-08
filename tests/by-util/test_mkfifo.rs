@@ -224,6 +224,31 @@ fn test_mkfifo_selinux_invalid() {
 }
 
 #[test]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
+fn test_mkfifo_context_warns_when_kernel_not_enabled() {
+    if uucore::selinux::is_selinux_enabled() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_fifo_context_warning";
+
+    scene
+        .ucmd()
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg(dest)
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("ignoring --context");
+
+    assert!(at.is_fifo(dest));
+}
+
+#[test]
 fn test_mkfifo_permission_unchanged_when_failed() {
     use uucore::fs::display_permissions;
 
