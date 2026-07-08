@@ -104,6 +104,23 @@ fn test_cp_stream_to_full() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_write_error_is_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source_file");
+    ucmd.arg("--verbose")
+        .arg("source_file")
+        .arg("dest_file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cp: write error: No space left on device\n");
+
+    // The copy itself should still succeed even though reporting it on
+    // stdout failed.
+    assert!(at.file_exists("dest_file"));
+}
+
+#[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();
     // Invoke our binary to make the copy.
