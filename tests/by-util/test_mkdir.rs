@@ -569,6 +569,33 @@ fn test_selinux() {
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
 ))]
+fn test_selinux_context_warns_when_kernel_not_enabled() {
+    // --context should still create the directory on a kernel without
+    // SELinux/SMACK, just with a warning that it had no effect (matches GNU).
+    // On a kernel that does have it enabled, that's test_selinux's job above.
+    if uucore::selinux::is_selinux_enabled() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_context_warning";
+
+    new_ucmd!()
+        .arg("--context=unconfined_u:object_r:user_tmp_t:s0")
+        .arg(at.plus_as_string(dest))
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("ignoring --context");
+
+    assert!(at.dir_exists(dest));
+}
+
+#[test]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
