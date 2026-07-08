@@ -350,6 +350,22 @@ impl<'a> From<Component<'a>> for OwningComponent {
     }
 }
 
+/// Confirm that `path` (already known to exist) is a directory, without
+/// requiring permission to list its contents.
+///
+/// `read_dir` alone would raise the right error for a non-directory, but
+/// also requires listing permission on the target, which a plain "is this a
+/// directory" check should not need (e.g. `realpath /root/` succeeds for
+/// non-root users even though they can't list `/root`).
+fn ensure_is_directory(path: &Path) -> IOResult<()> {
+    if fs::metadata(path)?.is_dir() {
+        Ok(())
+    } else {
+        read_dir(path)?;
+        Ok(())
+    }
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -457,13 +473,13 @@ pub fn canonicalize<P: AsRef<Path>>(
     match miss_mode {
         MissingHandling::Existing => {
             if has_to_be_directory {
-                read_dir(&result)?;
+                ensure_is_directory(&result)?;
             }
         }
         MissingHandling::Normal => {
             if result.exists() {
                 if has_to_be_directory {
-                    read_dir(&result)?;
+                    ensure_is_directory(&result)?;
                 }
             } else if let Some(parent) = result.parent() {
                 read_dir(parent)?;
