@@ -211,6 +211,40 @@ fn test_decode_trailing_remainder_non_canonical() {
 }
 
 #[test]
+fn test_decode_explicit_padding_non_canonical() {
+    // Same leniency as the trailing-remainder case, but for a quantum that's
+    // already a full 4 characters with an explicit '=' (from GNU's own
+    // basenc/base64.pl: baddecode6/baddecode7).
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("SB==")
+        .fails()
+        .stdout_is("H")
+        .stderr_is("base64: error: invalid input\n");
+
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("SGVsbG9=")
+        .fails()
+        .stdout_is("Hello")
+        .stderr_is("base64: error: invalid input\n");
+}
+
+#[test]
+fn test_decode_insufficient_padding_recovers_preceding_data() {
+    // A trailing '=' without enough characters left to complete the padded
+    // quantum (e.g. "NA=" would need to be "NA==") isn't a valid quantum at
+    // all, but GNU still recovers whatever precedes it by decoding that much
+    // as an unpadded remainder (from GNU's own basenc/base64.pl: baddecode8).
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("MTIzNA=")
+        .fails()
+        .stdout_is("1234")
+        .stderr_is("base64: error: invalid input\n");
+}
+
+#[test]
 fn test_wrap() {
     for wrap_param in ["-w", "--wrap", "--wr"] {
         let input = "The quick brown fox jumps over the lazy dog.";

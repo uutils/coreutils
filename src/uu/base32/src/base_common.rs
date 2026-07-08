@@ -680,13 +680,16 @@ pub mod fast_decode {
                 break;
             }
 
-            decode_in_chunks_to_buffer(
+            // write out whatever got decoded even on error, a partial/lenient
+            // decode can still be real output
+            let decode_result = decode_in_chunks_to_buffer(
                 supports_fast_decode_and_encode,
                 &buffer[..aligned_take],
                 decoded_buffer,
-            )?;
+            );
 
             write_to_output(decoded_buffer, output)?;
+            decode_result?;
 
             buffer.drain(..aligned_take);
         }
@@ -896,8 +899,10 @@ pub mod fast_decode {
 
             let final_chunk = owned_chunk.as_deref().unwrap_or(&buffer);
 
-            supports_fast_decode_and_encode.decode_final_chunk(final_chunk, &mut decoded_buffer)?;
+            let decode_result =
+                supports_fast_decode_and_encode.decode_into_vec(final_chunk, &mut decoded_buffer);
             write_to_output(&mut decoded_buffer, output)?;
+            decode_result?;
 
             if had_invalid_tail {
                 return Err(USimpleError::new(1, "error: invalid input"));

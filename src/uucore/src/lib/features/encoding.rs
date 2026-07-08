@@ -42,6 +42,18 @@ impl Base64SimdWrapper {
         }
     }
 
+    // fallback for when a quantum has non-zero padding bits: GNU still decodes
+    // it, just flags the input as invalid afterward
+    fn decode_with_forgiving(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::forgiving_decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
     pub fn new(
         use_padding: bool,
         valid_decoding_multiple: usize,
@@ -67,65 +79,64 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let original_len = output.len();
+        if !self.use_padding {
+            return Self::decode_with_no_pad(input, output)
+                .map_err(|_| USimpleError::new(1, "error: invalid input"));
+        }
 
-        let decode_result = if self.use_padding {
-            // GNU coreutils keeps decoding even when '=' appears before the true end
-            // of the stream (e.g. concatenated padded chunks). Mirror that logic
-            // by splitting at each '='-containing quantum, decoding those 4-byte
-            // groups with the padded variant, then letting the remainder fall back
-            // to whichever alphabet fits.
-            let mut start = 0usize;
-            while start < input.len() {
-                let remaining = &input[start..];
+        // GNU keeps decoding past a '=' if more data follows (concatenated
+        // padded chunks), so split at each '=' and decode those 4-byte groups
+        // one at a time, falling back to whichever alphabet fits for the tail.
+        // if a quantum's padding bits turn out non-zero, decode it leniently
+        // anyway instead of dropping it, but stop right there either way -
+        // GNU never continues past a bad quantum.
+        let mut start = 0usize;
+        while start < input.len() {
+            let remaining = &input[start..];
 
-                if remaining.is_empty() {
-                    break;
-                }
-
-                if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
-                    let blocks = (eq_rel_idx / 4) + 1;
-                    let segment_len = blocks * 4;
-
-                    if segment_len > remaining.len() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    start += segment_len;
-                } else {
-                    // If there are no more '=' bytes the tail might still be padded
-                    // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
-                    // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len().is_multiple_of(4) {
-                        Self::decode_with_standard
-                    } else {
-                        Self::decode_with_no_pad
-                    };
-
-                    if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    break;
-                }
+            if remaining.is_empty() {
+                break;
             }
 
-            Ok(())
-        } else {
-            Self::decode_with_no_pad(input, output)
-                .map_err(|_| USimpleError::new(1, "error: invalid input"))
-        };
+            if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
+                let blocks = (eq_rel_idx / 4) + 1;
+                let segment_len = blocks * 4;
 
-        if let Err(err) = decode_result {
-            output.truncate(original_len);
-            Err(err)
-        } else {
-            Ok(())
+                if segment_len > remaining.len() {
+                    // not enough left to finish this padded quantum, e.g. "NA="
+                    // would need to be "NA==". GNU still recovers whatever came
+                    // before the '=' by decoding it unpadded
+                    let _ = Self::decode_with_forgiving(&remaining[..eq_rel_idx], output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                let segment = &remaining[..segment_len];
+                if Self::decode_with_standard(segment, output).is_err() {
+                    let _ = Self::decode_with_forgiving(segment, output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                start += segment_len;
+            } else {
+                // no more '=' left, so this tail is either still padded (len % 4
+                // == 0) or genuinely unpadded (--ignore-garbage, concatenated
+                // streams) - pick whichever decoder matches
+                let strict_decoder = if remaining.len().is_multiple_of(4) {
+                    Self::decode_with_standard
+                } else {
+                    Self::decode_with_no_pad
+                };
+
+                if strict_decoder(remaining, output).is_err() {
+                    let _ = Self::decode_with_forgiving(remaining, output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                break;
+            }
         }
+
+        Ok(())
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
@@ -146,50 +157,6 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
 
     fn valid_decoding_multiple(&self) -> usize {
         self.valid_decoding_multiple
-    }
-
-    fn pad_remainder(&self, remainder: &[u8]) -> Option<PadResult> {
-        // GNU decodes a trailing group of 2 or 3 characters by padding it with
-        // '=' as if it had been terminated properly. It only reports the input
-        // as invalid if the quantum's unused bits are non-zero (non-canonical);
-        // a canonical trailing group (unused bits already zero) decodes cleanly
-        // with no error. A lone leftover character can't represent any byte, so
-        // there is nothing to decode in that case.
-        if !self.use_padding
-            || remainder.is_empty()
-            || remainder.len() == 1
-            || remainder.contains(&b'=')
-        {
-            return None;
-        }
-
-        let mut padded = remainder.to_vec();
-        let missing = self.valid_decoding_multiple - padded.len();
-        padded.extend(std::iter::repeat_n(b'=', missing));
-
-        let had_invalid_tail = base64_simd::STANDARD.decode_to_vec(&padded).is_err();
-
-        Some(PadResult {
-            chunk: padded,
-            had_invalid_tail,
-        })
-    }
-
-    fn decode_final_chunk(&self, chunk: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        if !self.use_padding {
-            return self.decode_into_vec(chunk, output);
-        }
-
-        // Only the very last quantum gets GNU's leniency about non-zero unused
-        // padding bits; everything earlier in the stream still goes through the
-        // strict decoder in decode_into_vec.
-        match base64_simd::forgiving_decode_to_vec(chunk) {
-            Ok(decoded_bytes) => {
-                output.extend_from_slice(&decoded_bytes);
-                Ok(())
-            }
-            Err(_) => Err(USimpleError::new(1, "error: invalid input")),
-        }
     }
 }
 
@@ -306,13 +273,6 @@ pub trait SupportsFastDecodeAndEncode {
     /// before the final decode attempt. The default implementation opts out.
     fn pad_remainder(&self, _remainder: &[u8]) -> Option<PadResult> {
         None
-    }
-
-    /// Decodes the very last chunk of the stream (the output of `pad_remainder`,
-    /// or the raw leftover buffer if that returned `None`). Defaults to
-    /// `decode_into_vec`;
-    fn decode_final_chunk(&self, chunk: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        self.decode_into_vec(chunk, output)
     }
 }
 
