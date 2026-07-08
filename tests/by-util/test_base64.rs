@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore unpadded, QUJD
+// spell-checker:ignore unpadded, QUJD, baddecode
 
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
