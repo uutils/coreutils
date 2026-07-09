@@ -7843,7 +7843,7 @@ fn test_cp_archive_deref_preserves_recursive() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.mkdir("srcdir");
         at.touch("srcdir/file.txt");
-        let dest = format!("dest_{}", &flags.replace('-', ""));
+        let dest = format!("dest_{}", flags.replace('-', ""));
         ucmd.args(&[flags, "srcdir", &dest]).succeeds();
         assert!(
             at.file_exists(format!("{dest}/file.txt")),
