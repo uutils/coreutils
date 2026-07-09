@@ -1025,6 +1025,16 @@ fn test_touch_invalid_timestamp_leading_multibyte_char() {
 }
 
 #[test]
+fn test_touch_invalid_timestamp_reports_original_input() {
+    for ts in ["2026-04-10", "26-04-10", "00000000"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date ts format '{ts}'\n"));
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "freebsd"))]
 fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();

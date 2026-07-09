@@ -862,7 +862,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
             )
         })?;
 
@@ -883,7 +883,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => ts.quote()),
+                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
             )
         })?;
 
