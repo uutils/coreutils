@@ -335,7 +335,7 @@ jobs:
           x86_64-pc-cygwin.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: "`make build`"
+    - name: "`make install`"
       shell: bash
       run: |
         set -x
