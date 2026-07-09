@@ -819,7 +819,7 @@ fn prepend_century(s: &str) -> UResult<String> {
     let first_two_digits = first_two.parse::<u32>().map_err(|_| {
         USimpleError::new(
             1,
-            translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+            translate!("touch-error-invalid-date-format", "date" => s.quote()),
         )
     })?;
     Ok(format!(
@@ -862,7 +862,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 
@@ -883,7 +883,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 

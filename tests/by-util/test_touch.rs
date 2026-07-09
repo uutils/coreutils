@@ -1020,7 +1020,7 @@ fn test_touch_invalid_timestamp_leading_multibyte_char() {
         new_ucmd!()
             .args(&["-t", ts, "f"])
             .fails_with_code(1)
-            .stderr_only(format!("touch: invalid date ts format '{ts}'\n"));
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
     }
 }
 
@@ -1030,7 +1030,7 @@ fn test_touch_invalid_timestamp_reports_original_input() {
         new_ucmd!()
             .args(&["-t", ts, "f"])
             .fails_with_code(1)
-            .stderr_only(format!("touch: invalid date ts format '{ts}'\n"));
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
     }
 }
 
