@@ -1445,6 +1445,13 @@ invalid-syntax = This is { $missing
     }
 
     #[test]
+    fn test_resolve_locale_lc_all_precedence_over_lc_messages() {
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LC_MESSAGES", "de_DE")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
     fn test_resolve_locale_nothing_set_falls_back_to_default() {
         let resolved = resolve_locale_string(|_| None);
         assert_eq!(resolved, DEFAULT_LOCALE);
