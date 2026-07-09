@@ -424,14 +424,35 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
-/// Function to detect system locale from environment variables
-fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
+/// Resolve the locale string from an environment lookup, applying the
+/// POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` > `LANG`.
+///
+/// The first of those variables that is set AND non-empty wins; a
+/// set-but-empty value is treated as unset. If none qualify, falls back to
+/// [`DEFAULT_LOCALE`]. The winning value is stripped of any `.<encoding>`
+/// suffix (e.g. `fr_FR.UTF-8` -> `fr_FR`), matching the previous `LANG`-only
+/// behavior exactly (no additional normalization is applied).
+///
+/// `lookup` is injected so the precedence logic is unit-testable without
+/// mutating process-global env vars (which races under parallel test threads).
+fn resolve_locale_string(lookup: impl Fn(&str) -> Option<String>) -> String {
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|key| lookup(key).filter(|value| !value.is_empty()))
+        .as_deref()
+        .unwrap_or(DEFAULT_LOCALE)
         .split('.')
         .next()
         .unwrap_or(DEFAULT_LOCALE)
-        .to_string();
+        .to_string()
+}
+
+/// Function to detect system locale from environment variables.
+///
+/// Honors the POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` >
+/// `LANG` (see [`resolve_locale_string`]).
+fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
+    let locale_str = resolve_locale_string(|key| std::env::var(key).ok());
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
@@ -441,7 +462,8 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// Always loads common strings in addition to utility-specific strings.
 ///
 /// This function initializes the localization system based on the system's locale
-/// preferences (via the LANG environment variable) or falls back to English
+/// preferences (via the `LC_ALL` > `LC_MESSAGES` > `LANG` environment variables,
+/// in that precedence order) or falls back to English
 /// if the system locale cannot be determined or the locale file doesn't exist.
 /// English is always loaded as a fallback.
 ///
@@ -1377,6 +1399,55 @@ invalid-syntax = This is { $missing
         })
         .join()
         .unwrap();
+    }
+
+    /// Build an env lookup closure from a fixed list of key/value pairs so the
+    /// precedence logic can be tested without touching process-global env vars.
+    fn env_lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let owned: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        move |key: &str| owned.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_all_wins_over_unset() {
+        // Issue #8922 repro: LC_ALL set, LC_MESSAGES/LANG unset.
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_messages_when_lc_all_unset() {
+        let resolved = resolve_locale_string(env_lookup(&[("LC_MESSAGES", "de_DE.UTF-8")]));
+        assert_eq!(resolved, "de_DE");
+    }
+
+    #[test]
+    fn test_resolve_locale_lang_still_works() {
+        // Regression: LANG alone must keep working.
+        let resolved = resolve_locale_string(env_lookup(&[("LANG", "es_ES.UTF-8")]));
+        assert_eq!(resolved, "es_ES");
+    }
+
+    #[test]
+    fn test_resolve_locale_empty_treated_as_unset() {
+        // Set-but-empty LC_ALL is skipped in favor of a non-empty LANG.
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", ""), ("LANG", "fr_FR")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_all_precedence_over_lang() {
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LANG", "es_ES")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_nothing_set_falls_back_to_default() {
+        let resolved = resolve_locale_string(|_| None);
+        assert_eq!(resolved, DEFAULT_LOCALE);
     }
 
     #[test]
