@@ -1144,7 +1144,6 @@ fn finalize_installed_file(
     b: &Behavior,
     backup_path: Option<PathBuf>,
 ) -> UResult<()> {
-    #[cfg(not(windows))]
     if b.strip {
         strip_file(to, b)?;
     }
