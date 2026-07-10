@@ -40,6 +40,7 @@ pub use crate::features::backup_control;
 pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
+pub use crate::features::char_width;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
