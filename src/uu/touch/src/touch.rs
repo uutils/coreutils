@@ -126,9 +126,6 @@ mod format {
     pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
     // "%Y-%m-%d %H:%M:%S" 12 chars
     pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
-    // "%Y-%m-%d %H:%M" 12 chars
-    // Used for example in tests/touch/no-rights.sh
-    pub(crate) const YYYY_MM_DD_HH_MM: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12 chars
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
     // "%Y-%m-%d %H:%M +offset"
@@ -765,7 +762,6 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     for fmt in [
         format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMMSS,
-        format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
         if let Ok(parsed) = strtime::parse(fmt, s)
