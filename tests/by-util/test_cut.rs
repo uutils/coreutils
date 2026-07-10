@@ -789,6 +789,31 @@ fn test_gb18030_byte_mode_no_split_output_delimiter() {
         .stdout_only_bytes(b"\xBA\xC3|\xBA\xC3\n");
 }
 
+// In the C/POSIX locale there are no multibyte characters: every byte is its own
+// unit, so `-c` and `-b -n` must select individual bytes and never decode a
+// UTF-8 sequence. The bytes 0xC3 0xB1 spell ñ in UTF-8, but under LC_ALL=C they
+// are two unrelated bytes.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_c_locale_is_byte_wise() {
+    // `-c2` selects the single second byte, not a decoded two-byte character.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-c2"])
+        .pipe_in(&b"A\xC3\xB1Z\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xC3\n");
+
+    // `-b2 -n` also selects one byte: there is no multibyte character to keep
+    // whole, so `-n` is a no-op.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-b2", "-n"])
+        .pipe_in(&b"A\xC3\xB1Z\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xC3\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_failed_write_is_reported() {
