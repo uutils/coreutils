@@ -748,25 +748,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-
                 #[cfg(not(unix))]
-                {
-                    if let Err(e) = fs::create_dir_all(to_create) {
-                        return Err(
-                            InstallError::CreateDirFailed(to_create.to_path_buf(), e).into()
-                        );
-                    }
-
-                    // Set SELinux context for all created directories if needed
-                    #[cfg(all(
-                        feature = "selinux",
-                        any(target_os = "linux", target_os = "android")
-                    ))]
-                    if should_set_selinux_context(b) {
-                        let context = get_context_for_selinux(b);
-                        set_selinux_context_for_directories_install(to_create, context);
-                    }
-                }
+                fs::create_dir_all(to_create)
+                    .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
         }
     }
