@@ -168,6 +168,38 @@ fn unexpand_spaces_after_fields() {
 }
 
 #[test]
+fn unexpand_leading_spaces_before_multibyte() {
+    // Leading whitespace is converted even in the default (UTF-8) mode, and the
+    // multibyte tail is copied verbatim.
+    new_ucmd!()
+        .pipe_in("        caf\u{e9}\n")
+        .succeeds()
+        .stdout_is("\tcaf\u{e9}\n");
+}
+
+#[test]
+fn unexpand_deep_indent_stops_at_last_tabstop() {
+    // With several tab stops, conversion stops past the last one: the extra
+    // leading spaces beyond column 4 stay as spaces.
+    new_ucmd!()
+        .args(&["-t", "2,4"])
+        .pipe_in("            x\n")
+        .succeeds()
+        .stdout_is("\t\t        x\n");
+}
+
+#[test]
+fn unexpand_wide_char_width_before_tab() {
+    // A 3-byte, double-width character advances the column by two, so the
+    // following tab lands on the next tab stop.
+    new_ucmd!()
+        .args(&["-a", "-t", "4"])
+        .pipe_in("   \u{3000}X\ty\n")
+        .succeeds()
+        .stdout_is("   \u{3000}X\ty\n");
+}
+
+#[test]
 fn unexpand_read_from_file() {
     new_ucmd!().arg("with_spaces.txt").arg("-t4").succeeds();
 }

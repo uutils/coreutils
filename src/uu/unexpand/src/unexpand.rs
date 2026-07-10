@@ -469,8 +469,12 @@ fn unexpand_buf(
 
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
-        // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-        if !options.utf8 && !options.aflag && print_state.leading {
+        // Fast path: count consecutive leading spaces/tabs at the start of the
+        // line. Leading whitespace is ASCII, so this is independent of UTF-8
+        // mode; the rest of the line is copied verbatim in default mode. It does
+        // not apply once a finite last column is in play (multiple tab stops),
+        // where the general loop stops converting past that column.
+        if !options.aflag && print_state.leading && lastcol == 0 {
             // In default mode (not -a), we only convert leading spaces
             // So we can batch process them and then copy the rest
             while byte < buf.len() {
