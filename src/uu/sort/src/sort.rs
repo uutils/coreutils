@@ -2801,11 +2801,11 @@ fn compare_by<'a>(
     } else {
         #[cfg(feature = "i18n-collator")]
         {
-        locale_cmp(a.line, b.line)
+            locale_cmp(a.line, b.line)
         }
         #[cfg(not(feature = "i18n-collator"))]
         {
-        a.line.cmp(b.line)
+            a.line.cmp(b.line)
         }
     };
 
