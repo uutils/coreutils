@@ -2015,6 +2015,11 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
+        match fs::remove_file(backup_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
         fs::copy(dest, backup_path)?;
     }
     Ok(())
