@@ -474,6 +474,24 @@ fn test_expand_non_utf8_paths() {
 }
 
 #[test]
+fn test_wide_multibyte_char_width() {
+    // A tab following a wide character must expand to the next tab stop based
+    // on the character's display width, not its byte length. Regression for a
+    // bug where the UTF-8 sequence length was derived from the leading byte's
+    // codepoint value, so 3- and 4-byte characters were mis-measured.
+    // U+4E2D (中, 3 bytes, width 2): col 0->2, tab pads 6 spaces to column 8.
+    new_ucmd!()
+        .pipe_in("\u{4E2D}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{4E2D}      |");
+    // U+1F600 (😀, 4 bytes, width 2) behaves the same.
+    new_ucmd!()
+        .pipe_in("\u{1F600}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{1F600}      |");
+}
+
+#[test]
 fn test_buffered_reads_new_line_no_tabs_in_first_chunk() {
     // test includes tabs after 1 full chunk of no tabs with new line
     // checks that the tabstop calculation is done to correct column

@@ -12,6 +12,7 @@ pub mod backup_control;
 pub mod benchmark;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
+pub mod char_width;
 #[cfg(feature = "checksum")]
 pub mod checksum;
 #[cfg(feature = "colors")]
