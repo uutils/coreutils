@@ -5,6 +5,7 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
+#[cfg(unix)]
 use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -842,7 +843,7 @@ fn test_backup_same_file() {
 }
 
 #[test]
-fn test_backup_existing_hardlinked_under_different_name() {
+fn test_backup_existing_hard_linked_under_different_name() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.hard_link("a", "b");
@@ -856,7 +857,7 @@ fn test_backup_existing_hardlinked_under_different_name() {
 
 #[test]
 #[cfg(unix)]
-fn test_backup_existing_hardlinked_target_is_fifo() {
+fn test_backup_existing_hard_linked_target_is_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
     at.hard_link("a", "b");
