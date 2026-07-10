@@ -592,6 +592,27 @@ fn test_selinux_context_warns_when_kernel_not_enabled() {
 }
 
 #[test]
+#[cfg(all(feature = "feat_smack", target_os = "linux"))]
+fn test_smack_context_warns_when_kernel_not_enabled() {
+    if uucore::smack::is_smack_enabled() {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dest = "test_dir_smack_context_warning";
+
+    new_ucmd!()
+        .arg("--context=some-label")
+        .arg(at.plus_as_string(dest))
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("ignoring --context");
+
+    assert!(at.dir_exists(dest));
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
