@@ -2150,6 +2150,7 @@ dependencies = [
  "sm3",
  "thiserror",
  "unic-langid",
+ "unicode-width",
  "unit-prefix",
  "uucore_procs",
  "wild",

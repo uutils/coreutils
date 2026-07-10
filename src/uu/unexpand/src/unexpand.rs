@@ -11,8 +11,8 @@ use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
-use std::str::from_utf8;
 use thiserror::Error;
+use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::translate;
@@ -411,14 +411,8 @@ fn next_char_info(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, usiz
     }
 
     if utf8 {
-        let nbytes = char::from(b).len_utf8();
-        // don't overrun the buffer because of invalid UTF-8
-        if buf
-            .get(byte..byte + nbytes)
-            .is_some_and(|s| from_utf8(s).is_ok())
-        {
-            return (Other, nbytes, nbytes);
-        }
+        let (width, nbytes) = char_width_at(buf, byte);
+        return (Other, width, nbytes);
     }
     (Other, 1, 1)
 }

@@ -3570,7 +3570,6 @@ dependencies = [
  "rustix",
  "tempfile",
  "thiserror 2.0.18",
- "unicode-width 0.2.2",
  "uucore",
 ]
 
@@ -4575,6 +4574,7 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "unic-langid",
+ "unicode-width 0.2.2",
  "unit-prefix",
  "utmp-classic",
  "uucore_procs",

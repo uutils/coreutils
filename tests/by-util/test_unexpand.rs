@@ -309,14 +309,27 @@ fn test_non_utf8_filename() {
 
 #[test]
 fn unexpand_multibyte_utf8_gnu_compat() {
-    // Verifies GNU-compatible behavior: column position uses byte count, not display width
-    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
-    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    // Column position uses display width, not byte count (matches GNU 9.11).
+    // "1ΔΔΔ5" is 5 columns wide (each Δ is a 2-byte char of display width 1),
+    // so the run of 3 spaces reaches tab stop 8 and collapses to a single tab.
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("1ΔΔΔ5   99999\n")
         .succeeds()
-        .stdout_is("1ΔΔΔ5   99999\n");
+        .stdout_is("1ΔΔΔ5\t99999\n");
+}
+
+#[test]
+fn unexpand_wide_multibyte_char_width() {
+    // A 3-byte character of display width 2 must advance the column by 2, not by
+    // its byte length. U+FF0D (full-width hyphen, 3 bytes, width 2) at column 0
+    // reaches column 2; the following 6 spaces then collapse to one tab at
+    // column 8. Regression for the byte-length-as-width bug.
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("\u{FF0D}      X\n")
+        .succeeds()
+        .stdout_is("\u{FF0D}\tX\n");
 }
 
 #[test]
