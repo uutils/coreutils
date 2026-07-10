@@ -3370,6 +3370,24 @@ fn test_cp_fifo() {
     assert_eq!(permission, "prwx-wx--x".to_string());
 }
 
+#[test]
+#[cfg(unix)]
+fn test_cp_fifo_preserve_timestamps() {
+    // Preserving timestamps must not open the FIFO: opening a FIFO with no
+    // writer blocks forever. If this regresses, the test hangs instead of
+    // completing. See the `-a`/`--preserve=timestamps` path in copy_attributes.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("pipe");
+    at.set_mode("pipe", 0o624);
+    ucmd.arg("--preserve=timestamps")
+        .arg("-r")
+        .arg("pipe")
+        .arg("pipe_dup")
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("pipe_dup"));
+}
+
 #[rstest]
 #[case::recursive("-R")]
 #[case::archive("-a")]
