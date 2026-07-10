@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore contenta edgecase behaviour
+// spell-checker:ignore contenta edgecase behaviour tcaf
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -197,6 +197,28 @@ fn unexpand_wide_char_width_before_tab() {
         .pipe_in("   \u{3000}X\ty\n")
         .succeeds()
         .stdout_is("   \u{3000}X\ty\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_absorbed_into_tab() {
+    // U+3000 is a width-2 blank: a run of them that reaches a tab stop is
+    // converted to a tab, just like a run of ASCII spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\u{3000}\u{3000}\u{3000}\u{3000}Z\n")
+        .succeeds()
+        .stdout_is("\tZ\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_preserved_when_not_converted() {
+    // A blank run that does not reach a tab stop is emitted verbatim, so the
+    // multibyte blank keeps its original bytes rather than becoming spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("a\u{3000}b\n")
+        .succeeds()
+        .stdout_is("a\u{3000}b\n");
 }
 
 #[test]
