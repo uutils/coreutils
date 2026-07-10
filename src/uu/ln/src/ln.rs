@@ -402,6 +402,17 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     src.into()
 }
 
+/// Decide whether `src` and `dst` are actually the same directory entry.
+fn is_same_entry(src: &Path, dst: &Path) -> bool {
+    match (
+        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+    ) {
+        (Ok(src), Ok(dst)) => src == dst,
+        _ => true,
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
@@ -415,7 +426,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
-            if paths_refer_to_same_file(src, dst, true) {
+            if paths_refer_to_same_file(src, dst, true) && is_same_entry(src, dst) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
         }
@@ -438,18 +449,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
+                if !dst.is_symlink()
+                    && paths_refer_to_same_file(src, dst, true)
+                    && is_same_entry(src, dst)
+                {
                     // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
-                    let same_entry = match (
-                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
-                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
-                    ) {
-                        (Ok(src), Ok(dst)) => src == dst,
-                        _ => true,
-                    };
-                    if same_entry {
-                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
-                    }
+                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
                 }
                 let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
