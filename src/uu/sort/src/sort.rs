@@ -2799,7 +2799,14 @@ fn compare_by<'a>(
     {
         Ordering::Equal
     } else {
+        #[cfg(feature = "i18n-collator")]
+        {
+        locale_cmp(a.line, b.line)
+        }
+        #[cfg(not(feature = "i18n-collator"))]
+        {
         a.line.cmp(b.line)
+        }
     };
 
     if global_settings.reverse {
