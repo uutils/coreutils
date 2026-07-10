@@ -415,46 +415,38 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         }
     }
 
-    let owner = matches
-        .get_one::<String>(OPT_OWNER)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let owner_id = if owner.is_empty() {
-        None
-    } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
+    let owner_id = if let Some(owner) = matches.get_one::<String>(OPT_OWNER) {
+        if let Ok(u) = usr2uid(owner) {
+            Some(u)
+        } else {
             // When using -o500 option and there's no user with uid 500 on the system
             // usr2uid returns an Err value and the whole install operation fails.
             // GNU coreutils installs a file with uid 500 in the same situation
             // so just return the supplied owner as uid if it's an integer value
-            Err(_) => match owner.parse::<u32>() {
-                Ok(u) => Some(u),
-                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
-            },
+            let uid = owner
+                .parse::<u32>()
+                .map_err(|_| InstallError::InvalidUser(owner.clone()))?;
+            Some(uid)
         }
+    } else {
+        None
     };
 
-    let group = matches
-        .get_one::<String>(OPT_GROUP)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let group_id = if group.is_empty() {
-        None
-    } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
+    let group_id = if let Some(group) = matches.get_one::<String>(OPT_GROUP) {
+        if let Ok(g) = grp2gid(group) {
+            Some(g)
+        } else {
             // When using -g500 option and there's no group with gid 500 on the system
             // grp2gid returns an Err value and the whole install operation fails.
             // GNU coreutils installs a file with gid 500 in the same situation
             // so just return the supplied group as gid if it's an integer value
-            Err(_) => match group.parse::<u32>() {
-                Ok(g) => Some(g),
-                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
-            },
+            let gid = group
+                .parse::<u32>()
+                .map_err(|_| InstallError::InvalidGroup(group.clone()))?;
+            Some(gid)
         }
+    } else {
+        None
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
