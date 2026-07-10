@@ -569,7 +569,9 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
-        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+        && path
+            .parent()
+            .is_none_or(|p| p.as_os_str().is_empty() || p.is_dir())
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
