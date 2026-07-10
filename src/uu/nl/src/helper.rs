@@ -63,8 +63,11 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     }
     match opts.get_one::<usize>(options::NUMBER_WIDTH) {
         None => {}
-        Some(num) if *num > 0 => settings.number_width = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
+        Some(num) if *num > 0 && *num <= i32::MAX as usize => settings.number_width = *num,
+        Some(num) => errs.push(translate!(
+            "nl-error-invalid-line-width",
+            "value" => num.to_string()
+        )),
     }
     if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
         settings.join_blank_lines = *num;

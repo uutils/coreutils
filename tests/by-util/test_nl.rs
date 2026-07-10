@@ -188,6 +188,28 @@ fn test_number_width_zero() {
 }
 
 #[test]
+fn test_number_width_too_large() {
+    // Values > i32::MAX must be rejected to match GNU nl behaviour and avoid
+    // a capacity-overflow panic in " ".repeat(number_width + 1).
+    for arg in ["-w2147483648", "--number-width=2147483648"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("")
+            .fails()
+            .stderr_contains("Invalid line number field width: '2147483648': Numerical result out of range");
+    }
+}
+
+#[test]
+fn test_number_width_max_i32() {
+    // i32::MAX (2147483647) is the largest value GNU nl accepts; it must not panic.
+    new_ucmd!()
+        .args(&["-w", "2147483647"])
+        .pipe_in("")
+        .succeeds();
+}
+
+#[test]
 fn test_invalid_number_width() {
     for arg in ["-winvalid", "--number-width=invalid"] {
         new_ucmd!()
