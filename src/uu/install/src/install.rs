@@ -667,24 +667,18 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 _ => to_create,
             };
 
-            let dir_exists = if to_create.exists() {
-                metadata(to_create).is_ok_and(|m| m.is_dir())
-            } else {
-                false
-            };
+            let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
                 #[cfg(unix)]
+                if b.target_dir.is_none()
+                    && sources.len() == 1
+                    && !is_potential_directory_path(&target)
+                    && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::Follow)
+                    && let Some(filename) = target.file_name()
                 {
-                    if b.target_dir.is_none()
-                        && sources.len() == 1
-                        && !is_potential_directory_path(&target)
-                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::Follow)
-                        && let Some(filename) = target.file_name()
-                    {
-                        target_parent_fd = Some(dir_fd);
-                        target_filename = Some(filename.to_os_string());
-                    }
+                    target_parent_fd = Some(dir_fd);
+                    target_filename = Some(filename.to_os_string());
                 }
             } else {
                 if b.verbose {
@@ -791,10 +785,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         if b.backup_mode.ne(&BackupMode::None)
             && let Ok(to_abs) = target.canonicalize()
+            && source.canonicalize()? == to_abs
         {
-            if source.canonicalize()? == to_abs {
-                return Err(InstallError::SameFile(source.clone(), target.clone()).into());
-            }
+            return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
         if target.is_file() || is_new_file_path(&target) {
@@ -905,14 +898,11 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     };
 
-    let meta = match metadata(path) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-    match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
-        Ok(msg) if b.verbose && !msg.is_empty() => writeln!(stdout(), "chown: {msg}")?,
-        Ok(_) => {}
-        Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
+    let meta = metadata(path).map_err(InstallError::MetadataFailed)?;
+    let msg = wrap_chown(path, &meta, owner_id, group_id, false, verbosity)
+        .map_err(|e| InstallError::ChownFailed(path.to_path_buf(), e))?;
+    if b.verbose && !msg.is_empty() {
+        writeln!(stdout(), "chown: {msg}")?;
     }
 
     Ok(())
@@ -1098,11 +1088,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
     // Silent the warning as we want to the error message
-    #[allow(clippy::question_mark)]
-    if mode::chmod(to, b.mode()).is_err() {
-        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
-    }
-
+    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
     if b.privileged {
         chown_optional_user_group(to, b)?;
     }
@@ -1122,11 +1108,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = match metadata(from) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-
+    let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
     let modified_time = FileTime::from_last_modification_time(&meta);
     let accessed_time = FileTime::from_last_access_time(&meta);
 
