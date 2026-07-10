@@ -431,26 +431,16 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         }
     }
 
-    let owner = matches
-        .get_one::<String>(OPT_OWNER)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let owner_id = if owner.is_empty() {
-        None
+    let owner_id = if let Some(owner) = matches.get_one::<String>(OPT_OWNER) {
+        Some(resolve_id(owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     } else {
-        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
+        None
     };
 
-    let group = matches
-        .get_one::<String>(OPT_GROUP)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let group_id = if group.is_empty() {
-        None
+    let group_id = if let Some(group) = matches.get_one::<String>(OPT_GROUP) {
+        Some(resolve_id(group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     } else {
-        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
+        None
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
