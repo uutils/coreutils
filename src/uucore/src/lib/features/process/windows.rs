@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (win-api) WAITABLE Waitable HIRES
-// spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH
+// spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
+// spell-checker:ignore catchable targetable wakeup
 
 //! Windows emulation of POSIX signal delivery for child processes.
 //!
