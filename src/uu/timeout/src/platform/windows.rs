@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore catchable forwardable
+
 //! Windows implementation of `timeout`'s platform facade, built on the signal
 //! emulation in [`uucore::process`] (which maps POSIX signal numbers to
 //! Windows primitives). Non-foreground mode spawns the child in a new console
