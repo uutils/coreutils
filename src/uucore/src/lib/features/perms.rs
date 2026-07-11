@@ -893,7 +893,7 @@ pub fn chown_base(
     let mut help = false;
     // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+        if arg.as_encoded_bytes().starts_with(b"--reference=") || arg == "--reference" {
             reference = true;
         } else if arg == "--help" {
             // we stop processing once we see --help,
