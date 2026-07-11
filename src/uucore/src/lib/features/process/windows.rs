@@ -134,17 +134,17 @@ pub mod sys {
         cvt(unsafe { SetEvent(event.as_raw_handle() as HANDLE) })
     }
 
-    /// Create a one-shot waitable timer.
-    ///
-    /// With `high_resolution`, the timer is not coalesced to the ~15.6 ms
-    /// scheduler tick (Windows 10 1803+); callers should fall back to a
-    /// standard timer when the flag is unsupported.
-    pub fn create_waitable_timer(high_resolution: bool) -> io::Result<OwnedHandle> {
-        let flags = if high_resolution {
-            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
-        } else {
-            0
-        };
+    /// Create a one-shot waitable timer with the best resolution the OS
+    /// offers: a high-resolution timer (not coalesced to the ~15.6 ms
+    /// scheduler tick; Windows 10 1803+) when supported, a standard
+    /// waitable timer otherwise.
+    pub fn create_waitable_timer() -> io::Result<OwnedHandle> {
+        create_waitable_timer_with(CREATE_WAITABLE_TIMER_HIGH_RESOLUTION)
+            // Pre-1803 systems reject the high-resolution flag.
+            .or_else(|_| create_waitable_timer_with(0))
+    }
+
+    fn create_waitable_timer_with(flags: u32) -> io::Result<OwnedHandle> {
         // SAFETY: null attributes and name are documented as valid; the
         // returned handle is owned by us.
         unsafe {
@@ -432,14 +432,8 @@ pub fn last_ctrl_signal() -> Option<usize> {
 }
 
 /// Create a one-shot waitable timer that fires after `timeout`.
-///
-/// Uses a high-resolution timer (100 ns due-time granularity, not coalesced
-/// to the ~15.6 ms scheduler tick) when the OS supports it (Windows 10 1803+),
-/// falling back to a standard waitable timer otherwise.
 fn start_relative_timer(timeout: Duration) -> io::Result<OwnedHandle> {
-    let timer = sys::create_waitable_timer(true)
-        // Pre-1803 systems reject the high-resolution flag.
-        .or_else(|_| sys::create_waitable_timer(false))?;
+    let timer = sys::create_waitable_timer()?;
     // 100 ns ticks: round up so a sub-tick duration never fires early, and
     // clamp huge durations.
     let ticks = timeout.as_nanos().div_ceil(100).min(i64::MAX as u128) as i64;
