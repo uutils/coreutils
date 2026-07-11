@@ -3,60 +3,240 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (win-api) WAITABLE Waitable HIRES
+// spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled
 // spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
 // spell-checker:ignore catchable targetable wakeup
 
 //! Windows emulation of POSIX signal delivery for child processes.
 //!
-//! Windows has no signals, so this module emulates the POSIX *default
-//! dispositions* using native primitives:
-//!
-//! - Signal numbers follow the Linux layout (the same table
-//!   `uucore::signals::ALL_SIGNALS` uses on Windows), so `-s HUP`, `-s 9`,
-//!   etc. keep meaning what cross-platform scripts expect.
-//! - "Terminate" signals force-exit the target with exit code `128 + n`,
-//!   which is what observers of the exit status see on unix when a process
-//!   dies to signal `n`.
-//! - `INT`/`QUIT` can be delivered to a console process group as a
-//!   `CTRL_BREAK_EVENT`: targetable, catchable by the child, and fatal by
-//!   default — the closest analog to a catchable SIGINT. (`CTRL_C_EVENT`
-//!   cannot target a specific group; it would be broadcast to the whole
-//!   console, including the sender.)
-//! - Discard-by-default signals (`CHLD`, `CONT`, `URG`, `WINCH`) and the
-//!   stop family (`STOP`, `TSTP`, `TTIN`, `TTOU`), which cannot be emulated
-//!   with documented APIs, are accepted as no-ops.
-//!
-//! [`Job`] provides process-tree termination (the analog of signalling a
-//! process group), and [`enable_ctrl_forwarding`] + [`last_ctrl_signal`]
-//! translate console control events (Ctrl-C, Ctrl-Break, console close) into
-//! POSIX signal numbers so callers can implement signal forwarding.
+//! Windows has no signals, so this module emulates the POSIX default
+//! dispositions with native primitives: signal numbers follow the Linux
+//! layout (matching `uucore::signals::ALL_SIGNALS`), "terminate" signals
+//! force-exit with exit code `128 + n`, and `INT`/`QUIT` map to a
+//! `CTRL_BREAK_EVENT` on a console process group. [`Job`] gives process-tree
+//! termination, and [`enable_ctrl_forwarding`]/[`last_ctrl_signal`] surface
+//! console control events (Ctrl-C, Ctrl-Break, close) as POSIX signal numbers
+//! for forwarding. All raw Win32 calls live in the safe [`sys`] wrappers.
 
 use std::io;
-use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+use std::os::windows::io::{AsHandle, BorrowedHandle, OwnedHandle};
 use std::process::{Child, Command, ExitStatus};
-use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicPtr, Ordering};
+use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::time::Duration;
 
-use windows_sys::Win32::Foundation::{
-    FALSE, HANDLE, TRUE, WAIT_OBJECT_0, WAIT_TIMEOUT,
-};
-use windows_sys::Win32::System::Console::{
-    CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT, GenerateConsoleCtrlEvent,
-    SetConsoleCtrlHandler,
-};
-use windows_sys::Win32::System::JobObjects::{
-    AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
-};
-use windows_sys::Win32::System::Threading::{
-    CREATE_NEW_PROCESS_GROUP, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW,
-    CreateWaitableTimerExW, INFINITE, SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS,
-    TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
-};
+use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT};
+use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, INFINITE};
 use windows_sys::core::BOOL;
 
 use super::ChildExt;
+
+/// Safe wrappers around the raw Win32 calls used for process control: each
+/// validates results into [`io::Error`] and takes
+/// [`BorrowedHandle`]/[`OwnedHandle`] so callers never touch raw `HANDLE`s.
+pub mod sys {
+    use std::io;
+    use std::os::windows::io::{AsRawHandle, BorrowedHandle, HandleOrNull, OwnedHandle};
+
+    use windows_sys::Win32::Foundation::{
+        FALSE, HANDLE, TRUE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
+    use windows_sys::Win32::System::Console::{
+        GenerateConsoleCtrlEvent, PHANDLER_ROUTINE, SetConsoleCtrlHandler,
+    };
+    use windows_sys::Win32::System::JobObjects::{
+        AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
+    };
+    use windows_sys::Win32::System::Threading::{
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, SetEvent,
+        SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects,
+        WaitForSingleObject,
+    };
+    use windows_sys::core::BOOL;
+
+    /// The outcome of a successful bounded wait.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum WaitOutcome {
+        /// The object at this index in the wait set became signaled.
+        Object(u32),
+        /// The wait interval elapsed first.
+        TimedOut,
+    }
+
+    fn cvt(result: BOOL) -> io::Result<()> {
+        if result == 0 {
+            Err(io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Take ownership of a `HANDLE` from a Win32 create-function, treating
+    /// null as failure.
+    ///
+    /// # Safety
+    ///
+    /// `raw` must be either null or a valid handle exclusively owned by the
+    /// caller (i.e. freshly returned by a Win32 function that transfers
+    /// ownership).
+    unsafe fn cvt_created_handle(raw: HANDLE) -> io::Result<OwnedHandle> {
+        // SAFETY: per this function's contract, `raw` is null or owned.
+        OwnedHandle::try_from(unsafe { HandleOrNull::from_raw_handle(raw) })
+            .map_err(|_| io::Error::last_os_error())
+    }
+
+    /// Create an anonymous job object.
+    pub fn create_job_object() -> io::Result<OwnedHandle> {
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe { cvt_created_handle(CreateJobObjectW(std::ptr::null(), std::ptr::null())) }
+    }
+
+    /// Assign the process behind `process` to the job behind `job`.
+    pub fn assign_process_to_job(job: BorrowedHandle, process: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: both handles are valid for the duration of the call by
+        // construction of `BorrowedHandle`.
+        cvt(unsafe {
+            AssignProcessToJobObject(job.as_raw_handle() as HANDLE, process.as_raw_handle())
+        })
+    }
+
+    /// Terminate every process in the job with the given exit code.
+    pub fn terminate_job_object(job: BorrowedHandle, exit_code: u32) -> io::Result<()> {
+        // SAFETY: the job handle is valid for the duration of the call.
+        cvt(unsafe { TerminateJobObject(job.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// Terminate the process behind `process` with the given exit code.
+    pub fn terminate_process(process: BorrowedHandle, exit_code: u32) -> io::Result<()> {
+        // SAFETY: the process handle is valid for the duration of the call;
+        // terminating an already-exited process fails cleanly.
+        cvt(unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// Create an unnamed manual-reset event, initially unsignaled.
+    pub fn create_manual_reset_event() -> io::Result<OwnedHandle> {
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe {
+            cvt_created_handle(CreateEventW(
+                std::ptr::null(),
+                TRUE,
+                FALSE,
+                std::ptr::null(),
+            ))
+        }
+    }
+
+    /// Signal a (manual-reset or auto-reset) event.
+    pub fn set_event(event: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: the event handle is valid for the duration of the call.
+        cvt(unsafe { SetEvent(event.as_raw_handle() as HANDLE) })
+    }
+
+    /// Create a one-shot waitable timer.
+    ///
+    /// With `high_resolution`, the timer is not coalesced to the ~15.6 ms
+    /// scheduler tick (Windows 10 1803+); callers should fall back to a
+    /// standard timer when the flag is unsupported.
+    pub fn create_waitable_timer(high_resolution: bool) -> io::Result<OwnedHandle> {
+        let flags = if high_resolution {
+            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION
+        } else {
+            0
+        };
+        // SAFETY: null attributes and name are documented as valid; the
+        // returned handle is owned by us.
+        unsafe {
+            cvt_created_handle(CreateWaitableTimerExW(
+                std::ptr::null(),
+                std::ptr::null(),
+                flags,
+                TIMER_ALL_ACCESS,
+            ))
+        }
+    }
+
+    /// Arm `timer` to fire once after `ticks_100ns` (in 100 ns units).
+    pub fn set_relative_timer(timer: BorrowedHandle, ticks_100ns: i64) -> io::Result<()> {
+        // A negative due time means a relative wait.
+        let due_time = -ticks_100ns;
+        // SAFETY: the timer handle is valid, the due-time pointer is valid
+        // for the duration of the call, and no completion routine is used.
+        cvt(unsafe {
+            SetWaitableTimer(
+                timer.as_raw_handle() as HANDLE,
+                &raw const due_time,
+                0,
+                None,
+                std::ptr::null(),
+                FALSE,
+            )
+        })
+    }
+
+    /// Wait until any handle in `handles` is signaled or `timeout_ms`
+    /// elapses (`INFINITE` for no limit). On simultaneous completion the
+    /// lowest index wins.
+    ///
+    /// Mutexes are not supported (an abandoned-mutex result is reported as
+    /// an error).
+    pub fn wait_for_any(handles: &[BorrowedHandle], timeout_ms: u32) -> io::Result<WaitOutcome> {
+        let count = u32::try_from(handles.len())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        // SAFETY: `BorrowedHandle` is `repr(transparent)` over a raw handle,
+        // so the slice is layout-compatible with an array of `HANDLE`, and
+        // every element is a valid open handle for the duration of the call.
+        let result =
+            unsafe { WaitForMultipleObjects(count, handles.as_ptr().cast(), FALSE, timeout_ms) };
+        wait_outcome(result, count)
+    }
+
+    /// Wait until `handle` is signaled or `timeout_ms` elapses. A zero
+    /// timeout makes this a state poll.
+    pub fn wait_for_one(handle: BorrowedHandle, timeout_ms: u32) -> io::Result<WaitOutcome> {
+        // SAFETY: the handle is valid for the duration of the call.
+        let result = unsafe { WaitForSingleObject(handle.as_raw_handle() as HANDLE, timeout_ms) };
+        wait_outcome(result, 1)
+    }
+
+    fn wait_outcome(result: u32, count: u32) -> io::Result<WaitOutcome> {
+        if result == WAIT_TIMEOUT {
+            return Ok(WaitOutcome::TimedOut);
+        }
+        if result == WAIT_FAILED {
+            return Err(io::Error::last_os_error());
+        }
+        let index = result.wrapping_sub(WAIT_OBJECT_0);
+        if index < count {
+            Ok(WaitOutcome::Object(index))
+        } else {
+            // WAIT_ABANDONED_0..: only possible for mutexes, which this
+            // module never waits on; surface it instead of guessing.
+            Err(io::Error::other(format!("unexpected wait result {result}")))
+        }
+    }
+
+    /// Send a console control event (`CTRL_C_EVENT`/`CTRL_BREAK_EVENT`) to
+    /// the console process group led by `process_group_id`.
+    pub fn generate_console_ctrl_event(ctrl_event: u32, process_group_id: u32) -> io::Result<()> {
+        // SAFETY: no pointers involved; fails cleanly without a console.
+        cvt(unsafe { GenerateConsoleCtrlEvent(ctrl_event, process_group_id) })
+    }
+
+    /// Register `handler` to receive console control events.
+    ///
+    /// # Safety
+    ///
+    /// The OS invokes `handler` on a dedicated thread at any moment,
+    /// including while other threads run arbitrary code; it must be sound
+    /// under those conditions (touch only atomics and other thread-safe,
+    /// non-allocating state).
+    pub unsafe fn set_console_ctrl_handler(handler: PHANDLER_ROUTINE) -> io::Result<()> {
+        // SAFETY: the handler contract is upheld by the caller.
+        cvt(unsafe { SetConsoleCtrlHandler(handler, TRUE) })
+    }
+}
 
 // POSIX (Linux-layout) signal numbers, matching the Windows `ALL_SIGNALS`
 // table in `uucore::signals`. Kept local so the `process` feature does not
@@ -67,13 +247,11 @@ const SIGNAL_QUIT: i32 = 3;
 
 /// What delivering a given POSIX signal number means on Windows.
 enum Disposition {
-    /// Signal 0: existence check only.
     Probe,
     /// Discarded-by-default and stop signals: accepted, nothing to do.
     Ignore,
     /// `INT`/`QUIT`: deliverable to a console process group as CTRL_BREAK.
     Interrupt,
-    /// Everything else: forced termination with exit code `128 + n`.
     Terminate,
 }
 
@@ -81,47 +259,35 @@ fn disposition(signal: usize) -> io::Result<Disposition> {
     match signal {
         0 => Ok(Disposition::Probe),
         2 | 3 => Ok(Disposition::Interrupt),
-        // CHLD, CONT, URG and WINCH are discarded by default on POSIX; the
-        // stop family (STOP, TSTP, TTIN, TTOU) cannot be emulated with
-        // documented APIs. All are accepted as no-ops.
+        // Discarded-by-default (CHLD, CONT, URG, WINCH) and the stop family
+        // (STOP, TSTP, TTIN, TTOU): no documented emulation, so no-ops.
         17..=23 | 28 => Ok(Disposition::Ignore),
         1..=31 => Ok(Disposition::Terminate),
         _ => Err(io::ErrorKind::InvalidInput.into()),
     }
 }
 
-/// Terminate the process behind `handle` so that its exit status becomes
-/// `128 + signal`, emulating "killed by signal" for exit-code observers.
-fn terminate_with_signal(handle: HANDLE, signal: usize) -> io::Result<()> {
-    // SAFETY: the handle is a valid process handle; terminating an
-    // already-exited process fails cleanly with an OS error.
-    if unsafe { TerminateProcess(handle, (128 + signal) as u32) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
+/// Terminate so the child's exit status becomes `128 + signal`, emulating
+/// "killed by signal" for exit-code observers.
+fn terminate_with_signal(handle: BorrowedHandle, signal: usize) -> io::Result<()> {
+    sys::terminate_process(handle, (128 + signal) as u32)
 }
 
 /// Deliver `signal` (POSIX numbering) to the child process only.
 ///
 /// A console control event cannot target a single process, so `INT`/`QUIT`
-/// fall back to their POSIX default disposition here: termination. Callers
-/// that want a catchable interrupt must target a process group via
-/// [`send_signal_to_console_group`].
+/// fall back to termination here; callers wanting a catchable interrupt must
+/// use [`send_signal_to_console_group`].
 pub fn send_signal_to_process(child: &Child, signal: usize) -> io::Result<()> {
-    let handle = child.as_raw_handle() as HANDLE;
     match disposition(signal)? {
-        Disposition::Probe => {
-            // SAFETY: valid process handle; a zero timeout makes this a poll.
-            match unsafe { WaitForSingleObject(handle, 0) } {
-                WAIT_TIMEOUT => Ok(()),
-                // The process has exited: the POSIX analog is ESRCH.
-                WAIT_OBJECT_0 => Err(io::ErrorKind::NotFound.into()),
-                _ => Err(io::Error::last_os_error()),
-            }
-        }
+        Disposition::Probe => match sys::wait_for_one(child.as_handle(), 0)? {
+            sys::WaitOutcome::TimedOut => Ok(()),
+            // The process has exited: the POSIX analog is ESRCH.
+            sys::WaitOutcome::Object(_) => Err(io::ErrorKind::NotFound.into()),
+        },
         Disposition::Ignore => Ok(()),
         Disposition::Interrupt | Disposition::Terminate => {
-            terminate_with_signal(handle, signal)
+            terminate_with_signal(child.as_handle(), signal)
         }
     }
 }
@@ -135,23 +301,20 @@ pub fn send_signal_to_process(child: &Child, signal: usize) -> io::Result<()> {
 pub fn send_signal_to_console_group(pid: u32, signal: usize) -> io::Result<()> {
     match disposition(signal)? {
         Disposition::Probe | Disposition::Ignore => Ok(()),
-        Disposition::Interrupt => {
-            // SAFETY: no pointers involved; fails cleanly without a console.
-            if unsafe { GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, pid) } == 0 {
-                return Err(io::Error::last_os_error());
-            }
-            Ok(())
-        }
+        // CTRL_C_EVENT cannot target a nonzero group (it broadcasts to the
+        // whole console, including the sender), so INT/QUIT both use
+        // CTRL_BREAK: targetable, catchable, fatal by default.
+        Disposition::Interrupt => sys::generate_console_ctrl_event(CTRL_BREAK_EVENT, pid),
         Disposition::Terminate => Err(io::ErrorKind::Unsupported.into()),
     }
 }
 
-/// Deliver `signal` (POSIX numbering) to the child's whole process tree:
-/// terminating signals (including `INT`/`QUIT`, which cannot reach a whole
-/// tree as console events) terminate the job with exit code `128 + n`,
-/// falling back to the direct child when `job` is `None` or termination via
-/// the job fails; probe and ignored signals behave as in
-/// [`send_signal_to_process`].
+/// Deliver `signal` (POSIX numbering) to the child's whole process tree.
+///
+/// Terminating signals (including `INT`/`QUIT`, which cannot reach a tree as
+/// console events) terminate the job with exit code `128 + n`, falling back
+/// to the direct child when `job` is `None` or the job terminate fails;
+/// probe/ignored signals behave as [`send_signal_to_process`].
 pub fn send_signal_to_tree(child: &Child, job: Option<&Job>, signal: usize) -> io::Result<()> {
     match disposition(signal)? {
         Disposition::Probe | Disposition::Ignore => send_signal_to_process(child, signal),
@@ -161,18 +324,16 @@ pub fn send_signal_to_tree(child: &Child, job: Option<&Job>, signal: usize) -> i
                     return Ok(());
                 }
             }
-            terminate_with_signal(child.as_raw_handle() as HANDLE, signal)
+            terminate_with_signal(child.as_handle(), signal)
         }
     }
 }
 
 /// Make `cmd` spawn its child as the leader of a new console process group,
-/// so that `CTRL_BREAK_EVENT` can be targeted at exactly that child's group
-/// and the console's own Ctrl-C no longer reaches the child directly (the
-/// analog of `setpgid(0, 0)` isolation on unix).
+/// so `CTRL_BREAK_EVENT` can target exactly that group and the console's own
+/// Ctrl-C no longer reaches the child (the analog of unix `setpgid(0, 0)`).
 ///
-/// Note: this sets the command's creation flags, overwriting any flags set
-/// earlier via `CommandExt::creation_flags`.
+/// Overwrites any creation flags set earlier via `CommandExt::creation_flags`.
 pub fn configure_process_group(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     cmd.creation_flags(CREATE_NEW_PROCESS_GROUP);
@@ -190,13 +351,7 @@ pub struct Job(OwnedHandle);
 impl Job {
     /// Create a new anonymous job object.
     pub fn new() -> io::Result<Self> {
-        // SAFETY: null attributes and name are documented as valid.
-        let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
-        if raw.is_null() {
-            return Err(io::Error::last_os_error());
-        }
-        // SAFETY: `raw` is a valid handle exclusively owned by us.
-        Ok(Self(unsafe { OwnedHandle::from_raw_handle(raw) }))
+        sys::create_job_object().map(Self)
     }
 
     /// Assign `child` (and, transitively, every process it spawns from then
@@ -206,64 +361,45 @@ impl Job {
     /// current process already runs inside a job; callers should degrade to
     /// per-process operations in that case.
     pub fn assign(&self, child: &Child) -> io::Result<()> {
-        // SAFETY: both handles are valid for the duration of the call.
-        if unsafe {
-            AssignProcessToJobObject(
-                self.0.as_raw_handle() as HANDLE,
-                child.as_raw_handle() as HANDLE,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(())
+        sys::assign_process_to_job(self.0.as_handle(), child.as_handle())
     }
 
     /// Terminate every process in the job with the given exit code
     /// (pass `128 + signal` to emulate death by signal).
     pub fn terminate(&self, exit_code: u32) -> io::Result<()> {
-        // SAFETY: the job handle is valid for the duration of the call.
-        if unsafe { TerminateJobObject(self.0.as_raw_handle() as HANDLE, exit_code) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(())
+        sys::terminate_job_object(self.0.as_handle(), exit_code)
     }
 }
 
 /// Manual-reset event signalled by the console control handler to wake
-/// [`ChildExt::wait_or_timeout`]. Null until [`enable_ctrl_forwarding`] runs.
-/// Intentionally lives for the rest of the process; the OS reclaims it.
-static WAKE_EVENT: AtomicPtr<core::ffi::c_void> = AtomicPtr::new(ptr::null_mut());
+/// [`ChildExt::wait_or_timeout`]. Unset until [`enable_ctrl_forwarding`]
+/// runs; intentionally lives for the rest of the process.
+static WAKE_EVENT: OnceLock<OwnedHandle> = OnceLock::new();
 /// POSIX signal number of the last console control event received (0 = none).
 static LAST_CTRL_SIGNAL: AtomicI32 = AtomicI32::new(0);
 
-/// The console control handler runs on a system-spawned thread: it must only
-/// touch atomics and signal the pre-created event (no allocation, no locks).
+/// Console control handler. Runs on an OS-spawned thread, so it only touches
+/// atomics and signals the pre-created event — no allocation, no locks.
 ///
 /// # Safety
 ///
-/// Only registered via `SetConsoleCtrlHandler` and called by the system with
-/// a valid `ctrl_type`; touches nothing but atomics and a live event handle.
+/// Registered only via [`sys::set_console_ctrl_handler`] and invoked by the
+/// system with a valid `ctrl_type`.
 unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
     let signal = match ctrl_type {
         CTRL_C_EVENT => SIGNAL_INT,
         CTRL_BREAK_EVENT => SIGNAL_QUIT,
-        // The console window is going away; the analog of losing the
-        // controlling terminal. The system still terminates us after a grace
-        // period, so the main thread must react promptly.
+        // Console window closing (analog of losing the controlling terminal);
+        // the system force-terminates us after a grace period, so react now.
         CTRL_CLOSE_EVENT => SIGNAL_HUP,
-        // Logoff/shutdown notifications are only delivered to services;
-        // leave them to the default handler.
-        _ => return FALSE,
+        // Logoff/shutdown reach only services; leave them to the default handler.
+        _ => return 0,
     };
     LAST_CTRL_SIGNAL.store(signal, Ordering::Release);
-    let event = WAKE_EVENT.load(Ordering::Acquire);
-    if !event.is_null() {
-        // SAFETY: the event handle is created before the handler is
-        // registered and is never closed.
-        unsafe { SetEvent(event) };
+    if let Some(event) = WAKE_EVENT.get() {
+        let _ = sys::set_event(event.as_handle());
     }
-    TRUE
+    1
 }
 
 /// Install a console control handler that records Ctrl-C, Ctrl-Break and
@@ -273,21 +409,17 @@ unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
 ///
 /// Use [`last_ctrl_signal`] to read the last event received. Idempotent.
 pub fn enable_ctrl_forwarding() -> io::Result<()> {
-    if !WAKE_EVENT.load(Ordering::Acquire).is_null() {
+    if WAKE_EVENT.get().is_some() {
         return Ok(());
     }
     // Manual-reset so a wakeup latched before a wait starts is never lost.
-    // SAFETY: null attributes and name are documented as valid.
-    let event = unsafe { CreateEventW(ptr::null(), TRUE, FALSE, ptr::null()) };
-    if event.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    WAKE_EVENT.store(event, Ordering::Release);
-    // SAFETY: the handler only touches atomics and a live event handle.
-    if unsafe { SetConsoleCtrlHandler(Some(console_ctrl_handler), TRUE) } == 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(())
+    let event = sys::create_manual_reset_event()?;
+    // A racing second caller just drops its event; registering the handler
+    // twice is harmless.
+    let _ = WAKE_EVENT.set(event);
+    // SAFETY: the handler only touches atomics, the immutable `WAKE_EVENT`
+    // cell and a live event handle — sound for arbitrary-thread invocation.
+    unsafe { sys::set_console_ctrl_handler(Some(console_ctrl_handler)) }
 }
 
 /// The POSIX signal number corresponding to the last console control event
@@ -304,45 +436,14 @@ pub fn last_ctrl_signal() -> Option<usize> {
 /// Uses a high-resolution timer (100 ns due-time granularity, not coalesced
 /// to the ~15.6 ms scheduler tick) when the OS supports it (Windows 10 1803+),
 /// falling back to a standard waitable timer otherwise.
-fn create_relative_timer(timeout: Duration) -> io::Result<OwnedHandle> {
-    // SAFETY: null attributes and name are documented as valid.
-    let mut raw = unsafe {
-        CreateWaitableTimerExW(
-            ptr::null(),
-            ptr::null(),
-            CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-            TIMER_ALL_ACCESS,
-        )
-    };
-    if raw.is_null() {
+fn start_relative_timer(timeout: Duration) -> io::Result<OwnedHandle> {
+    let timer = sys::create_waitable_timer(true)
         // Pre-1803 systems reject the high-resolution flag.
-        // SAFETY: as above.
-        raw = unsafe { CreateWaitableTimerExW(ptr::null(), ptr::null(), 0, TIMER_ALL_ACCESS) };
-    }
-    if raw.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    // SAFETY: `raw` is a valid handle exclusively owned by us.
-    let timer = unsafe { OwnedHandle::from_raw_handle(raw) };
-
-    // A negative due time is relative, in 100 ns units. Round up so a
-    // sub-tick duration never fires early, and clamp huge durations.
+        .or_else(|_| sys::create_waitable_timer(false))?;
+    // 100 ns ticks: round up so a sub-tick duration never fires early, and
+    // clamp huge durations.
     let ticks = timeout.as_nanos().div_ceil(100).min(i64::MAX as u128) as i64;
-    let due_time = -ticks;
-    // SAFETY: the timer handle is valid; no completion routine is used.
-    if unsafe {
-        SetWaitableTimer(
-            timer.as_raw_handle() as HANDLE,
-            &raw const due_time,
-            0,
-            None,
-            ptr::null(),
-            FALSE,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    sys::set_relative_timer(timer.as_handle(), ticks)?;
     Ok(timer)
 }
 
@@ -353,8 +454,8 @@ impl ChildExt for Child {
 
     fn send_signal_group(&mut self, signal: usize) -> io::Result<()> {
         // Unlike unix (which signals the caller's own process group), this
-        // targets the child's console process group: on Windows only a group
-        // the child leads can be addressed at all.
+        // targets the child's console group — the only group Windows lets us
+        // address at all.
         let pid = self.id();
         send_signal_to_console_group(pid, signal)
     }
@@ -367,53 +468,43 @@ impl ChildExt for Child {
         // The unix implementation drops stdin so the child sees EOF; match it.
         drop(self.stdin.take());
 
-        // A single blocking wait over up to three handles. Ordering matters:
-        // on simultaneous completion `WaitForMultipleObjects` reports the
-        // lowest index, so child-exit wins over a console event, which wins
-        // over timer expiry — matching the unix implementation's races.
-        let mut handles: [HANDLE; 3] = [ptr::null_mut(); 3];
-        let mut count: u32 = 0;
-
-        handles[count as usize] = self.as_raw_handle() as HANDLE;
-        count += 1;
-
-        let wake_index = if signaled.is_some() {
-            let event = WAKE_EVENT.load(Ordering::Acquire);
-            if event.is_null() {
-                None
-            } else {
-                handles[count as usize] = event;
-                count += 1;
-                Some(count - 1)
-            }
+        // Zero disables the timeout: no timer, so the wait blocks until the
+        // child exits (or a console event fires).
+        let timer = if timeout.is_zero() {
+            None
         } else {
-            // The caller wants this wait to ignore console events (e.g. the
-            // kill-after grace period), so the wake event is left out.
+            Some(start_relative_timer(timeout)?)
+        };
+        // The wake event is left out when this wait must ignore console events
+        // (e.g. the kill-after grace period).
+        let wake_event = if signaled.is_some() {
+            WAKE_EVENT.get()
+        } else {
             None
         };
 
-        // A timeout of zero disables the timeout: no timer handle, so the
-        // wait below blocks until the child exits (or a console event fires).
-        let _timer: Option<OwnedHandle> = if timeout.is_zero() {
-            None
-        } else {
-            let timer = create_relative_timer(timeout)?;
-            handles[count as usize] = timer.as_raw_handle() as HANDLE;
-            count += 1;
-            Some(timer)
-        };
-
-        // SAFETY: `handles[..count]` are valid, open handles for the whole
-        // call; INFINITE is safe because at least the process handle (and
-        // usually the timer) will eventually be signalled.
-        let result = unsafe { WaitForMultipleObjects(count, handles.as_ptr(), FALSE, INFINITE) };
-        let index = result.wrapping_sub(WAIT_OBJECT_0);
-        if index >= count {
-            // WAIT_FAILED (or an impossible WAIT_ABANDONED: no mutexes here).
-            return Err(io::Error::last_os_error());
+        // A single blocking wait over up to three handles. On simultaneous
+        // completion the lowest index wins, so child-exit beats a console
+        // event, which beats timer expiry — matching the unix races.
+        let mut handles: Vec<BorrowedHandle> = Vec::with_capacity(3);
+        handles.push(self.as_handle());
+        let wake_index = wake_event.map(|event| {
+            handles.push(event.as_handle());
+            handles.len() - 1
+        });
+        if let Some(timer) = &timer {
+            handles.push(timer.as_handle());
         }
+
+        let index = match sys::wait_for_any(&handles, INFINITE)? {
+            sys::WaitOutcome::Object(index) => index as usize,
+            // Unreachable with an INFINITE wait; treat as timer expiry.
+            sys::WaitOutcome::TimedOut => return Ok(None),
+        };
+        drop(handles);
+
         if index == 0 {
-            // The child exited; this reaps it without blocking.
+            // Child exited; reap it without blocking.
             return self.wait().map(Some);
         }
         if Some(index) == wake_index {
