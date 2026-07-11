@@ -393,13 +393,14 @@ impl ChownExecutor {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
-                "changing {} of {}: {e}",
+                "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
                 } else {
                     "ownership"
                 },
                 path.quote(),
+                strip_errno(&e),
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
