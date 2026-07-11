@@ -81,10 +81,10 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
-        if attr_name.to_string_lossy() != "security.selinux" {
-            if let Some(value) = xattr::get(&source, &attr_name)? {
-                xattr::set(&dest, &attr_name, &value)?;
-            }
+        if attr_name.as_bytes() != b"security.selinux"
+            && let Some(value) = xattr::get(&source, &attr_name)?
+        {
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
