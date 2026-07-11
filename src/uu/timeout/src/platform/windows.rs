@@ -13,7 +13,7 @@
 
 use std::io;
 use std::process::Child;
-use std::sync::OnceLock;
+use std::sync::Mutex;
 
 use uucore::process::{
     Job, configure_process_group, enable_ctrl_forwarding, last_ctrl_signal,
@@ -25,8 +25,10 @@ const SIGNAL_QUIT: usize = 3;
 
 /// The job object tracking the child's process tree (non-foreground mode
 /// only; `None` also when job assignment failed and we degraded to
-/// per-process signalling).
-static JOB: OnceLock<Job> = OnceLock::new();
+/// per-process signalling). Replaced on every spawn so that repeated
+/// in-process invocations of `uumain` (benchmarks, fuzzing) never signal a
+/// previous run's job.
+static JOB: Mutex<Option<Job>> = Mutex::new(None);
 
 /// Configure the child's spawn attributes and console-event forwarding, right
 /// before the child is spawned.
@@ -59,11 +61,8 @@ pub(crate) fn post_spawn(child: &Child, foreground: bool) {
     if foreground {
         return;
     }
-    if let Ok(job) = Job::new() {
-        if job.assign(child).is_ok() {
-            let _ = JOB.set(job);
-        }
-    }
+    let job = Job::new().ok().filter(|job| job.assign(child).is_ok());
+    *JOB.lock().unwrap() = job;
 }
 
 pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
@@ -81,10 +80,10 @@ pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) 
         // Deliverable as a catchable CTRL_BREAK to the child's group; without
         // a console, fall back to termination so the signal is never lost.
         if send_signal_to_console_group(process.id(), signal).is_err() {
-            let _ = send_signal_to_tree(process, JOB.get(), signal);
+            let _ = send_signal_to_tree(process, JOB.lock().unwrap().as_ref(), signal);
         }
     } else {
-        let _ = send_signal_to_tree(process, JOB.get(), signal);
+        let _ = send_signal_to_tree(process, JOB.lock().unwrap().as_ref(), signal);
     }
 }
 
