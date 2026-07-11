@@ -122,12 +122,16 @@ wild = "2.2.1"
 winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
+  "Win32_Security",
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
+  "Win32_System_Console",
   "Win32_System_IO",
   "Win32_System_Ioctl",
+  "Win32_System_JobObjects",
   "Win32_System_RemoteDesktop",
   "Win32_System_SystemInformation",
+  "Win32_System_Threading",
   "Win32_System_WindowsProgramming",
 ] }
 
@@ -179,7 +183,7 @@ parser-size = ["parser-num", "procfs"]
 parser-glob = ["glob"]
 parser = ["parser-num", "parser-size", "parser-glob"]
 pipes = ["fs"]
-process = ["libc"]
+process = ["libc", "windows-sys"]
 proc-info = ["tty", "walkdir"]
 quoting-style = ["i18n-common"]
 ranges = []
