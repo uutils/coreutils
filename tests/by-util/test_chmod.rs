@@ -1414,7 +1414,7 @@ fn test_chmod_colored_output() {
     new_ucmd!()
         .arg("--invalid-option")
         .env("CLICOLOR_FORCE", "1")
-        .env("LANG", "fr_FR.UTF-8")
+        .env("LC_ALL", "fr_FR.UTF-8")
         .fails()
         .code_is(1)
         .stderr_contains("\x1b[31merreur\x1b[0m") // Red "erreur" in French
