@@ -23,7 +23,7 @@ permissions:
 jobs:
   check-doc:
     name: Verify uudoc generates correct documentation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository

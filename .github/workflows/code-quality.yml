@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-24.04 , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v7.0.0
       with:
@@ -71,10 +71,10 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { os: ubuntu-latest  , features: all             , workspace: true }
+          - { os: ubuntu-24.04  , features: all             , workspace: true }
           - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
-          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
+          - { os: ubuntu-24.04  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
     - uses: actions/checkout@v7.0.0
       with:
@@ -152,7 +152,7 @@ jobs:
     strategy:
       matrix:
         job:
-          - { os: ubuntu-latest , features: feat_os_unix }
+          - { os: ubuntu-24.04 , features: feat_os_unix }
     steps:
     - uses: actions/checkout@v7.0.0
       with:
@@ -189,7 +189,7 @@ jobs:
 
   python:
     name: Style/Python
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Clone repository
         uses: actions/checkout@v7.0.0
@@ -213,7 +213,7 @@ jobs:
 
   pre_commit:
     name: Pre-commit hooks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7.0.0

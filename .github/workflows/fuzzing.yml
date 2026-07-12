@@ -23,7 +23,7 @@ concurrency:
 jobs:
   uufuzz-examples:
     name: Build and test uufuzz examples
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7.0.0
       with:
@@ -52,7 +52,7 @@ jobs:
 
   fuzz-build:
     name: Build the fuzzers
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v7.0.0
       with:
@@ -72,7 +72,7 @@ jobs:
   fuzz-run:
     needs: fuzz-build
     name: Fuzz
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     env:
       RUN_FOR: 60
@@ -199,7 +199,7 @@ jobs:
   fuzz-summary:
     needs: fuzz-run
     name: Fuzzing Summary
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: always()
     steps:
       - uses: actions/checkout@v7.0.0
