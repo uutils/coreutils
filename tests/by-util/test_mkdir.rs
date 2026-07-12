@@ -406,7 +406,7 @@ fn test_mkdir_acl_inheritance_with_restrictive_mask() {
 
     // Verify the child itself has an ACL (indicated by presence of xattr)
     assert!(
-        uucore::fsxattr::has_acl(at.plus("parent/child")),
+        uucore::fsxattr::has_acl(at.plus("parent/child"), true),
         "Child directory should have inherited ACL entries"
     );
 }
