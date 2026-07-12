@@ -34,7 +34,7 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 #[cfg(unix)]
 use uucore::entries;
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-use uucore::fsxattr::has_acl;
+use uucore::fsxattr::has_acl_with_deref;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
 use uucore::{
@@ -934,7 +934,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-        let is_acl_set = has_acl(item.path());
+        let is_acl_set = has_acl_with_deref(item.path(), item.must_dereference);
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
@@ -1339,7 +1339,7 @@ fn calculate_padding_collection(
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.path());
+                let is_acl_set = has_acl_with_deref(item.path(), item.must_dereference);
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;
                 }
