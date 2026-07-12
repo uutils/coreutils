@@ -503,11 +503,8 @@ fn touch_file(
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
             // when stable, we can change to use e.kind() == std::io::ErrorKind::IsADirectory
-            let is_directory = if let Some(last_char) = path.to_string_lossy().chars().last() {
-                last_char == std::path::MAIN_SEPARATOR
-            } else {
-                false
-            };
+            let is_directory = path.as_os_str().as_encoded_bytes().last()
+                == Some(&(std::path::MAIN_SEPARATOR as u8));
             if is_directory {
                 let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
                 return Err(custom_err.map_err_context(
