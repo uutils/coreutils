@@ -127,10 +127,8 @@ impl Display for FormatError {
     }
 }
 
-/// Maximum width for formatting to prevent memory allocation panics.
-/// Rust's formatter will panic when trying to allocate memory for very large widths.
-/// This limit is somewhat arbitrary but should be well above any practical use case
-/// while still preventing formatter panics.
+/// Maximum padding width for formatting to prevent pathological output requests.
+/// This limit is somewhat arbitrary but should be well above any practical use case.
 const MAX_FORMAT_WIDTH: usize = 1_000_000;
 
 /// Check if a width is too large for formatting.
@@ -144,6 +142,19 @@ fn check_width(width: usize) -> std::io::Result<()> {
     } else {
         Ok(())
     }
+}
+
+fn write_padding(mut writer: impl Write, byte: u8, len: usize) -> std::io::Result<()> {
+    check_width(len)?;
+
+    let buffer = [byte; 1024];
+    let mut remaining = len;
+    while remaining > 0 {
+        let count = remaining.min(buffer.len());
+        writer.write_all(&buffer[..count])?;
+        remaining -= count;
+    }
+    Ok(())
 }
 
 /// A single item to format

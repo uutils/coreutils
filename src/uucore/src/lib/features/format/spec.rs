@@ -547,14 +547,11 @@ fn write_padded(
 ) -> Result<(), FormatError> {
     let padlen = width.saturating_sub(text.len());
 
-    // Check if the padding length is too large for formatting
-    super::check_width(padlen).map_err(FormatError::IoError)?;
-
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        super::write_padding(writer, b' ', padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        super::write_padding(&mut writer, b' ', padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)

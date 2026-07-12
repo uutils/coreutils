@@ -1486,6 +1486,29 @@ fn test_large_width_format() {
 }
 
 #[test]
+fn test_large_but_allowed_width_format() {
+    let width = 111_111;
+
+    let expected_char = format!("{}x", " ".repeat(width - 1));
+    new_ucmd!()
+        .args(&["%111111c", "x"])
+        .succeeds()
+        .stdout_only(expected_char);
+
+    let expected_int = format!("{}1", " ".repeat(width - 1));
+    new_ucmd!()
+        .args(&["%111111.1d", "1"])
+        .succeeds()
+        .stdout_only(expected_int);
+
+    let expected_float = format!("{}1.0", " ".repeat(width - 3));
+    new_ucmd!()
+        .args(&["%111111.1f", "1"])
+        .succeeds()
+        .stdout_only(expected_float);
+}
+
+#[test]
 fn test_extreme_field_width_overflow() {
     // Test the specific case that was causing panic due to integer overflow
     // in the field width parsing.
