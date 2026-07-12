@@ -284,7 +284,6 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: u64,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -458,7 +457,6 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: 0,
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -1627,7 +1625,7 @@ where
             break;
         }
 
-        if starts_with_plus(&arg) {
+        if arg.as_encoded_bytes().first() == Some(&b'+') {
             let as_str = arg.to_string_lossy();
             if let Some(from_spec) = as_str.strip_prefix('+') {
                 if let Some(from) = parse_legacy_part(from_spec) {
@@ -1669,17 +1667,6 @@ where
     }
 
     (processed, legacy_warnings)
-}
-
-fn starts_with_plus(arg: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        arg.as_bytes().first() == Some(&b'+')
-    }
-    #[cfg(not(unix))]
-    {
-        arg.to_string_lossy().starts_with('+')
-    }
 }
 
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
@@ -2040,27 +2027,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
+                .into());
+            }
+
+            let f: OsString = {
+                #[cfg(unix)]
+                {
+                    OsStr::from_bytes(&line).to_os_string()
+                }
+                #[cfg(not(unix))]
+                {
+                    OsString::from(String::from_utf8_lossy(&line).into_owned())
+                }
+            };
+
+            match f.to_str() {
+                Some(s) if s == STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
                 }
                 _ => {}
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(f);
         }
+
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
@@ -2116,14 +2112,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    settings.threads = matches
-        .get_one::<u64>(options::PARALLEL)
-        .copied()
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+
+    // WASI doesn't support threads, so we ignore the corresponding option
     #[cfg(not(target_os = "wasi"))]
-    let _ = rayon::ThreadPoolBuilder::new()
-        .num_threads(settings.threads as usize)
-        .build_global();
+    {
+        let threads = matches
+            .get_one::<u64>(options::PARALLEL)
+            .copied()
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build_global();
+    }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -2185,13 +2185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         translate!(
                             "sort-maximum-batch-size-rlimit",
                             "rlimit" => {
-                                let Some(rlimit) = fd_soft_limit() else {
-                                    return Err(UUsageError::new(
-                                        2,
-                                        translate!("sort-failed-fetch-rlimit"),
-                                    ));
-                                };
-                                rlimit
+                                fd_soft_limit().ok_or_else(|| {
+                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
+                                })?
                             }
                         )
                     }

@@ -393,13 +393,14 @@ impl ChownExecutor {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
-                "changing {} of {}: {e}",
+                "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
                 } else {
                     "ownership"
                 },
                 path.quote(),
+                strip_errno(&e),
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
@@ -893,7 +894,7 @@ pub fn chown_base(
     let mut help = false;
     // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+        if arg.as_encoded_bytes().starts_with(b"--reference=") || arg == "--reference" {
             reference = true;
         } else if arg == "--help" {
             // we stop processing once we see --help,

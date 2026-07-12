@@ -6,16 +6,15 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs;
-#[cfg(target_os = "linux")]
-use std::fs::File;
+use std::fs::{self, File};
 #[cfg(target_os = "linux")]
 use std::io::{BufRead, BufReader};
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-#[cfg(not(windows))]
+use std::path::PathBuf;
 use std::process;
+use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::process::{getegid, geteuid};
@@ -372,6 +371,15 @@ fn test_install_target_file() {
 }
 
 #[test]
+fn test_install_missing_source_reports_cannot_stat_with_path() {
+    new_ucmd!()
+        .arg("missing_source")
+        .arg("target_file")
+        .fails_with_code(1)
+        .stderr_contains("cannot stat 'missing_source': No such file or directory");
+}
+
+#[test]
 fn test_install_target_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "file";
@@ -479,6 +487,33 @@ fn test_install_preserve_timestamps() {
     assert_eq!(
         file1_metadata.modified().ok(),
         file2_metadata.modified().ok()
+    );
+}
+
+#[test]
+#[cfg(not(target_os = "openbsd"))]
+fn test_install_compare_preserve_timestamps() {
+    use std::time::Duration;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "source_file";
+    let dest = "dest_file";
+
+    // Same contents, but destination has a newer timestamp than the source.
+    at.write(source, "data");
+    at.write(dest, "data");
+    let old = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    filetime::set_file_mtime(at.plus(source), FileTime::from_system_time(old)).unwrap();
+
+    // With --preserve-timestamps, the timestamp difference forces the copy so
+    // the destination ends up with the source's modification time.
+    ucmd.args(&["-C", "--preserve-timestamps", source, dest])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(
+        at.metadata(source).modified().ok(),
+        at.metadata(dest).modified().ok()
     );
 }
 
@@ -750,27 +785,34 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
-#[cfg(all(not(windows), not(target_os = "freebsd")))]
+#[cfg(not(target_os = "freebsd"))]
 const SYMBOL_DUMP_PROGRAM: &str = "objdump";
 #[cfg(target_os = "freebsd")]
 const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
-#[cfg(not(windows))]
 const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
 
-fn strip_source_file() -> &'static str {
-    if cfg!(target_os = "freebsd") {
-        "helloworld_freebsd"
-    } else if cfg!(target_os = "macos") {
-        "helloworld_macos"
-    } else if cfg!(target_arch = "arm") || cfg!(target_arch = "aarch64") {
-        "helloworld_android"
-    } else {
-        "helloworld_linux"
-    }
+fn strip_source_file() -> PathBuf {
+    use std::io::Write as _;
+    static BINARY: OnceLock<PathBuf> = OnceLock::new();
+    BINARY
+        .get_or_init(|| {
+            let dir = std::env::temp_dir();
+            let source = dir.join("hello.rs");
+            let binary = dir.join("hello_bin");
+            let mut file = File::create(&source).unwrap();
+            file.write_all(b"fn main() {}").unwrap();
+            process::Command::new("rustc")
+                .arg("-o")
+                .arg(&binary)
+                .arg(&source)
+                .status()
+                .unwrap();
+            binary
+        })
+        .clone()
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
@@ -796,15 +838,11 @@ fn test_install_and_strip() {
 }
 
 #[test]
-#[cfg(not(windows))]
-#[cfg(not(target_os = "android"))] // missing strip binary
-// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_no_strip_with_program() {
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--strip-program")
-        .arg("true")
+        .arg("false")
         .arg(strip_source_file())
         .arg(STRIP_TARGET_FILE)
         .succeeds()
@@ -814,7 +852,6 @@ fn test_install_no_strip_with_program() {
 }
 
 #[test]
-#[cfg(not(windows))]
 #[cfg(not(target_os = "android"))] // missing strip binary
 // FIXME test runs in a timeout with macos-latest on x86_64 in the CI
 #[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
@@ -936,7 +973,6 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -954,7 +990,6 @@ fn test_install_and_strip_with_invalid_program() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_and_strip_with_signal_terminated_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -974,7 +1009,6 @@ fn test_install_and_strip_with_signal_terminated_program() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1111,7 +1145,6 @@ fn test_install_creating_leading_dirs_with_multiple_sources_and_target_dir() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_install_creating_leading_dir_fails_on_long_name() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1683,6 +1716,53 @@ fn test_install_dir_dot() {
 }
 
 #[test]
+fn test_install_dir_with_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let newdir1 = "newdir1";
+    let existing_file = "existing_file";
+    let newdir2 = "newdir2";
+    at.touch(existing_file);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(newdir1)
+        .arg(existing_file)
+        .arg(newdir2)
+        .fails()
+        .stderr_contains("cannot create directory 'existing_file': File exists");
+
+    assert!(at.dir_exists(newdir1));
+    assert!(!at.dir_exists(existing_file));
+    assert!(at.dir_exists(newdir2));
+}
+
+#[test]
+fn test_install_dir_with_multiple_existing_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "file1";
+    let file2 = "file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(file1)
+        .arg(file2)
+        .fails()
+        .stderr_contains("cannot create directory 'file1': File exists")
+        .stderr_contains("cannot create directory 'file2': File exists");
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
+}
+
+#[test]
 fn test_install_dir_req_verbose() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1838,11 +1918,12 @@ fn test_install_compare_option() {
         .args(&["-Cv", first, second])
         .succeeds()
         .stdout_contains(format!("removed '{second}'\n'{first}' -> '{second}'"));
+    // -C and --preserve-timestamps are no longer mutually exclusive
     scene
         .ucmd()
         .args(&["-C", "--preserve-timestamps", first, second])
-        .fails_with_code(1)
-        .stderr_contains("Options --compare and --preserve-timestamps are mutually exclusive");
+        .succeeds()
+        .no_output();
     scene
         .ucmd()
         .args(&["-C", "--strip", "--strip-program=echo", first, second])

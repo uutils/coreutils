@@ -186,11 +186,12 @@ impl Options {
 
         let iflag = matches.get_flag(options::INITIAL);
         let utf8 = !matches.get_flag(options::NO_UTF8);
-
-        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
-            Some(s) => s.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
@@ -268,11 +269,12 @@ pub fn uu_app() -> Command {
             .action(ArgAction::Append)
             .hide(true)
             .value_hint(clap::ValueHint::FilePath)
+            .default_value("-")
             .value_parser(clap::value_parser!(OsString)),
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
@@ -285,6 +287,8 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             ));
         }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file_buf, 0, None, rustix::fs::Advice::Sequential);
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -396,8 +400,12 @@ fn expand_buf(
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+    // we can write the buffer directly without character-by-character processing.
+    // Single pass with early exit instead of up to 3 separate .contains() scans.
+    let needs_processing = buf
+        .iter()
+        .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
+    if !needs_processing {
         output.write_all(buf)?;
         if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
             *col = buf.len() - n - 1;

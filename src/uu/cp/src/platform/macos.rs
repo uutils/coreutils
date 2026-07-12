@@ -117,7 +117,7 @@ pub(crate) fn copy_on_write(
                 dst_file.set_len(0)?;
             }
 
-            buf_copy::copy_stream(&mut src_file, &mut dst_file)
+            buf_copy::copy_fast(&mut src_file, &mut dst_file)
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {

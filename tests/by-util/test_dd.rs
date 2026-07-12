@@ -133,6 +133,35 @@ fn test_out_of_memory_skip() {
 }
 
 #[test]
+fn test_huge_block_size_is_rejected_without_panicking() {
+    // Regression test for #12844: a block size >= i64::MAX used to panic
+    // ("attempt to multiply with overflow"); it must be rejected cleanly.
+    for arg in [
+        "bs=9223372036854775807",      // i64::MAX
+        "ibs=99999999999999999999",    // larger than u64::MAX
+        "obs=18446744073709551616",    // u64::MAX + 1
+        "cbs=9223372036854775808",     // i64::MAX + 1
+        "ibs=1778172772721772786161B", // overflows via the 'B' suffix
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
+fn test_huge_obs_reports_memory_error_instead_of_aborting() {
+    // Regression test for #12847: a valid but huge `obs` used to abort
+    // ("memory allocation of N bytes failed"); it must fail gracefully instead.
+    new_ucmd!()
+        .arg("obs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory");
+}
+
+#[test]
 fn test_stdin_stdout() {
     let input = build_ascii_block(521);
     let output = String::from_utf8(input.clone()).unwrap();

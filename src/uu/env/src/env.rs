@@ -176,12 +176,12 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
         .filter(|chunk| !chunk.is_empty())
         .map(OsStr::from_bytes)
     {
-        let Some(sig_str) = sig.to_str() else {
-            return Err(USimpleError::new(
+        let sig_str = sig.to_str().ok_or_else(|| {
+            USimpleError::new(
                 1,
                 translate!("env-error-invalid-signal", "signal" => sig.quote()),
-            ));
-        };
+            )
+        })?;
         let sig_val = parse_signal_value(sig_str)?;
         target.signals.insert(sig_val);
     }

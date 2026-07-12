@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -873,7 +873,7 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+        write!(stdout(), "{}\t", self.convert_size(size))?;
 
         if let Some(md_time) = &self.time {
             if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
@@ -889,8 +889,8 @@ impl StatPrinter {
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -938,10 +938,9 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            let p = PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap());
-            if !paths.contains(&p) {
-                paths.push(p);
-            }
+            // Keep every entry: duplicates are handled later via inode tracking
+            // (which -l disables), matching GNU. Missing files must each report.
+            paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
 

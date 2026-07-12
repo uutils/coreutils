@@ -2619,6 +2619,47 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
+/// Regression for #10015. The cross-device fallback unlinks the destination
+/// and then creates a new file at the same path. An attacker who can write
+/// to the destination directory could race to plant a symlink in that
+/// window; without `O_NOFOLLOW` on the create, the copy would write through
+/// the symlink. The deterministic stand-in here pre-plants the symlink:
+/// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
+/// than truncate `victim`.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_refuses_planted_symlink_dest() {
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("payload", "PAYLOAD_FROM_SRC");
+
+    let dst_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let victim = dst_dir.path().join("victim");
+    std::fs::write(&victim, "PROTECTED_DATA").expect("write victim");
+    let target = dst_dir.path().join("target");
+    symlink(&victim, &target).expect("plant symlink");
+
+    // mv replaces the symlink at `target` with a fresh regular file. The
+    // important invariant is that `victim` is never opened for write.
+    scene
+        .ucmd()
+        .arg("-f")
+        .arg("payload")
+        .arg(target.to_str().unwrap())
+        .succeeds();
+
+    assert_eq!(
+        std::fs::read_to_string(&victim).expect("victim still readable"),
+        "PROTECTED_DATA",
+        "cross-device mv must not write through a planted symlink at dest"
+    );
+}
+
 #[test]
 #[cfg(all(
     feature = "feat_selinux",

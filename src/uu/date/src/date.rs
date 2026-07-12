@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
 
 mod format_modifiers;
 mod locale;
@@ -708,6 +708,44 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
+/// Replace bare `%s` conversion specifiers in `fmt` with the Unix epoch second
+/// using floor semantics.
+///
+/// GNU `date` rounds `%s` toward negative infinity for negative fractional
+/// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
+/// preserved and every other specifier is left untouched for jiff to render.
+fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
+    if !fmt.contains("%s") {
+        return fmt.to_string();
+    }
+
+    let seconds = parse_datetime::ParsedDateTime::InRange(date.clone())
+        .unix_epoch_second()
+        .to_string();
+
+    let mut out = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('s') => {
+                chars.next();
+                out.push_str(&seconds);
+            }
+            // Keep `%%` intact so jiff still renders it as a literal percent.
+            Some('%') => {
+                chars.next();
+                out.push_str("%%");
+            }
+            _ => out.push('%'),
+        }
+    }
+    out
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
@@ -726,6 +764,13 @@ fn format_date_with_locale_aware_months(
     let fmt: &str = localized.as_deref().unwrap_or(format_string);
     #[cfg(not(feature = "i18n-datetime"))]
     let fmt = format_string;
+
+    // jiff renders `%s` by truncating toward zero, but GNU `date` floors toward
+    // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
+    // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
+    // to the floored epoch second before jiff sees the format string.
+    let fmt_owned = substitute_epoch_seconds(fmt, date);
+    let fmt = fmt_owned.as_str();
 
     // Check if format string has GNU modifiers (width/flags) and format if present
     if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
@@ -880,7 +925,7 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
 
     // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
     let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
-    let zoned = parsed.datetime().to_zoned(tz).ok()?;
+    let zoned = parsed.into_zoned()?.datetime().to_zoned(tz).ok()?;
 
     // The trailing abbreviation only describes the *input* timezone. For display,
     // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
@@ -948,8 +993,16 @@ fn parse_date<S: AsRef<str> + Clone>(
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
         // Convert to system timezone for display
-        // (parse_datetime 0.13 returns Zoned in the input's timezone)
-        Ok(date) => {
+        // (parse_datetime returns a value in the input's timezone)
+        Ok(parsed) => {
+            // Out-of-range years (the `Extended` variant) can't be represented
+            // as a `Zoned`; treat them as an unparseable input.
+            let Some(date) = parsed.into_zoned() else {
+                return Err((
+                    input_str.into(),
+                    parse_datetime::ParseDateTimeError::InvalidInput,
+                ));
+            };
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time

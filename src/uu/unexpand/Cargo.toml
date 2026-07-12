@@ -19,10 +19,11 @@ path = "src/unexpand.rs"
 doctest = false
 
 [dependencies]
-thiserror = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true }
+thiserror = { workspace = true }
+uucore = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }

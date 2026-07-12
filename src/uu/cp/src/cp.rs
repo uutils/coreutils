@@ -696,12 +696,6 @@ pub fn uu_app() -> Command {
             Arg::new(options::NO_DEREFERENCE)
                 .short('P')
                 .long(options::NO_DEREFERENCE)
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 // -d sets this option
                 .help(translate!("cp-help-no-dereference"))
                 .action(ArgAction::SetTrue),
@@ -710,24 +704,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::DEREFERENCE)
                 .short('L')
                 .long(options::DEREFERENCE)
-                .overrides_with_all([
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-dereference"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::CLI_SYMBOLIC_LINKS)
                 .short('H')
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::ARCHIVE,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-cli-symbolic-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -735,24 +717,12 @@ pub fn uu_app() -> Command {
             Arg::new(options::ARCHIVE)
                 .short('a')
                 .long(options::ARCHIVE)
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::NO_DEREFERENCE_PRESERVE_LINKS,
-                ])
                 .help(translate!("cp-help-archive"))
                 .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new(options::NO_DEREFERENCE_PRESERVE_LINKS)
                 .short('d')
-                .overrides_with_all([
-                    options::DEREFERENCE,
-                    options::NO_DEREFERENCE,
-                    options::CLI_SYMBOLIC_LINKS,
-                    options::ARCHIVE,
-                ])
                 .help(translate!("cp-help-no-dereference-preserve-links"))
                 .action(ArgAction::SetTrue),
         )
@@ -835,12 +805,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (sources, target) = parse_path_args(paths, &options)?;
 
     if let Err(error) = copy(&sources, &target, &options) {
-        if let CpError::NotAllFilesCopied = error {
-            // Error::NotAllFilesCopied is non-fatal, but the error
-            // code should still be EXIT_ERR as does GNU cp
-        } else {
-            // Else we caught a fatal bubbled-up error, log it to stderr
-            show_error!("{error}");
+        match error {
+            CpError::NotAllFilesCopied => {
+                // non-fatal; exit code still EXIT_ERR
+            }
+            CpError::IoErr(io_err) if io_err.kind() == io::ErrorKind::NotFound => {
+                show_error!(
+                    "{}",
+                    translate!(
+                        "cp-error-cannot-stat",
+                        "source" => format!("'{}'", sources[0].display())
+                    )
+                );
+            }
+            _ => {
+                show_error!("{error}");
+            }
         }
         set_exit_code(EXIT_ERR);
     }
@@ -1018,6 +998,53 @@ impl Attributes {
     }
 }
 
+/// Flags in the mutual-exclusion group for symlink handling.
+/// The last one on the command line determines dereference behavior.
+/// Note: CLI_SYMBOLIC_LINKS (-H) is excluded here — it only affects
+/// CLI-level symlinks, not recursive traversal.
+const DEREF_FLAGS: &[&str] = &[
+    options::DEREFERENCE,
+    options::NO_DEREFERENCE,
+    options::ARCHIVE,
+    options::NO_DEREFERENCE_PRESERVE_LINKS,
+];
+
+/// Resolves `(dereference, cli_dereference)` from the overriding order.
+///
+/// Both values follow last-flag-wins semantics over the mutual-exclusion
+/// group of symlink-handling flags (-L/-H/-P/-a/-d). When no dereference
+/// flag is present, `dereference` falls back to its default: don't follow
+/// links during recursive copies (unless `--link`).
+fn resolve_dereference(
+    recursive: bool,
+    is_link: bool,
+    overriding_order: &[(usize, &str, Vec<&String>)],
+) -> (bool, bool) {
+    let last_deref = overriding_order
+        .iter()
+        .rev()
+        .find_map(|(_, opt, _)| DEREF_FLAGS.contains(opt).then_some(*opt));
+
+    let dereference = match last_deref {
+        Some(opt) => opt == options::DEREFERENCE,
+        None => !recursive || is_link,
+    };
+
+    let cli_dereference = overriding_order
+        .iter()
+        .rev()
+        .find_map(|(_, opt, _)| match *opt {
+            options::CLI_SYMBOLIC_LINKS | options::DEREFERENCE => Some(true),
+            options::ARCHIVE | options::NO_DEREFERENCE | options::NO_DEREFERENCE_PRESERVE_LINKS => {
+                Some(false)
+            }
+            _ => None,
+        })
+        .unwrap_or(false);
+
+    (dereference, cli_dereference)
+}
+
 impl Options {
     #[allow(clippy::cognitive_complexity)]
     fn from_matches(matches: &ArgMatches) -> CopyResult<Self> {
@@ -1036,6 +1063,8 @@ impl Options {
         }
 
         let recursive = matches.get_flag(options::RECURSIVE) || matches.get_flag(options::ARCHIVE);
+
+        let copy_mode = CopyMode::from_matches(matches);
 
         let backup_mode = match backup_control::determine_backup_mode(matches) {
             Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
@@ -1069,14 +1098,11 @@ impl Options {
             return Err(CpError::NotADirectory(dir.clone()));
         }
         // cp follows POSIX conventions for overriding options such as "-a",
-        // "-d", "--preserve", and "--no-preserve". We can use clap's
-        // override-all behavior to achieve this, but there's a challenge: when
-        // clap overrides an argument, it removes all traces of it from the
-        // match. This poses a problem because flags like "-a" expand to "-dR
-        // --preserve=all", and we only want to override the "--preserve=all"
-        // part. Additionally, we need to handle multiple occurrences of the
-        // same flags. To address this, we create an overriding order from the
-        // matches here.
+        // "-d", "--preserve", and "--no-preserve": the last flag on the
+        // command line wins. We build an `overriding_order` vector of all
+        // overriding options (including dereference flags) sorted by their
+        // command-line index, then derive attributes and dereference behavior
+        // from the last relevant entry.
         let mut overriding_order: Vec<(usize, &str, Vec<&String>)> = vec![];
         // We iterate through each overriding option, adding each occurrence of
         // the option along with its value and index as a tuple, and push it to
@@ -1087,6 +1113,9 @@ impl Options {
             options::ARCHIVE,
             options::PRESERVE_DEFAULT_ATTRIBUTES,
             options::NO_DEREFERENCE_PRESERVE_LINKS,
+            options::DEREFERENCE,
+            options::NO_DEREFERENCE,
+            options::CLI_SYMBOLIC_LINKS,
         ] {
             if let (Ok(Some(val)), Some(index)) = (
                 matches.try_get_one::<bool>(option),
@@ -1123,6 +1152,11 @@ impl Options {
             }
         }
         overriding_order.sort_by_key(|a| a.0);
+
+        // dereference and cli_dereference follow last-flag-wins semantics
+        // over the mutual-exclusion group of symlink-handling flags.
+        let (dereference, cli_dereference) =
+            resolve_dereference(recursive, copy_mode == CopyMode::Link, &overriding_order);
 
         let mut attributes = Attributes::NONE;
 
@@ -1184,16 +1218,9 @@ impl Options {
         let options = Self {
             attributes_only: matches.get_flag(options::ATTRIBUTES_ONLY),
             copy_contents: matches.get_flag(options::COPY_CONTENTS),
-            cli_dereference: matches.get_flag(options::CLI_SYMBOLIC_LINKS),
-            copy_mode: CopyMode::from_matches(matches),
-            // No dereference is set with -p, -d and --archive
-            dereference: !(matches.get_flag(options::NO_DEREFERENCE)
-                || matches.get_flag(options::NO_DEREFERENCE_PRESERVE_LINKS)
-                || matches.get_flag(options::ARCHIVE)
-                // cp normally follows the link only when not copying recursively or when
-                // --link (-l) is used
-                || (recursive && CopyMode::from_matches(matches)!= CopyMode::Link ))
-                || matches.get_flag(options::DEREFERENCE),
+            cli_dereference,
+            copy_mode,
+            dereference,
             one_file_system: matches.get_flag(options::ONE_FILE_SYSTEM),
             parents: matches.get_flag(options::PARENTS),
             update: update_mode,
@@ -1993,6 +2020,15 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     Ok(())
 }
 
+/// Decide whether `source` and `dest` are the same directory entry, as opposed
+/// to merely being two different hard links to the same inode.
+fn paths_are_same_entry(source: &Path, dest: &Path) -> bool {
+    canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+        .ok()
+        .zip(canonicalize(dest, MissingHandling::Normal, ResolveMode::Physical).ok())
+        .is_some_and(|(s, d)| s == d)
+}
+
 /// Decide whether source and destination files are the same and
 /// copying is forbidden.
 ///
@@ -2227,18 +2263,22 @@ fn print_verbose_output(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
-) {
+) -> CopyResult<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
-        pb.suspend(|| {
-            print_paths(parents, source, dest);
-        });
+        pb.suspend(|| print_paths(parents, source, dest))
     } else {
-        print_paths(parents, source, dest);
+        print_paths(parents, source, dest)
     }
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
+    use std::io::Write;
+
+    // Buffer the output so a failed write (e.g. stdout redirected to a full
+    // disk) surfaces as one error instead of panicking inside println!.
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let write_err = |e| CpError::IoErrContext(e, translate!("cp-error-write"));
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -2247,11 +2287,13 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!("{} -> {}", x.display(), y.display());
+            writeln!(out, "{} -> {}", x.display(), y.display()).map_err(write_err)?;
         }
     }
 
-    println!("{}", context_for(source, dest));
+    writeln!(out, "{}", context_for(source, dest)).map_err(write_err)?;
+    out.flush().map_err(write_err)?;
+    Ok(())
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2505,12 +2547,14 @@ fn copy_file(
         }
     }
 
+    // Path resolution is the last condition checked, only reached in the rare
+    // hardlink `--remove-destination` case rather than on every file `cp` touches.
     if are_hardlinks_to_same_file(source, dest)
-        && source != dest
         && matches!(
             options.overwrite,
             OverwriteMode::Clobber(ClobberMode::RemoveDestination)
         )
+        && !paths_are_same_entry(source, dest)
     {
         fs::remove_file(dest)?;
     }
@@ -2574,7 +2618,7 @@ fn copy_file(
             fs::hard_link(new_source, dest)?;
 
             if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest);
+                print_verbose_output(options.parents, progress_bar, source, dest)?;
             }
 
             return Ok(());
@@ -2624,7 +2668,7 @@ fn copy_file(
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
     // TODO: implement something similar to gnu's lchown

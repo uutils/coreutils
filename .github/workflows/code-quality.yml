@@ -197,12 +197,12 @@ jobs:
           persist-credentials: false
 
       - name: ruff
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           src: "./util"
 
       - name: ruff - format
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           src: "./util"
           args: format --check
@@ -241,7 +241,7 @@ jobs:
         run: npm install -g cspell
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}

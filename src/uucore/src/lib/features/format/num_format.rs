@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal prec cppreference
+// spell-checker:ignore bigdecimal prec cppreference bignums
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -13,7 +13,7 @@ use std::cmp::min;
 use std::io::Write;
 
 use super::{
-    ExtendedBigDecimal, FormatError,
+    ExtendedBigDecimal, FormatError, check_precision,
     spec::{CanAsterisk, Spec},
 };
 
@@ -257,6 +257,29 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 
         let mut alignment = self.alignment;
 
+        // The formatters below do arithmetic on the decimal exponent (negating it,
+        // scaling by the precision, shifting bignums by it), which would overflow
+        // for a scale outside `i32`. The parser already rejects such magnitudes as
+        // overflow/underflow, so this only guards values built without going
+        // through it; treat them the same way a real float would (as +-inf/0)
+        // rather than erroring.
+        if let ExtendedBigDecimal::BigDecimal(bd) = &abs {
+            if i32::try_from(bd.fractional_digit_count()).is_err() {
+                let overflow = bd.fractional_digit_count().is_negative();
+                let abs = if overflow {
+                    ExtendedBigDecimal::Infinity
+                } else {
+                    ExtendedBigDecimal::zero()
+                };
+                if alignment == NumberAlignment::RightZero {
+                    alignment = NumberAlignment::RightSpace;
+                }
+                let s = format_float_non_finite(&abs, self.case);
+                let sign_indicator = get_sign_indicator(self.positive_sign, negative);
+                return write_output(writer, sign_indicator, s, self.width, alignment);
+            }
+        }
+
         let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
             match self.variant {
                 FloatVariant::Decimal => {
@@ -313,6 +336,10 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
+
+        if let Some(precision) = precision {
+            check_precision(precision)?;
+        }
 
         Ok(Self {
             variant,
@@ -618,7 +645,7 @@ fn format_float_hexadecimal(
         // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
         // rounding.
         let margin =
-            ((max_precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+            ((max_precision as i64 + 1) * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
 
         // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
         // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
@@ -631,7 +658,7 @@ fn format_float_hexadecimal(
 
     // Emulate x86(-64) behavior, we display 4 binary digits before the decimal point,
     // so the value will always be between 0x8 and 0xf.
-    let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
+    let wanted_bits = BEFORE_BITS as u64 + max_precision as u64 * 4;
     let bits = frac2.bits();
 
     exp2 += bits as i64 - wanted_bits as i64;
@@ -661,7 +688,7 @@ fn format_float_hexadecimal(
         digits.make_ascii_uppercase();
     }
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = exp2 + (4 * max_precision) as i64;
+    let exponent = exp2 + 4 * max_precision as i64;
 
     let mut remaining_digits = remaining_digits.to_string();
     if precision.is_none() {

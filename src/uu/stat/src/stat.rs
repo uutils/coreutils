@@ -11,6 +11,7 @@ use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
@@ -46,8 +47,8 @@ enum StatError {
     StdinFilesystemMode,
     #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", translate!("stat-error-cannot-stat", "file" => file.clone(), "error" => error.clone()))]
-    CannotStat { file: String, error: String },
+    #[error("{}", translate!("stat-error-cannot-statx", "file" => file.clone(), "error" => error.clone()))]
+    CannotStatx { file: String, error: String },
 }
 
 impl UError for StatError {
@@ -1287,9 +1288,9 @@ impl Stater {
                 Err(e) => {
                     show_error!(
                         "{}",
-                        StatError::CannotStat {
+                        StatError::CannotStatx {
                             file: display_name.quote().to_string(),
-                            error: e.to_string()
+                            error: strip_errno(&e)
                         }
                     );
                     return 1;

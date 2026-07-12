@@ -12,6 +12,7 @@ vdir-usage = vdir [OPTION]... [FILE]...
 ls-after-help = The TIME_STYLE argument can be full-iso, long-iso, iso, locale or +FORMAT. FORMAT is interpreted like in date. Also the TIME_STYLE environment variable sets the default style to use.
 
 # Error messages
+ls-error-invalid-tab-size = invalid tab size: {$size}
 ls-error-invalid-line-width = invalid line width: {$width}
 ls-error-general-io = general io error: {$error}
 ls-error-cannot-access-no-such-file = cannot access {$path}: No such file or directory
