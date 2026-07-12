@@ -977,7 +977,7 @@ fn display_item_long(
         // TODO: See how Mac should work here
         let is_acl_set = false;
         #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
-        let is_acl_set = has_acl(item.path());
+        let is_acl_set = has_acl(item.path(), item.must_dereference);
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
@@ -1374,7 +1374,7 @@ fn calculate_padding_collection(
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
-                let is_acl_set = has_acl(item.path());
+                let is_acl_set = has_acl(item.path(), item.must_dereference);
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;
                 }
