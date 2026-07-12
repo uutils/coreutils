@@ -879,7 +879,7 @@ pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
 /// # Returns
 /// A `File` handle to the newly created file, or an `IOResult` if creation fails.
 pub fn create_file_restrictive_perm(path: impl AsRef<Path>, truncate: bool) -> IOResult<fs::File> {
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "redox")))]
     {
         use std::os::unix::fs::OpenOptionsExt;
         fs::OpenOptions::new()
@@ -889,7 +889,7 @@ pub fn create_file_restrictive_perm(path: impl AsRef<Path>, truncate: bool) -> I
             .mode(0o600)
             .open(path)
     }
-    #[cfg(not(unix))]
+    #[cfg(any(not(unix), target_os = "redox"))]
     {
         if truncate {
             fs::File::create(path)
