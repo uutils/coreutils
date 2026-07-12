@@ -35,9 +35,9 @@ impl InputOffset {
 
     /// Increase `byte_pos` and `label` if a label is used.
     pub fn increase_position(&mut self, n: u64) {
-        self.byte_pos += n;
+        self.byte_pos = self.byte_pos.wrapping_add(n);
         if let Some(l) = self.label {
-            self.label = Some(l + n);
+            self.label = Some(l.wrapping_add(n));
         }
     }
 
@@ -93,6 +93,14 @@ fn test_input_offset() {
     sut.increase_position(10);
     sut.set_radix(Radix::Octal);
     assert_eq!("0000036", &sut.format_byte_offset());
+}
+
+#[test]
+fn test_increase_position_wraps_on_overflow() {
+    // A label of u64::MAX must not panic — it wraps, matching C unsigned semantics.
+    let mut sut = InputOffset::new(Radix::Hexadecimal, 0, Some(u64::MAX));
+    sut.increase_position(1); // would panic in debug builds before the fix
+    assert_eq!(sut.label, Some(0));
 }
 
 #[test]

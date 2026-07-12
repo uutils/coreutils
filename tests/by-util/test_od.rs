@@ -1360,3 +1360,16 @@ fn test_hex_lowercase() {
             ",
         ));
 }
+
+/// Regression test for #13225: `od --traditional` with a pseudo-address label
+/// near `u64::MAX` must not panic with "attempt to add with overflow".
+///
+/// GNU `od` uses C unsigned arithmetic which wraps on overflow; the Rust port
+/// previously used plain `+=` / `+` which panics in debug builds.
+#[test]
+fn test_traditional_label_near_u64_max_does_not_panic() {
+    new_ucmd!()
+        .args(&["--traditional", "-", "0", "0xffffffffffffffff"])
+        .pipe_in("0123456789ABCDEF")
+        .succeeds(); // must not panic (exit 101 in debug before the fix)
+}
