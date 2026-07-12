@@ -100,6 +100,11 @@ impl FromStr for PreciseNumber {
         let ebd = match ExtendedBigDecimal::extended_parse(input) {
             Ok(ebd) => match ebd {
                 // Handle special values
+                ExtendedBigDecimal::BigDecimal(ref x)
+                    if x.digits() as i128 - x.fractional_digit_count() as i128 > 4933 =>
+                {
+                    return Err(ParseNumberError::Float);
+                }
                 ExtendedBigDecimal::BigDecimal(_) | ExtendedBigDecimal::MinusZero => {
                     // TODO: GNU `seq` treats small numbers < 1e-4950 as 0, we could do the same
                     // to avoid printing senselessly small numbers.
@@ -374,7 +379,9 @@ mod tests {
     #[test]
     fn test_parse_max_exponents() {
         // Make sure exponents much bigger than i64::MAX cause errors
-        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_ok());
+        assert!("1e4932".parse::<PreciseNumber>().is_ok());
+        assert!("1e4933".parse::<PreciseNumber>().is_err());
+        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_err());
         assert!("1e92233720368547758070".parse::<PreciseNumber>().is_err());
     }
 }
