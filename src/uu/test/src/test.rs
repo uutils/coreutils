@@ -33,7 +33,8 @@ use uucore::translate;
 pub fn uu_app() -> Command {
     // Disable printing of -h and -v as valid alternatives for --help and --version,
     // since we don't recognize -h and -v as help/version flags.
-    Command::new(uucore::util_name())
+    // We change the name to test later
+    Command::new("[")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("test-about"))
@@ -41,7 +42,7 @@ pub fn uu_app() -> Command {
         .after_help(translate!("test-after-help"))
 }
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     let program = args.next().unwrap_or_else(|| OsString::from("test"));
     let binary_name = uucore::util_name();
@@ -64,8 +65,10 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
                 translate!("test-error-missing-closing-bracket"),
             ));
         }
+    } else {
+        // Show actual name with error
+        let _ = uu_app().name("test");
     }
-
     let result = parse(args).map(|mut stack| eval(&mut stack))??;
 
     if result { Ok(()) } else { Err(1.into()) }
@@ -94,10 +97,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Op(Operator::String(op))) => {
             let b = pop_literal!();
             let a = pop_literal!();
-            match op.to_string_lossy().as_ref() {
-                "!=" => Ok(a != b),
-                "<" => Ok(a < b),
-                ">" => Ok(a > b),
+            match op.as_encoded_bytes() {
+                b"!=" => Ok(a != b),
+                b"<" => Ok(a < b),
+                b">" => Ok(a > b),
                 _ => Ok(a == b),
             }
         }
@@ -116,19 +119,11 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
-                None => {
-                    return Ok(true);
-                }
-                _ => {
-                    return Err(ParseError::MissingArgument(op.quote().to_string()));
-                }
+                None => return Ok(true),
+                _ => return Err(ParseError::MissingArgument(op.quote().to_string())),
             };
 
-            Ok(if op == "-z" {
-                s.is_empty()
-            } else {
-                !s.is_empty()
-            })
+            Ok((op == "-z") == s.is_empty())
         }
         Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
             let op = op.to_str().unwrap();
@@ -341,12 +336,15 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::Sticky => false,
         PathCondition::UserOwns => unimplemented!(),
         PathCondition::Fifo => false,
-        PathCondition::Readable => false, // TODO
+        PathCondition::Readable => true,
         PathCondition::Socket => false,
         PathCondition::NonEmpty => stat.len() > 0,
         PathCondition::UserIdFlag => false,
-        PathCondition::Writable => false,   // TODO
-        PathCondition::Executable => false, // TODO
+        PathCondition::Writable => !stat.permissions().readonly(),
+        PathCondition::Executable => std::path::Path::new(path)
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
     }
 }
 

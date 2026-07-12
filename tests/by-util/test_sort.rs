@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) ints (linux) NOFILE dfgi
+// spell-checker:ignore (words) ints (linux) NOFILE dfgi abmon avril
 #![allow(clippy::cast_possible_wrap)]
 
 use std::env;
@@ -15,6 +15,8 @@ use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 
 fn test_helper(file_name: &str, possible_args: &[&str]) {
     for args in possible_args {
@@ -182,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
@@ -292,6 +301,16 @@ fn test_numeric_with_trailing_invalid_chars() {
         "numeric_trailing_chars",
         &["-n", "--numeric-sort", "--sort=numeric"],
     );
+}
+
+#[test]
+fn test_numeric_sort_rejects_leading_plus_sign() {
+    // GNU sort -n does not treat '+' as a number sign; lines sort lexicographically.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("+1\n+10\n+2\n")
+        .succeeds()
+        .stdout_is("+1\n+10\n+2\n");
 }
 
 #[test]
@@ -603,6 +622,191 @@ fn test_month_default2() {
     }
 }
 
+/// Query the system for abbreviated month names via `locale abmon`.
+/// Returns a vector of 12 month abbreviations in order (Jan..Dec),
+/// or None if the command fails or returns unexpected output.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .arg("abmon")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let text = String::from_utf8(output.stdout).ok()?;
+    let months: Vec<String> = text
+        .trim()
+        .split(';')
+        .map(String::from)
+        .filter(|m| !m.is_empty())
+        .collect();
+    if months.len() == 12 {
+        Some(months)
+    } else {
+        None
+    }
+}
+
+/// Build shuffled input and sorted expected output from month names.
+#[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+fn month_sort_input_expected(months: &[String]) -> (String, String) {
+    // Shuffled order: May, Dec, Jan, Jun, Feb, Mar, Apr, Jul, Aug, Sep, Oct, Nov
+    let shuffle_order = [4, 11, 0, 5, 1, 2, 3, 6, 7, 8, 9, 10];
+    let input = shuffle_order
+        .iter()
+        .map(|&i| months[i].as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let expected = months.join("\n") + "\n";
+    (input, expected)
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_locale() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // On macOS/OpenBSD, abbreviated month names vary across OS versions (different CLDR data),
+    // so we query the system dynamically. On other platforms, glibc values are stable.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "mai\ndéc.\njanv.\njuin\nfévr.\nmars\navril\njuil.\naoût\nsept.\noct.\nnov.\n".to_string(),
+        "janv.\nfévr.\nmars\navril\nmai\njuin\njuil.\naoût\nsept.\noct.\nnov.\ndéc.\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_hungarian_locale() {
+    let locale = "hu_HU.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "máj\ndec\njan\njún\nfebr\nmárc\nápr\njúl\naug\nszept\nokt\nnov\n".to_string(),
+        "jan\nfebr\nmárc\nápr\nmáj\njún\njúl\naug\nszept\nokt\nnov\ndec\n".to_string(),
+    );
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+/// Test that embedded blanks in month names cause a non-match (GNU compat).
+/// E.g. "av   ril" should NOT match "avril" — GNU treats it as unknown.
+#[test]
+#[cfg(unix)]
+fn test_month_sort_french_embedded_blanks() {
+    let locale = "fr_FR.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // spell-checker:disable
+    // Pick three locale months (indices 2=March, 3=April, 5=June) and verify
+    // that inserting blanks into April's name causes a non-match.
+    // On glibc these are "mars", "avril", "juin"; on other systems they vary.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let months = {
+        let Some(m) = get_system_abmon(locale) else {
+            return;
+        };
+        m
+    };
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let months = vec![
+        "janv.", "févr.", "mars", "avril", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.",
+        "déc.",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect::<Vec<_>>();
+
+    let march = &months[2];
+    let april = &months[3];
+    let june = &months[5];
+
+    // Build a mangled version of April with embedded spaces: e.g. "avril" -> "av   ril"
+    // Insert spaces after the second byte.
+    if april.len() < 3 {
+        // Month name too short to meaningfully insert blanks; skip.
+        return;
+    }
+    let mangled = format!("{}   {}", &april[..2], &april[2..]);
+
+    // Input: june, mangled-april, march
+    let input = format!("{june}\n{mangled}\n{march}\n");
+    // Expected: mangled sorts as unknown (first), then march (3), then june (6)
+    let expected = format!("{mangled}\n{march}\n{june}\n");
+    // spell-checker:enable
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_month_sort_japanese_locale() {
+    let locale = "ja_JP.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    // On macOS/OpenBSD, abbreviated month names may differ, so query dynamically.
+    #[cfg(any(target_vendor = "apple", target_os = "openbsd"))]
+    let (input, expected) = {
+        let Some(months) = get_system_abmon(locale) else {
+            return;
+        };
+        month_sort_input_expected(&months)
+    };
+    // Japanese abbreviated months are numeric (1月..12月) on glibc
+    #[cfg(not(any(target_vendor = "apple", target_os = "openbsd")))]
+    let (input, expected) = (
+        "5月\n12月\n1月\n6月\n2月\n3月\n4月\n7月\n8月\n9月\n10月\n11月\n".to_string(),
+        "1月\n2月\n3月\n4月\n5月\n6月\n7月\n8月\n9月\n10月\n11月\n12月\n".to_string(),
+    );
+    new_ucmd!()
+        .env("LC_ALL", locale)
+        .arg("-M")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 #[test]
 fn test_default_unsorted_ints2() {
     let input = "9\n1909888\n000\n1\n2";
@@ -903,6 +1107,34 @@ fn test_merge_interleaved() {
         .arg("merge_ints_interleaved_3.txt")
         .succeeds()
         .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_merge_preserves_long_lines() {
+    use std::fmt::Write;
+
+    const N_ROWS: usize = 3;
+    const LINE_LEN: usize = 32_000;
+    const LINE_VALUES: [&str; N_ROWS] = ["a", "b", "c"];
+    // Exercise merge reads where long lines span internal chunk boundaries.
+    let input = LINE_VALUES.into_iter().fold(
+        String::with_capacity(N_ROWS * (LINE_LEN + 1)),
+        |mut acc, value| {
+            writeln!(acc, "{}", value.repeat(LINE_LEN)).unwrap();
+            acc
+        },
+    );
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &input);
+
+    let result = ucmd.arg("-m").arg("long-lines.txt").succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert_eq!(stdout.len(), input.len());
+    assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
 #[test]
@@ -1361,8 +1593,7 @@ fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "empty.txt"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -1384,16 +1615,14 @@ fn test_wrong_args_exit_code() {
 #[test]
 #[cfg(unix)]
 fn test_tmp_files_deleted_on_sigint() {
+    use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
+    use rustix::process::{Pid, Signal, kill_process};
     use std::{fs::read_dir, time::Duration};
-
-    use nix::{sys::signal, unistd::Pid};
-    use rand::rngs::SmallRng;
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
     let file_name = "big_file_to_sort.txt";
     {
-        use rand::{Rng, SeedableRng};
         use std::io::Write;
         let mut file = at.make_file(file_name);
         // approximately 20 MB
@@ -1424,7 +1653,7 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
-    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     // wait for `sort` to exit
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
@@ -1570,6 +1799,15 @@ fn test_files0_from_empty() {
         .stderr_only("sort: no input from 'file'\n");
 }
 
+#[test]
+#[cfg(unix)]
+fn test_files0_read_error() {
+    new_ucmd!()
+        .args(&["--files0-from", "."])
+        .fails_with_code(2)
+        .stderr_only("sort: cannot read: .: Is a directory\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
@@ -1654,6 +1892,25 @@ fn test_files0_from_2a() {
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files0_from_non_utf8() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
 }
 
 #[test]
@@ -2734,6 +2991,21 @@ fn test_locale_utf8_sort_debug_message() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_failed_to_set_locale_debug_message() {
+    let result = new_ucmd!()
+        .env("LC_ALL", "not-valid-locale")
+        .arg("--debug")
+        .pipe_in("a\nA\nb\nB\n")
+        .succeeds();
+
+    result.stderr_contains("text ordering performed using simple byte comparison");
+
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
+    result.stderr_contains("failed to set locale");
+}
+
+#[test]
 fn test_locale_utf8_with_key_field() {
     // Regression test for issue #10909
     // Sort should not panic when using -k flag with UTF-8 locale
@@ -2748,6 +3020,70 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
         .pipe_in(input)
         .succeeds()
         .stdout_is(input);
+}
+
+#[test]
+fn test_consistent_sorting_with_i18n_collate() {
+    // Regression test for issue #11980
+    // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
+    let expected_output = "0_1\n0_1\n01\n01\n02\n02\n";
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+
+    let expected_output = "01\n01\n02\n02\n0_1\n0_1\n";
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation() {
+    // Punctuation gets a distinguishing collation weight, so lines differing
+    // only by punctuation sort in a stable order (issue #12542) and are never
+    // merged by -u. This holds across the plain, explicit-key and stable paths,
+    // and in both locales. The wildcard-domain case comes from dehydrated, which
+    // relied on -u keeping a `*.domain.com` alias distinct from the bare domain.
+    // (input, expected, [(locale, args)...])
+    let cases = [
+        (
+            "file10\nfile-10\n",
+            "file-10\nfile10\n",
+            &[("en_US.UTF-8", &[][..]), ("C", &[][..])][..],
+        ),
+        (
+            "EU\nE.U\nE-U\n",
+            "E-U\nE.U\nEU\n",
+            &[
+                ("en_US.UTF-8", &["-u"][..]),
+                ("C", &["-u"][..]),
+                ("en_US.UTF-8", &["-u", "-k1,1"][..]),
+                ("en_US.UTF-8", &["-s", "-k1,1"][..]),
+            ][..],
+        ),
+        (
+            "domain.com\n*.domain.com\ndomain.com\n",
+            "*.domain.com\ndomain.com\n",
+            &[("en_US.UTF-8", &["-u"][..]), ("C", &["-u"][..])][..],
+        ),
+    ];
+
+    for (input, expected, runs) in cases {
+        for (locale, args) in runs {
+            new_ucmd!()
+                .env("LC_ALL", *locale)
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 /* spell-checker: enable */

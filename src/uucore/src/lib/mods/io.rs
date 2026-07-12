@@ -30,7 +30,31 @@ type NativeType = OwnedHandle;
 #[cfg(not(windows))]
 type NativeType = OwnedFd;
 
+// create reader without buffering
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct RawReader<T: AsFd>(pub T);
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> io::Read for RawReader<T> {
+    fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
+        rustix::io::read(&self.0, b).map_err(Into::into)
+    }
+}
+
+// create writer without buffering
+#[cfg(any(unix, target_os = "wasi"))]
+pub struct RawWriter<T: AsFd>(pub T);
+#[cfg(any(unix, target_os = "wasi"))]
+impl<T: AsFd> io::Write for RawWriter<T> {
+    fn write(&mut self, b: &[u8]) -> io::Result<usize> {
+        rustix::io::write(&self.0, b).map_err(Into::into)
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// abstraction wrapper for native file handle / file descriptor
+// todo: remove clone introducing additional syscall dependency
 pub struct OwnedFileDescriptorOrHandle {
     fx: NativeType,
 }
@@ -73,8 +97,22 @@ impl OwnedFileDescriptorOrHandle {
     }
 
     /// instantiates a corresponding `Stdio`
+    #[cfg(not(target_os = "wasi"))]
     pub fn into_stdio(self) -> Stdio {
-        Stdio::from(self.fx)
+        #[cfg(not(target_os = "wasi"))]
+        {
+            Stdio::from(self.fx)
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            Stdio::from(File::from(self.fx))
+        }
+    }
+
+    /// WASI: Stdio::from(OwnedFd) is not available, convert via File instead.
+    #[cfg(target_os = "wasi")]
+    pub fn into_stdio(self) -> Stdio {
+        Stdio::from(File::from(self.fx))
     }
 
     /// clones self. useful when needing another

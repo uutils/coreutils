@@ -310,7 +310,15 @@ impl Observer {
             EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
-                    let is_tailable = new_md.is_tailable();
+                    // `metadata()` follows symlinks, so under --follow=name a
+                    // watched file swapped for a symlink would otherwise be
+                    // silently followed to its target. GNU treats such a
+                    // replacement as untailable.
+                    let replaced_by_symlink = self.follow_name()
+                        && event_path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
+                    let is_tailable = !replaced_by_symlink && new_md.is_tailable();
                     let pd = self.files.get(event_path);
                     if let Some(old_md) = &pd.metadata {
                         if is_tailable {
@@ -345,7 +353,13 @@ impl Observer {
                             }
                             paths.push(event_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
-                            if pd.reader.is_some() {
+                            if replaced_by_symlink {
+                                show_error!(
+                                    "{}",
+                                    translate!("tail-status-replaced-with-untailable-symlink", "file" => display_name.quote())
+                                );
+                                self.files.reset_reader(event_path);
+                            } else if pd.reader.is_some() {
                                 self.files.reset_reader(event_path);
                             } else {
                                 show_error!(
@@ -394,8 +408,10 @@ impl Observer {
                         if let Some(old_md) = self.files.get_mut_metadata(event_path) {
                             if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
                                 show_error!(
-                                    "{}",
-                                    translate!("tail-status-file-became-inaccessible", "file" => display_name.quote(), "become_inaccessible" => translate!("tail-become-inaccessible"), "no_such_file" => translate!("tail-no-such-file-or-directory"))
+                                    "{} {}: {}",
+                                    display_name.quote(),
+                                    translate!("tail-become-inaccessible"),
+                                    translate!("tail-no-such-file-or-directory")
                                 );
                             }
                         }
@@ -410,8 +426,9 @@ impl Observer {
                         }
                     } else {
                         show_error!(
-                            "{}",
-                            translate!("tail-status-file-no-such-file", "file" => display_name, "no_such_file" => translate!("tail-no-such-file-or-directory"))
+                            "{}: {}",
+                            display_name,
+                            translate!("tail-no-such-file-or-directory")
                         );
                         if !self.files.files_remaining() && self.use_polling {
                             // NOTE: GNU's tail exits here for `---disable-inotify`
@@ -436,7 +453,7 @@ impl Observer {
                     */
                 }
             }
-            EventKind::Modify(ModifyKind::Name(RenameMode::Both)) => {
+            EventKind::Modify(ModifyKind::Name(RenameMode::Both))
                 /*
                 NOTE: For `tail -f a`, keep tracking additions to b after `mv a b`
                 (gnu/tests/tail-2/descriptor-vs-rename.sh)
@@ -454,7 +471,7 @@ impl Observer {
                 TODO: [2022-05; jhscheer] add test for this bug
                 */
 
-                if self.follow_descriptor() {
+                if self.follow_descriptor() => {
                     let new_path = event.paths.last().unwrap();
                     paths.push(new_path.clone());
 
@@ -469,7 +486,6 @@ impl Observer {
                     let _ = self.watcher_rx.as_mut().unwrap().unwatch(event_path);
                     self.watcher_rx.as_mut().unwrap().watch_with_parent(new_path)?;
                 }
-            }
             _ => {}
         }
         Ok(paths)
@@ -482,7 +498,7 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         return Err(USimpleError::new(1, translate!("tail-no-files-remaining")));
     }
 
-    let mut process = platform::ProcessChecker::new(observer.pid);
+    let process = platform::ProcessChecker::new(observer.pid);
 
     let mut timeout_counter = 0;
 
@@ -503,9 +519,10 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
         // here paths will not be removed from orphans if the path becomes available.
         if observer.follow_name_retry() {
             for new_path in &observer.orphans {
-                if new_path.exists() {
+                // Use metadata() directly instead of exists() + metadata().unwrap()
+                // to avoid a TOCTOU race where the file is removed between the two calls.
+                if let Ok(md) = new_path.metadata() {
                     let pd = observer.files.get(new_path);
-                    let md = new_path.metadata().unwrap();
                     if md.is_tailable() && pd.reader.is_none() {
                         show_error!(
                             "{}",

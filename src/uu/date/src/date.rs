@@ -3,19 +3,19 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz
+// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
 
 mod format_modifiers;
 mod locale;
 
 use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
-use jiff::tz::{TimeZone, TimeZoneDatabase};
+use jiff::tz::{Offset, TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use uucore::display::Quotable;
@@ -285,6 +285,27 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
+        // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
+        let date = date_os.to_str().ok_or_else(|| {
+            let bytes = date_os.as_encoded_bytes();
+            let escaped_str = escape_invalid_bytes(bytes);
+            USimpleError::new(1, format!("invalid date '{escaped_str}'"))
+        })?;
+        DateSource::Human(date.into())
+    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
+        match file.as_ref() {
+            "-" => DateSource::Stdin,
+            _ => DateSource::File(file.into()),
+        }
+    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
+        DateSource::FileMtime(file.into())
+    } else if matches.get_flag(OPT_RESOLUTION) {
+        DateSource::Resolution
+    } else {
+        DateSource::Now
+    };
+
     // Check for extra operands (multiple positional arguments)
     if let Some(formats) = matches.get_many::<String>(OPT_FORMAT) {
         let format_args: Vec<&String> = formats.collect();
@@ -296,15 +317,25 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let format = if let Some(form) = matches.get_one::<String>(OPT_FORMAT) {
-        if !form.starts_with('+') {
+    let format = if let Some(fmt) = matches.get_one::<String>(OPT_FORMAT) {
+        if !fmt.starts_with('+') {
+            // if an optional Format String was found but the user has not provided an input date
+            // GNU prints an invalid date Error
+            if !matches!(date_source, DateSource::Human(_)) {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => fmt),
+                ));
+            }
+            // If the user did provide an input date with the --date flag and the Format String is
+            // not starting with '+' GNU prints the missing '+' error message
             return Err(USimpleError::new(
                 1,
-                translate!("date-error-invalid-date", "date" => form),
+                translate!("date-error-format-missing-plus", "arg" => fmt),
             ));
         }
-        let form = form[1..].to_string();
-        Format::Custom(form)
+        let fmt = fmt[1..].to_string();
+        Format::Custom(fmt)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
@@ -331,27 +362,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Timestamp::now().to_zoned(TimeZone::UTC)
     } else {
         Zoned::now()
-    };
-
-    let date_source = if let Some(date_os) = matches.get_one::<std::ffi::OsString>(OPT_DATE) {
-        // Convert OsString to String, handling invalid UTF-8 with GNU-compatible error
-        let date = date_os.to_str().ok_or_else(|| {
-            let bytes = date_os.as_encoded_bytes();
-            let escaped_str = escape_invalid_bytes(bytes);
-            USimpleError::new(1, format!("invalid date '{escaped_str}'"))
-        })?;
-        DateSource::Human(date.into())
-    } else if let Some(file) = matches.get_one::<String>(OPT_FILE) {
-        match file.as_ref() {
-            "-" => DateSource::Stdin,
-            _ => DateSource::File(file.into()),
-        }
-    } else if let Some(file) = matches.get_one::<String>(OPT_REFERENCE) {
-        DateSource::FileMtime(file.into())
-    } else if matches.get_flag(OPT_RESOLUTION) {
-        DateSource::Resolution
-    } else {
-        DateSource::Now
     };
 
     let set_to = match matches
@@ -408,8 +418,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             // - Semantics: a pure decimal number denotes today's time-of-day (HH or HHMM).
             //   Examples: "0"/"00" => 00:00 today; "7"/"07" => 07:00 today; "0700" => 07:00 today.
             // For all other forms, fall back to the general parser.
-            let is_pure_digits =
-                !input.is_empty() && input.len() <= 4 && input.chars().all(|c| c.is_ascii_digit());
+            //
+            // GNU compatibility (Military timezone 'J' after a time):
+            // 'J' is local time, so "<digits>j"/"<digits>J" is the same time-of-day form
+            // as the bare "<digits>" input ("9j" == "9"). Strip it before the digit check.
+            let time_digits = input.strip_suffix(['j', 'J']).unwrap_or(input);
+            let is_pure_digits = !time_digits.is_empty()
+                && time_digits.len() <= 4
+                && time_digits.chars().all(|c| c.is_ascii_digit());
 
             let date = if is_empty_or_whitespace || is_military_j {
                 // Treat empty string or 'J' as midnight today (00:00:00) in local time
@@ -426,7 +442,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     format!("{date_part} 00:00 {offset}")
                 };
                 if settings.debug {
-                    eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                    let _ = writeln!(
+                        stderr(),
+                        "date: warning: using midnight as starting time: 00:00:00"
+                    );
                 }
                 parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
@@ -450,11 +469,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
                 parse_date(composed, &now, DebugOptions::new(settings.debug, false))
             } else if is_pure_digits {
-                // Derive HH and MM from the input
-                let (hh_opt, mm_opt) = if input.len() <= 2 {
-                    (input.parse::<u32>().ok(), Some(0u32))
+                // Derive HH and MM from the digits
+                let (hh_opt, mm_opt) = if time_digits.len() <= 2 {
+                    (time_digits.parse::<u32>().ok(), Some(0u32))
                 } else {
-                    let (h, m) = input.split_at(input.len() - 2);
+                    let (h, m) = time_digits.split_at(time_digits.len() - 2);
                     (h.parse::<u32>().ok(), m.parse::<u32>().ok())
                 };
 
@@ -578,7 +597,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("date")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("date-about"))
@@ -689,30 +708,79 @@ pub fn uu_app() -> Command {
         .arg(Arg::new(OPT_FORMAT).num_args(0..))
 }
 
+/// Replace bare `%s` conversion specifiers in `fmt` with the Unix epoch second
+/// using floor semantics.
+///
+/// GNU `date` rounds `%s` toward negative infinity for negative fractional
+/// timestamps, whereas jiff's `%s` truncates toward zero. `%%` escapes are
+/// preserved and every other specifier is left untouched for jiff to render.
+fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
+    if !fmt.contains("%s") {
+        return fmt.to_string();
+    }
+
+    let seconds = parse_datetime::ParsedDateTime::InRange(date.clone())
+        .unix_epoch_second()
+        .to_string();
+
+    let mut out = String::with_capacity(fmt.len());
+    let mut chars = fmt.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c != '%' {
+            out.push(c);
+            continue;
+        }
+        match chars.peek() {
+            Some('s') => {
+                chars.next();
+                out.push_str(&seconds);
+            }
+            // Keep `%%` intact so jiff still renders it as a literal percent.
+            Some('%') => {
+                chars.next();
+                out.push_str("%%");
+            }
+            _ => out.push('%'),
+        }
+    }
+    out
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
     config: &Config<PosixCustom>,
-    skip_localization: bool,
+    #[cfg(feature = "i18n-datetime")] skip_localization: bool,
+    #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
-    // First check if format string has GNU modifiers (width/flags) and format if present
-    // This optimization combines detection and formatting in a single pass
-    if let Some(result) =
-        format_modifiers::format_with_modifiers_if_present(date, format_string, config)
-    {
+    // Apply locale-aware name substitution (month/day names) before modifier
+    // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
+    // The owned String is kept in `localized` so `fmt` can borrow from it for the
+    // rest of the function without a dangling reference.
+    #[cfg(feature = "i18n-datetime")]
+    let localized: Option<String> = (!skip_localization && should_use_icu_locale())
+        .then(|| localize_format_string(format_string, date.date()));
+    #[cfg(feature = "i18n-datetime")]
+    let fmt: &str = localized.as_deref().unwrap_or(format_string);
+    #[cfg(not(feature = "i18n-datetime"))]
+    let fmt = format_string;
+
+    // jiff renders `%s` by truncating toward zero, but GNU `date` floors toward
+    // negative infinity (e.g. `@-1.5` → `-2`, not `-1`). Every other field jiff
+    // produces already agrees with GNU, so only `%s` needs correcting; rewrite it
+    // to the floored epoch second before jiff sees the format string.
+    let fmt_owned = substitute_epoch_seconds(fmt, date);
+    let fmt = fmt_owned.as_str();
+
+    // Check if format string has GNU modifiers (width/flags) and format if present
+    if let Some(result) = format_modifiers::format_with_modifiers_if_present(date, fmt, config) {
         return result.map_err(|e| e.to_string());
     }
 
     let broken_down = BrokenDownTime::from(date);
-
-    let result = if !should_use_icu_locale() || skip_localization {
-        broken_down.to_string_with_config(config, format_string)
-    } else {
-        let fmt = localize_format_string(format_string, date.date());
-        broken_down.to_string_with_config(config, &fmt)
-    };
-
-    result.map_err(|e| e.to_string())
+    broken_down
+        .to_string_with_config(config, fmt)
+        .map_err(|e| e.to_string())
 }
 
 /// Return the appropriate format string for the given settings.
@@ -737,78 +805,64 @@ fn make_format_string(settings: &Settings) -> &str {
     }
 }
 
-/// Minimal disambiguation rules for highly ambiguous timezone abbreviations.
-/// Only includes cases where multiple major timezones share the same abbreviation.
-/// All other abbreviations are discovered dynamically from the IANA database.
-///
-/// Disambiguation rationale (GNU compatible):
-/// - CST: Central Standard Time (US) preferred over China/Cuba Standard Time
-/// - EST: Eastern Standard Time (US) preferred over Australian Eastern Standard Time
-/// - IST: India Standard Time preferred over Israel/Irish Standard Time
-/// - MST: Mountain Standard Time (US) preferred over Malaysia Standard Time
-/// - PST: Pacific Standard Time (US) - widely used abbreviation
-/// - GMT: Alias for UTC (universal)
-/// - Australian timezones: AWST, ACST, AEST (cannot be dynamically discovered)
-///
-/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database. // spell-checker:disable-line
-static PREFERRED_TZ_MAPPINGS: &[(&str, &str)] = &[
-    // Universal (no ambiguity, but commonly used)
-    ("UTC", "UTC"),
-    ("GMT", "UTC"),
-    // Highly ambiguous US timezones (GNU compatible)
-    ("PST", "America/Los_Angeles"),
-    ("PDT", "America/Los_Angeles"),
-    ("MST", "America/Denver"),
-    ("MDT", "America/Denver"),
-    ("CST", "America/Chicago"), // Ambiguous: US vs China vs Cuba
-    ("CDT", "America/Chicago"),
-    ("EST", "America/New_York"), // Ambiguous: US vs Australia
-    ("EDT", "America/New_York"),
-    // Other highly ambiguous cases
-    /* spell-checker: disable */
-    ("IST", "Asia/Kolkata"), // Ambiguous: India vs Israel vs Ireland
-    // Australian timezones (cannot be discovered from IANA location names)
-    ("AWST", "Australia/Perth"),    // Australian Western Standard Time
-    ("ACST", "Australia/Adelaide"), // Australian Central Standard Time
-    ("ACDT", "Australia/Adelaide"), // Australian Central Daylight Time
-    ("AEST", "Australia/Sydney"),   // Australian Eastern Standard Time
-    ("AEDT", "Australia/Sydney"),   // Australian Eastern Daylight Time
-                                    /* spell-checker: enable */
+/// Timezone abbreviations with known fixed UTC offsets.
+/// Checked first because the abbreviation encodes the exact offset
+/// (e.g., EDT always means UTC-4, even in winter when New York observes EST).
+/// Offset is in seconds to support half-hour zones like IST (UTC+5:30).
+/// All other timezones (JST, CET, etc.) are dynamically resolved from IANA database.
+/* spell-checker: disable */
+static FIXED_OFFSET_ABBREVIATIONS: &[(&str, i32)] = &[
+    ("UTC", 0),
+    ("GMT", 0),
+    ("MEST", 7200), // UTC+2 Middle European Summer Time
+    // US timezones (GNU compatible)
+    ("PST", -28800), // UTC-8
+    ("PDT", -25200), // UTC-7
+    ("MST", -25200), // UTC-7
+    ("MDT", -21600), // UTC-6
+    ("CST", -21600), // UTC-6 (Ambiguous: US Central, not China/Cuba)
+    ("CDT", -18000), // UTC-5
+    ("EST", -18000), // UTC-5
+    ("EDT", -14400), // UTC-4
+    // Indian Standard Time (Ambiguous: India vs Israel vs Ireland)
+    ("IST", 19800), // UTC+5:30
+    // Australian timezones
+    ("AWST", 28800), // UTC+8
+    ("ACST", 34200), // UTC+9:30
+    ("ACDT", 37800), // UTC+10:30
+    ("AEST", 36000), // UTC+10
+    ("AEDT", 39600), // UTC+11
+    // German timezones
+    ("MEZ", 3600),  // UTC+1
+    ("MESZ", 7200), // UTC+2
+    // Asian timezones
+    ("KST", 32400), // UTC+9 Korean Standard Time
 ];
+/* spell-checker: enable */
 
 /// Lazy-loaded timezone abbreviation lookup map built from IANA database.
 static TZ_ABBREV_CACHE: OnceLock<HashMap<String, String>> = OnceLock::new();
 
 /// Build timezone abbreviation lookup map from IANA database.
-/// Uses preferred mappings for disambiguation, then searches all timezones.
+/// This is a fallback for abbreviations not covered by FIXED_OFFSET_ABBREVIATIONS.
 fn build_tz_abbrev_map() -> HashMap<String, String> {
     let mut map = HashMap::new();
 
-    // First, add preferred mappings (these take precedence)
-    for (abbrev, iana) in PREFERRED_TZ_MAPPINGS {
-        map.insert((*abbrev).to_string(), (*iana).to_string());
-    }
-
-    // Then, try to find additional abbreviations from IANA database
-    // This gives us broader coverage while respecting disambiguation preferences
     let tzdb = TimeZoneDatabase::from_env(); // spell-checker:disable-line
     // spell-checker:disable-next-line
     for tz_name in tzdb.available() {
         let tz_str = tz_name.as_str();
-        // Skip if we already have a preferred mapping for this zone
-        if !map.values().any(|v| v == tz_str) {
-            // For zones without preferred mappings, use last component as potential abbreviation
-            // e.g., "Pacific/Fiji" could map to "FIJI"
-            if let Some(last_part) = tz_str.split('/').next_back() {
-                let potential_abbrev = last_part.to_uppercase();
-                // Only add if it looks like an abbreviation (2-5 uppercase chars)
-                if potential_abbrev.len() >= 2
-                    && potential_abbrev.len() <= 5
-                    && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
-                {
-                    map.entry(potential_abbrev)
-                        .or_insert_with(|| tz_str.to_string());
-                }
+        // Use last component as potential abbreviation
+        // e.g., "Pacific/Fiji" could map to "FIJI"
+        if let Some(last_part) = tz_str.split('/').next_back() {
+            let potential_abbrev = last_part.to_uppercase();
+            // Only add if it looks like an abbreviation (2-5 uppercase chars)
+            if potential_abbrev.len() >= 2
+                && potential_abbrev.len() <= 5
+                && potential_abbrev.chars().all(|c| c.is_ascii_uppercase())
+            {
+                map.entry(potential_abbrev)
+                    .or_insert_with(|| tz_str.to_string());
             }
         }
     }
@@ -823,41 +877,61 @@ fn tz_abbrev_to_iana(abbrev: &str) -> Option<&str> {
     cache.get(abbrev).map(String::as_str)
 }
 
-/// Attempts to parse a date string that contains a timezone abbreviation (e.g. "EST").
+/// Resolve a timezone abbreviation (e.g. "EST") to a [`TimeZone`].
 ///
-/// If an abbreviation is found and the date is parsable, returns `Some(Zoned)`.
-/// Returns `None` if no abbreviation is detected or if parsing fails, indicating
-/// that standard parsing should be attempted.
-fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S) -> Option<Zoned> {
-    let s = date_str.as_ref();
-
-    // Look for timezone abbreviation at the end of the string
-    // Pattern: ends with uppercase letters (2-5 chars)
-    if let Some(last_word) = s.split_whitespace().last() {
-        // Check if it's a potential timezone abbreviation (all uppercase, 2-5 chars)
-        if last_word.len() >= 2
-            && last_word.len() <= 5
-            && last_word.chars().all(|c| c.is_ascii_uppercase())
-        {
-            if let Some(iana_name) = tz_abbrev_to_iana(last_word) {
-                // Try to get the timezone
-                if let Ok(tz) = TimeZone::get(iana_name) {
-                    // Parse the date part (everything before the TZ abbreviation)
-                    let date_part = s.trim_end_matches(last_word).trim();
-                    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT
-                    if let Ok(parsed) = parse_datetime::parse_datetime(date_part) {
-                        let dt = parsed.datetime();
-                        if let Ok(zoned) = dt.to_zoned(tz) {
-                            return Some(zoned);
-                        }
-                    }
-                }
-            }
-        }
+/// Returns `None` if `word` is not shaped like an abbreviation (2-5 ASCII
+/// uppercase letters) or is not a recognized abbreviation.
+fn resolve_tz_abbreviation(word: &str) -> Option<TimeZone> {
+    if word.len() < 2 || word.len() > 5 || !word.chars().all(|c| c.is_ascii_uppercase()) {
+        return None;
     }
 
-    // No abbreviation found or couldn't resolve, return original
-    None
+    if let Some(&(_, offset_secs)) = FIXED_OFFSET_ABBREVIATIONS
+        .iter()
+        .find(|(abbr, _)| *abbr == word)
+    {
+        Offset::from_seconds(offset_secs).ok().map(TimeZone::fixed)
+    } else {
+        tz_abbrev_to_iana(word).and_then(|name| TimeZone::get(name).ok())
+    }
+}
+
+/// Attempts to parse a date string that ends with a timezone abbreviation
+/// (e.g. "10:30 EST").
+///
+/// If a trailing abbreviation is found and the rest of the string is a parsable
+/// date, returns `Some(Zoned)`. Returns `None` if no abbreviation is detected or
+/// if parsing fails, indicating that standard parsing should be attempted.
+fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Option<Zoned> {
+    let s = date_str.as_ref();
+
+    // Look for a timezone abbreviation at the end of the string.
+    let last_word = s.split_whitespace().last()?;
+    let tz = resolve_tz_abbreviation(last_word)?;
+
+    let date_part = s.trim_end_matches(last_word).trim();
+
+    // Reject inputs that specify a timezone twice, e.g. "EST EST" or "EST PST":
+    // GNU `date` considers these invalid. If what remains after stripping the
+    // trailing abbreviation is itself a bare timezone abbreviation, don't rescue
+    // it here; let the standard parser reject the whole string.
+    if date_part
+        .split_whitespace()
+        .last()
+        .is_some_and(|w| resolve_tz_abbreviation(w).is_some())
+    {
+        return None;
+    }
+
+    // Parse in the target timezone so "10:30 EDT" means 10:30 in EDT.
+    let parsed = parse_datetime::parse_datetime_at_date(now.clone(), date_part).ok()?;
+    let zoned = parsed.into_zoned()?.datetime().to_zoned(tz).ok()?;
+
+    // The trailing abbreviation only describes the *input* timezone. For display,
+    // re-zone to the system timezone (i.e. `now`'s zone, which is UTC under `-u`).
+    // This matches GNU `date` and keeps this path consistent with the generic
+    // `parse_datetime` fallback, which already re-zones via `to_zoned(now.time_zone())`.
+    Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
 /// Parse a `String` into a `DateTime`.
@@ -894,44 +968,58 @@ fn parse_date<S: AsRef<str> + Clone>(
     let input_str = s.as_ref();
 
     if dbg_opts.debug {
-        eprintln!("date: input string: {input_str}");
+        let _ = writeln!(stderr(), "date: input string: {input_str}");
     }
 
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str) {
+    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
         if dbg_opts.debug {
-            eprintln!(
+            let mut err = stderr().lock();
+            let _ = writeln!(
+                err,
                 "date: parsed date part: (Y-M-D) {}",
                 strtime::format("%Y-%m-%d", &zoned).unwrap_or_default()
             );
-            eprintln!(
+            let _ = writeln!(
+                err,
                 "date: parsed time part: {}",
                 strtime::format("%H:%M:%S", &zoned).unwrap_or_default()
             );
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
-            eprintln!("date: input timezone: {tz_display}");
+            let _ = writeln!(err, "date: input timezone: {tz_display}");
         }
         return Ok(zoned);
     }
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
         // Convert to system timezone for display
-        // (parse_datetime 0.13 returns Zoned in the input's timezone)
-        Ok(date) => {
+        // (parse_datetime returns a value in the input's timezone)
+        Ok(parsed) => {
+            // Out-of-range years (the `Extended` variant) can't be represented
+            // as a `Zoned`; treat them as an unparseable input.
+            let Some(date) = parsed.into_zoned() else {
+                return Err((
+                    input_str.into(),
+                    parse_datetime::ParseDateTimeError::InvalidInput,
+                ));
+            };
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
-                eprintln!(
+                let mut err = stderr().lock();
+                let _ = writeln!(
+                    err,
                     "date: parsed date part: (Y-M-D) {}",
                     strtime::format("%Y-%m-%d", &result).unwrap_or_default()
                 );
-                eprintln!(
+                let _ = writeln!(
+                    err,
                     "date: parsed time part: {}",
                     strtime::format("%H:%M:%S", &result).unwrap_or_default()
                 );
 
                 // Show timezone information
-                eprintln!("date: input timezone: system default");
+                let _ = writeln!(err, "date: input timezone: system default");
 
                 // Check if time component was specified, if not warn about midnight usage
                 // Only warn for date-only inputs (no time specified), but not for epoch formats (@N)
@@ -940,7 +1028,10 @@ fn parse_date<S: AsRef<str> + Clone>(
                     // Input likely didn't specify a time, so midnight was assumed
                     let time_str = strtime::format("%H:%M:%S", &result).unwrap_or_default();
                     if time_str == "00:00:00" {
-                        eprintln!("date: warning: using midnight as starting time: 00:00:00");
+                        let _ = writeln!(
+                            err,
+                            "date: warning: using midnight as starting time: 00:00:00"
+                        );
                     }
                 }
             }
@@ -964,12 +1055,12 @@ fn get_clock_resolution() -> Timestamp {
 /// as `CLOCK_REALTIME` is required to be supported.
 /// Failure would indicate a non-conforming or otherwise broken implementation.
 fn get_clock_resolution() -> Timestamp {
-    use nix::time::{ClockId, clock_getres};
+    use rustix::time::{ClockId, clock_getres};
 
-    let timespec = clock_getres(ClockId::CLOCK_REALTIME).unwrap();
+    let timespec = clock_getres(ClockId::Realtime);
 
-    #[allow(clippy::unnecessary_cast)] // Cast required on 32-bit platforms
-    Timestamp::constant(timespec.tv_sec() as _, timespec.tv_nsec() as _)
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
 }
 
 #[cfg(all(unix, target_os = "redox"))]
@@ -1026,12 +1117,16 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
 /// `<https://linux.die.net/man/3/clock_settime>`
 /// `<https://www.gnu.org/software/libc/manual/html_node/Time-Types.html>`
 fn set_system_datetime(date: Zoned) -> UResult<()> {
-    use nix::{sys::time::TimeSpec, time::ClockId};
+    use rustix::time::{ClockId, Timespec, clock_settime};
 
     let ts = date.timestamp();
-    let timespec = TimeSpec::new(ts.as_second() as _, ts.subsec_nanosecond() as _);
+    let timespec = Timespec {
+        tv_sec: ts.as_second() as _,
+        tv_nsec: ts.subsec_nanosecond() as _,
+    };
 
-    nix::time::clock_settime(ClockId::CLOCK_REALTIME, timespec)
+    clock_settime(ClockId::Realtime, timespec)
+        .map_err(std::io::Error::from)
         .map_err_context(|| translate!("date-error-cannot-set-date"))
 }
 
@@ -1097,6 +1192,14 @@ mod tests {
         assert_eq!(parse_military_timezone_with_offset(""), None); // Empty
         assert_eq!(parse_military_timezone_with_offset("m999"), None); // Too long
         assert_eq!(parse_military_timezone_with_offset("9m"), None); // Starts with digit
+    }
+
+    #[test]
+    fn test_abbreviation_resolves_relative_date_against_now() {
+        let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let result =
+            parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false)).unwrap();
+        assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
     #[test]

@@ -89,7 +89,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_uid failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_uid failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -123,7 +123,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_tty failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_tty failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -209,7 +209,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_type failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_type failed for session '{session_id}': {result}").into(),
             );
         }
 
@@ -237,7 +237,7 @@ mod login {
 
         if result < 0 {
             return Err(
-                format!("sd_session_get_seat failed for session '{session_id}': {result}",).into(),
+                format!("sd_session_get_seat failed for session '{session_id}': {result}").into(),
             );
         }
 

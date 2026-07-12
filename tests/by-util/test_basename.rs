@@ -138,6 +138,7 @@ fn test_too_many_args_output() {
 
 #[cfg(any(unix, target_os = "redox"))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_utf8_args() {
     let param = uucore::os_str_from_bytes(b"/tmp/some-\xc0-file.k\xf3")
         .expect("Only unix platforms can test non-unicode names");

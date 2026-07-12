@@ -101,8 +101,10 @@ flamegraph
 flamegraphs
 gcov
 gmake
+gnuls
 grcov
 grep
+makepkg
 markdownlint
 rerast
 rollup

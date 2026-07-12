@@ -86,7 +86,8 @@ fn od_format_type(type_char: FormatType, byte_size: u8) -> Option<FormatterItemI
         (FormatType::HexadecimalInt, 8) => Some(FORMAT_ITEM_HEX64),
 
         (FormatType::Float, 2) => Some(FORMAT_ITEM_F16),
-        (FormatType::Float, 0 | 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 4) => Some(FORMAT_ITEM_F32),
+        (FormatType::Float, 0) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 8) => Some(FORMAT_ITEM_F64),
         (FormatType::Float, 16) => Some(FORMAT_ITEM_LONG_DOUBLE),
 
@@ -120,7 +121,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
     for arg in arg_iter {
         if expect_type_string {
             let v = parse_type_string(arg)?;
-            formats.extend(v.into_iter());
+            formats.extend(v);
             expect_type_string = false;
         } else if arg.starts_with("--") {
             if arg.len() == 2 {
@@ -129,7 +130,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             if arg.starts_with("--format=") {
                 let params: String = arg.chars().skip_while(|c| *c != '=').skip(1).collect();
                 let v = parse_type_string(&params)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
             }
             if arg == "--format" {
                 expect_type_string = true;
@@ -153,7 +154,7 @@ pub fn parse_format_flags(args: &[String]) -> Result<Vec<ParsedFormatterItemInfo
             }
             if !format_spec.is_empty() {
                 let v = parse_type_string(&format_spec)?;
-                formats.extend(v.into_iter());
+                formats.extend(v);
                 expect_type_string = false;
             }
         }
@@ -521,7 +522,7 @@ fn test_long_format_x_default() {
 fn test_long_format_f_default() {
     assert_eq!(
         parse_format_flags_str(&["od", "--format=f"]).unwrap(),
-        vec![FORMAT_ITEM_F32]
+        vec![FORMAT_ITEM_F64]
     );
 }
 
@@ -587,7 +588,7 @@ fn test_mixed_formats() {
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX8, false),   // tx1
             ParsedFormatterItemInfo::new(FORMAT_ITEM_DEC16U, false), // tu2
             ParsedFormatterItemInfo::new(FORMAT_ITEM_C, false),      // tc
-            ParsedFormatterItemInfo::new(FORMAT_ITEM_F32, false),    // tf
+            ParsedFormatterItemInfo::new(FORMAT_ITEM_F64, false),    // tf
             ParsedFormatterItemInfo::new(FORMAT_ITEM_HEX16, false),  // x
         ]
     );

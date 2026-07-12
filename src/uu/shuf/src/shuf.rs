@@ -13,9 +13,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use clap::{Arg, ArgAction, Command, builder::ValueParser};
-use rand::rngs::ThreadRng;
 use rand::{
-    Rng,
+    RngExt as _,
+    rngs::ThreadRng,
     seq::{IndexedRandom, SliceRandom},
 };
 
@@ -123,24 +123,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let mut output = BufWriter::with_capacity(
-        BUF_SIZE,
-        match options.output {
-            None => Box::new(stdout()) as Box<dyn OsWrite>,
-            Some(ref s) => {
-                let file = File::create(s).map_err_context(
-                    || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-                )?;
-                Box::new(file) as Box<dyn OsWrite>
-            }
-        },
-    );
-
     if options.head_count == 0 {
-        // In this case we do want to touch the output file but we can quit immediately.
+        // GNU still truncates the -o file in this case, but quits immediately
+        // without reading the input or the random source.
+        if let Some(ref s) = options.output {
+            File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+        }
         return Ok(());
     }
 
+    // Open the random source and read the input *before* creating the output
+    // file. Truncating the -o file only once the data is in hand means a failure
+    // here (missing input, unreadable random source) leaves an existing output
+    // file untouched, matching GNU and avoiding silent data loss.
     let mut rng = match options.random_source {
         RandomSource::None => WrappedRng::Default(rand::rng()),
         RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
@@ -153,6 +150,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    let fdata = match mode {
+        Mode::Default(ref filename) => Some(read_input_file(filename)?),
+        _ => None,
+    };
+
+    let mut output = open_output(options.output.as_deref())?;
+
     match mode {
         Mode::Echo(args) => {
             let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
@@ -161,8 +165,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::InputRange(mut range) => {
             shuf_exec(&mut range, &options, &mut rng, &mut output)?;
         }
-        Mode::Default(filename) => {
-            let fdata = read_input_file(&filename)?;
+        Mode::Default(_) => {
+            let fdata = fdata.unwrap_or_default();
             let mut items = split_seps(&fdata, options.sep);
             shuf_exec(&mut items, &options, &mut rng, &mut output)?;
         }
@@ -172,10 +176,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("shuf")
         .about(translate!("shuf-about"))
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("shuf"))
         .override_usage(format_usage(&translate!("shuf-usage")))
         .infer_long_args(true)
         .arg(
@@ -255,6 +259,19 @@ pub fn uu_app() -> Command {
         )
 }
 
+fn open_output(output: Option<&Path>) -> UResult<BufWriter<Box<dyn OsWrite>>> {
+    let writer: Box<dyn OsWrite> = match output {
+        None => Box::new(stdout()),
+        Some(s) => {
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+            Box::new(file)
+        }
+    };
+    Ok(BufWriter::with_capacity(BUF_SIZE, writer))
+}
+
 fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {
     if filename.as_os_str() == "-" {
         let mut data = Vec::new();
@@ -272,10 +289,11 @@ fn split_seps(data: &[u8], sep: u8) -> Vec<&[u8]> {
     // If data is empty (and does not even contain a single 'sep'
     // to indicate the presence of an empty element), then behave
     // as if the input contained no elements at all.
-    let mut elements: Vec<&[u8]> = data.split(|&b| b == sep).collect();
-    if elements.last().is_some_and(|e| e.is_empty()) {
-        elements.pop();
-    }
+    const PREDICTED_LINE_LENGTH: usize = 64;
+    let predicted_capacity = data.len() / PREDICTED_LINE_LENGTH;
+    let mut elements = Vec::with_capacity(predicted_capacity);
+    elements.extend(data.split(|&b| b == sep));
+    let _ = elements.pop_if(|e| e.is_empty());
     elements
 }
 
@@ -357,7 +375,7 @@ impl Shufable for RangeInclusive<u64> {
         amount: u64,
     ) -> UResult<impl Iterator<Item = UResult<Self::Item>>> {
         let amount = usize::try_from(amount).unwrap_or(usize::MAX);
-        Ok(NonrepeatingIterator::new(self.clone(), rng).take(amount))
+        Ok(NonrepeatingIterator::new(self.clone(), rng, Some(amount))?.take(amount))
     }
 }
 

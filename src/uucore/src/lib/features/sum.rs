@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -83,9 +83,15 @@ pub struct Blake2b {
 
 impl Blake2b {
     pub const DEFAULT_BYTE_SIZE: usize = 64;
+    pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
     /// Return a new Blake2b instance with a custom output bytes length
     pub fn with_output_bytes(output_bytes: usize) -> Self {
+        debug_assert!(
+            output_bytes <= Self::DEFAULT_BYTE_SIZE,
+            "GNU doesn't accept BLAKE2b bigger than 64 bytes long"
+        );
+
         let mut params = blake2b_simd::Params::new();
         params.hash_length(output_bytes);
 
@@ -122,30 +128,58 @@ impl Digest for Blake2b {
     }
 }
 
-#[derive(Default)]
-pub struct Blake3(blake3::Hasher);
+pub struct Blake3 {
+    digest: blake3::Hasher,
+    byte_size: usize,
+}
+
+impl Blake3 {
+    /// Default length for the BLAKE3 digest in bytes.
+    pub const DEFAULT_BYTE_SIZE: usize = 32;
+    pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
+
+    pub fn with_output_bytes(output_bytes: usize) -> Self {
+        Self {
+            digest: blake3::Hasher::new(),
+            byte_size: output_bytes,
+        }
+    }
+}
+
+impl Default for Blake3 {
+    fn default() -> Self {
+        Self {
+            digest: blake3::Hasher::default(),
+            byte_size: Self::DEFAULT_BYTE_SIZE,
+        }
+    }
+}
 
 impl Digest for Blake3 {
     fn hash_update(&mut self, input: &[u8]) {
-        self.0.update(input);
+        self.digest.update(input);
     }
 
     fn hash_finalize(&mut self, out: &mut [u8]) {
-        let hash_result = &self.0.finalize();
-        out.copy_from_slice(hash_result.as_bytes());
+        let mut hash_result = self.digest.finalize_xof();
+        hash_result.fill(out);
     }
 
     fn reset(&mut self) {
-        *self = Self::default();
+        *self = Self::with_output_bytes(self.output_bytes());
     }
 
     fn output_bits(&self) -> usize {
-        256
+        self.byte_size * 8
     }
 }
 
 #[derive(Default)]
 pub struct Sm3(sm3::Sm3);
+
+impl Sm3 {
+    pub const BIT_SIZE: usize = 256;
+}
 
 impl Digest for Sm3 {
     fn hash_update(&mut self, input: &[u8]) {
@@ -161,7 +195,7 @@ impl Digest for Sm3 {
     }
 
     fn output_bits(&self) -> usize {
-        256
+        Self::BIT_SIZE
     }
 }
 
@@ -338,6 +372,9 @@ impl Digest for SysV {
 // Implements the Digest trait for sha2 / sha3 algorithms with fixed output
 macro_rules! impl_digest_common {
     ($algo_type: ty, $size: literal) => {
+        impl $algo_type {
+            pub const BIT_SIZE: usize = $size;
+        }
         impl Default for $algo_type {
             fn default() -> Self {
                 Self(Default::default())
@@ -349,7 +386,8 @@ macro_rules! impl_digest_common {
             }
 
             fn hash_finalize(&mut self, out: &mut [u8]) {
-                digest::Digest::finalize_into_reset(&mut self.0, out.into());
+                let result = digest::Digest::finalize_reset(&mut self.0);
+                out.copy_from_slice(&result);
             }
 
             fn reset(&mut self) {
@@ -357,7 +395,7 @@ macro_rules! impl_digest_common {
             }
 
             fn output_bits(&self) -> usize {
-                $size
+                Self::BIT_SIZE
             }
         }
     };
@@ -413,18 +451,130 @@ macro_rules! impl_digest_shake {
     };
 }
 
+// When the `openssl` feature is enabled, md5/sha1/sha2-family digests are
+// backed by OpenSSL's libcrypto, which provides hand-tuned assembly
+// implementations (AVX2, SSSE3, etc.) that are substantially faster than the
+// pure-Rust crates on CPUs without SHA-NI. The OpenSSL backend is only
+// compiled in on `cfg(unix)`; Windows targets always use the pure-Rust path
+// since libcrypto headers aren't generally available there.
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Md5(md5::Md5);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha1(sha1::Sha1);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha224(sha2::Sha224);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha256(sha2::Sha256);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha384(sha2::Sha384);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha512(sha2::Sha512);
+
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Md5, 128);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha1, 160);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha224, 224);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha256, 256);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha384, 384);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha512, 512);
+
+// When OpenSSL is built in FIPS mode (or otherwise refuses an algorithm —
+// e.g. MD5/SHA-1 in strict legacy-off builds), `Hasher::new` returns Err.
+// To avoid panicking at construction time, each type carries a PureRust
+// fallback variant built from the same crate the non-OpenSSL path uses.
+#[cfg(all(feature = "openssl", unix))]
+macro_rules! impl_digest_openssl {
+    ($algo_type:ident, $size:literal, $md:expr, $rust_type:ty) => {
+        pub enum $algo_type {
+            OpenSsl(openssl::hash::Hasher),
+            PureRust($rust_type),
+        }
+
+        impl $algo_type {
+            pub const BIT_SIZE: usize = $size;
+        }
+
+        impl Default for $algo_type {
+            fn default() -> Self {
+                match openssl::hash::Hasher::new($md) {
+                    Ok(h) => Self::OpenSsl(h),
+                    Err(_) => Self::PureRust(<$rust_type>::default()),
+                }
+            }
+        }
+
+        impl Digest for $algo_type {
+            fn hash_update(&mut self, input: &[u8]) {
+                match self {
+                    Self::OpenSsl(h) => {
+                        h.update(input).expect("OpenSSL hasher update failed");
+                    }
+                    Self::PureRust(h) => digest::Digest::update(h, input),
+                }
+            }
+
+            fn hash_finalize(&mut self, out: &mut [u8]) {
+                match self {
+                    // `finish` finalizes the hash and resets the underlying context.
+                    Self::OpenSsl(h) => {
+                        let result = h.finish().expect("OpenSSL hasher finish failed");
+                        out.copy_from_slice(&result);
+                    }
+                    Self::PureRust(h) => {
+                        let result = digest::Digest::finalize_reset(h);
+                        out.copy_from_slice(&result);
+                    }
+                }
+            }
+
+            fn reset(&mut self) {
+                *self = Self::default();
+            }
+
+            fn output_bits(&self) -> usize {
+                Self::BIT_SIZE
+            }
+        }
+    };
+}
+
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(Md5, 128, openssl::hash::MessageDigest::md5(), md5::Md5);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(Sha1, 160, openssl::hash::MessageDigest::sha1(), sha1::Sha1);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha224,
+    224,
+    openssl::hash::MessageDigest::sha224(),
+    sha2::Sha224
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha256,
+    256,
+    openssl::hash::MessageDigest::sha256(),
+    sha2::Sha256
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha384,
+    384,
+    openssl::hash::MessageDigest::sha384(),
+    sha2::Sha384
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha512,
+    512,
+    openssl::hash::MessageDigest::sha512(),
+    sha2::Sha512
+);
 
 pub struct Sha3_224(sha3::Sha3_224);
 pub struct Sha3_256(sha3::Sha3_256);
@@ -436,11 +586,11 @@ impl_digest_common!(Sha3_384, 384);
 impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128 {
-    digest: sha3::Shake128,
+    digest: shake::Shake128,
     bit_size: usize,
 }
 pub struct Shake256 {
-    digest: sha3::Shake256,
+    digest: shake::Shake256,
     bit_size: usize,
 }
 impl_digest_shake!(Shake128, 256);

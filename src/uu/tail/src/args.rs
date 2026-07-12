@@ -431,7 +431,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // In cases 4 & 5, we want to try parsing the obsolete arguments, which corresponds to
     // checking whether clap succeeded or the first argument starts with '+'.
     let possible_obsolete_args = &args_vec[1];
-    if clap_result.is_ok() && !possible_obsolete_args.to_string_lossy().starts_with('+') {
+    if clap_result.is_ok() && possible_obsolete_args.as_encoded_bytes().first() != Some(&b'+') {
         return clap_result;
     }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {
@@ -447,10 +447,12 @@ pub fn uu_app() -> Command {
     let polling_help = translate!("tail-help-polling-unix");
     #[cfg(target_os = "windows")]
     let polling_help = translate!("tail-help-polling-windows");
+    #[cfg(not(any(unix, target_os = "windows")))]
+    let polling_help = translate!("tail-help-polling-unix");
 
-    Command::new(uucore::util_name())
+    Command::new("tail")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("tail"))
         .about(translate!("tail-about"))
         .override_usage(format_usage(&translate!("tail-usage")))
         .infer_long_args(true)

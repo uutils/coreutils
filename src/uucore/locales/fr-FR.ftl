@@ -7,6 +7,7 @@ common-tip = conseil
 common-usage = Utilisation
 common-help = aide
 common-version = version
+common-write-error = erreur d'écriture
 
 # Messages d'erreur clap communs
 clap-error-unexpected-argument = { $error_word } : argument inattendu '{ $arg }' trouvé
@@ -74,3 +75,7 @@ checksum-failed-open-file = { $count ->
    *[other] { $count } fichiers passés n'ont pas pu être lu
 }
 checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }
+
+# Messages uudoc pour les exemples tldr
+uudoc-tldr-attribution = Les exemples sont fournis par le [projet tldr-pages](https://tldr.sh) sous la [licence CC BY 4.0](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
+uudoc-tldr-disclaimer = Veuillez noter que, uutils étant en cours de développement, certains exemples peuvent échouer.

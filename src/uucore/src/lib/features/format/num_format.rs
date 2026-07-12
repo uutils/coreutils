@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal prec cppreference
+// spell-checker:ignore bigdecimal prec cppreference bignums
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -13,7 +13,7 @@ use std::cmp::min;
 use std::io::Write;
 
 use super::{
-    ExtendedBigDecimal, FormatError,
+    ExtendedBigDecimal, FormatError, check_precision,
     spec::{CanAsterisk, Spec},
 };
 
@@ -83,7 +83,7 @@ impl Formatter<i64> for SignedInt {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
         let s = if self.precision > 0 {
-            format!("{abs:0>width$}", width = self.precision)
+            zero_pad_to(&abs.to_string(), self.precision)
         } else {
             abs.to_string()
         };
@@ -153,7 +153,7 @@ impl Formatter<u64> for UnsignedInt {
             _ => "",
         };
 
-        s = format!("{prefix}{s:0>width$}", width = self.precision);
+        s = format!("{prefix}{}", zero_pad_to(&s, self.precision));
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
@@ -257,6 +257,29 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 
         let mut alignment = self.alignment;
 
+        // The formatters below do arithmetic on the decimal exponent (negating it,
+        // scaling by the precision, shifting bignums by it), which would overflow
+        // for a scale outside `i32`. The parser already rejects such magnitudes as
+        // overflow/underflow, so this only guards values built without going
+        // through it; treat them the same way a real float would (as +-inf/0)
+        // rather than erroring.
+        if let ExtendedBigDecimal::BigDecimal(bd) = &abs {
+            if i32::try_from(bd.fractional_digit_count()).is_err() {
+                let overflow = bd.fractional_digit_count().is_negative();
+                let abs = if overflow {
+                    ExtendedBigDecimal::Infinity
+                } else {
+                    ExtendedBigDecimal::zero()
+                };
+                if alignment == NumberAlignment::RightZero {
+                    alignment = NumberAlignment::RightSpace;
+                }
+                let s = format_float_non_finite(&abs, self.case);
+                let sign_indicator = get_sign_indicator(self.positive_sign, negative);
+                return write_output(writer, sign_indicator, s, self.width, alignment);
+            }
+        }
+
         let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
             match self.variant {
                 FloatVariant::Decimal => {
@@ -314,6 +337,10 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
+        if let Some(precision) = precision {
+            check_precision(precision)?;
+        }
+
         Ok(Self {
             variant,
             case,
@@ -323,6 +350,23 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             alignment,
             precision,
         })
+    }
+}
+
+/// Left-pad `s` with `'0'` until it is at least `width` characters long.
+///
+/// Unlike `format!("{s:0>width$}")`, this does not feed `width` into the
+/// standard formatting machinery, which panics with "Formatting argument out
+/// of range" once the dynamic width exceeds `u16::MAX`. A large precision such
+/// as `%.100000d` is valid input for `printf`/`seq`, so it must not panic.
+fn zero_pad_to(s: &str, width: usize) -> String {
+    if s.len() >= width {
+        s.to_string()
+    } else {
+        let mut padded = String::with_capacity(width);
+        padded.extend(std::iter::repeat_n('0', width - s.len()));
+        padded.push_str(s);
+        padded
     }
 }
 
@@ -396,7 +440,7 @@ fn bd_to_string_exp_with_prec(bd: &BigDecimal, precision: usize) -> (String, i64
 
     // In the unlikely case we had an overflow, correct for that.
     if digits.len() == precision + 1 {
-        debug_assert!(&digits[precision..] == "0");
+        debug_assert_eq!(&digits[precision..], "0");
         digits.truncate(precision);
         p -= 1;
     }
@@ -534,6 +578,9 @@ fn format_float_hexadecimal(
     case: Case,
     force_decimal: ForceDecimal,
 ) -> String {
+    // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
+    const BEFORE_BITS: usize = 4;
+
     debug_assert!(!bd.is_negative());
     // Default precision for %a is supposed to be sufficient to represent the
     // exact value. This is platform specific, GNU coreutils uses a `long double`,
@@ -598,7 +645,7 @@ fn format_float_hexadecimal(
         // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
         // rounding.
         let margin =
-            ((max_precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+            ((max_precision as i64 + 1) * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
 
         // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
         // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
@@ -611,9 +658,7 @@ fn format_float_hexadecimal(
 
     // Emulate x86(-64) behavior, we display 4 binary digits before the decimal point,
     // so the value will always be between 0x8 and 0xf.
-    // TODO: Make this configurable? e.g. arm64 only displays 1 digit.
-    const BEFORE_BITS: usize = 4;
-    let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
+    let wanted_bits = BEFORE_BITS as u64 + max_precision as u64 * 4;
     let bits = frac2.bits();
 
     exp2 += bits as i64 - wanted_bits as i64;
@@ -643,7 +688,7 @@ fn format_float_hexadecimal(
         digits.make_ascii_uppercase();
     }
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = exp2 + (4 * max_precision) as i64;
+    let exponent = exp2 + 4 * max_precision as i64;
 
     let mut remaining_digits = remaining_digits.to_string();
     if precision.is_none() {
@@ -1191,6 +1236,21 @@ mod test {
         let format = Format::<SignedInt, i64>::parse("% d").unwrap();
         assert_eq!(fmt(&format, 123i64), " 123");
         assert_eq!(fmt(&format, -123i64), "-123");
+    }
+
+    #[test]
+    fn format_int_large_precision() {
+        // A precision above u16::MAX must not panic in the formatter (#12572).
+        let format = Format::<SignedInt, i64>::parse("%.100000d").unwrap();
+        let s = fmt(&format, 1i64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("01"));
+        assert!(s.starts_with('0'));
+
+        let format = Format::<UnsignedInt, u64>::parse("%.100000x").unwrap();
+        let s = fmt(&format, 255u64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("0ff"));
     }
 
     #[test]

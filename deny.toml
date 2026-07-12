@@ -76,8 +76,6 @@ skip = [
   { name = "windows_x86_64_gnullvm", version = "0.52.6" },
   # windows-targets
   { name = "windows_x86_64_msvc", version = "0.52.6" },
-  # kqueue-sys, onig
-  { name = "bitflags", version = "1.3.2" },
   # ansi-width
   { name = "unicode-width", version = "0.1.13" },
   # filedescriptor, utmp-classic
@@ -86,10 +84,10 @@ skip = [
   { name = "thiserror-impl", version = "1.0.69" },
   # bindgen
   { name = "itertools", version = "0.13.0" },
+  # codspeed-divan-compat-macros
+  { name = "itertools", version = "0.14.0" },
   # ordered-multimap
   { name = "hashbrown", version = "0.14.5" },
-  # lru (via num-prime)
-  { name = "hashbrown", version = "0.15.5" },
   # cexpr (via bindgen)
   { name = "nom", version = "7.1.3" },
   # const-random-macro, rand_core
@@ -104,6 +102,10 @@ skip = [
   { name = "zerocopy", version = "0.7.35" },
   # zerocopy
   { name = "zerocopy-derive", version = "0.7.35" },
+  # crc-fast
+  { name = "digest", version = "0.10.7" },
+  # digest
+  { name = "crypto-common", version = "0.1.7" },
 ]
 # spell-checker: enable
 

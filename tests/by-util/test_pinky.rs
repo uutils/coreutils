@@ -85,12 +85,6 @@ fn test_short_format_i() {
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_lookup() {
-    let args = ["--lookup"];
-    let ts = TestScenario::new(util_name!());
-    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
-    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
-    let v_actual: Vec<&str> = actual.split_whitespace().collect();
-    let v_expect: Vec<&str> = expect.split_whitespace().collect();
     // The "Idle" field (index 3 in header) contains a dynamic time value that can change
     // between when the two commands run (e.g., "00:09" vs "00:10"), causing flaky tests.
     // We filter out values matching the idle time pattern (HH:MM format) to avoid race conditions.
@@ -120,6 +114,13 @@ fn test_lookup() {
             .map(|(_, s)| (*s).to_string())
             .collect()
     }
+
+    let args = ["--lookup"];
+    let ts = TestScenario::new(util_name!());
+    let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
+    let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
+    let v_actual: Vec<&str> = actual.split_whitespace().collect();
+    let v_expect: Vec<&str> = expect.split_whitespace().collect();
     let v_actual_filtered = filter_idle_times(&v_actual);
     let v_expect_filtered = filter_idle_times(&v_expect);
     assert_eq!(v_actual_filtered, v_expect_filtered);

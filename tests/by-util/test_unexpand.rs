@@ -285,6 +285,7 @@ fn test_one_nonexisting_file() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_read_error() {
     new_ucmd!()
         .arg("/proc/self/mem")
@@ -294,6 +295,7 @@ fn test_read_error() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_non_utf8_filename() {
     use std::os::unix::ffi::OsStringExt;
 

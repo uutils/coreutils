@@ -3,7 +3,6 @@ name = "uu_tr"
 description = "tr ~ (uutils) translate characters within input and display"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/tr"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -17,6 +16,8 @@ workspace = true
 
 [lib]
 path = "src/tr.rs"
+test = false
+doctest = false
 
 [dependencies]
 nom = { workspace = true }

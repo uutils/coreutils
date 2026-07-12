@@ -16,11 +16,15 @@ use clap::{Arg, ArgMatches, Command};
 
 use libc::{gid_t, uid_t};
 use options::traverse;
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
 use std::ffi::OsString;
 
 #[cfg(not(target_os = "linux"))]
 use walkdir::WalkDir;
 
+#[cfg(target_os = "linux")]
+use crate::features::fs::FileInformation;
 #[cfg(target_os = "linux")]
 use crate::features::safe_traversal::{DirFd, SymlinkBehavior};
 
@@ -231,8 +235,8 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
         // which we need to avoid here.
         // All directory-ish paths match "*/", except ".", "..", "*/.", and "*/..".
         let path_bytes = path.as_os_str().as_encoded_bytes();
-        let looks_like_dir = path_bytes == [b'.']
-            || path_bytes == [b'.', b'.']
+        let looks_like_dir = path_bytes == *b"."
+            || path_bytes == *b".."
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8])
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.'])
             || path_bytes.ends_with(&[MAIN_SEPARATOR as u8, b'.', b'.']);
@@ -309,7 +313,8 @@ impl ChownExecutor {
         let ret = if self.matched(meta.uid(), meta.gid()) {
             // Use safe syscalls for root directory to prevent TOCTOU attacks on Linux
             #[cfg(target_os = "linux")]
-            let chown_result = if path.is_dir() {
+            // We cannot check path.is_dir() here, as this would resolve symlinks
+            let chown_result = if meta.is_dir() {
                 // For directories on Linux, use safe traversal from the start
                 match DirFd::open(path, SymlinkBehavior::Follow) {
                     Ok(dir_fd) => self
@@ -388,13 +393,14 @@ impl ChownExecutor {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
-                "changing {} of {}: {e}",
+                "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
                 } else {
                     "ownership"
                 },
                 path.quote(),
+                strip_errno(&e),
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
@@ -449,13 +455,30 @@ impl ChownExecutor {
             return 1;
         };
 
+        let mut ancestors = HashSet::new();
         let mut ret = 0;
-        self.safe_traverse_dir(&dir_fd, root, &mut ret);
+        self.safe_traverse_dir(&dir_fd, root, &mut ret, &mut ancestors);
         ret
     }
 
     #[cfg(target_os = "linux")]
-    fn safe_traverse_dir(&self, dir_fd: &DirFd, dir_path: &Path, ret: &mut i32) {
+    fn safe_traverse_dir(
+        &self,
+        dir_fd: &DirFd,
+        dir_path: &Path,
+        ret: &mut i32,
+        ancestors: &mut HashSet<FileInformation>,
+    ) {
+        // Cycle detection: identify this directory by (dev, ino) via the already-open
+        // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
+        // avoids a redundant path walk. If it's already on the current path, it's a cycle.
+        let dir_info = FileInformation::from_file(dir_fd).ok();
+        if let Some(info) = &dir_info {
+            if !ancestors.insert(info.clone()) {
+                return; // cycle detected, stop silently
+            }
+        }
+
         // Read directory entries
         let entries = match dir_fd.read_dir() {
             Ok(entries) => entries,
@@ -535,11 +558,15 @@ impl ChownExecutor {
                 );
             }
 
-            // Recurse into subdirectories
+            // Recurse into subdirectories. Open with the same symlink behavior
+            // used for the stat above: with NoFollow (the default, `-P`/`-H`) an
+            // attacker that swaps the just-stat'd directory for a symlink between
+            // the stat and this open cannot redirect the descent off-tree
+            // (O_NOFOLLOW makes openat fail). Only follow when `-L` was requested.
             if meta.is_dir() && (follow || !meta.file_type().is_symlink()) {
-                match dir_fd.open_subdir(&entry_name, SymlinkBehavior::Follow) {
+                match dir_fd.open_subdir(&entry_name, follow.into()) {
                     Ok(subdir_fd) => {
-                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret);
+                        self.safe_traverse_dir(&subdir_fd, &entry_path, ret, ancestors);
                     }
                     Err(e) => {
                         *ret = 1;
@@ -553,6 +580,12 @@ impl ChownExecutor {
                     }
                 }
             }
+        }
+
+        // Backtrack so sibling subtrees that legitimately reach the same directory
+        // (e.g. two symlinks to one dir) are not mistaken for cycles.
+        if let Some(info) = dir_info {
+            ancestors.remove(&info);
         }
     }
 
@@ -830,10 +863,7 @@ pub fn configure_symlink_and_recursion(
     if recursive {
         if traverse_symlinks == TraverseSymlinks::None {
             if dereference == Some(true) {
-                return Err(USimpleError::new(
-                    1,
-                    "-R --dereference requires -H or -L".to_string(),
-                ));
+                return Err(USimpleError::new(1, "-R --dereference requires -H or -L"));
             }
             dereference = Some(false);
         }
@@ -864,7 +894,7 @@ pub fn chown_base(
     let mut help = false;
     // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+        if arg.as_encoded_bytes().starts_with(b"--reference=") || arg == "--reference" {
             reference = true;
         } else if arg == "--help" {
             // we stop processing once we see --help,

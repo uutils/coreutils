@@ -3,101 +3,65 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NPROCESSORS nprocs numstr sysconf
+// spell-checker:ignore NPROCESSORS SCHED ONLN getaffinity getcpu getscheduler sched sysconf
 
 use clap::{Arg, ArgAction, Command};
+use std::env;
 use std::io::{Write, stdout};
-use std::{env, thread};
-use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
-use uucore::format_usage;
-use uucore::translate;
-
-#[cfg(any(target_os = "linux", target_os = "android"))]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 83;
-#[cfg(target_vendor = "apple")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = libc::_SC_NPROCESSORS_CONF;
-#[cfg(target_os = "freebsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 57;
-#[cfg(target_os = "netbsd")]
-pub const _SC_NPROCESSORS_CONF: libc::c_int = 1001;
+use uucore::{
+    error::{UResult, USimpleError, strip_errno},
+    format_usage, translate,
+};
 
 static OPT_ALL: &str = "all";
 static OPT_IGNORE: &str = "ignore";
 
-#[uucore::main]
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    let ignore = match matches.get_one::<String>(OPT_IGNORE) {
-        Some(numstr) => match numstr.trim().parse::<usize>() {
-            Ok(num) => num,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("nproc-error-invalid-number", "value" => numstr.quote(), "error" => e),
-                ));
-            }
-        },
-        None => 0,
-    };
-
-    let limit = match env::var("OMP_THREAD_LIMIT") {
-        // Uses the OpenMP variable to limit the number of threads
-        // If the parsing fails, returns the max size (so, no impact)
-        // If OMP_THREAD_LIMIT=0, rejects the value
-        Ok(threads) => match threads.parse() {
-            Ok(0) | Err(_) => usize::MAX,
-            Ok(n) => n,
-        },
-        // the variable 'OMP_THREAD_LIMIT' doesn't exist
-        // fallback to the max
-        Err(_) => usize::MAX,
-    };
+    #[allow(clippy::unwrap_used, reason = "clap provides 0 by default")]
+    let ignore = *matches.get_one::<usize>(OPT_IGNORE).unwrap();
+    // Uses the OpenMP variable to limit the number of threads
+    // Non OMP_THREAD_LIMIT>0 cases are rejected
+    let limit = env::var("OMP_THREAD_LIMIT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(usize::MAX);
 
     let mut cores = if matches.get_flag(OPT_ALL) {
         num_cpus_all()
     } else {
         // OMP_NUM_THREADS doesn't have an impact on --all
-        match env::var("OMP_NUM_THREADS") {
-            // Uses the OpenMP variable to force the number of threads
-            // If the parsing fails, returns the number of CPU
-            Ok(threads) => {
-                // In some cases, OMP_NUM_THREADS can be "x,y,z"
-                // In this case, only take the first one (like GNU)
-                // If OMP_NUM_THREADS=0, rejects the value
-                match threads.split_terminator(',').next() {
-                    None => available_parallelism(),
-                    Some(s) => match s.trim().parse() {
-                        Ok(0) | Err(_) => available_parallelism(),
-                        Ok(n) => n,
-                    },
-                }
-            }
-            // the variable 'OMP_NUM_THREADS' doesn't exist
-            // fallback to the regular CPU detection
-            Err(_) => available_parallelism(),
-        }
+        // Uses the OpenMP variable to force the number of threads
+        // If the parsing fails, returns the number of CPU
+        // Non OMP_NUM_THREADS>0 cases are rejected
+        omp_num_threads().unwrap_or_else(available_parallelism)
     };
 
-    cores = std::cmp::min(limit, cores);
-    if cores <= ignore {
-        cores = 1;
-    } else {
-        cores -= ignore;
-    }
+    cores = cores.saturating_sub(ignore).clamp(1, limit);
     //discard error about stdout flush
     stdout()
-        .lock()
         .write_all(format!("{cores}\n").as_bytes())
-        .map_err(|e| USimpleError::new(1, e.to_string()))?;
-    Ok(())
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
+}
+
+fn omp_num_threads() -> Option<usize> {
+    let threads = env::var("OMP_NUM_THREADS").ok()?;
+    let s = threads.split_terminator(',').next()?;
+    // In some cases, OMP_NUM_THREADS can be "x,y,z"
+    // In this case, only take the first one (like GNU)
+    match s.trim().parse::<usize>() {
+        Ok(n @ 1..) => Some(n),
+        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => Some(usize::MAX),
+        _ => None,
+    }
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("nproc")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("nproc"))
         .about(translate!("nproc-about"))
         .override_usage(format_usage(&translate!("nproc-usage")))
         .infer_long_args(true)
@@ -111,45 +75,60 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_IGNORE)
                 .long(OPT_IGNORE)
                 .value_name("N")
+                .default_value("0")
+                .value_parser(|s: &str| -> Result<usize, String> {
+                    match s.trim().parse::<usize>() {
+                        Ok(n) => Ok(n),
+                        Err(e) if *e.kind() == std::num::IntErrorKind::PosOverflow => {
+                            Ok(usize::MAX)
+                        }
+                        Err(e) => Err(e.to_string()),
+                    }
+                })
                 .help(translate!("nproc-help-ignore")),
         )
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-))]
 fn num_cpus_all() -> usize {
-    let nprocs = unsafe { libc::sysconf(_SC_NPROCESSORS_CONF) };
-    if nprocs == 1 {
-        // In some situation, /proc and /sys are not mounted, and sysconf returns 1.
-        // However, we want to guarantee that `nproc --all` >= `nproc`.
-        available_parallelism()
-    } else if nprocs > 0 {
-        nprocs as usize
-    } else {
-        1
-    }
-}
-
-// Other platforms (e.g., windows), available_parallelism() directly.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd"
-)))]
-fn num_cpus_all() -> usize {
+    // sysconf returns (hardcoded?) 2 if /proc and /sys are masked, and sched_getaffinity syscall was blocked by strace.
+    // So fallback to available_parallelism at here is not useful
+    #[cfg(unix)]
+    return unsafe { libc::sysconf(libc::_SC_NPROCESSORS_CONF) } as usize;
+    // not sure what we can do for non-unix...
+    #[cfg(not(unix))]
     available_parallelism()
 }
 
-/// In some cases, [`thread::available_parallelism`]() may return an Err
-/// In this case, we will return 1 (like GNU)
+// We cannot use std::thread::available_parallelism to mimic GNU's rounding...
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn cgroups2_quota() -> Option<usize> {
+    use std::fs::read_to_string;
+    let cgroups = read_to_string("/proc/self/cgroup").ok()?;
+    let path = cgroups.lines().next()?.split(':').nth(2)?;
+    let pair = read_to_string(format!("/sys/fs/cgroup{path}/cpu.max")).ok()?;
+    let mut pair = pair.split_whitespace();
+    // map the string "max" to None as we unwrap_or(usize::MAX) later
+    let quota = pair.next()?.parse::<usize>().ok()?;
+    // kernel does not provide 0 period. But it seems GNU cares about it
+    let period = pair.next()?.parse::<usize>().ok().filter(|&p| p > 0)?;
+    // mimic GNU's rounding
+    Some(quota.saturating_add(period / 2) / period)
+}
+
 fn available_parallelism() -> usize {
-    match thread::available_parallelism() {
-        Ok(n) => n.get(),
-        Err(_) => 1,
+    // return all online cores if sched_getaffinity syscall failed as same as GNU
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let affinity = rustix::thread::sched_getaffinity(None).map_or_else(
+        |_| unsafe { libc::sysconf(libc::_SC_NPROCESSORS_ONLN) } as usize,
+        |s| s.count() as usize,
+    );
+    // ignore quota under some schedulers
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    match unsafe { libc::sched_getscheduler(0) } {
+        libc::SCHED_FIFO | libc::SCHED_RR | libc::SCHED_DEADLINE => affinity,
+        // GNU has no quota if /proc is masked
+        _ => affinity.min(cgroups2_quota().unwrap_or(usize::MAX)),
     }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get)
 }

@@ -33,7 +33,21 @@ mod options {
 const POSIX_PATH_MAX: usize = 256;
 const POSIX_NAME_MAX: usize = 14;
 
-#[uucore::main]
+#[cfg(all(unix, not(target_os = "redox")))]
+const PATH_MAX: usize = libc::PATH_MAX as usize;
+#[cfg(all(unix, not(target_os = "redox")))]
+const FILENAME_MAX: usize = libc::FILENAME_MAX as usize;
+#[cfg(target_os = "redox")]
+const PATH_MAX: usize = 4096;
+#[cfg(target_os = "redox")]
+const FILENAME_MAX: usize = 255;
+// for Windows. But don't deny wasm
+#[cfg(not(unix))]
+const PATH_MAX: usize = 260;
+#[cfg(not(unix))]
+const FILENAME_MAX: usize = 255;
+
+#[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -81,9 +95,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("pathchk")
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("pathchk"))
         .about(translate!("pathchk-about"))
         .override_usage(format_usage(&translate!("pathchk-usage")))
         .infer_long_args(true)
@@ -193,11 +207,11 @@ fn check_default(path: &[String]) -> bool {
     let joined_path = path.join("/");
     let total_len = joined_path.len();
     // path length
-    if total_len > libc::PATH_MAX as usize {
+    if total_len > PATH_MAX {
         writeln!(
             std::io::stderr(),
             "{}",
-            translate!("pathchk-error-path-length-exceeded", "limit" => libc::PATH_MAX, "length" => total_len, "path" => joined_path.quote())
+            translate!("pathchk-error-path-length-exceeded", "limit" => PATH_MAX, "length" => total_len, "path" => joined_path.quote())
         );
         return false;
     }
@@ -219,11 +233,11 @@ fn check_default(path: &[String]) -> bool {
     // components: length
     for p in path {
         let component_len = p.len();
-        if component_len > libc::FILENAME_MAX as usize {
+        if component_len > FILENAME_MAX {
             writeln!(
                 std::io::stderr(),
                 "{}",
-                translate!("pathchk-error-name-length-exceeded", "limit" => libc::FILENAME_MAX, "length" => component_len, "component" => p.quote())
+                translate!("pathchk-error-name-length-exceeded", "limit" => FILENAME_MAX, "length" => component_len, "component" => p.quote())
             );
             return false;
         }

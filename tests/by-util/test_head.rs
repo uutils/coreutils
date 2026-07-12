@@ -4,7 +4,6 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
-// spell-checker:ignore (words) seekable
 
 #[cfg(all(
     not(target_os = "windows"),
@@ -413,6 +412,7 @@ fn test_presume_input_pipe_5_chars() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_all_but_last_bytes_large_file_piped() {
     // Validate print-all-but-last-n-bytes with a large piped-in (i.e. non-seekable) file.
     let scene = TestScenario::new(util_name!());
@@ -452,6 +452,36 @@ fn test_all_but_last_bytes_large_file_piped() {
 }
 
 #[test]
+fn test_all_but_last_lines_large_file_presume_input_pipe() {
+    // Validate print-all-but-last-n-lines on the non-seekable path for a large terminated input.
+    // This input shape forces repeated buffer reuse while some chunks end mid-line.
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    let input_file_name = "reused_line_chunks";
+    let expected_output_file_name = "reused_line_chunks_elide_last";
+    let line = "aaaaaa\n";
+    let input_line_count: usize = 20_000;
+
+    let mut input = String::with_capacity(line.len() * input_line_count);
+    for _ in 0..input_line_count {
+        input.push_str(line);
+    }
+    fixtures.write(input_file_name, &input);
+    fixtures.write(
+        expected_output_file_name,
+        &line.repeat(input_line_count - 1),
+    );
+
+    scene
+        .ucmd()
+        .args(&["---presume-input-pipe", "-n", "-1", input_file_name])
+        .succeeds()
+        .stdout_only_fixture(expected_output_file_name);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no subprocess spawning")]
 fn test_all_but_last_lines_large_file() {
     // Create our fixtures on the fly. We need the input file to be at least double
     // the size of BUF_SIZE as specified in head.rs. Go for something a bit bigger
@@ -525,6 +555,10 @@ fn test_all_but_last_lines_large_file() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
 fn test_validate_stdin_offset_lines() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -625,6 +659,10 @@ fn test_validate_stdin_offset_lines() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: stdin file position not preserved through wasmtime"
+)]
 fn test_validate_stdin_offset_bytes() {
     // A handful of unix-only tests to validate behavior when reading from stdin on a seekable
     // file. GNU-compatibility requires that the stdin file be left such that if another
@@ -750,6 +788,7 @@ fn test_validate_stdin_offset_bytes() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_version() {
     let ts = TestScenario::new(util_name!());
 
@@ -766,6 +805,7 @@ fn test_read_backwards_bytes_proc_fs_version() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_bytes_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -786,6 +826,7 @@ fn test_read_backwards_bytes_proc_fs_modules() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
 fn test_read_backwards_lines_proc_fs_modules() {
     let ts = TestScenario::new(util_name!());
 
@@ -806,6 +847,7 @@ fn test_read_backwards_lines_proc_fs_modules() {
     not(target_os = "openbsd")
 ))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]
 fn test_read_backwards_bytes_sys_kernel_profiling() {
     let ts = TestScenario::new(util_name!());
     // in case the kernel was not built with profiling support, e.g. WSL
@@ -827,6 +869,24 @@ fn test_value_too_large() {
     new_ucmd!()
         .args(&["-n", format!("{MAX}0").as_str(), "lorem_ipsum.txt"])
         .succeeds();
+}
+
+#[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
 }
 
 #[test]
@@ -854,13 +914,14 @@ fn test_write_to_dev_full() {
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
                 .fails()
-                .stderr_contains("error writing 'standard output': No space left on device");
+                .stderr_is("head: error writing 'standard output': No space left on device\n");
         }
     }
 }
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_head_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -882,3 +943,83 @@ fn test_head_non_utf8_paths() {
     assert!(output.contains("line3"));
 }
 // Test that head handles non-UTF-8 file names without crashing
+
+#[test]
+fn test_do_not_attempt_to_read_a_directory() {
+    new_ucmd!()
+        .arg(".")
+        .fails_with_code(1)
+        .stderr_contains("error reading '.'");
+}
+
+/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
+#[test]
+fn test_zero_bytes_on_directory_succeeds() {
+    new_ucmd!().args(&["-c", "0", "."]).succeeds().no_output();
+}
+
+/// `head -n0 <directory>` should also succeed.
+#[test]
+fn test_zero_lines_on_directory_succeeds() {
+    new_ucmd!().args(&["-n", "0", "."]).succeeds().no_output();
+}
+
+/// GNU `head` prints the `==> name <==` header for every file argument
+/// (including directories) when invoked with multiple files. With non-zero
+/// output, directories also produce an "Is a directory" error after the
+/// header.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "5", "d", "f"])
+        .fails_with_code(1)
+        .stdout_is("==> d <==\n\n==> f <==\nhello")
+        .stderr_contains("Is a directory");
+}
+
+/// With `-c 0` (zero output), the directory header is still printed but no
+/// error is emitted.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files_zero_output() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "0", "d", "f"])
+        .succeeds()
+        .stdout_is("==> d <==\n\n==> f <==\n")
+        .no_stderr();
+}
+
+/// GNU `head` prints the `==> name <==` header only after the file is
+/// successfully opened. A file that exists but cannot be opened (e.g. no read
+/// permission) must therefore produce only an error and no header.
+#[cfg(unix)]
+#[test]
+fn test_unreadable_file_prints_no_header() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("unreadable", "secret\n");
+    at.write("readable", "hello\n");
+    at.set_mode("unreadable", 0o000);
+
+    // Running as root bypasses permission checks, so the open would succeed.
+    if std::fs::File::open(at.plus("unreadable")).is_ok() {
+        return;
+    }
+
+    ts.ucmd()
+        .args(&["-c", "5", "unreadable", "readable"])
+        .fails_with_code(1)
+        .stdout_is("==> readable <==\nhello")
+        .stdout_does_not_contain("==> unreadable <==")
+        .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
+}

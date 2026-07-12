@@ -295,11 +295,24 @@ fn test_sentence_regexp_newlines_are_spaces() {
 }
 
 #[test]
+fn test_sentence_regexp_invalid_syntax_failure() {
+    new_ucmd!()
+        .args(&["-S", "^["])
+        .fails()
+        .stderr_contains("Invalid regexp");
+}
+
+#[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
         "                                       a b\n                                   a   b\n",
     );
+
+    new_ucmd!()
+        .pipe_in("2a")
+        .succeeds()
+        .stdout_only(format!("{}2   a\n", " ".repeat(35)));
 }
 
 #[test]
@@ -328,6 +341,15 @@ fn test_unicode_padding_alignment() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("        a\n        é\n");
+}
+
+#[test]
+fn test_gnu_compat_numeric_token_with_emoji_produces_no_index() {
+    // GNU ptx produces no output for this input in default mode.
+    new_ucmd!()
+        .pipe_in("012345678901234567890123456789🛠\n")
+        .succeeds()
+        .no_output();
 }
 
 #[test]
@@ -402,4 +424,12 @@ fn test_invalid_regex_word_trailing_backslash() {
 #[test]
 fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
 }

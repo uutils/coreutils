@@ -142,7 +142,7 @@ enum OptionsError {
         .0.iter()
             .map(|t| translate!("df-error-filesystem-type-both-selected-and-excluded", "type" => t.quote()))
             .collect::<Vec<_>>()
-            .join(format!("\n{}: ", uucore::util_name()).as_str())
+            .join("\ndf: ")
     )]
     FilesystemTypeBothSelectedAndExcluded(Vec<String>),
 }
@@ -222,31 +222,17 @@ impl Options {
 /// Whether to display the mount info given the inclusion settings.
 fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
-    if mi.remote && opt.show_local_fs {
-        return false;
-    }
+    !(mi.remote && opt.show_local_fs) &&
 
     // Don't show pseudo filesystems unless `--all` has been given.
     // The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
-        return false;
-    }
+    !((mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs) &&
 
     // Don't show filesystems if they have been explicitly excluded.
-    if let Some(ref excludes) = opt.exclude {
-        if excludes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-    if let Some(ref includes) = opt.include {
-        if !includes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-
-    true
+    !opt.exclude.as_ref().is_some_and(|e| e.contains(&mi.fs_type)) &&
+    opt.include.as_ref().is_none_or(|i| i.contains(&mi.fs_type))
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.
@@ -273,11 +259,7 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
     // matching an existing mnt point, to avoid problematic
     // replacement when given inaccurate mount lists, seen with some
     // chroot environments for example.
-    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
-        return false;
-    }
-
-    true
+    !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
 /// Whether to prioritize given mount info over all others on the same device.
@@ -295,20 +277,8 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Get all currently mounted filesystems.
 ///
-/// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
-/// [`Options`] for more information.
+/// `opt` excludes certain filesystems from consideration; see [`Options`] for more information.
 fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
-    // Run a sync call before any operation if so instructed.
-    if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        unsafe {
-            #[cfg(not(target_os = "android"))]
-            uucore::libc::sync();
-            #[cfg(target_os = "android")]
-            uucore::libc::syscall(uucore::libc::SYS_sync);
-        }
-    }
-
     let mut mounts = vec![];
     for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
@@ -338,25 +308,17 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
+
     #[cfg(not(windows))]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&mounts, &m, None).ok();
-        Ok(mounts
-            .clone()
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
+    let maybe_mount = |m| Filesystem::from_mount(&mounts, m, None).ok();
     #[cfg(windows)]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&m, None).ok();
-        Ok(mounts
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
+    let maybe_mount = |m| Filesystem::from_mount(m, None).ok();
+
+    Ok(mounts
+        .iter()
+        .filter_map(maybe_mount)
+        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+        .collect())
 }
 
 /// For each path, get the filesystem that contains that path.
@@ -456,13 +418,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         if matches.get_flag(OPT_INODES) {
             println!(
                 "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => uucore::util_name())
+                translate!("df-error-inodes-not-supported-windows", "program" => "df")
             );
             return Ok(());
         }
     }
 
     let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
+
+    // Run a sync call before any operation if so instructed.
+    if opt.sync {
+        #[cfg(not(any(windows, target_os = "redox")))]
+        rustix::fs::sync();
+    }
+
     // Get the list of filesystems to display in the output table.
     let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
         None => {
@@ -503,7 +472,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("df")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("df-about"))

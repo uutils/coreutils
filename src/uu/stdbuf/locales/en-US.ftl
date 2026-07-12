@@ -1,4 +1,5 @@
 stdbuf-about = Run COMMAND, with modified buffering operations for its standard streams.
+stdbuf-about-windows = Run COMMAND linked against cygwin runtime, with modified buffering operations for its standard streams.
 
   Mandatory arguments to long options are mandatory for short options too.
 stdbuf-usage = stdbuf [OPTION]... COMMAND
@@ -23,7 +24,6 @@ stdbuf-value-mode = MODE
 stdbuf-error-line-buffering-stdin-meaningless = line buffering stdin is meaningless
 stdbuf-error-invalid-mode = invalid mode {$error}
 stdbuf-error-value-too-large = invalid mode '{$value}': Value too large for defined data type
-stdbuf-error-command-not-supported = Command not supported for this operating system!
 stdbuf-error-external-libstdbuf-not-found = External libstdbuf not found at configured path: {$path}
 stdbuf-error-permission-denied = failed to execute process: Permission denied
 stdbuf-error-no-such-file = failed to execute process: No such file or directory

@@ -217,10 +217,14 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        if let Ok(re) = Regex::new(&regex) {
-            if re.is_match("") {
-                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
-            }
+        let re = Regex::new(&regex).map_err(|error| {
+            USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+            )
+        })?;
+        if re.is_match("") {
+            return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
         }
 
         config.sentence_regex = Some(regex);
@@ -281,7 +285,7 @@ struct FileContent {
 
 type FileMap = Vec<(OsString, FileContent)>;
 
-fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString], config: &Config) -> UResult<FileMap> {
     let mut file_map: FileMap = FileMap::new();
     let mut offset: usize = 0;
 
@@ -294,11 +298,15 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
-            let file = File::open(Path::new(filename))?;
+            // Attach the quoted filename to the error context if opening fails
+            let file =
+                File::open(Path::new(filename)).map_err_context(|| filename.quote().to_string())?;
             Box::new(file)
         });
 
-        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)?;
+        // Attach the quoted filename context if reading the contents fails
+        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)
+            .map_err_context(|| filename.quote().to_string())?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -356,7 +364,19 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
             };
             // match words with given regex
             for mat in reg.find_iter(line) {
-                let (beg, end) = (mat.start(), mat.end());
+                let (mut beg, end) = (mat.start(), mat.end());
+
+                // GNU-compatible default behavior:
+                // with default regexp, keyword must start at first alphabetic char.
+                if filter.word_regex == Config::default().context_regex {
+                    let matched = &line[beg..end];
+                    if let Some(pos) = matched.find(|c: char| c.is_alphabetic()) {
+                        beg += pos;
+                    } else {
+                        continue;
+                    }
+                }
+
                 if config.input_ref && ((beg, end) == (ref_beg, ref_end)) {
                     continue;
                 }
@@ -489,7 +509,7 @@ fn get_output_chunks(
     // and get the string.
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
-    assert!(max_before_size >= before.len());
+    assert!(max_before_size >= before.chars().count());
 
     // the after chunk
 
@@ -935,16 +955,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
+    let file_map = read_input(&input_files, &config)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("ptx")
         .about(translate!("ptx-about"))
         .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
+        .help_template(uucore::localized_help_template("ptx"))
         .override_usage(format_usage(&translate!("ptx-usage")))
         .infer_long_args(true)
         .arg(

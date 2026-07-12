@@ -108,7 +108,7 @@ pub fn print_dired_output(
 }
 
 /// Helper function to print positions with a given prefix.
-fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
+fn print_positions(prefix: &str, positions: &[BytePosition]) {
     print!("{prefix}");
     for c in positions {
         print!(" {c}");
@@ -117,16 +117,7 @@ fn print_positions(prefix: &str, positions: &Vec<BytePosition>) {
 }
 
 pub fn add_total(dired: &mut DiredOutput, total_len: usize) {
-    if dired.padding == 0 {
-        // when dealing with "  total: xx", it isn't part of the //DIRED//
-        // so, we just keep the size line to add it to the position of the next file
-        dired.padding = total_len + DIRED_TRAILING_OFFSET;
-    } else {
-        // += because if we are in -R, we have "  dir:\n  total X". So, we need to take the
-        // previous padding too.
-        // and we already have the previous position in mind
-        dired.padding += total_len + DIRED_TRAILING_OFFSET;
-    }
+    dired.padding += total_len + DIRED_TRAILING_OFFSET;
 }
 
 // when using -R, we have the dirname. we need to add it to the padding
@@ -156,7 +147,7 @@ pub fn update_positions(dired: &mut DiredOutput, start: usize, end: usize, line_
         start: start + padding,
         end: end + padding,
     });
-    dired.line_offset = dired.line_offset + padding + line_len;
+    dired.line_offset += padding + line_len;
     // Remove the previous padding
     dired.padding = 0;
 }

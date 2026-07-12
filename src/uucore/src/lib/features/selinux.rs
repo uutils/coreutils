@@ -1,4 +1,4 @@
-// This file is part of the uutils uucore package.
+// This file is part of the uutils coreutils package.
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
@@ -618,7 +618,9 @@ mod tests {
 
         // Create a FIFO (pipe)
         let fifo_path = dir_path.join("my_fifo");
-        crate::fs::make_fifo(&fifo_path).expect("Failed to create FIFO");
+        // todo: use rustix::fs::mkfifoat since selinux is linux specific
+        nix::unistd::mkfifo(&fifo_path, nix::sys::stat::Mode::from_bits_truncate(0o666))
+            .expect("Failed to create FIFO");
 
         // Just getting a context is good enough
         get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");

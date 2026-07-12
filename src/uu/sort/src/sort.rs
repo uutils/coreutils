@@ -7,7 +7,8 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
 mod check;
@@ -18,36 +19,40 @@ mod merge;
 mod numeric_str_cmp;
 mod tmp_dir;
 
-use ahash::AHashMap;
 use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
+use foldhash::fast::FoldHasher;
+use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
-use rand::{Rng, rng};
-use rayon::prelude::*;
+use rand::{RngExt as _, rng};
+#[cfg(not(target_os = "wasi"))]
+use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, OpenOptions};
-use std::hash::{BuildHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
-use std::num::{IntErrorKind, NonZero};
+use std::num::IntErrorKind;
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
+use std::sync::OnceLock;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
 use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
-use uucore::i18n::collator::locale_cmp;
+use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
+use uucore::i18n::datetime::get_locale_months;
 use uucore::i18n::decimal::locale_decimal_separator;
 use uucore::line_ending::LineEnding;
 use uucore::parser::num_parser::{ExtendedParser, ExtendedParserError};
@@ -279,7 +284,6 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -323,6 +327,7 @@ struct Precomputed {
     floats_per_line: usize,
     selections_per_line: usize,
     fast_lexicographic: bool,
+    fast_locale_collation: bool,
     fast_ascii_insensitive: bool,
     tokenize_blank_thousands_sep: bool,
     tokenize_allow_unit_after_blank: bool,
@@ -386,6 +391,8 @@ impl GlobalSettings {
 
         self.precomputed.fast_lexicographic =
             !disable_fast_lexicographic && self.can_use_fast_lexicographic();
+        self.precomputed.fast_locale_collation =
+            disable_fast_lexicographic && self.can_use_fast_lexicographic();
         self.precomputed.fast_ascii_insensitive = self.can_use_fast_ascii_insensitive();
     }
 
@@ -450,7 +457,6 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: String::new(),
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -631,6 +637,15 @@ impl<'a> Line<'a> {
         token_buffer: &mut Vec<Field>,
         settings: &GlobalSettings,
     ) -> Self {
+        #[cfg(feature = "i18n-collator")]
+        if settings.precomputed.fast_locale_collation {
+            compute_sort_key_utf8(line, &mut line_data.collation_key_buffer);
+            line_data
+                .collation_key_ends
+                .push(line_data.collation_key_buffer.len());
+            return Self { line, index };
+        }
+
         let needs_line_data = settings.precomputed.needs_tokens
             || settings.precomputed.selections_per_line > 0
             || settings.precomputed.num_infos_per_line > 0
@@ -649,10 +664,11 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
+            // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
+                .filter(|s| !s.trim_ascii_start().starts_with('+'))
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
@@ -678,7 +694,7 @@ impl<'a> Line<'a> {
         Self { line, index }
     }
 
-    fn print(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
+    fn write(&self, writer: &mut impl Write, settings: &GlobalSettings) -> std::io::Result<()> {
         if settings.debug {
             self.write_debug(settings, writer)?;
         } else {
@@ -774,31 +790,23 @@ impl<'a> Line<'a> {
                 }
                 SortMode::Month => {
                     let initial_selection = &self.line[selection.clone()];
-
-                    let mut month_chars = initial_selection
+                    let first_non_blank = initial_selection
                         .iter()
-                        .enumerate()
-                        .skip_while(|(_, c)| c.is_ascii_whitespace());
+                        .position(|c| !c.is_ascii_whitespace())
+                        .unwrap_or(initial_selection.len());
 
-                    let month = if month_parse(initial_selection) == Month::Unknown {
+                    let (parsed, match_len) = month_parse(initial_selection);
+
+                    if parsed == Month::Unknown {
                         // We failed to parse a month, which is equivalent to matching nothing.
                         // Add the "no match for key" marker to the first non-whitespace character.
-                        let first_non_whitespace = month_chars.next();
-                        first_non_whitespace.map_or(
-                            initial_selection.len()..initial_selection.len(),
-                            |(idx, _)| idx..idx,
-                        )
+                        selection.start += first_non_blank;
+                        selection.end = selection.start;
                     } else {
-                        // We parsed a month. Match the first three non-whitespace characters, which must be the month we parsed.
-                        month_chars.next().unwrap().0
-                            ..month_chars
-                                .nth(2)
-                                .map_or(initial_selection.len(), |(idx, _)| idx)
-                    };
-
-                    // Shorten selection to month.
-                    selection.start += month.start;
-                    selection.end = selection.start + month.len();
+                        // We parsed a month. Use the actual match byte length.
+                        selection.start += first_non_blank;
+                        selection.end = selection.start + match_len;
+                    }
                 }
                 _ => {}
             }
@@ -1360,13 +1368,12 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
-        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
-    }
+    let rlim_cur = getrlimit(Resource::Nofile)
+        .current
+        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
@@ -1399,8 +1406,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1620,7 +1625,7 @@ where
             break;
         }
 
-        if starts_with_plus(&arg) {
+        if arg.as_encoded_bytes().first() == Some(&b'+') {
             let as_str = arg.to_string_lossy();
             if let Some(from_spec) = as_str.strip_prefix('+') {
                 if let Some(from) = parse_legacy_part(from_spec) {
@@ -1664,23 +1669,12 @@ where
     (processed, legacy_warnings)
 }
 
-fn starts_with_plus(arg: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        arg.as_bytes().first() == Some(&b'+')
-    }
-    #[cfg(not(unix))]
-    {
-        arg.to_string_lossy().starts_with('+')
-    }
-}
-
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
     if legacy_warnings.is_empty() {
         return;
     }
 
-    let mut index_by_arg = AHashMap::default();
+    let mut index_by_arg = HashMap::default();
     for (warning_idx, warning) in legacy_warnings.iter().enumerate() {
         index_by_arg.insert(warning.arg_index, warning_idx);
     }
@@ -1752,8 +1746,14 @@ fn default_merge_batch_size() -> usize {
     }
 }
 
+#[cfg(not(unix))]
 fn locale_failed_to_set() -> bool {
-    matches!(env::var("LC_ALL").ok().as_deref(), Some("missing"))
+    env::var_os("LC_ALL").as_deref() == Some(OsStr::new("missing"))
+}
+
+#[cfg(unix)]
+fn locale_failed_to_set() -> bool {
+    unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
 fn key_zero_width(selector: &FieldSelector) -> bool {
@@ -1809,8 +1809,7 @@ fn emit_debug_warnings(
         show_error!("{}", translate!("sort-warning-simple-byte-comparison"));
     }
 
-    for (idx, selector) in settings.selectors.iter().enumerate() {
-        let key_index = idx + 1;
+    for (key_index, selector) in (1..).zip(settings.selectors.iter()) {
         if let Some(legacy) = legacy_warnings
             .iter()
             .find(|warning| warning.key_index == Some(key_index))
@@ -2023,28 +2022,41 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // sort errors with "cannot open: [...]" instead of "cannot read: [...]" here
         let reader = open_with_open_failed_error(&files0_from)?;
         let buf_reader = BufReader::new(reader);
-        for (line_num, line) in buf_reader.split(b'\0').flatten().enumerate() {
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+        for (line_num, line_res) in buf_reader.split(b'\0').enumerate() {
+            let line = line_res.map_err(|error| SortError::ReadFailed {
+                path: files0_from.clone(),
+                error,
+            })?;
+
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
+                .into());
+            }
+
+            let f: OsString = {
+                #[cfg(unix)]
+                {
+                    OsStr::from_bytes(&line).to_os_string()
+                }
+                #[cfg(not(unix))]
+                {
+                    OsString::from(String::from_utf8_lossy(&line).into_owned())
+                }
+            };
+
+            match f.to_str() {
+                Some(s) if s == STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
                 }
                 _ => {}
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(f);
         }
+
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
@@ -2100,17 +2112,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    if matches.contains_id(options::PARALLEL) {
-        // "0" is default - threads = num of cores
-        settings.threads = matches
-            .get_one::<String>(options::PARALLEL)
-            .map_or_else(|| "0".to_string(), String::from);
-        let num_threads = match settings.threads.parse::<usize>() {
-            Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
-            Ok(n) => n,
-        };
+
+    // WASI doesn't support threads, so we ignore the corresponding option
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let threads = matches
+            .get_one::<u64>(options::PARALLEL)
+            .copied()
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
         let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(num_threads)
+            .num_threads(threads as usize)
             .build_global();
     }
 
@@ -2124,11 +2135,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.buffer_size_is_explicit = false;
     }
 
-    let mut tmp_dir = TmpDirWrapper::new(
-        matches
-            .get_one::<String>(options::TMP_DIR)
-            .map_or_else(env::temp_dir, PathBuf::from),
-    );
+    let mut tmp_dir = TmpDirWrapper::new(matches.get_one::<String>(options::TMP_DIR).map_or_else(
+        || {
+            // WASI does not support std::env::temp_dir() — it panics with
+            // "no filesystem on wasm". Use /tmp as a nominal fallback;
+            // the WASI ext_sort path never actually creates temp files.
+            #[cfg(target_os = "wasi")]
+            {
+                PathBuf::from("/tmp")
+            }
+            #[cfg(not(target_os = "wasi"))]
+            {
+                env::temp_dir()
+            }
+        },
+        PathBuf::from,
+    ));
 
     settings.compress_prog = matches
         .get_one::<String>(options::COMPRESS_PROG)
@@ -2163,13 +2185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         translate!(
                             "sort-maximum-batch-size-rlimit",
                             "rlimit" => {
-                                let Some(rlimit) = fd_soft_limit() else {
-                                    return Err(UUsageError::new(
-                                        2,
-                                        translate!("sort-failed-fetch-rlimit"),
-                                    ));
-                                };
-                                rlimit
+                                fd_soft_limit().ok_or_else(|| {
+                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
+                                })?
                             }
                         )
                     }
@@ -2321,7 +2339,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
 pub fn uu_app() -> Command {
     uucore::clap_localization::configure_localized_command(
-        Command::new(uucore::util_name())
+        Command::new("sort")
             .version(uucore::crate_version!())
             .about(translate!("sort-about"))
             .after_help(translate!("sort-after-help"))
@@ -2508,6 +2526,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
+            .value_parser(clap::value_parser!(u64).range(1..))
             .value_name("NUM_THREADS"),
     )
     .arg(
@@ -2584,10 +2603,19 @@ fn exec(
 }
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
+    let cmp = |a: &Line<'a>, b: &Line<'a>| compare_by(a, b, settings, line_data, line_data);
+    // WASI does not support threads, so use non-parallel sort to avoid
+    // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        unsorted.par_sort_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_by(cmp);
     } else {
-        unsorted.par_sort_unstable_by(|a, b| compare_by(a, b, settings, line_data, line_data));
+        #[cfg(not(target_os = "wasi"))]
+        unsorted.par_sort_unstable_by(cmp);
+        #[cfg(target_os = "wasi")]
+        unsorted.sort_unstable_by(cmp);
     }
 }
 
@@ -2600,6 +2628,24 @@ fn compare_by<'a>(
 ) -> Ordering {
     if global_settings.precomputed.fast_lexicographic {
         let cmp = a.line.cmp(b.line);
+        return if global_settings.reverse {
+            cmp.reverse()
+        } else {
+            cmp
+        };
+    }
+
+    #[cfg(feature = "i18n-collator")]
+    if global_settings.precomputed.fast_locale_collation {
+        let a_key = a_line_data.collation_key(a.index);
+        let b_key = b_line_data.collation_key(b.index);
+        let mut cmp = a_key.cmp(b_key);
+        // If collation keys are equal, fall back to lexicographic comparison
+        // This can be the case for inputs like `01` and `0_1`, which have equal keys
+        if cmp == Ordering::Equal {
+            // Reversing the order to match sort's sorting behaviour
+            cmp = b.line.cmp(a.line);
+        }
         return if global_settings.reverse {
             cmp.reverse()
         } else {
@@ -2778,11 +2824,12 @@ fn ascii_case_insensitive_cmp(a: &[u8], b: &[u8]) -> Ordering {
 // For example, 5e10KFD would be 5e10 or 5x10^10 and +10000HFKJFK would become 10000.
 #[allow(clippy::cognitive_complexity)]
 fn get_leading_gen(inp: &[u8], decimal_pt: u8) -> Range<usize> {
+    // check for inf, -inf and nan
+    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
+
     let trimmed = inp.trim_ascii_start();
     let leading_whitespace_len = inp.len() - trimmed.len();
 
-    // check for inf, -inf and nan
-    const ALLOWED_PREFIXES: &[&[u8]] = &[b"inf", b"-inf", b"nan"];
     for &allowed_prefix in ALLOWED_PREFIXES {
         if trimmed.len() >= allowed_prefix.len()
             && trimmed[..allowed_prefix.len()].eq_ignore_ascii_case(allowed_prefix)
@@ -2919,7 +2966,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut buf = [0u8; BUF_LEN];
     let mut total = 0usize;
     // freeze seed for --random-source
-    let mut hasher = ahash::RandomState::with_seeds(1, 1, 1, 1).build_hasher();
+    let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
     loop {
         let n = reader
@@ -2945,7 +2992,7 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
     let first = hasher.finish();
     // freeze seed for --random-source
-    let mut second_hasher = ahash::RandomState::with_seeds(2, 2, 2, 2).build_hasher();
+    let mut second_hasher = FoldHasher::with_seed(2, SharedSeed::global_fixed());
     second_hasher.write(RANDOM_SOURCE_TAG);
     second_hasher.write_u64(first);
     let second = second_hasher.finish();
@@ -2958,7 +3005,9 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
 
 fn get_hash<T: Hash>(t: &T) -> u64 {
     // Is reproducibility of get_hash itself needed for --random-source ?
-    ahash::RandomState::with_seeds(0, 0, 0, 0).hash_one(t)
+    let mut s = FoldHasher::with_seed(0, SharedSeed::global_fixed());
+    t.hash(&mut s);
+    s.finish()
 }
 
 fn random_shuffle(a: &[u8], b: &[u8], salt: &[u8]) -> Ordering {
@@ -2984,30 +3033,88 @@ enum Month {
     December,
 }
 
+/// Cached locale month lookup table.
+/// Each entry is (uppercased_name, month_value).
+type MonthTable = Vec<(Vec<u8>, Month)>;
+
+fn get_locale_month_table() -> Option<&'static MonthTable> {
+    static TABLE: OnceLock<Option<MonthTable>> = OnceLock::new();
+
+    TABLE
+        .get_or_init(|| {
+            let months = get_locale_months()?;
+            let all_months = [
+                Month::January,
+                Month::February,
+                Month::March,
+                Month::April,
+                Month::May,
+                Month::June,
+                Month::July,
+                Month::August,
+                Month::September,
+                Month::October,
+                Month::November,
+                Month::December,
+            ];
+            let table: Vec<(Vec<u8>, Month)> = months
+                .iter()
+                .zip(all_months.iter())
+                .map(|(name, &month)| (name.clone(), month))
+                .collect();
+            Some(table)
+        })
+        .as_ref()
+}
+
 /// Parse the beginning string into a Month, returning [`Month::Unknown`] on errors.
-fn month_parse(line: &[u8]) -> Month {
+/// Also returns the byte length consumed from the input (after leading blanks).
+///
+/// The stored locale month names have blanks stripped and are uppercased.
+/// Comparison against input is case-insensitive but NOT blank-insensitive:
+/// the input must match the stored name exactly (after leading blank trimming).
+fn month_parse(line: &[u8]) -> (Month, usize) {
     let line = line.trim_ascii_start();
 
+    // Try locale-specific month names, keeping the longest match.
+    // This handles cases where one name is a prefix of another
+    // (e.g., Japanese "1" vs "10", "11", "12").
+    if let Some(table) = get_locale_month_table() {
+        let mut best = None;
+        for (name, month) in table {
+            if line.len() >= name.len()
+                && line[..name.len()].eq_ignore_ascii_case(name)
+                && best.as_ref().is_none_or(|&(len, _)| name.len() > len)
+            {
+                best = Some((name.len(), *month));
+            }
+        }
+        if let Some((len, month)) = best {
+            return (month, len);
+        }
+    }
+
+    // Fall back to English 3-letter abbreviations
     match line.get(..3).map(<[u8]>::to_ascii_uppercase).as_deref() {
-        Some(b"JAN") => Month::January,
-        Some(b"FEB") => Month::February,
-        Some(b"MAR") => Month::March,
-        Some(b"APR") => Month::April,
-        Some(b"MAY") => Month::May,
-        Some(b"JUN") => Month::June,
-        Some(b"JUL") => Month::July,
-        Some(b"AUG") => Month::August,
-        Some(b"SEP") => Month::September,
-        Some(b"OCT") => Month::October,
-        Some(b"NOV") => Month::November,
-        Some(b"DEC") => Month::December,
-        _ => Month::Unknown,
+        Some(b"JAN") => (Month::January, 3),
+        Some(b"FEB") => (Month::February, 3),
+        Some(b"MAR") => (Month::March, 3),
+        Some(b"APR") => (Month::April, 3),
+        Some(b"MAY") => (Month::May, 3),
+        Some(b"JUN") => (Month::June, 3),
+        Some(b"JUL") => (Month::July, 3),
+        Some(b"AUG") => (Month::August, 3),
+        Some(b"SEP") => (Month::September, 3),
+        Some(b"OCT") => (Month::October, 3),
+        Some(b"NOV") => (Month::November, 3),
+        Some(b"DEC") => (Month::December, 3),
+        _ => (Month::Unknown, 0),
     }
 }
 
 fn month_compare(a: &[u8], b: &[u8]) -> Ordering {
-    let ma = month_parse(a);
-    let mb = month_parse(b);
+    let ma = month_parse(a).0;
+    let mb = month_parse(b).0;
 
     ma.cmp(&mb)
 }
@@ -3025,7 +3132,7 @@ fn print_sorted<'a, T: Iterator<Item = &'a Line<'a>>>(
 
     let mut writer = output.into_write();
     for line in iter {
-        line.print(&mut writer, settings).map_err_context(ctx)?;
+        line.write(&mut writer, settings).map_err_context(ctx)?;
     }
     writer.flush().map_err_context(ctx)?;
     Ok(())

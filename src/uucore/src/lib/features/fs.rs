@@ -5,21 +5,13 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport
+// spell-checker:ignore backport Ioctl absolutized
 
-#[cfg(unix)]
-use libc::{
-    S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, S_IRGRP, S_IROTH,
-    S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP, S_IXOTH, S_IXUSR,
-    mkfifo, mode_t,
-};
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::env;
-#[cfg(unix)]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 use std::fs::read_dir;
@@ -30,9 +22,21 @@ use std::io::{Error, ErrorKind, Result as IOResult};
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
 #[cfg(target_os = "windows")]
 use winapi_util::AsHandleRef;
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::MAX_PATH;
+#[cfg(windows)]
+use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+#[cfg(windows)]
+use windows_sys::Win32::System::IO::DeviceIoControl;
+#[cfg(windows)]
+use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
 /// Used to check if the `mode` has its `perm` bit set.
 ///
@@ -46,16 +50,19 @@ macro_rules! has {
 }
 
 /// Information to uniquely identify a file
+#[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(unix)] nix::sys::stat::FileStat,
+    #[cfg(unix)] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
+    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
+    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
     #[cfg(unix)]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
-        let stat = nix::sys::stat::fstat(file)?;
+        let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
     }
 
@@ -74,9 +81,9 @@ impl FileInformation {
         #[cfg(unix)]
         {
             let stat = if dereference {
-                nix::sys::stat::stat(path.as_ref())
+                rustix::fs::stat(path.as_ref())
             } else {
-                nix::sys::stat::lstat(path.as_ref())
+                rustix::fs::lstat(path.as_ref())
             };
             Ok(Self(stat?))
         }
@@ -95,6 +102,16 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
+        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
+        #[cfg(target_os = "wasi")]
+        {
+            let metadata = if dereference {
+                fs::metadata(path.as_ref())
+            } else {
+                fs::symlink_metadata(path.as_ref())
+            };
+            Ok(Self(metadata?))
+        }
     }
 
     pub fn file_size(&self) -> u64 {
@@ -106,6 +123,10 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len()
         }
     }
 
@@ -157,6 +178,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
+        // WASI: nlink is not available in std::fs::Metadata, return 1
+        #[cfg(target_os = "wasi")]
+        return 1;
     }
 
     #[cfg(unix)]
@@ -164,6 +188,7 @@ impl FileInformation {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
         #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
 }
@@ -172,6 +197,15 @@ impl FileInformation {
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
+    }
+}
+
+// WASI: compare by file type and size as a basic heuristic since
+// device/inode numbers are not available through std::fs::Metadata.
+#[cfg(target_os = "wasi")]
+impl PartialEq for FileInformation {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -196,6 +230,11 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
+        }
+        #[cfg(target_os = "wasi")]
+        {
+            self.0.len().hash(state);
+            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -405,12 +444,11 @@ pub fn canonicalize<P: AsRef<Path>>(
                 }
                 result.pop();
             }
-            Err(e) => {
-                if miss_mode == MissingHandling::Existing
-                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())
-                {
-                    return Err(e);
-                }
+            Err(e)
+                if (miss_mode == MissingHandling::Existing
+                    || (miss_mode == MissingHandling::Normal && !parts.is_empty())) =>
+            {
+                return Err(e);
             }
             _ => {}
         }
@@ -463,12 +501,44 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 #[cfg(unix)]
 /// Display the permissions of a file
 pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> String {
-    let mode: mode_t = metadata.mode() as mode_t;
-    display_permissions_unix(mode, display_file_type)
+    display_permissions_unix(metadata.mode(), display_file_type)
+}
+
+/// Portable file mode bit constants, equivalent to the POSIX `S_I*` values.
+///
+/// These are defined here as plain `u32` so they are available on every
+/// platform, including Windows, without requiring `libc` or a Unix target.
+/// Callers that previously used `libc::S_IFDIR` etc. can import these instead.
+pub mod mode {
+    // File-type mask and values
+    pub const S_IFMT: u32 = 0o170_000; // bitmask for the file-type field
+    pub const S_IFSOCK: u32 = 0o140_000; // socket
+    pub const S_IFLNK: u32 = 0o120_000; // symbolic link
+    pub const S_IFREG: u32 = 0o100_000; // regular file
+    pub const S_IFBLK: u32 = 0o060_000; // block device
+    pub const S_IFDIR: u32 = 0o040_000; // directory
+    pub const S_IFCHR: u32 = 0o020_000; // character device
+    pub const S_IFIFO: u32 = 0o010_000; // named pipe (FIFO)
+
+    // Permission and special-mode bits
+    pub const S_ISUID: u32 = 0o4000; // setuid
+    pub const S_ISGID: u32 = 0o2000; // setgid
+    pub const S_ISVTX: u32 = 0o1000; // sticky
+
+    pub const S_IRUSR: u32 = 0o0400; // owner read
+    pub const S_IWUSR: u32 = 0o0200; // owner write
+    pub const S_IXUSR: u32 = 0o0100; // owner execute
+
+    pub const S_IRGRP: u32 = 0o0040; // group read
+    pub const S_IWGRP: u32 = 0o0020; // group write
+    pub const S_IXGRP: u32 = 0o0010; // group execute
+
+    pub const S_IROTH: u32 = 0o0004; // other read
+    pub const S_IWOTH: u32 = 0o0002; // other write
+    pub const S_IXOTH: u32 = 0o0001; // other execute
 }
 
 /// Returns a character representation of the file type based on its mode.
-/// This function is specific to Unix-like systems.
 ///
 /// - `mode`: The mode of the file, typically obtained from file metadata.
 ///
@@ -481,8 +551,8 @@ pub fn display_permissions(metadata: &fs::Metadata, display_file_type: bool) -> 
 /// - 'l' for symbolic links
 /// - 's' for sockets
 /// - '?' for any other unrecognized file types
-#[cfg(unix)]
-fn get_file_display(mode: mode_t) -> char {
+fn get_file_display(mode: u32) -> char {
+    use mode::{S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK};
     match mode & S_IFMT {
         S_IFDIR => 'd',
         S_IFCHR => 'c',
@@ -499,9 +569,12 @@ fn get_file_display(mode: mode_t) -> char {
 // The logic below is more readable written this way.
 #[allow(clippy::if_not_else)]
 #[allow(clippy::cognitive_complexity)]
-#[cfg(unix)]
-/// Display the permissions of a file on a unix like system
-pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String {
+/// Display the unix permissions of a file
+pub fn display_permissions_unix(mode: u32, display_file_type: bool) -> String {
+    use mode::{
+        S_IRGRP, S_IROTH, S_IRUSR, S_ISGID, S_ISUID, S_ISVTX, S_IWGRP, S_IWOTH, S_IWUSR, S_IXGRP,
+        S_IXOTH, S_IXUSR,
+    };
     let mut result;
     if display_file_type {
         result = String::with_capacity(10);
@@ -510,31 +583,31 @@ pub fn display_permissions_unix(mode: mode_t, display_file_type: bool) -> String
         result = String::with_capacity(9);
     }
 
-    result.push(if has!(mode, S_IRUSR) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWUSR) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISUID as mode_t) {
-        if has!(mode, S_IXUSR) { 's' } else { 'S' }
-    } else if has!(mode, S_IXUSR) {
+    result.push(if mode & S_IRUSR != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWUSR != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISUID != 0 {
+        if mode & S_IXUSR != 0 { 's' } else { 'S' }
+    } else if mode & S_IXUSR != 0 {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IRGRP) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWGRP) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISGID as mode_t) {
-        if has!(mode, S_IXGRP) { 's' } else { 'S' }
-    } else if has!(mode, S_IXGRP) {
+    result.push(if mode & S_IRGRP != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWGRP != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISGID != 0 {
+        if mode & S_IXGRP != 0 { 's' } else { 'S' }
+    } else if mode & S_IXGRP != 0 {
         'x'
     } else {
         '-'
     });
 
-    result.push(if has!(mode, S_IROTH) { 'r' } else { '-' });
-    result.push(if has!(mode, S_IWOTH) { 'w' } else { '-' });
-    result.push(if has!(mode, S_ISVTX as mode_t) {
-        if has!(mode, S_IXOTH) { 't' } else { 'T' }
-    } else if has!(mode, S_IXOTH) {
+    result.push(if mode & S_IROTH != 0 { 'r' } else { '-' });
+    result.push(if mode & S_IWOTH != 0 { 'w' } else { '-' });
+    result.push(if mode & S_ISVTX != 0 {
+        if mode & S_IXOTH != 0 { 't' } else { 'T' }
+    } else if mode & S_IXOTH != 0 {
         'x'
     } else {
         '-'
@@ -573,12 +646,7 @@ pub fn infos_refer_to_same_file(
     info1: IOResult<FileInformation>,
     info2: IOResult<FileInformation>,
 ) -> bool {
-    if let Ok(info1) = info1 {
-        if let Ok(info2) = info2 {
-            return info1 == info2;
-        }
-    }
-    false
+    info1.is_ok() && info1.ok() == info2.ok()
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
@@ -699,9 +767,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// # Arguments
 ///
 /// * `path` - A reference to the path to be checked.
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
+    #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
+    #[cfg(target_os = "wasi")]
+    use std::os::wasi::ffi::OsStrExt;
     path.as_os_str()
         .as_bytes()
         .last()
@@ -729,8 +800,8 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
     #[cfg(unix)]
     {
-        use nix::sys::stat::fstat;
-        let mode = fstat(stdin.as_fd()).unwrap().st_mode as mode_t;
+        use mode::{S_IFDIR, S_IFMT};
+        let mode = rustix::fs::fstat(stdin).unwrap().st_mode as u32;
         // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
         // sockets for directories.
         mode & S_IFMT == S_IFDIR
@@ -745,11 +816,18 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
         }
         false
     }
+
+    // WASI: stdin is never a directory
+    #[cfg(target_os = "wasi")]
+    {
+        let _ = stdin;
+        false
+    }
 }
 
 pub mod sane_blksize {
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(unix)]
     use std::os::unix::fs::MetadataExt;
     use std::{fs::metadata, path::Path};
 
@@ -776,12 +854,12 @@ pub mod sane_blksize {
         #[cfg(unix)] metadata: &std::fs::Metadata,
         #[cfg(not(unix))] _: &std::fs::Metadata,
     ) -> u64 {
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(unix)]
         {
             sane_blksize(metadata.blksize())
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(not(unix))]
         {
             DEFAULT
         }
@@ -797,6 +875,112 @@ pub mod sane_blksize {
             Err(_) => DEFAULT,
         }
     }
+}
+
+/// Disk geometry of a volume, as reported by the Windows `GetDiskFreeSpaceW`
+/// API. Cluster counts are in clusters, not bytes.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug)]
+pub struct DiskFreeSpace {
+    pub sectors_per_cluster: u32,
+    pub bytes_per_sector: u32,
+    pub free_clusters: u32,
+    pub total_clusters: u32,
+}
+
+/// Safe wrapper around the Windows `GetVolumePathNameW` API.
+///
+/// Returns the mount-point root of the volume holding `path` (e.g. `C:\` or
+/// `C:\mount\`), handling both plain drive letters and volumes mounted on a
+/// directory.
+#[cfg(windows)]
+pub fn volume_path_name(path: &Path) -> IOResult<PathBuf> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // The returned mount point is a prefix of the (absolutized) input, so
+    // sizing the buffer to the input — with the documented MAX_PATH + 1
+    // minimum — means it cannot be too small, even for long paths.
+    let mut root = vec![0u16; wide.len().max(MAX_PATH as usize + 1)];
+    // SAFETY: `wide` is a valid null-terminated wide string, and `root` is a
+    // valid output buffer of `root.len()` u16s.
+    let ok = unsafe { GetVolumePathNameW(wide.as_ptr(), root.as_mut_ptr(), root.len() as u32) };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    let len = root.iter().position(|&c| c == 0).unwrap_or(root.len());
+    Ok(PathBuf::from(OsString::from_wide(&root[..len])))
+}
+
+/// Safe wrapper around the Windows `GetDiskFreeSpaceW` API for the volume
+/// rooted at `root` (as returned by [`volume_path_name`]).
+///
+/// The trailing separator the API requires on drive and UNC roots is appended
+/// if missing.
+#[cfg(windows)]
+pub fn disk_free_space(root: &Path) -> IOResult<DiskFreeSpace> {
+    let mut wide: Vec<u16> = root.as_os_str().encode_wide().collect();
+    if !matches!(wide.last(), Some(&sep) if sep == u16::from(b'\\') || sep == u16::from(b'/')) {
+        wide.push(u16::from(b'\\'));
+    }
+    wide.push(0);
+
+    let mut info = DiskFreeSpace {
+        sectors_per_cluster: 0,
+        bytes_per_sector: 0,
+        free_clusters: 0,
+        total_clusters: 0,
+    };
+    // SAFETY: `wide` is a valid null-terminated wide string; the four
+    // out-params are valid `u32` pointers.
+    let ok = unsafe {
+        GetDiskFreeSpaceW(
+            wide.as_ptr(),
+            &raw mut info.sectors_per_cluster,
+            &raw mut info.bytes_per_sector,
+            &raw mut info.free_clusters,
+            &raw mut info.total_clusters,
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(info)
+}
+
+/// Flag `file` as sparse using the Windows `FSCTL_SET_SPARSE` control code.
+///
+/// Once a file is marked sparse, regions within its length that are never
+/// written are not allocated on disk and read back as zeros. On filesystems
+/// without sparse support the call fails with `ERROR_INVALID_FUNCTION` or
+/// `ERROR_NOT_SUPPORTED`.
+#[cfg(windows)]
+pub fn set_file_sparse(file: &fs::File) -> IOResult<()> {
+    let mut bytes_returned: u32 = 0;
+    // SAFETY: `file.as_raw_handle()` is a valid, open file handle owned by `file`.
+    // `FSCTL_SET_SPARSE` takes no input or output buffer, so the buffer pointers
+    // are null with zero lengths; `bytes_returned` is a valid out-parameter.
+    let ok = unsafe {
+        DeviceIoControl(
+            // `as_raw_handle()` yields the std `*mut c_void`; `.cast()` reinterprets
+            // it as the windows-sys `HANDLE` without an identity `as` pointer cast
+            // (which clippy::ptr_as_ptr flags).
+            file.as_raw_handle().cast(),
+            FSCTL_SET_SPARSE,
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            0,
+            &raw mut bytes_returned,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        return Err(Error::last_os_error());
+    }
+    Ok(())
 }
 
 /// Extracts the filename component from the given `file` path and returns it as an `Option<&str>`.
@@ -816,37 +1000,6 @@ pub mod sane_blksize {
 /// * `None`: If the `file` path does not contain a valid filename or if the filename is not valid UTF-8.
 pub fn get_filename(file: &Path) -> Option<&str> {
     file.file_name().and_then(|filename| filename.to_str())
-}
-
-/// Make a FIFO, also known as a named pipe.
-///
-/// This is a safe wrapper for the unsafe [`libc::mkfifo`] function,
-/// which makes a [named
-/// pipe](https://en.wikipedia.org/wiki/Named_pipe) on Unix systems.
-///
-/// # Errors
-///
-/// If the named pipe cannot be created.
-///
-/// # Examples
-///
-/// ```ignore
-/// use uucore::fs::make_fifo;
-///
-/// make_fifo("my-pipe").expect("failed to create the named pipe");
-///
-/// std::thread::spawn(|| { std::fs::write("my-pipe", b"hello").unwrap(); });
-/// assert_eq!(std::fs::read("my-pipe").unwrap(), b"hello");
-/// ```
-#[cfg(unix)]
-pub fn make_fifo(path: &Path) -> std::io::Result<()> {
-    let name = CString::new(path.to_str().unwrap()).unwrap();
-    let err = unsafe { mkfifo(name.as_ptr(), 0o666) };
-    if err == -1 {
-        Err(Error::from_raw_os_error(err))
-    } else {
-        Ok(())
-    }
 }
 
 // Redox's libc appears not to include the following utilities
@@ -875,8 +1028,6 @@ mod tests {
     use std::io::Write;
     #[cfg(unix)]
     use std::os::unix;
-    #[cfg(unix)]
-    use std::os::unix::fs::FileTypeExt;
     #[cfg(unix)]
     use tempfile::{NamedTempFile, tempdir};
 
@@ -963,9 +1114,9 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_display_permissions() {
+        use mode::*;
         // spell-checker:ignore (perms) brwsr drwxr rwxr
         assert_eq!(
             "drwxr-xr-x",
@@ -991,29 +1142,29 @@ mod tests {
 
         assert_eq!(
             "brwSr-xr-x",
-            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o655, true)
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o655, true)
         );
         assert_eq!(
             "brwsr-xr-x",
-            display_permissions_unix(S_IFBLK | S_ISUID as mode_t | 0o755, true)
+            display_permissions_unix(S_IFBLK | S_ISUID | 0o755, true)
         );
 
         assert_eq!(
             "prw---sr--",
-            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o614, true)
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o614, true)
         );
         assert_eq!(
             "prw---Sr--",
-            display_permissions_unix(S_IFIFO | S_ISGID as mode_t | 0o604, true)
+            display_permissions_unix(S_IFIFO | S_ISGID | 0o604, true)
         );
 
         assert_eq!(
             "c---r-xr-t",
-            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o055, true)
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o055, true)
         );
         assert_eq!(
             "c---r-xr-T",
-            display_permissions_unix(S_IFCHR | S_ISVTX as mode_t | 0o054, true)
+            display_permissions_unix(S_IFCHR | S_ISVTX | 0o054, true)
         );
     }
 
@@ -1094,9 +1245,9 @@ mod tests {
         assert!(are_hardlinks_to_same_file(path1, &path2));
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_get_file_display() {
+        use mode::*;
         assert_eq!(get_file_display(S_IFDIR | 0o755), 'd');
         assert_eq!(get_file_display(S_IFCHR | 0o644), 'c');
         assert_eq!(get_file_display(S_IFBLK | 0o600), 'b');
@@ -1143,24 +1294,42 @@ mod tests {
         assert!(matches!(get_filename(&file_path), Some("foo.txt")));
     }
 
-    #[cfg(unix)]
+    #[cfg(windows)]
     #[test]
-    fn test_make_fifo() {
-        // Create the FIFO in a temporary directory.
-        let tempdir = tempdir().unwrap();
-        let path = tempdir.path().join("f");
-        assert!(make_fifo(&path).is_ok());
+    fn test_volume_path_name() {
+        let temp = env::temp_dir();
+        let root = volume_path_name(&temp).unwrap();
+        assert!(path_ends_with_terminator(&root));
+        assert!(temp.starts_with(&root));
+    }
 
-        // Check that it is indeed a FIFO.
-        assert!(fs::metadata(&path).unwrap().file_type().is_fifo());
+    #[cfg(windows)]
+    #[test]
+    fn test_disk_free_space() {
+        let root = volume_path_name(&env::temp_dir()).unwrap();
+        let info = disk_free_space(&root).unwrap();
+        assert!(info.sectors_per_cluster > 0);
+        assert!(info.bytes_per_sector > 0);
 
-        // Check that we can write to it and read from it.
-        //
-        // Write and read need to happen in different threads,
-        // otherwise `write` would block indefinitely while waiting
-        // for the `read`.
-        let path2 = path.clone();
-        std::thread::spawn(move || assert!(fs::write(&path2, b"foo").is_ok()));
-        assert_eq!(fs::read(&path).unwrap(), b"foo");
+        // The trailing separator required by the underlying API is appended
+        // when missing, so a bare drive path works too.
+        let stripped = root
+            .to_string_lossy()
+            .trim_end_matches(['\\', '/'])
+            .to_owned();
+        let info = disk_free_space(Path::new(&stripped)).unwrap();
+        assert!(info.bytes_per_sector > 0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_set_file_sparse() {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_SPARSE_FILE;
+
+        let file = tempfile::NamedTempFile::new().unwrap();
+        set_file_sparse(file.as_file()).unwrap();
+        let attributes = file.as_file().metadata().unwrap().file_attributes();
+        assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
     }
 }

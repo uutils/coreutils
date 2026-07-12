@@ -5,6 +5,7 @@
 // spell-checker:ignore rustdoc
 #![allow(rustdoc::private_intra_doc_links)]
 
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
@@ -111,7 +112,7 @@ impl<T: BufRead> Iterator for LinesWithNewlines<T> {
 /// - [`CsplitError::MatchNotFound`] if no line matched a regular expression.
 /// - [`CsplitError::MatchNotFoundOnRepetition`], like previous but after applying the pattern
 ///   more than once.
-pub fn csplit<T>(options: &CsplitOptions, patterns: &[String], input: T) -> Result<(), CsplitError>
+pub fn csplit<T>(options: &CsplitOptions, patterns: &[&str], input: T) -> Result<(), CsplitError>
 where
     T: BufRead,
 {
@@ -267,10 +268,12 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// The creation of the split file may fail with some [`io::Error`].
-    fn new_writer(&mut self) -> io::Result<()> {
+    /// Returns an error if creating the split file fails.
+    fn new_writer(&mut self) -> Result<(), CsplitError> {
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(file_name)?;
+        let file = File::create(&file_name)
+            .map_err_context(|| file_name.clone())
+            .map_err(CsplitError::from)?;
         self.current_writer = Some(BufWriter::new(file));
         self.counter += 1;
         self.size = 0;
@@ -627,10 +630,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let file_name = matches.get_one::<OsString>(options::FILE).unwrap();
 
     // get the patterns to split on
-    let patterns: Vec<String> = matches
+    let patterns: Vec<_> = matches
         .get_many::<String>(options::PATTERN)
         .unwrap()
-        .map(ToOwned::to_owned)
+        .map(Borrow::borrow)
         .collect();
     let options = CsplitOptions::new(&matches)?;
     if file_name == "-" {
@@ -644,7 +647,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("csplit")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("csplit-about"))

@@ -348,14 +348,14 @@ fn parse_special_value(
     negative: bool,
     allowed_suffixes: &[(char, u32)],
 ) -> Result<ExtendedBigDecimal, ExtendedParserError<ExtendedBigDecimal>> {
-    let input_lc = input.to_ascii_lowercase();
-
     // Array of ("String to match", return value when sign positive, when sign negative)
     const MATCH_TABLE: &[(&str, ExtendedBigDecimal)] = &[
         ("infinity", ExtendedBigDecimal::Infinity),
         ("inf", ExtendedBigDecimal::Infinity),
         ("nan", ExtendedBigDecimal::Nan),
     ];
+
+    let input_lc = input.to_ascii_lowercase();
 
     for (str, ebd) in MATCH_TABLE {
         if input_lc.starts_with(str) {
@@ -425,10 +425,14 @@ fn construct_extended_big_decimal(
         } else {
             let new_scale = -exponent + scale;
 
-            // BigDecimal "only" supports i64 scale.
+            // BigDecimal supports an i64 scale, but a magnitude anywhere near that
+            // range is already many orders beyond any real floating-point type (a
+            // long double tops out around 10^±4932), and formatting it would mean
+            // materializing quintillions of digits. Cap the scale at `i32` so such
+            // values are treated as overflow/underflow, like a real float would.
             // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
-            if let Some(new_scale) = new_scale.to_i64() {
-                BigDecimal::from_bigint(signed_digits, new_scale)
+            if let Some(new_scale) = new_scale.to_i32() {
+                BigDecimal::from_bigint(signed_digits, new_scale.into())
             } else {
                 return Err(make_error(new_scale.is_negative(), negative));
             }
@@ -445,9 +449,9 @@ fn construct_extended_big_decimal(
 
         // powi "only" supports i64 values. Just overflow/underflow if the value provided
         // is > 2**64 or < 2**-64.
-        let Some(exponent) = exponent.to_i64() else {
-            return Err(make_error(exponent.is_positive(), negative));
-        };
+        let exponent = exponent
+            .to_i64()
+            .ok_or_else(|| make_error(exponent.is_positive(), negative))?;
 
         // Confusingly, exponent is in base 2 for hex floating point numbers.
         let base: BigDecimal = 2.into();

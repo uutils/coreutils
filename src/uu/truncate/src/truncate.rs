@@ -14,9 +14,10 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
+use uucore::show_if_err;
 use uucore::translate;
 
-use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
+use uucore::parser::parse_size::{ParseSizeError, Parser, allow_list_with_all_suffixes};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -124,7 +125,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    let cmd = Command::new(uucore::util_name())
+    let cmd = Command::new("truncate")
         .version(uucore::crate_version!())
         .about(translate!("truncate-about"))
         .override_usage(format_usage(&translate!("truncate-usage")))
@@ -228,12 +229,9 @@ fn file_truncate(
     // 2. The size of the file to be truncated if no reference has been provided.
     let actual_reference_size = reference_size.unwrap_or(file_size);
 
-    let Some(truncate_size) = mode.to_size(actual_reference_size) else {
-        return Err(USimpleError::new(
-            1,
-            translate!("truncate-error-division-by-zero"),
-        ));
-    };
+    let truncate_size = mode
+        .to_size(actual_reference_size)
+        .ok_or_else(|| USimpleError::new(1, translate!("truncate-error-division-by-zero")))?;
 
     do_file_truncate(path, !no_create, truncate_size)
 }
@@ -284,8 +282,10 @@ fn truncate(
         ));
     }
 
+    // Process every file: a failure on one (e.g. a directory) must not
+    // prevent the remaining files from being truncated.
     for filename in filenames {
-        file_truncate(no_create, reference_size, &mode, filename)?;
+        show_if_err!(file_truncate(no_create, reference_size, &mode, filename));
     }
 
     Ok(())
@@ -298,7 +298,7 @@ fn is_modifier(c: char) -> bool {
 
 /// Parse a size string with optional modifier symbol as its first character.
 ///
-/// A size string is as described in [`parse_size_u64`]. The first character
+/// A size string is as described in [`Parser::parse_u64`]. The first character
 /// of `size_string` might be a modifier symbol, like `'+'` or
 /// `'<'`. The first element of the pair returned by this function
 /// indicates which modifier symbol was present, or
@@ -323,15 +323,20 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
-        parse_size_u64(size_string).map(match c {
-            '+' => TruncateMode::Extend,
-            '-' => TruncateMode::Reduce,
-            '<' => TruncateMode::AtMost,
-            '>' => TruncateMode::AtLeast,
-            '/' => TruncateMode::RoundDown,
-            '%' => TruncateMode::RoundUp,
-            _ => TruncateMode::Absolute,
-        })
+        let allow_list = allow_list_with_all_suffixes("EgGkKmMPQRtTYZ");
+        let allow_list_ref = allow_list.iter().map(AsRef::as_ref).collect::<Vec<&str>>();
+        Parser::default()
+            .with_allow_list(&allow_list_ref)
+            .parse_u64(size_string)
+            .map(match c {
+                '+' => TruncateMode::Extend,
+                '-' => TruncateMode::Reduce,
+                '<' => TruncateMode::AtMost,
+                '>' => TruncateMode::AtLeast,
+                '/' => TruncateMode::RoundDown,
+                '%' => TruncateMode::RoundUp,
+                _ => TruncateMode::Absolute,
+            })
     } else {
         Err(ParseSizeError::ParseFailure(size_string.to_string()))
     }
@@ -351,6 +356,9 @@ mod tests {
         assert_eq!(parse_mode_and_size(">10"), Ok(TruncateMode::AtLeast(10)));
         assert_eq!(parse_mode_and_size("/10"), Ok(TruncateMode::RoundDown(10)));
         assert_eq!(parse_mode_and_size("%10"), Ok(TruncateMode::RoundUp(10)));
+        assert_eq!(parse_mode_and_size("1kB"), Ok(TruncateMode::Absolute(1000)));
+        assert_eq!(parse_mode_and_size("1kD"), Ok(TruncateMode::Absolute(1000)));
+        assert!(parse_mode_and_size("1b").is_err());
     }
 
     #[test]

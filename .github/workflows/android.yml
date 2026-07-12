@@ -1,6 +1,6 @@
 name: Android
 
-# spell-checker:ignore (people) reactivecircus Swatinem dtolnay juliangruber
+# spell-checker:ignore (people) reactivecircus juliangruber
 # spell-checker:ignore (shell/tools) TERMUX nextest udevadm pkill
 # spell-checker:ignore (misc) swiftshader playstore DATALOSS noaudio
 
@@ -75,7 +75,7 @@ jobs:
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
         sudo udevadm trigger --name-match=kvm
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Collect information about runner
@@ -85,7 +85,7 @@ jobs:
         free -mh
         df -Th
     - name: Restore AVD cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       id: avd-cache
       continue-on-error: true
       with:
@@ -111,7 +111,7 @@ jobs:
           ~/.android/avd/*/*.lock
     - name: Create and cache emulator image
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: reactivecircus/android-emulator-runner@v2.35.0
+      uses: reactivecircus/android-emulator-runner@v2.38.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -127,7 +127,7 @@ jobs:
           util/android-commands.sh init "${{ matrix.arch }}" "${{ matrix.api-level }}" "${{ env.TERMUX }}"
     - name: Save AVD cache
       if: steps.avd-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: |
           ~/.android/avd/*
@@ -143,7 +143,7 @@ jobs:
         trim: true
     - name: Restore rust cache
       id: rust-cache
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@v6
       with:
         path: ~/__rust_cache__
         # The version vX at the end of the key is just a development version to avoid conflicts in
@@ -156,7 +156,7 @@ jobs:
         free -mh
         df -Th
     - name: Build and Test
-      uses: reactivecircus/android-emulator-runner@v2.35.0
+      uses: reactivecircus/android-emulator-runner@v2.38.0
       with:
         api-level: ${{ matrix.api-level }}
         target: ${{ matrix.target }}
@@ -184,13 +184,13 @@ jobs:
         df -Th
     - name: Save rust cache
       if: steps.rust-cache.outputs.cache-hit != 'true'
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@v6
       with:
         path: ~/__rust_cache__
         key: ${{ matrix.arch }}_${{ matrix.target}}_${{ steps.read_rustc_hash.outputs.content }}_${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}_v3
     - name: archive any output (error screenshots)
       if: always()
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: test_output_${{ env.AVD_CACHE_KEY }}
         path: output

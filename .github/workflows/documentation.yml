@@ -1,4 +1,4 @@
-# spell-checker:ignore dtolnay libsystemd libattr libcap gsub
+# spell-checker:ignore libsystemd libattr libcap gsub
 
 name: Check uudoc Documentation Generation
 
@@ -17,6 +17,9 @@ on:
       - 'src/uu/*/locales/en-US.ftl'
       - 'Cargo.toml'
 
+permissions:
+  contents: read
+
 jobs:
   check-doc:
     name: Verify uudoc generates correct documentation
@@ -24,7 +27,9 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
 
       - name: Install/setup prerequisites
         shell: bash

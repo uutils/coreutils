@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) nums aflag uflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
+// spell-checker:ignore (ToDO) nums aflag scol prevtab amode ctype cwidth nbytes lastcol pctype Preprocess
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read, Stdout, Write, stdin, stdout};
+use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
@@ -115,11 +115,9 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
 
     // Handle the increment if specified
     // Only add an extra tab stop if increment is non-zero
-    if let Some(inc) = increment_size {
-        if inc > 0 {
-            let last = *nums.last().unwrap();
-            nums.push(last + inc);
-        }
+    if let Some(inc) = increment_size.filter(|&i| i > 0) {
+        let last = *nums.last().unwrap();
+        nums.push(last + inc);
     }
 
     if let (false, _) = nums
@@ -154,7 +152,7 @@ struct Options {
     files: Vec<OsString>,
     tab_config: TabConfig,
     aflag: bool,
-    uflag: bool,
+    utf8: bool,
 }
 
 impl Options {
@@ -170,18 +168,19 @@ impl Options {
 
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
             && !matches.get_flag(options::FIRST_ONLY);
-        let uflag = !matches.get_flag(options::NO_UTF8);
-
-        let files = match matches.get_many::<OsString>(options::FILE) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        let utf8 = !matches.get_flag(options::NO_UTF8);
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILE)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
             tab_config,
             aflag,
-            uflag,
+            utf8,
         })
     }
 }
@@ -235,7 +234,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("unexpand")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .override_usage(format_usage(&translate!("unexpand-usage")))
@@ -246,6 +245,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
@@ -279,19 +279,34 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
-    let file_buf;
+enum Input {
+    Stdin(Stdin),
+    File(File),
+}
+
+impl Read for Input {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdin(s) => s.read(buf),
+            Self::File(f) => f.read(buf),
+        }
+    }
+}
+
+fn open(path: &OsString) -> UResult<BufReader<Input>> {
     let filename = Path::new(path);
     if filename.is_dir() {
-        Err(Box::new(USimpleError {
-            code: 1,
-            message: translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
-        }))
+        Err(USimpleError::new(
+            1,
+            translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
+        ))
     } else if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
+        Ok(BufReader::new(Input::Stdin(stdin())))
     } else {
-        file_buf = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
+        Ok(BufReader::new(Input::File(f)))
     }
 }
 
@@ -383,44 +398,29 @@ enum CharType {
     Other,
 }
 
-fn next_char_info(uflag: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
-    let (ctype, cwidth, nbytes) = if uflag {
-        let nbytes = char::from(buf[byte]).len_utf8();
+fn next_char_info(utf8: bool, buf: &[u8], byte: usize) -> (CharType, usize, usize) {
+    use CharType::{Backspace, Other, Space, Tab};
+    let b = buf[byte];
+    if b.is_ascii() {
+        return match b {
+            b' ' => (Space, 0, 1),
+            b'\t' => (Tab, 0, 1),
+            b'\x08' => (Backspace, 0, 1),
+            _ => (Other, 1, 1),
+        };
+    }
 
-        if byte + nbytes > buf.len() {
-            // make sure we don't overrun the buffer because of invalid UTF-8
-            (CharType::Other, 1, 1)
-        } else if let Ok(t) = from_utf8(&buf[byte..byte + nbytes]) {
-            // Now that we think it's UTF-8, figure out what kind of char it is
-            match t.chars().next() {
-                Some(' ') => (CharType::Space, 0, 1),
-                Some('\t') => (CharType::Tab, 0, 1),
-                Some('\x08') => (CharType::Backspace, 0, 1),
-                Some(_) => (CharType::Other, nbytes, nbytes),
-                None => {
-                    // invalid char snuck past the utf8_validation_iterator somehow???
-                    (CharType::Other, 1, 1)
-                }
-            }
-        } else {
-            // otherwise, it's not valid
-            (CharType::Other, 1, 1) // implicit assumption: non-UTF8 char has display width 1
+    if utf8 {
+        let nbytes = char::from(b).len_utf8();
+        // don't overrun the buffer because of invalid UTF-8
+        if buf
+            .get(byte..byte + nbytes)
+            .is_some_and(|s| from_utf8(s).is_ok())
+        {
+            return (Other, nbytes, nbytes);
         }
-    } else {
-        (
-            match buf[byte] {
-                // always take exactly 1 byte in strict ASCII mode
-                0x20 => CharType::Space,
-                0x09 => CharType::Tab,
-                0x08 => CharType::Backspace,
-                _ => CharType::Other,
-            },
-            1,
-            1,
-        )
-    };
-
-    (ctype, cwidth, nbytes)
+    }
+    (Other, 1, 1)
 }
 
 // This struct is used to store the current state of printing the input buf.
@@ -476,7 +476,7 @@ fn unexpand_buf(
     // We can only fast forward if we don't need to calculate col/scol
     if let Some(b'\n') = buf.last() {
         // Fast path for leading spaces in non-UTF8 mode: count consecutive spaces/tabs at start
-        if !options.uflag && !options.aflag && print_state.leading {
+        if !options.utf8 && !options.aflag && print_state.leading {
             // In default mode (not -a), we only convert leading spaces
             // So we can batch process them and then copy the rest
             while byte < buf.len() {
@@ -518,7 +518,7 @@ fn unexpand_buf(
         }
 
         // figure out how big the next char is, if it's UTF-8
-        let (ctype, cwidth, nbytes) = next_char_info(options.uflag, buf, byte);
+        let (ctype, cwidth, nbytes) = next_char_info(options.utf8, buf, byte);
 
         // now figure out how many columns this char takes up, and maybe print it
         let tabs_buffered = print_state.leading || options.aflag;
@@ -567,8 +567,8 @@ fn unexpand_file(
     options: &Options,
     lastcol: usize,
     tab_config: &TabConfig,
+    buf: &mut [u8],
 ) -> UResult<()> {
-    let mut buf = [0u8; 4096];
     let mut input = open(file)?;
     let mut print_state = PrintState {
         col: 0,
@@ -578,7 +578,7 @@ fn unexpand_file(
     };
 
     loop {
-        match input.read(&mut buf) {
+        match input.read(buf) {
             Ok(0) => break,
             Ok(n) => {
                 for line in buf[..n].split_inclusive(|b| *b == b'\n') {
@@ -597,6 +597,7 @@ fn unexpand_file(
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
+    let mut buf = [0u8; 128];
     let mut output = BufWriter::new(stdout());
     let tab_config = &options.tab_config;
     let lastcol = if tab_config.tabstops.len() > 1
@@ -609,7 +610,7 @@ fn unexpand(options: &Options) -> UResult<()> {
     };
 
     for file in &options.files {
-        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config) {
+        if let Err(e) = unexpand_file(file, &mut output, options, lastcol, tab_config, &mut buf) {
             show!(e);
             set_exit_code(1);
         }

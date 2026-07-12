@@ -2,7 +2,7 @@
 # `build-gnu.bash` ~ builds GNU coreutils (from supplied sources)
 #
 
-# spell-checker:ignore (paths) abmon deref discrim eacces getlimits getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
+# spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
 # spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
 
@@ -95,10 +95,11 @@ else
     # Use MULTICALL=y for faster build
     make MULTICALL=y SKIP_UTILS=more
     for binary in $("${UU_BUILD_DIR}"/coreutils --list)
-        do [ -e "${UU_BUILD_DIR}/${binary}" ] || ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
+        do ln -vf "${UU_BUILD_DIR}/coreutils" "${UU_BUILD_DIR}/${binary}"
     done
+    ln -vf "${UU_BUILD_DIR}"/deps/libstdbuf.* -t "${UU_BUILD_DIR}"
 fi
-[ -e "${UU_BUILD_DIR}/ginstall" ] || ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
+ln -vf "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall" # The GNU tests use ginstall
 ##
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
@@ -152,17 +153,27 @@ else
         echo "strip t${i}.sh from Makefile and tests/local.mk"
         sed -i -e "s/\$(tf)\/t${i}.sh//g" Makefile tests/local.mk
     done
-
+    # Remove LD_PRELOAD implementation of no-mtab-status-masked-proc. not compatible with our binary
+    sed -i '/tests\/df\/no-mtab-status.sh/ D' Makefile
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
     touch gnu-built
 fi
 
+# Keep getlimits available on PATH for GNU shell and Perl tests even when
+# reusing an existing GNU build directory.
+test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
+
 # Keep Makefile.in newer than the local.mk files we just modified,
 # and Makefile newer than Makefile.in, so make won't re-run
 # automake or config.status and undo our edits.
 touch Makefile.in Makefile
+
+# Patch the Makefile PATH to point to uutils build dir instead of GNU src/
+sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
+# Prevent make check from rebuilding the GNU binaries over the uutils ones
+sed -i 's/^check-am: all-am/check-am:/' Makefile
 
 grep -rl 'path_prepend_' tests/* | xargs -r "${SED}" -i 's| path_prepend_ ./src||'
 # path_prepend_ sets $abs_path_dir_: set it manually instead.
@@ -178,15 +189,13 @@ sed -i 's/^print_ver_.*/require_selinux_/' tests/chcon/chcon-fail.sh
 
 # We use coreutils yes
 sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
-# Different message
-sed -i "s|coreutils: unknown program 'blah'|blah: function/utility not found|" tests/misc/coreutils.sh
 
 # Use the system coreutils where the test fails due to error in a util that is not the one being tested
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
 # our messages are better
-sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
-sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
+sed -i "s|cp: cannot stat 'symlink': .*|cp: not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+sed -i "s|cp: target directory 'symlink': .*|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
@@ -206,7 +215,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
-sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+sed -i -e "s|rm: cannot remove 'rel': \$EACCES|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
 # Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
 # This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory

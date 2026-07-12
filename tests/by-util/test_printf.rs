@@ -802,6 +802,35 @@ fn test_overflow() {
 }
 
 #[test]
+fn test_extreme_exponent_does_not_overflow() {
+    // A value whose decimal exponent does not fit in an i32 used to overflow the
+    // exponent arithmetic in the float formatters (panic in debug, wrong value or
+    // bad allocation in release). GNU printf treats such a magnitude the same
+    // way it would treat any other out-of-range float: it reports the overflow
+    // on stderr but still prints inf (or 0, on underflow) to stdout.
+    for spec in ["%a", "%e", "%g", "%f"] {
+        new_ucmd!()
+            .args(&[spec, "5e8123456789012345678"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_contains("inf");
+
+        let zero = match spec {
+            "%a" => "0x0p+0",
+            "%e" => "0.000000e+00",
+            "%g" => "0",
+            "%f" => "0.000000",
+            _ => unreachable!(),
+        };
+        new_ucmd!()
+            .args(&[spec, "7E-8123456789012345678"])
+            .fails_with_code(1)
+            .stderr_contains("Numerical result out of range")
+            .stdout_is(zero);
+    }
+}
+
+#[test]
 fn partial_char() {
     new_ucmd!()
         .args(&["%d", "'abc"])
@@ -1336,6 +1365,7 @@ fn mb_input() {
 
 #[test]
 #[cfg(target_family = "unix")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn mb_invalid_unicode() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1424,6 +1454,7 @@ fn positional_format_specifiers() {
 
 #[test]
 #[cfg(target_family = "unix")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn non_utf_8_input() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;

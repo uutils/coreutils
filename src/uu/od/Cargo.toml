@@ -3,7 +3,6 @@ name = "uu_od"
 description = "od ~ (uutils) display formatted representation of input"
 repository = "https://github.com/uutils/coreutils/tree/main/src/uu/od"
 version.workspace = true
-authors.workspace = true
 license.workspace = true
 homepage.workspace = true
 keywords.workspace = true
@@ -22,7 +21,8 @@ path = "src/od.rs"
 byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
+rustix = { workspace = true, features = ["stdio"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
 libc.workspace = true
 

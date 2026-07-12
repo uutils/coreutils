@@ -27,20 +27,14 @@ impl Matcher for ExactMatcher<'_> {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
         let mut pos = 0usize;
         loop {
-            match memchr(self.needle[0], &haystack[pos..]) {
-                Some(match_idx) => {
-                    let match_idx = match_idx + pos; // account for starting from pos
-                    if self.needle.len() == 1
-                        || haystack[match_idx + 1..].starts_with(&self.needle[1..])
-                    {
-                        return Some((match_idx, match_idx + self.needle.len()));
-                    }
-                    pos = match_idx + 1;
-                }
-                None => {
-                    return None;
-                }
+            let match_idx = memchr(self.needle[0], &haystack[pos..])?;
+            let match_idx = match_idx + pos; // account for starting from pos
+
+            if self.needle.len() == 1 || haystack[match_idx + 1..].starts_with(&self.needle[1..]) {
+                return Some((match_idx, match_idx + self.needle.len()));
             }
+
+            pos = match_idx + 1;
         }
     }
 }
@@ -50,19 +44,17 @@ pub struct WhitespaceMatcher {}
 
 impl Matcher for WhitespaceMatcher {
     fn next_match(&self, haystack: &[u8]) -> Option<(usize, usize)> {
-        match memchr2(b' ', b'\t', haystack) {
-            Some(match_idx) => {
-                let mut skip = match_idx + 1;
-                while skip < haystack.len() {
-                    match haystack[skip] {
-                        b' ' | b'\t' => skip += 1,
-                        _ => break,
-                    }
-                }
-                Some((match_idx, skip))
+        let match_idx = memchr2(b' ', b'\t', haystack)?;
+        let mut skip = match_idx + 1;
+
+        while skip < haystack.len() {
+            match haystack[skip] {
+                b' ' | b'\t' => skip += 1,
+                _ => break,
             }
-            None => None,
         }
+
+        Some((match_idx, skip))
     }
 }
 

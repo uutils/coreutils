@@ -19,6 +19,7 @@ use std::{
     io::{self, Write, stderr},
     iter,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
@@ -297,12 +298,10 @@ impl<'a> Input<'a> {
 
 #[cfg(unix)]
 fn is_stdin_small_file() -> bool {
-    use std::os::unix::io::{AsRawFd, FromRawFd};
-    // Safety: we'll rely on Rust to give us a valid RawFd for stdin with which we can attempt to
-    // open a File, but only for the sake of fetching .metadata().  ManuallyDrop will ensure we
-    // don't do anything else to the FD if anything unexpected happens.
-    let f = std::mem::ManuallyDrop::new(unsafe { File::from_raw_fd(io::stdin().as_raw_fd()) });
-    matches!(f.metadata(), Ok(meta) if meta.is_file() && meta.len() <= (10 << 20))
+    matches!(
+        rustix::fs::fstat(io::stdin()),
+        Ok(meta) if meta.st_mode as libc::mode_t & libc::S_IFMT == libc::S_IFREG && meta.st_size <= (10 << 20)
+    )
 }
 
 #[cfg(not(unix))]
@@ -392,7 +391,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 }
 
 pub fn uu_app() -> Command {
-    Command::new(uucore::util_name())
+    Command::new("wc")
         .version(uucore::crate_version!())
         .help_template(uucore::localized_help_template(uucore::util_name()))
         .about(translate!("wc-about"))
@@ -579,11 +578,11 @@ fn process_chunk<
     text: &str,
     current_len: &mut usize,
     in_word: &mut bool,
-    posixly_correct: bool,
+    is_posixly_correct: bool,
 ) {
     for ch in text.chars() {
         if SHOW_WORDS {
-            let is_space = if posixly_correct {
+            let is_space = if is_posixly_correct {
                 matches!(ch, '\t'..='\r' | ' ')
             } else {
                 ch.is_whitespace()
@@ -655,7 +654,7 @@ fn word_count_from_reader_specialized<
     let mut reader = BufReadDecoder::new(reader.buffered());
     let mut in_word = false;
     let mut current_len = 0;
-    let posixly_correct = env::var_os("POSIXLY_CORRECT").is_some();
+    let is_posixly_correct = *IS_POSIXLY_CORRECT;
     while let Some(chunk) = reader.next_strict() {
         match chunk {
             Ok(text) => {
@@ -664,7 +663,7 @@ fn word_count_from_reader_specialized<
                     text,
                     &mut current_len,
                     &mut in_word,
-                    posixly_correct,
+                    is_posixly_correct,
                 );
             }
             Err(e) => {
@@ -988,6 +987,7 @@ fn wc(inputs: &Inputs, settings: &Settings) -> UResult<()> {
             if let Err(err) = print_stats(settings, &word_count, maybe_title_str, number_width) {
                 let title = maybe_title_str.unwrap_or(OsStr::new("<stdin>"));
                 show!(err.map_err_context(|| translate!("wc-error-failed-to-print-result", "title" => title.to_string_lossy())));
+                return Ok(());
             }
         }
         // Print deferred error after stats to match GNU wc output order
@@ -1038,3 +1038,6 @@ fn print_stats(
     }
     writeln!(stdout)
 }
+
+static IS_POSIXLY_CORRECT: LazyLock<bool> =
+    LazyLock::new(|| env::var_os("POSIXLY_CORRECT").is_some());
