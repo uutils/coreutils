@@ -1379,13 +1379,12 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     // Find the first existing parent directory to get its context
     let mut current_path = path;
     loop {
-        if current_path.exists() {
-            if let Ok(parent_context) = get_selinux_security_context(current_path, false) {
-                if !parent_context.is_empty() {
-                    // Found a context - derive the appropriate context for our target
-                    return Ok(Some(derive_context_from_parent(&parent_context)));
-                }
-            }
+        if current_path.exists()
+            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
+            && !parent_context.is_empty()
+        {
+            // Found a context - derive the appropriate context for our target
+            return Ok(Some(derive_context_from_parent(&parent_context)));
         }
 
         // Move up to parent
