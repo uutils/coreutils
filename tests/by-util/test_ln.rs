@@ -5,7 +5,7 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -843,6 +843,7 @@ fn test_backup_same_file() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_backup_existing_hard_linked_under_different_name() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
@@ -856,7 +857,7 @@ fn test_backup_existing_hard_linked_under_different_name() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_backup_existing_hard_linked_target_is_fifo() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("a");
