@@ -1362,7 +1362,7 @@ fn test_hex_lowercase() {
 }
 
 #[test]
-#[cfg_attr(any(target_os = "wasi", target_os = "windows"), ignore)]
+#[cfg_attr(any(target_os = "wasi", target_os = "windows"), ignore = "Messages are different on windows and wasi")]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
     let fixtures = &scene.fixtures;
