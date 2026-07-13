@@ -253,6 +253,18 @@ fn test_tabs_shortcut_with_too_large_size() {
 }
 
 #[test]
+fn test_extended_tabstop_increment_overflow() {
+    // `--tabs=N,+M` adds one stop at `N + M`. When `N` is near `usize::MAX`,
+    // that sum must be rejected as too large rather than overflowing (which
+    // aborts under overflow checks and wraps to a bogus stop otherwise).
+    let arg = format!("--tabs={},+1", usize::MAX);
+    new_ucmd!()
+        .arg(arg)
+        .fails()
+        .stderr_contains("tab stop value is too large");
+}
+
+#[test]
 fn test_is_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir_name = "dir";
