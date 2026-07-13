@@ -868,9 +868,10 @@ fn build_options(
     // `i32::MAX` up front rather than crashing later during layout.
     if column_width > i32::MAX as usize {
         return Err(PrError::EncounteredErrors {
-            msg: format!(
-                "'-w PAGE_WIDTH' invalid number of characters: {}: Value too large for defined data type",
-                matches
+            msg: translate!(
+                "pr-error-page-width-too-large",
+                "flag" => "-w",
+                "value" => matches
                     .get_one::<String>(options::COLUMN_WIDTH)
                     .map(String::as_str)
                     .unwrap_or_default()
@@ -898,9 +899,10 @@ fn build_options(
     // `i32::MAX` up front rather than crashing later during layout.
     if page_width.is_some_and(|w| w > i32::MAX as usize) {
         return Err(PrError::EncounteredErrors {
-            msg: format!(
-                "'-W PAGE_WIDTH' invalid number of characters: {}: Value too large for defined data type",
-                matches
+            msg: translate!(
+                "pr-error-page-width-too-large",
+                "flag" => "-W",
+                "value" => matches
                     .get_one::<String>(options::PAGE_WIDTH)
                     .map(String::as_str)
                     .unwrap_or_default()

@@ -103,3 +103,4 @@ pr-error-across-merge-conflict = cannot specify both printing across and printin
 pr-error-invalid-pages-range = invalid --pages argument '{$start}:{$end}'
 pr-error-invalid-expand-tab-argument ='-e' extra characters or invalid number in the argument: ‘{$arg}’
 pr-error-invalid-number-argument ='-n' extra characters or invalid number in the argument: ‘{$arg}’
+pr-error-page-width-too-large = '{$flag} PAGE_WIDTH' invalid number of characters: {$value}: Value too large for defined data type

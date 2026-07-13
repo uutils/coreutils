@@ -102,3 +102,4 @@ pr-error-across-merge-conflict = impossible de spécifier à la fois l'impressio
 pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
 pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'
 pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': '{$arg}'
+pr-error-page-width-too-large = '{$flag} PAGE_WIDTH' nombre de caractères invalide : {$value} : Valeur trop grande pour le type de données défini
