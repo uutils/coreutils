@@ -1360,3 +1360,19 @@ fn test_hex_lowercase() {
             ",
         ));
 }
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_is_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.mkdir("a");
+
+    scene
+        .ucmd()
+        .args(&["a"])
+        .fails_with_code(1)
+        .stderr_is("od: a: Is a directory\n");
+}
