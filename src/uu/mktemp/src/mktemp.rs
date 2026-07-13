@@ -436,18 +436,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let path = res?;
-    let res = println_verbatim(&path);
+    let print_result = println_verbatim(&path);
 
-    // Delete the file/directory if output flush failed.
-    if res.is_err() {
-        if path.is_dir() {
-            fs::remove_dir(&path)?;
+    // If we failed to print the path, clean up the file/directory we just
+    // created (matching GNU). Nothing is created in dry-run mode, so skip it
+    // there. Removal is best-effort: keep reporting the original print error.
+    if print_result.is_err() && !dry_run {
+        let _ = if make_dir {
+            fs::remove_dir(&path)
         } else {
-            fs::remove_file(&path)?;
-        }
+            fs::remove_file(&path)
+        };
     }
 
-    res.map_err_context(|| translate!("mktemp-error-failed-print"))
+    print_result.map_err_context(|| translate!("mktemp-error-failed-print"))
 }
 
 pub fn uu_app() -> Command {
