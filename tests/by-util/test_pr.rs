@@ -470,9 +470,7 @@ fn test_offset_invalid() {
 
 #[test]
 fn test_page_width_too_large() {
-    // GNU pr stores the width in a C `int` and rejects anything above `i32::MAX`
-    // ('2147483647') up front. `-W`/`--page-width` and `-w`/`--width` both report
-    // it as "PAGE_WIDTH".
+    // GNU pr rejects a width above `i32::MAX`, reported as "PAGE_WIDTH" for both `-W` and `-w`.
     let arg = "2147483648";
     new_ucmd!()
         .args(&["-W", arg])
@@ -490,9 +488,7 @@ fn test_page_width_too_large() {
 
 #[test]
 fn test_large_page_width_does_not_panic() {
-    // A page width whose centering padding exceeds the `{:width$}` formatter's
-    // `u16` count limit previously panicked ("Formatting argument out of range")
-    // while building the header. The header padding is now streamed instead.
+    // A wide page width used to panic building the header via `{:width$}`; padding is now streamed.
     new_ucmd!()
         .args(&["-W", "200000"])
         .pipe_in("hello\nworld\n")

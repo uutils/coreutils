@@ -864,8 +864,7 @@ fn build_options(
         });
     }
 
-    // GNU pr stores the width in a C `int`, so it rejects anything above
-    // `i32::MAX` up front rather than crashing later during layout.
+    // GNU pr stores the width in a C `int`, so reject anything above `i32::MAX`.
     if column_width > i32::MAX as usize {
         return Err(PrError::EncounteredErrors {
             msg: translate!(
@@ -895,8 +894,7 @@ fn build_options(
         });
     }
 
-    // GNU pr stores the page width in a C `int`; reject anything above
-    // `i32::MAX` up front rather than crashing later during layout.
+    // GNU pr stores the page width in a C `int`, so reject anything above `i32::MAX`.
     if page_width.is_some_and(|w| w > i32::MAX as usize) {
         return Err(PrError::EncounteredErrors {
             msg: translate!(
@@ -1519,13 +1517,7 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
     }
 }
 
-/// Writes the five line page header (unless disabled by the
-/// `NO_HEADER_TRAILER_OPTION` option) to `out`.
-///
-/// The centering padding is streamed with [`write_offset_spaces`] rather than
-/// built with a `{:width$}` format argument. A wide page width can make the
-/// padding exceed the formatter's `u16` count limit (which panics) or require a
-/// huge allocation, so it is written incrementally instead.
+/// Writes the five line page header to `out` (unless disabled by `NO_HEADER_TRAILER_OPTION`), streaming the centering padding to avoid the `{:width$}` formatter's `u16` panic and huge allocations.
 fn write_header(
     out: &mut impl Write,
     options: &OutputOptions,
