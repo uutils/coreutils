@@ -338,6 +338,11 @@ impl Utmpx {
     pub fn iter_all_records() -> UtmpxIter {
         #[cfg(target_os = "linux")]
         {
+            // The usability check inspects DEFAULT_FILE, while iteration reads
+            // libc's process-global path, which is sticky across
+            // `iter_all_records_from` calls. These can only disagree if a caller
+            // previously selected a custom path and then calls this function;
+            // no in-tree caller does that.
             if traditional_utmp_is_usable(Path::new(DEFAULT_FILE)) {
                 let iter = UtmpxIter::new();
                 unsafe {
@@ -414,6 +419,13 @@ impl Utmpx {
 // ordinary race conditions are also very much possible.
 static LOCK: Mutex<()> = Mutex::new(());
 
+/// Whether the traditional utmp file can serve login records: it must exist,
+/// be a regular file holding at least one record, and be readable.
+///
+/// A present-but-empty file (e.g. a non-systemd system with no logins yet) is
+/// treated as unusable, so each invocation pays one failed dlopen of
+/// libsystemd before falling back; this keeps the common systemd case correct
+/// at a negligible cost elsewhere.
 #[cfg(target_os = "linux")]
 fn traditional_utmp_is_usable(path: &Path) -> bool {
     #[cfg(target_env = "musl")]
@@ -484,7 +496,11 @@ impl UtmpxIter {
                 systemd_iter: Some(iter),
             }
         } else {
-            // Fall back to traditional utmp when systemd-logind is unavailable
+            // Fall back to traditional utmp when systemd-logind is unavailable.
+            // Callers only reach this constructor after determining that the
+            // traditional file is missing or empty, so re-reading it yields no
+            // records — matching GNU coreutils, which also prints nothing when
+            // /var/run/utmp is absent.
             unsafe {
                 if let Some(path) = fallback_path {
                     let path = CString::new(path.as_os_str().as_bytes()).unwrap();
@@ -506,7 +522,7 @@ impl UtmpxIter {
 #[cfg(all(test, target_os = "linux", not(target_env = "musl")))]
 mod tests {
     use super::*;
-    use std::fs::{File, remove_file};
+    use std::fs::File;
     use std::io::Write;
     use std::mem::zeroed;
 
@@ -529,10 +545,9 @@ mod tests {
 
     #[test]
     fn systemd_failure_uses_explicit_fallback_path() {
-        let temporary_directory = std::env::temp_dir();
-        let unique = std::process::id();
-        let custom_path = temporary_directory.join(format!("uucore-custom-utmp-{unique}"));
-        let fallback_path = temporary_directory.join(format!("uucore-fallback-utmp-{unique}"));
+        let directory = tempfile::tempdir().unwrap();
+        let custom_path = directory.path().join("custom-utmp");
+        let fallback_path = directory.path().join("fallback-utmp");
         write_utmpx_record(&custom_path, "custom");
         write_utmpx_record(&fallback_path, "fallback");
 
@@ -548,15 +563,14 @@ mod tests {
         let fallback_record = fallback_iter.next().expect("fallback utmp record");
         assert_eq!(fallback_record.user(), "fallback");
 
-        // Restore libc's process-global utmp path for other tests.
+        // Restore libc's process-global utmp path for other tests. This must
+        // happen before dropping `fallback_iter`: the iterator still holds
+        // LOCK, so no other thread can observe the intermediate path.
         let default_path = CString::new(DEFAULT_FILE).unwrap();
         unsafe {
             utmpxname(default_path.as_ptr());
         }
         drop(fallback_iter);
-
-        remove_file(custom_path).unwrap();
-        remove_file(fallback_path).unwrap();
     }
 
     #[test]
