@@ -826,6 +826,18 @@ fn test_parse_error_hex() {
 }
 
 #[test]
+fn test_format_a_huge_negative_exponent_does_not_oom() {
+    // `seq -f %a 1E-1000000000000000000 1` used to abort with an OOM from
+    // trying to allocate exabytes in the bignum shift (#13222).  Values
+    // with a decimal exponent below −5000 underflow to zero in any
+    // long-double implementation, so the output should be 0x0p+0.
+    new_ucmd!()
+        .args(&["-f", "%a", "1E-1000000000000000000", "1"])
+        .succeeds()
+        .stdout_contains("0x0p+0");
+}
+
+#[test]
 fn test_format_option() {
     new_ucmd!()
         .args(&["-f", "%.2f", "0.0", "0.1", "0.5"])

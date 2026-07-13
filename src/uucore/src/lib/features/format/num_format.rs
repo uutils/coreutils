@@ -620,6 +620,19 @@ fn format_float_hexadecimal(
     // gracefully though.
     let exp10 = -p;
 
+    // Guard against exponents far outside the range of any long-double
+    // (80-bit: ±4932, 128-bit: ±4932).  A huge negative exponent makes
+    // `margin ≈ -exp10 * 3` enormous, so `frac10 << margin` tries to
+    // allocate exabytes and aborts.  Decimal exponents below −5000 always
+    // underflow to zero in any long-double implementation (#13222).
+    if exp10 < -5000 {
+        return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
+            format!("0x0.{exp_char}+0")
+        } else {
+            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
+        };
+    }
+
     // We want something that looks like this: frac2 * 2^exp2,
     // without losing precision.
     // frac10 * 10^exp10 = (frac10 * 5^exp10) * 2^exp10 = frac2 * 2^exp2
@@ -1145,6 +1158,26 @@ mod test {
         assert_eq!(f(0.into(), 0), "0x0.000000p+0");
         assert_eq!(f(0.into(), -10), "0x0.000000p+0");
         assert_eq!(f(0.into(), 10), "0x0.000000p+0");
+    }
+
+    #[test]
+    fn hexadecimal_float_huge_negative_exponent_does_not_oom() {
+        // Values with a decimal exponent below −5000 underflow to zero in
+        // any long-double representation.  This must not abort with an OOM
+        // from trying to allocate exabytes in the bignum shift (#13222).
+        use super::format_float_hexadecimal;
+        let f = |x| {
+            format_float_hexadecimal(
+                &BigDecimal::from_str(x).unwrap(),
+                None,
+                Case::Lowercase,
+                ForceDecimal::No,
+            )
+        };
+        assert_eq!(f("1E-1000000000000000000"), "0x0p+0");
+        assert_eq!(f("1E-5001"), "0x0p+0");
+        // Values just inside the limit still compute correctly.
+        assert_eq!(f("1E-5000"), f("1E-5000")); // must not panic
     }
 
     #[test]
