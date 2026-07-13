@@ -437,6 +437,8 @@ fn traditional_utmp_is_usable(path: &Path) -> bool {
     #[cfg(not(target_env = "musl"))]
     {
         std::fs::metadata(path).is_ok_and(|metadata| {
+            // Stat before opening: opening a non-regular file could block
+            // (e.g. a FIFO with no writer).
             metadata.is_file()
                 && metadata.len() >= size_of::<utmpx>() as u64
                 && std::fs::File::open(path).is_ok()
@@ -556,6 +558,11 @@ mod tests {
             .expect("custom utmp record");
         assert_eq!(custom_record.user(), "custom");
 
+        // LOCK is released here with libc's global path still set to
+        // `custom_path`, so a parallel test iterating utmp records would
+        // observe it (none does today). Keeping the first iterator alive
+        // instead would deadlock: the constructor below reacquires the
+        // non-reentrant LOCK.
         let mut fallback_iter =
             UtmpxIter::new_systemd_with_fallback_path_using(Some(&fallback_path), || {
                 Err::<systemd_logind::SystemdUtmpxIter, ()>(())
