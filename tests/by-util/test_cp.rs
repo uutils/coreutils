@@ -4629,7 +4629,28 @@ fn test_cp_attributes_only_dest_open_error() {
     at.write("s.txt", "hi");
     ucmd.args(&["--attributes-only", "s.txt", "/dev/null/n.txt"])
         .fails_with_code(1)
-        .stderr_contains("cp: 's.txt' -> '/dev/null/n.txt'");
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.arg("source.txt")
+        .arg("/dev/null/n.txt")
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.args(&["--attributes-only", "source.txt", "/dev/null/n.txt"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot create regular file '/dev/null/n.txt': Not a directory\n");
 }
 
 #[test]
