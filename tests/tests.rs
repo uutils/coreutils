@@ -12,9 +12,7 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_coreutils");
 fn init() {
     // Allow overriding the binary path (e.g. to test a WASI binary via wasmtime)
     if env::var("UUTESTS_BINARY_PATH").is_err() {
-        unsafe {
-            env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-        }
+        uucore::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }
 }
 

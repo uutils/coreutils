@@ -236,8 +236,6 @@ fn main() {
     // Set UTF-8 locale BEFORE any benchmarks run.
     // This must happen before divan::main() because the locale is cached
     // on first access via OnceLock and cannot be changed afterwards.
-    unsafe {
-        std::env::set_var("LC_ALL", "en_US.UTF-8");
-    }
+    uucore::env::set_var("LC_ALL", "en_US.UTF-8");
     divan::main();
 }

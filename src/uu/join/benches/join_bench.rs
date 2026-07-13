@@ -118,8 +118,8 @@ fn join_french_locale(bencher: Bencher) {
     let (file1, file2) = create_join_files(&temp_dir, num_lines);
 
     bencher
-        .with_inputs(|| unsafe {
-            std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+        .with_inputs(|| {
+            uucore::env::set_var("LC_ALL", "fr_FR.UTF-8");
         })
         .bench_values(|_| {
             black_box(run_util_function(uumain, &[&file1, &file2]));
@@ -159,8 +159,8 @@ fn join_unicode_locale(bencher: Bencher) {
     let (file1, file2) = create_unicode_join_files(&temp_dir, num_lines);
 
     bencher
-        .with_inputs(|| unsafe {
-            std::env::set_var("LC_ALL", "fr_FR.UTF-8");
+        .with_inputs(|| {
+            uucore::env::set_var("LC_ALL", "fr_FR.UTF-8");
         })
         .bench_values(|_| {
             black_box(run_util_function(uumain, &[&file1, &file2]));

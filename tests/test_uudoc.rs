@@ -25,9 +25,7 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_uudoc");
 // Use the ctor attribute to run this function before any tests
 #[ctor::ctor(unsafe)]
 fn init() {
-    unsafe {
-        env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
-    }
+    uucore::env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     // Print for debugging
     eprintln!("Setting UUTESTS_BINARY_PATH={TESTS_BINARY}");
 }

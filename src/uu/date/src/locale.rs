@@ -237,12 +237,10 @@ mod tests {
                 }
             };
 
-            unsafe {
-                // Set C locale
-                std::env::set_var("LC_ALL", "C");
-                std::env::remove_var("LC_TIME");
-                std::env::remove_var("LANG");
-            }
+            // Set C locale
+            uucore::env::set_var("LC_ALL", "C");
+            uucore::env::remove_var("LC_TIME");
+            uucore::env::remove_var("LANG");
 
             // Get the locale format
             let format = unsafe {
@@ -265,22 +263,20 @@ mod tests {
             }
 
             // Restore original environment variables
-            unsafe {
-                if let Some(val) = original_lc_all {
-                    std::env::set_var("LC_ALL", val);
-                } else {
-                    std::env::remove_var("LC_ALL");
-                }
-                if let Some(val) = original_lc_time {
-                    std::env::set_var("LC_TIME", val);
-                } else {
-                    std::env::remove_var("LC_TIME");
-                }
-                if let Some(val) = original_lang {
-                    std::env::set_var("LANG", val);
-                } else {
-                    std::env::remove_var("LANG");
-                }
+            if let Some(val) = original_lc_all {
+                uucore::env::set_var("LC_ALL", val);
+            } else {
+                uucore::env::remove_var("LC_ALL");
+            }
+            if let Some(val) = original_lc_time {
+                uucore::env::set_var("LC_TIME", val);
+            } else {
+                uucore::env::remove_var("LC_TIME");
+            }
+            if let Some(val) = original_lang {
+                uucore::env::set_var("LANG", val);
+            } else {
+                uucore::env::remove_var("LANG");
             }
 
             // Restore original process locale

@@ -65,8 +65,6 @@ fn main() {
     // Set C locale BEFORE any benchmarks run.
     // This must happen before divan::main() because the locale is cached
     // on first access via OnceLock and cannot be changed afterwards.
-    unsafe {
-        std::env::set_var("LC_ALL", "C");
-    }
+    uucore::env::set_var("LC_ALL", "C");
     divan::main();
 }
