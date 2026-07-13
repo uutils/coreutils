@@ -32,10 +32,12 @@ where
 {
     let mut src = open_source(source, source_nofollow)
         .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let dest_context =
-        translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote());
-    let mut dst =
-        create_dest_restrictive(dest, false).map_err(|e| CpError::IoErrContext(e, dest_context))?;
+    let mut dst = create_dest_restrictive(&dest, false).map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
+        )
+    })?;
     if ioctl_ficlone(&dst, &src).is_err() {
         buf_copy::copy_fast(&mut src, &mut dst)
             .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
@@ -87,10 +89,12 @@ where
 {
     let src_file =
         open_source(&source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let dest_context =
-        translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote());
-    let dst_file = create_dest_restrictive(&dest, false)
-        .map_err(|e| CpError::IoErrContext(e, dest_context))?;
+    let dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
+        )
+    })?;
     if ioctl_ficlone(dst_file, src_file).is_err() {
         return match fallback {
             CloneFallback::Error => Err(CpError::IoErrContext(
@@ -145,11 +149,13 @@ where
     P: AsRef<Path>,
 {
     let src_file =
-        open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let dest_context =
-        translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote());
-    let dst_file =
-        create_dest_restrictive(dest, false).map_err(|e| CpError::IoErrContext(e, dest_context))?;
+        open_source(&source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
+        )
+    })?;
 
     let ctx_err = |e: std::io::Error| CpError::IoErrContext(e, context.to_owned());
 
@@ -189,11 +195,13 @@ where
     P: AsRef<Path>,
 {
     let mut src_file =
-        open_source(source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let dest_context =
-        translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote());
-    let dst_file =
-        create_dest_restrictive(dest, false).map_err(|e| CpError::IoErrContext(e, dest_context))?;
+        open_source(&source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    let dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
+        CpError::IoErrContext(
+            e,
+            translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
+        )
+    })?;
 
     let ctx_err = |e: std::io::Error| CpError::IoErrContext(e, context.to_owned());
 
