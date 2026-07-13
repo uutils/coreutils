@@ -46,6 +46,18 @@ fn print() {
     }
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn print_context_write_error_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("runcon: write error: No space left on device\n");
+}
+
 #[test]
 fn invalid() {
     new_ucmd!().arg("invalid").fails_with_code(1);
