@@ -247,12 +247,26 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
-        config.line_width = *matches.get_one::<u64>(options::WIDTH).unwrap() as usize;
+        let width = *matches.get_one::<u64>(options::WIDTH).unwrap();
+        if width > isize::MAX as u64 {
+            return Err(USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-line-width", "value" => width.to_string()),
+            ));
+        }
+        config.line_width = width as usize;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = *matches.get_one::<u64>(options::GAP_SIZE).unwrap() as usize;
+        let gap = *matches.get_one::<u64>(options::GAP_SIZE).unwrap();
+        if gap > isize::MAX as u64 {
+            return Err(USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-gap-size", "value" => gap.to_string()),
+            ));
+        }
+        config.gap_size = gap as usize;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {

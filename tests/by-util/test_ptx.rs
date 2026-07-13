@@ -500,3 +500,20 @@ fn test_nullable_word_regexp_no_empty_matches() {
         .succeeds()
         .stdout_only(expected);
 }
+
+#[test]
+fn test_gap_size_above_isize_max_rejected() {
+    // isize::MAX + 1: must fail with a clear error, not panic with overflow (#13184).
+    new_ucmd!()
+        .args(&["-g", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid gap width: '9223372036854775808'");
+}
+
+#[test]
+fn test_line_width_above_isize_max_rejected() {
+    new_ucmd!()
+        .args(&["-w", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid line width: '9223372036854775808'");
+}
