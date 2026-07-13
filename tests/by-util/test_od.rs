@@ -1361,6 +1361,7 @@ fn test_hex_lowercase() {
         ));
 }
 
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());
