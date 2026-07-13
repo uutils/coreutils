@@ -103,18 +103,31 @@ pub(crate) fn copy_on_write(
         }
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
-            let mut src_file = File::open(source)?;
+            let mut src_file =
+                File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             let mode = 0o622 & !get_umask();
             let mut dst_file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .mode(mode)
-                .open(dest)?;
+                .open(dest)
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                    )
+                })?;
 
-            let dest_is_stream = is_stream(&dst_file.metadata()?);
+            let dest_is_stream = is_stream(
+                &dst_file
+                    .metadata()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            );
             if !dest_is_stream {
                 // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-                dst_file.set_len(0)?;
+                dst_file
+                    .set_len(0)
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             }
 
             buf_copy::copy_fast(&mut src_file, &mut dst_file)
