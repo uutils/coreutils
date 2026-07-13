@@ -22,7 +22,7 @@ pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
     curr_file: Option<Box<dyn io::Read>>,
     any_err: bool,
-    file_name: None,
+    file_name: Option<&'a str>,
 }
 
 pub trait HasError {
@@ -35,6 +35,7 @@ impl MultifileReader<'_> {
             ni: fnames,
             curr_file: None, // normally this means done; call next_file()
             any_err: false,
+            file_name: None,
         };
         mf.next_file();
         mf
