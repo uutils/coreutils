@@ -11,6 +11,7 @@ use std::path::Path;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
+use uucore::safe_copy::{create_dest_restrictive, open_source};
 use uucore::translate;
 
 use uucore::mode::get_umask;
@@ -28,7 +29,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_stream: bool,
-    _nofollow: bool,
+    nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported")
@@ -134,7 +135,16 @@ pub(crate) fn copy_on_write(
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut src_file = open_source(source, nofollow)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                )
+            })?;
+            std::io::copy(&mut src_file, &mut dst_file)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
