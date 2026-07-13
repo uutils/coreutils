@@ -469,6 +469,37 @@ fn test_offset_invalid() {
 }
 
 #[test]
+fn test_page_width_too_large() {
+    // GNU pr stores the width in a C `int` and rejects anything above `i32::MAX`
+    // ('2147483647') up front. `-W`/`--page-width` and `-w`/`--width` both report
+    // it as "PAGE_WIDTH".
+    let arg = "2147483648";
+    new_ucmd!()
+        .args(&["-W", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-W PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+    new_ucmd!()
+        .args(&["-w", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_large_page_width_does_not_panic() {
+    // A page width whose centering padding exceeds the `{:width$}` formatter's
+    // `u16` count limit previously panicked ("Formatting argument out of range")
+    // while building the header. The header padding is now streamed instead.
+    new_ucmd!()
+        .args(&["-W", "200000"])
+        .pipe_in("hello\nworld\n")
+        .succeeds();
+}
+
+#[test]
 fn test_with_date_format() {
     let whitespace = " ".repeat(50);
     let blank_lines = "\n".repeat(61);
