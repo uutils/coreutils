@@ -203,7 +203,16 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     assert!(['.', ':'].contains(&sep));
     let mut args = spec.splitn(2, sep);
     let user = args.next().unwrap_or("");
-    let group = args.next().unwrap_or("");
+    let mut implicit_group_is_user = false;
+    let group = args.next().map_or("", |g| {
+        if g.is_empty() && sep == ':' {
+            // argument ended with a colon, implicit group == user
+            implicit_group_is_user = true;
+            user
+        } else {
+            g
+        }
+    });
 
     // dot separator: try as username first, fall back to owner.group (like GNU)
     if sep == ':' && !spec.contains(':') && spec.contains('.') {
@@ -221,7 +230,10 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
     let uid = parse_uid(user, spec)?;
     let gid = parse_gid(group, spec)?;
 
-    if user.chars().next().is_some_and(char::is_numeric) && group.is_empty() && spec != user {
+    if user.chars().next().is_some_and(char::is_numeric)
+        && (group.is_empty() || implicit_group_is_user)
+        && spec != user
+    {
         // if the arg starts with an id numeric value, the group isn't set but the separator is provided,
         // we should fail with an error
         return Err(USimpleError::new(
@@ -263,5 +275,17 @@ mod test {
             parse_spec("12345:54321", ':'),
             Ok((Some(12345), Some(54321)))
         ));
+        // Implicit group-is-user does not work with IDs
+        assert_eq!(
+            "chown-error-invalid-spec",
+            format!("{}", parse_spec("0:", ':').err().unwrap()),
+        );
+    }
+
+    /// root user uid/gid unresolvable in some environments
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_parse_spec_named() {
+        assert!(matches!(parse_spec("root:", ':'), Ok((Some(0), Some(0)))));
     }
 }

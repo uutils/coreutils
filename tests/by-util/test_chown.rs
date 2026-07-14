@@ -134,13 +134,46 @@ fn test_chown_only_owner_colon() {
     let file1 = "test_chown_file1";
     at.touch(file1);
 
-    scene
-        .ucmd()
-        .arg(format!("{user_name}:"))
-        .arg("--verbose")
-        .arg(file1)
-        .succeeds()
-        .stderr_contains("retained as");
+    let result = scene.cmd("id").arg("-gn").run();
+    if skipping_test_is_okay(&result, "id: cannot find name for group ID") {
+        return;
+    }
+    let group_name = String::from(result.stdout_str().trim());
+    assert!(!group_name.is_empty());
+
+    // In some test environments user and group are different, and the user
+    // is not allowed the file to its current group, in those cases, it should fail.
+    if group_name == user_name {
+        let success = scene
+            .ucmd()
+            .arg(format!("{user_name}:"))
+            .arg("--verbose")
+            .arg(file1)
+            .succeeds();
+        let stderr = success.stderr_str();
+        #[cfg(target_os = "openbsd")]
+        {
+            // Ugly hack because the openbsd runner has sticky file creation set to wheel for
+            // our directory, which make the group change when invoked
+            assert!(stderr.contains("retained as") || stderr.contains("changed ownership"));
+        }
+        #[cfg(not(target_os = "openbsd"))]
+        {
+            assert!(stderr.contains("retained as"));
+        }
+    } else {
+        let failure = scene
+            .ucmd()
+            .arg(format!("{user_name}:"))
+            .arg("--verbose")
+            .arg(file1)
+            .fails();
+        // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+        assert!(
+            failure.stderr_str().contains("failed to change")
+                || failure.stderr_str().contains("invalid group")
+        );
+    }
 
     scene
         .ucmd()
@@ -151,13 +184,17 @@ fn test_chown_only_owner_colon() {
         .stderr_contains("retained as")
         .stderr_contains("warning: '.' should be ':'");
 
-    scene
+    let failure = scene
         .ucmd()
         .arg("root:")
         .arg("--verbose")
         .arg(file1)
-        .fails()
-        .stderr_contains("failed to change");
+        .fails();
+    // Depending on the environment, it may be a forbidden group (failed to change) or group not existing (invalid group)
+    assert!(
+        failure.stderr_str().contains("failed to change")
+            || failure.stderr_str().contains("invalid group")
+    );
 }
 
 #[test]
@@ -212,12 +249,14 @@ fn test_chown_dot_separator_warning() {
     );
 
     // chown user: file should not warn
-    scene
-        .ucmd()
-        .arg(format!("{user_name}:"))
-        .arg(file1)
-        .succeeds()
-        .stderr_does_not_contain("warning");
+    let result = scene.ucmd().arg(format!("{user_name}:")).arg(file1).run();
+
+    // In ci some platforms run with the user `runner` and that user has no GID
+    // trying to parse it causes an error
+    if skipping_test_is_okay(&result, "chown: invalid group:") {
+        return;
+    }
+    result.success().stderr_does_not_contain("warning");
 }
 
 #[test]
