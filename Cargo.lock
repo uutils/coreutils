@@ -4501,6 +4501,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
+ "thiserror 2.0.18",
  "uucore",
 ]
 
