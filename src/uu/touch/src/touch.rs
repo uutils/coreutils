@@ -10,9 +10,11 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-#[cfg(any(not(unix), target_os = "redox"))]
+use filetime::FileTime;
+#[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
 use filetime::set_file_times;
-use filetime::{FileTime, set_symlink_file_times};
+#[cfg(not(target_os = "wasi"))]
+use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -708,6 +710,47 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
+/// WASI replacement for `filetime::set_file_times`.
+///
+/// The `filetime` crate has an unimplemented stub on `wasm32-wasi`. WASI
+/// supports setting both atime and mtime via `utimensat`, which we reach
+/// through `rustix`.
+#[cfg(target_os = "wasi")]
+fn set_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    wasi_utimensat(path, atime, mtime, false)
+}
+
+/// WASI replacement for `filetime::set_symlink_file_times`.
+#[cfg(target_os = "wasi")]
+fn set_symlink_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+    wasi_utimensat(path, atime, mtime, true)
+}
+
+#[cfg(target_os = "wasi")]
+fn wasi_utimensat(
+    path: &Path,
+    atime: FileTime,
+    mtime: FileTime,
+    no_follow: bool,
+) -> std::io::Result<()> {
+    let timestamps = rustix::fs::Timestamps {
+        last_access: rustix::fs::Timespec {
+            tv_sec: atime.unix_seconds(),
+            tv_nsec: atime.nanoseconds() as _,
+        },
+        last_modification: rustix::fs::Timespec {
+            tv_sec: mtime.unix_seconds(),
+            tv_nsec: mtime.nanoseconds() as _,
+        },
+    };
+    let flags = if no_follow {
+        rustix::fs::AtFlags::SYMLINK_NOFOLLOW
+    } else {
+        rustix::fs::AtFlags::empty()
+    };
+    rustix::fs::utimensat(rustix::fs::CWD, path, &timestamps, flags).map_err(Error::from)
+}
+
 /// Get metadata of the provided path
 /// If `follow` is `true`, the function will try to follow symlinks. Errors if the symlink is dangling, otherwise defaults to symlink metadata.
 /// If `follow` is `false`, the function will return metadata of the symlink itself
@@ -725,6 +768,19 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
         fs::symlink_metadata(path)?
     };
 
+    // `FileTime::from_last_{access,modification}_time` is unimplemented on
+    // `wasm32-wasi`, so go through `Metadata::{accessed, modified}` (which
+    // return `SystemTime`) and convert via `FileTime::from_system_time`.
+    #[cfg(target_os = "wasi")]
+    {
+        let atime = metadata.accessed()?;
+        let mtime = metadata.modified()?;
+        Ok((
+            FileTime::from_system_time(atime),
+            FileTime::from_system_time(mtime),
+        ))
+    }
+    #[cfg(not(target_os = "wasi"))]
     Ok((
         FileTime::from_last_access_time(&metadata),
         FileTime::from_last_modification_time(&metadata),
@@ -888,7 +944,10 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
 ///
 /// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
 /// from the stdout handle.
-#[cfg_attr(not(windows), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    not(any(windows, target_os = "wasi")),
+    expect(clippy::unnecessary_wraps)
+)]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     #[cfg(all(unix, not(target_os = "android")))]
     {
@@ -898,6 +957,10 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
     {
         Ok(PathBuf::from("/proc/self/fd/1"))
     }
+    #[cfg(target_os = "wasi")]
+    return Err(TouchError::UnsupportedPlatformFeature(
+        "touch - (stdout) is not supported on WASI".to_string(),
+    ));
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
@@ -953,10 +1016,6 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
             .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
             .into())
-    }
-    #[cfg(target_os = "wasi")]
-    {
-        Ok(PathBuf::from("/dev/stdout"))
     }
 }
 

@@ -53,6 +53,9 @@ windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
 ] }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
+
 [[bin]]
 name = "cp"
 path = "src/main.rs"

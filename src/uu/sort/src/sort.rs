@@ -17,6 +17,7 @@ mod custom_str_cmp;
 mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
+mod parallel;
 mod tmp_dir;
 
 use bigdecimal::BigDecimal;
@@ -29,8 +30,6 @@ use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
-#[cfg(not(target_os = "wasi"))]
-use rayon::slice::ParallelSliceMut;
 use std::cmp::Ordering;
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -2113,17 +2112,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
 
-    // WASI doesn't support threads, so we ignore the corresponding option
-    #[cfg(not(target_os = "wasi"))]
-    {
-        let threads = matches
-            .get_one::<u64>(options::PARALLEL)
-            .copied()
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
-        let _ = rayon::ThreadPoolBuilder::new()
-            .num_threads(threads as usize)
-            .build_global();
-    }
+    // On targets without thread support this is a no-op and --parallel is ignored.
+    parallel::init_thread_pool(matches.get_one::<u64>(options::PARALLEL).copied());
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
@@ -2135,22 +2125,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         settings.buffer_size_is_explicit = false;
     }
 
-    let mut tmp_dir = TmpDirWrapper::new(matches.get_one::<String>(options::TMP_DIR).map_or_else(
-        || {
-            // WASI does not support std::env::temp_dir() — it panics with
-            // "no filesystem on wasm". Use /tmp as a nominal fallback;
-            // the WASI ext_sort path never actually creates temp files.
-            #[cfg(target_os = "wasi")]
-            {
-                PathBuf::from("/tmp")
-            }
-            #[cfg(not(target_os = "wasi"))]
-            {
-                env::temp_dir()
-            }
-        },
-        PathBuf::from,
-    ));
+    let mut tmp_dir = TmpDirWrapper::new(
+        matches
+            .get_one::<String>(options::TMP_DIR)
+            .map(PathBuf::from)
+            .or_else(|| env::var_os("TMPDIR").map(PathBuf::from))
+            .unwrap_or_else(|| {
+                #[cfg(target_os = "wasi")]
+                {
+                    uucore::fs::wasi_default_tmp_dir()
+                }
+                #[cfg(not(target_os = "wasi"))]
+                {
+                    env::temp_dir()
+                }
+            }),
+    );
 
     settings.compress_prog = matches
         .get_one::<String>(options::COMPRESS_PROG)
@@ -2604,18 +2594,10 @@ fn exec(
 
 fn sort_by<'a>(unsorted: &mut Vec<Line<'a>>, settings: &GlobalSettings, line_data: &LineData<'a>) {
     let cmp = |a: &Line<'a>, b: &Line<'a>| compare_by(a, b, settings, line_data, line_data);
-    // WASI does not support threads, so use non-parallel sort to avoid
-    // rayon's thread pool which triggers an unreachable trap.
     if settings.stable || settings.unique {
-        #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_by(cmp);
-        #[cfg(target_os = "wasi")]
-        unsorted.sort_by(cmp);
+        parallel::sort_by(unsorted, cmp);
     } else {
-        #[cfg(not(target_os = "wasi"))]
-        unsorted.par_sort_unstable_by(cmp);
-        #[cfg(target_os = "wasi")]
-        unsorted.sort_unstable_by(cmp);
+        parallel::sort_unstable_by(unsorted, cmp);
     }
 }
 
