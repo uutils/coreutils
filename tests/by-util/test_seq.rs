@@ -784,12 +784,15 @@ fn test_parse_error_hex() {
 
 #[test]
 fn test_format_a_huge_negative_exponent_does_not_oom() {
-    // `seq -f %a 1E-1000000000000000000 1` used to abort with an OOM from
-    // trying to allocate exabytes in the bignum shift (#13222).  Values
-    // with a decimal exponent below −5000 underflow to zero in any
-    // long-double implementation, so the output should be 0x0p+0.
+    // Values with a decimal exponent below −5000 underflow to zero in any
+    // long-double implementation and must not abort with OOM (#13222).
+    // Use 1E-5001 rather than 1E-1000000000000000000: the latter would
+    // hang in BigDecimal arithmetic (10^18-digit integers) before even
+    // reaching the formatter.  The unit test in num_format.rs covers the
+    // extreme value directly.
+    // spell-checker:ignore bignum
     new_ucmd!()
-        .args(&["-f", "%a", "1E-1000000000000000000", "1"])
+        .args(&["-f", "%a", "1E-5001", "1"])
         .succeeds()
         .stdout_contains("0x0p+0");
 }
