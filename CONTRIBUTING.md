@@ -300,10 +300,10 @@ features.
 ## Improving the GNU compatibility
 
 Please make sure you have installed
-[GNU utils and prerequisites](DEVELOPMENT.md#gnu-utils-and-prerequisites) and
+[GNU utils and prerequisites](./DEVELOPMENT.md#gnu-utils-and-prerequisites) and
 can execute commands described in
-[Comparing with GNU](DEVELOPMENT.md#comparing-with-gnu) section of
-[DEVELOPMENT.md](DEVELOPMENT.md)
+[Comparing with GNU](./DEVELOPMENT.md#comparing-with-gnu) section of
+[DEVELOPMENT.md](./DEVELOPMENT.md)
 
 The Python script `./util/remaining-gnu-error.py` shows the list of failing
 tests in the CI.
@@ -330,8 +330,8 @@ To improve the GNU compatibility, the following process is recommended:
 ## Code coverage
 
 To generate code coverage report locally please follow
-[Code coverage report](DEVELOPMENT.md#code-coverage-report) section of
-[DEVELOPMENT.md](DEVELOPMENT.md)
+[Code coverage report](./DEVELOPMENT.md#code-coverage-report) section of
+[DEVELOPMENT.md](./DEVELOPMENT.md)
 
 ## Other implementations
 
