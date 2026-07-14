@@ -2007,3 +2007,22 @@ fn test_emoji_operations() {
         .succeeds()
         .stdout_only("1\n");
 }
+
+#[test]
+fn test_deeply_nested_parens_do_not_crash() {
+    // 5000 levels of nesting used to cause a stack overflow (issue #13146).
+    // With the recursion limit, it must fail gracefully rather than crashing.
+    const DEPTH: usize = 5000;
+    let mut args: Vec<String> = Vec::with_capacity(DEPTH * 2 + 1);
+    for _ in 0..DEPTH {
+        args.push("(".to_string());
+    }
+    args.push("1".to_string());
+    for _ in 0..DEPTH {
+        args.push(")".to_string());
+    }
+    new_ucmd!()
+        .args(&args)
+        .fails()
+        .stderr_contains("expression too deeply nested");
+}

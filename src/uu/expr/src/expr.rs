@@ -58,6 +58,8 @@ pub enum ExprError {
     TooBigRangeQuantifierIndex,
     #[error("{}", translate!("expr-error-match-utf8", "arg" => _0.quote()))]
     UnsupportedNonUtf8Match(String),
+    #[error("{}", translate!("expr-error-recursion-limit"))]
+    RecursionLimit,
 }
 
 impl UError for ExprError {

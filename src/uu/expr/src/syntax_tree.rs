@@ -753,14 +753,24 @@ fn get_next_id() -> u32 {
     })
 }
 
+// Each `(` spawns ~8 recursive frames (parse_expression + 6×parse_precedence +
+// parse_simple_expression). 86 levels × 8 ≈ 688 frames, leaving comfortable
+// headroom before the ~840-frame stack overflow seen in debug builds.
+const MAX_RECURSION_DEPTH: usize = 86;
+
 struct Parser<'a, S: AsRef<MaybeNonUtf8Str>> {
     input: &'a [S],
     index: usize,
+    depth: usize,
 }
 
 impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
     fn new(input: &'a [S]) -> Self {
-        Self { input, index: 0 }
+        Self {
+            input,
+            index: 0,
+            depth: 0,
+        }
     }
 
     fn next(&mut self) -> ExprResult<&'a MaybeNonUtf8Str> {
@@ -877,7 +887,12 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                 value: self.next()?.into(),
             },
             b"(" => {
+                if self.depth >= MAX_RECURSION_DEPTH {
+                    return Err(ExprError::RecursionLimit);
+                }
+                self.depth += 1;
                 let s = self.parse_expression()?;
+                self.depth -= 1;
 
                 match self.next() {
                     Ok(b")") => {}

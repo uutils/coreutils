@@ -64,3 +64,4 @@ expr-error-invalid-bracket-content = Invalid content of {"\\{\\}"}
 expr-error-trailing-backslash = Trailing backslash
 expr-error-too-big-range-quantifier-index = Regular expression too big
 expr-error-match-utf8 = match does not support invalid UTF-8 encoding in { $arg }
+expr-error-recursion-limit = expression too deeply nested
