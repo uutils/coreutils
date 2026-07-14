@@ -3086,4 +3086,50 @@ fn test_sort_locale_punctuation() {
     }
 }
 
+#[test]
+fn test_locale_collation_long_lines() {
+    // Lines longer than 64 KiB skip collation-key precomputation and are
+    // compared lazily with the locale collator (issue #12138). Interleave
+    // long and short lines so lazy lines are compared against precomputed
+    // ones, and precomputed lines follow lazy ones (validating that key
+    // offsets stay correct after a skipped entry).
+    const LONG: usize = 70_000; // > MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN
+
+    let long_e_acute = "é".repeat(LONG / 2); // 2 bytes per char => above the cap
+    let long_upper_a = "A".repeat(LONG);
+    let long_lower_a = "a".repeat(LONG);
+    let input = format!("f\n{long_upper_a}\nb\n{long_lower_a}\n{long_e_acute}\na\n");
+    // Locale order: a < aa… < AA… < b < éé… < f.
+    // Byte order would instead yield AA… < a < aa… < b < f < éé….
+    let expected = format!("a\n{long_lower_a}\n{long_upper_a}\nb\n{long_e_acute}\nf\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_locale_collation_long_line_boundary() {
+    // Lines of exactly 65,535 bytes still get a precomputed collation key,
+    // while 65,536-byte lines take the lazy path. Both paths must agree on
+    // locale-aware order: shorter prefixes first, lowercase before uppercase
+    // within the same length.
+    const AT_CAP: usize = 65_535; // == MAX_PRECOMPUTED_COLLATION_KEY_LINE_LEN
+
+    let lower_at = "a".repeat(AT_CAP);
+    let upper_at = "A".repeat(AT_CAP);
+    let lower_over = "a".repeat(AT_CAP + 1);
+    let upper_over = "A".repeat(AT_CAP + 1);
+    let input = format!("{upper_over}\n{lower_at}\n{upper_at}\n{lower_over}\n");
+    let expected = format!("{lower_at}\n{upper_at}\n{lower_over}\n{upper_over}\n");
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_is(expected);
+}
+
 /* spell-checker: enable */

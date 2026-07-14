@@ -24,8 +24,20 @@ use crate::{
 };
 
 const ALLOC_CHUNK_SIZE: usize = 64 * 1024;
+const COLLATION_KEY_SKIPPED: usize = 1usize << (usize::BITS - 1);
+const COLLATION_KEY_OFFSET_MASK: usize = !COLLATION_KEY_SKIPPED;
 const MAX_TOKEN_BUFFER_BYTES: usize = 4 * 1024 * 1024;
 const MAX_TOKEN_BUFFER_ELEMS: usize = MAX_TOKEN_BUFFER_BYTES / size_of::<Range<usize>>();
+
+#[inline]
+fn collation_key_end(entry: usize) -> usize {
+    entry & COLLATION_KEY_OFFSET_MASK
+}
+
+#[inline]
+fn is_collation_key_skipped(entry: usize) -> bool {
+    entry & COLLATION_KEY_SKIPPED != 0
+}
 
 self_cell!(
     /// The chunk that is passed around between threads.
@@ -55,20 +67,42 @@ pub struct LineData<'a> {
     pub line_num_floats: Vec<Option<f64>>,
     /// Arena buffer holding all collation sort keys concatenated.
     pub collation_key_buffer: Vec<u8>,
-    /// End offsets into `collation_key_buffer` for each line's sort key.
+    /// End offsets into `collation_key_buffer`; the high bit marks lines that use lazy collation.
     pub collation_key_ends: Vec<usize>,
 }
 
 impl LineData<'_> {
     /// Get the collation sort key for a line at the given index.
-    pub fn collation_key(&self, index: usize) -> &[u8] {
+    pub fn collation_key(&self, index: usize) -> Option<&[u8]> {
+        let entry = self.collation_key_ends[index];
+        if is_collation_key_skipped(entry) {
+            return None;
+        }
         let start = if index == 0 {
             0
         } else {
-            self.collation_key_ends[index - 1]
+            collation_key_end(self.collation_key_ends[index - 1])
         };
-        let end = self.collation_key_ends[index];
-        &self.collation_key_buffer[start..end]
+        let end = collation_key_end(entry);
+        Some(&self.collation_key_buffer[start..end])
+    }
+
+    /// Record that the current end of `collation_key_buffer` terminates the
+    /// precomputed collation key of the line being appended.
+    #[inline]
+    pub fn push_collation_key_end(&mut self) {
+        let end = self.collation_key_buffer.len();
+        debug_assert_eq!(end & COLLATION_KEY_SKIPPED, 0);
+        self.collation_key_ends.push(end);
+    }
+
+    /// Record a line whose collation key was not precomputed; `collation_key`
+    /// returns `None` for it so it is compared lazily via the locale collator.
+    #[inline]
+    pub fn push_skipped_collation_key(&mut self) {
+        let end = self.collation_key_buffer.len();
+        debug_assert_eq!(end & COLLATION_KEY_SKIPPED, 0);
+        self.collation_key_ends.push(end | COLLATION_KEY_SKIPPED);
     }
 }
 
@@ -313,6 +347,9 @@ fn parse_lines<'a>(
     }
     if settings.mode == SortMode::Numeric {
         line_data.line_num_floats.reserve(estimated);
+    }
+    if settings.precomputed.fast_locale_collation {
+        line_data.collation_key_ends.reserve(estimated);
     }
     let mut start = 0usize;
     let mut index = 0usize;
