@@ -40,6 +40,8 @@ macro_rules! test_digest {
             #[test]
             fn test_stdin() {
                 let ts = TestScenario::new(util_name!());
+                // A directory named "-" must not shadow stdin.
+                ts.fixtures.mkdir("-");
                 assert_eq!(
                     ts.fixtures.read(EXPECTED_FILE),
                     get_hash!(
