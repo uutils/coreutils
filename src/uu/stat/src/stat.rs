@@ -1069,7 +1069,9 @@ impl Stater {
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
-            Token::Char(c) => std::io::stdout().write_all(c.to_string().as_bytes()).map_err(|_| 1)?,
+            Token::Char(c) => std::io::stdout()
+                .write_all(c.to_string().as_bytes())
+                .map_err(|_| 1)?,
 
             Token::Directive {
                 flag,
