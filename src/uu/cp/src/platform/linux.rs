@@ -38,10 +38,8 @@ where
             translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
         )
     })?;
-    if ioctl_ficlone(&dst, &src).is_err() {
-        buf_copy::copy_fast(&mut src, &mut dst)
-            .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    }
+    buf_copy::copy_fast(&mut src, &mut dst)
+        .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
     Ok(())
 }
 
