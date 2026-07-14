@@ -12,6 +12,7 @@ use rustix::process::{
 };
 use std::cmp::Ordering;
 use std::io::{self, BufWriter, Write};
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
@@ -40,6 +41,14 @@ pub enum Mode {
     Table,
     List,
 }
+
+#[derive(Debug, Error)]
+enum KillError {
+    #[error("{}", translate!("kill-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
+}
+
+impl UError for KillError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -159,26 +168,16 @@ fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
     Ok(None)
 }
 
-// Turn a stdout write failure into a user-facing error carrying the OS error
-// message (e.g. "write error: No space left on device"), so a failed write to a
-// full/closed stdout is reported instead of panicking inside `println!`.
-fn stdout_write_error(err: io::Error) -> Box<dyn UError> {
-    USimpleError::new(
-        1,
-        translate!("kill-error-write-error", "err" => strip_errno(&err)),
-    )
-}
-
 fn table() -> UResult<()> {
     // Buffer the listing so a failed write surfaces as one clean error at flush
     // rather than the runtime's implicit-flush message on top of ours.
     let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            writeln!(out, "{signal_value: >#2} {signal_name}").map_err(stdout_write_error)?;
+            writeln!(out, "{signal_value: >#2} {signal_name}").map_err(KillError::Write)?;
         }
     }
-    out.flush().map_err(stdout_write_error)?;
+    out.flush().map_err(KillError::Write)?;
     Ok(())
 }
 
@@ -216,8 +215,8 @@ fn print_signal(signal_name_or_value: &str) -> UResult<()> {
     };
 
     let mut out = BufWriter::new(io::stdout().lock());
-    writeln!(out, "{output}").map_err(stdout_write_error)?;
-    out.flush().map_err(stdout_write_error)?;
+    writeln!(out, "{output}").map_err(KillError::Write)?;
+    out.flush().map_err(KillError::Write)?;
     Ok(())
 }
 
@@ -225,10 +224,10 @@ fn print_signals() -> UResult<()> {
     let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            writeln!(out, "{signal_name}").map_err(stdout_write_error)?;
+            writeln!(out, "{signal_name}").map_err(KillError::Write)?;
         }
     }
-    out.flush().map_err(stdout_write_error)?;
+    out.flush().map_err(KillError::Write)?;
     Ok(())
 }
 
