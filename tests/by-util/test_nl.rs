@@ -183,7 +183,7 @@ fn test_number_width_zero() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+            .stderr_contains("is not in 1..=2147483647");
     }
 }
 
@@ -196,7 +196,7 @@ fn test_number_width_too_large() {
             .arg(arg)
             .pipe_in("")
             .fails()
-            .stderr_contains("Invalid line number field width: '2147483648': Numerical result out of range");
+            .stderr_contains("is not in 1..=2147483647");
     }
 }
 
