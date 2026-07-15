@@ -122,7 +122,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::from);
     let size = matches.get_one::<String>(options::SIZE).map(String::from);
 
-    truncate(no_create, io_blocks, reference, size, &files)
+    truncate(&files, no_create, io_blocks, reference, size)
 }
 
 pub fn uu_app() -> Command {
@@ -199,10 +199,10 @@ fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
 }
 
 fn file_truncate(
+    filename: &OsString,
     no_create: bool,
     reference_size: Option<u64>,
     mode: &TruncateMode,
-    filename: &OsString,
 ) -> UResult<()> {
     let path = Path::new(filename);
 
@@ -236,11 +236,11 @@ fn file_truncate(
 }
 
 fn truncate(
+    filenames: &[OsString],
     no_create: bool,
-    _: bool,
+    _io_blocks: bool, // TODO: implement handling
     reference: Option<String>,
     size: Option<String>,
-    filenames: &[OsString],
 ) -> UResult<()> {
     let reference_size = match reference {
         Some(reference_path) => {
@@ -284,7 +284,7 @@ fn truncate(
     // Process every file: a failure on one (e.g. a directory) must not
     // prevent the remaining files from being truncated.
     for filename in filenames {
-        show_if_err!(file_truncate(no_create, reference_size, &mode, filename));
+        show_if_err!(file_truncate(filename, no_create, reference_size, &mode));
     }
 
     Ok(())
