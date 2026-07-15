@@ -293,7 +293,7 @@ fn truncate(
 
 /// Decide whether a character is one of the size modifiers, like '+' or '<'.
 fn is_modifier(c: char) -> bool {
-    c == '+' || c == '-' || c == '<' || c == '>' || c == '/' || c == '%'
+    "+-<>/%".contains(c)
 }
 
 /// Parse a size string with optional modifier symbol as its first character.
