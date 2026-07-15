@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
+// spell-checker:ignore (ToDO) RFILE fsize
+
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{OpenOptions, metadata};
@@ -100,8 +101,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
-    let matches = uucore::clap_localization::handle_clap_result(app, args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(options::ARG_FILES)
