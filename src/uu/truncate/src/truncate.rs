@@ -187,9 +187,7 @@ pub fn uu_app() -> Command {
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
 fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
-    let path = Path::new(filename);
-
-    match OpenOptions::new().write(true).create(create).open(path) {
+    match OpenOptions::new().write(true).create(create).open(filename) {
         Ok(file) => file.set_len(size),
         Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
         Err(e) => Err(e),
