@@ -109,19 +109,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if files.is_empty() {
-        Err(UUsageError::new(
+        return Err(UUsageError::new(
             1,
             translate!("truncate-error-missing-file-operand"),
-        ))
-    } else {
-        let io_blocks = matches.get_flag(options::IO_BLOCKS);
-        let no_create = matches.get_flag(options::NO_CREATE);
-        let reference = matches
-            .get_one::<String>(options::REFERENCE)
-            .map(String::from);
-        let size = matches.get_one::<String>(options::SIZE).map(String::from);
-        truncate(no_create, io_blocks, reference, size, &files)
+        ));
     }
+
+    let io_blocks = matches.get_flag(options::IO_BLOCKS);
+    let no_create = matches.get_flag(options::NO_CREATE);
+    let reference = matches
+        .get_one::<String>(options::REFERENCE)
+        .map(String::from);
+    let size = matches.get_one::<String>(options::SIZE).map(String::from);
+
+    truncate(no_create, io_blocks, reference, size, &files)
 }
 
 pub fn uu_app() -> Command {
