@@ -20,7 +20,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
+uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
 
 [[bin]]

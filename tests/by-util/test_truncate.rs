@@ -6,6 +6,8 @@
 // spell-checker:ignore (words) RFILE
 
 use std::io::{Seek, SeekFrom, Write};
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -295,6 +297,33 @@ fn test_relative_size_overflow_preserves_file() {
         .stderr_contains("Value too large for defined data type");
 
     assert_eq!(at.read(FILE1), "x");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_io_blocks_uses_file_block_size() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+    let block_size = at.metadata(FILE1).blksize();
+
+    ucmd.args(&["--io-blocks", "--size=1", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), block_size);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_io_blocks_uses_parent_block_size_for_new_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let block_size = at.metadata(".").blksize();
+
+    ucmd.args(&["--io-blocks", "--size=2", FILE1])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.metadata(FILE1).len(), 2 * block_size);
 }
 
 /// Test that truncating a non-existent file creates that file.
