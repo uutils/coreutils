@@ -10,7 +10,7 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{stdin, IsTerminal};
+use std::io::{IsTerminal, stdin};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -21,8 +21,9 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    is_dir_empty, is_readable_metadata, prompt_descend, remove_file, show_permission_denied_error,
-    show_removal_error, verbose_removed_directory, verbose_removed_file, InteractiveMode, Options,
+    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
+    show_permission_denied_error, show_removal_error, verbose_removed_directory,
+    verbose_removed_file,
 };
 
 #[inline]
