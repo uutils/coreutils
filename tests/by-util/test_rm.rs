@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile NOFILE EMFILE
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1188,6 +1188,39 @@ fn test_rm_recursive_long_path_safe_traversal() {
 
     // Verify the directory is completely removed
     assert!(!at.dir_exists("rm_deep"));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_rm_recursive_deep_tree_low_nofile() {
+    // Regression for #7995: recursive rm held one DirFd per nesting level and
+    // failed with EMFILE on deep trees under a tight NOFILE limit. GNU rm keeps
+    // FD use O(1) with depth; we should too.
+    use rlimit::Resource;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // ~80 nested dirs is enough to exhaust a soft NOFILE of 32 if each level
+    // keeps its parent open, while remaining cheap to create.
+    let depth = 80;
+    let mut deep_path = String::from("rm_emfile_deep");
+    at.mkdir(&deep_path);
+    for _ in 0..depth {
+        deep_path = format!("{deep_path}/x");
+        at.mkdir(&deep_path);
+    }
+    at.write(&format!("{deep_path}/leaf"), "data");
+
+    // Leave headroom for stdio + a few helpers, but far below `depth`.
+    ts.ucmd()
+        .arg("-rf")
+        .arg("rm_emfile_deep")
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("rm_emfile_deep"));
 }
 
 #[cfg(all(not(windows), feature = "chmod"))]

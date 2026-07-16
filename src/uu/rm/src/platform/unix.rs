@@ -10,7 +10,7 @@
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
 use std::fs;
-use std::io::{IsTerminal, stdin};
+use std::io::{stdin, IsTerminal};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
@@ -21,9 +21,8 @@ use uucore::show_error;
 use uucore::translate;
 
 use super::super::{
-    InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
-    show_permission_denied_error, show_removal_error, verbose_removed_directory,
-    verbose_removed_file,
+    is_dir_empty, is_readable_metadata, prompt_descend, remove_file, show_permission_denied_error,
+    show_removal_error, verbose_removed_directory, verbose_removed_file, InteractiveMode, Options,
 };
 
 #[inline]
@@ -371,6 +370,23 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
+/// Frame on the explicit directory-walk stack used by
+/// [`safe_remove_dir_recursive_impl`].
+///
+/// Only the active directory stays open. Before descending we close the parent
+/// `DirFd` and reopen it later from its saved path, so open-file use stays O(1)
+/// with depth. Deep single-child trees no longer fail with EMFILE (#7995).
+/// Children are still unlinked with `unlinkat` relative to an open parent.
+struct DirWalkFrame {
+    path: std::path::PathBuf,
+    dir_fd: Option<DirFd>,
+    dir_dev: u64,
+    pending: Vec<std::ffi::OsString>,
+    error: bool,
+    mode: libc::mode_t,
+    name_in_parent: std::ffi::OsString,
+}
+
 #[cfg(not(target_os = "redox"))]
 pub fn safe_remove_dir_recursive_impl(
     path: &Path,
@@ -379,8 +395,9 @@ pub fn safe_remove_dir_recursive_impl(
     root_dev: u64,
     parent_dev: u64,
 ) -> bool {
-    // Read directory entries using safe traversal
-    let entries = match dir_fd.read_dir() {
+    // Snapshot entries from the caller's DirFd, then re-open so the walk owns
+    // every descriptor on the stack (parent FDs are closed while descended).
+    let root_entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             if !options.force {
@@ -393,22 +410,115 @@ pub fn safe_remove_dir_recursive_impl(
         }
     };
 
-    let mut error = false;
+    let root_fd = match DirFd::open(path, SymlinkBehavior::Follow) {
+        Ok(fd) => fd,
+        Err(e) => return handle_error_with_force(e, path, options),
+    };
 
-    // Process each entry
-    for entry_name in entries {
-        let entry_path = path.join(&entry_name);
+    // parent_dev is unused on the root frame itself; the caller passes
+    // parent_dev == root_dev for the initial invocation.
+    let _ = parent_dev;
 
-        // Get metadata for the entry using fstatat
-        let entry_stat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
-            Ok(stat) => stat,
-            Err(e) => {
-                error |= handle_error_with_force(e, &entry_path, options);
+    // Reverse so pop() yields entries in the original read order.
+    let mut root_pending = root_entries;
+    root_pending.reverse();
+
+    let mut stack = vec![DirWalkFrame {
+        path: path.to_path_buf(),
+        dir_fd: Some(root_fd),
+        dir_dev: root_dev,
+        pending: root_pending,
+        error: false,
+        mode: 0,
+        name_in_parent: std::ffi::OsString::new(),
+    }];
+
+    let mut had_error = false;
+
+    while !stack.is_empty() {
+        let frame_idx = stack.len() - 1;
+
+        if stack[frame_idx].pending.is_empty() {
+            let child_error = stack[frame_idx].error;
+            let child_path = stack[frame_idx].path.clone();
+            let child_mode = stack[frame_idx].mode;
+            let child_name = stack[frame_idx].name_in_parent.clone();
+            // Drop this directory's FD before unlinking / restoring parent.
+            stack[frame_idx].dir_fd = None;
+
+            if stack.len() == 1 {
+                had_error = child_error;
+                stack.pop();
+                break;
+            }
+
+            let parent_idx = frame_idx - 1;
+            if stack[parent_idx].dir_fd.is_none() {
+                match DirFd::open(&stack[parent_idx].path, SymlinkBehavior::NoFollow) {
+                    Ok(fd) => stack[parent_idx].dir_fd = Some(fd),
+                    Err(e) => {
+                        stack[parent_idx].error |=
+                            handle_error_with_force(e, &stack[parent_idx].path, options);
+                        stack.pop();
+                        continue;
+                    }
+                }
+            }
+
+            if !child_error {
+                if options.interactive == InteractiveMode::Always
+                    && !prompt_dir_with_mode(&child_path, child_mode, options)
+                {
+                    stack.pop();
+                    continue;
+                }
+
+                if let Some(parent_fd) = stack[parent_idx].dir_fd.as_ref() {
+                    stack[parent_idx].error |=
+                        handle_unlink(parent_fd, child_name.as_ref(), &child_path, true, options);
+                } else {
+                    stack[parent_idx].error = true;
+                }
+            } else {
+                stack[parent_idx].error = true;
+            }
+
+            stack.pop();
+            continue;
+        }
+
+        let Some(entry_name) = stack[frame_idx].pending.pop() else {
+            continue;
+        };
+        let entry_path = stack[frame_idx].path.join(&entry_name);
+
+        if stack[frame_idx].dir_fd.is_none() {
+            match DirFd::open(&stack[frame_idx].path, SymlinkBehavior::NoFollow) {
+                Ok(fd) => stack[frame_idx].dir_fd = Some(fd),
+                Err(e) => {
+                    stack[frame_idx].error |=
+                        handle_error_with_force(e, &stack[frame_idx].path, options);
+                    stack[frame_idx].pending.clear();
+                    continue;
+                }
+            }
+        }
+
+        let parent_dev_for_child = stack[frame_idx].dir_dev;
+        let entry_stat = {
+            let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() else {
+                stack[frame_idx].error = true;
                 continue;
+            };
+            match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
+                Ok(stat) => stat,
+                Err(e) => {
+                    stack[frame_idx].error |= handle_error_with_force(e, &entry_path, options);
+                    continue;
+                }
             }
         };
 
-        // Check if it's a directory
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
@@ -421,16 +531,16 @@ pub fn safe_remove_dir_recursive_impl(
                     "{}",
                     translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
                 );
-                error = true;
+                stack[frame_idx].error = true;
                 continue;
             }
 
             // --preserve-root=all compares against the immediate parent rather
             // than the tree root, so a mount nested anywhere in the tree is
             // caught even when --one-file-system is not in effect.
-            if options.preserve_root_all && entry_dev != parent_dev {
+            if options.preserve_root_all && entry_dev != parent_dev_for_child {
                 show_preserve_root_all_skip(&entry_path);
-                error = true;
+                stack[frame_idx].error = true;
                 continue;
             }
 
@@ -442,60 +552,81 @@ pub fn safe_remove_dir_recursive_impl(
                 continue;
             }
 
-            // Recursively remove subdirectory using safe traversal. rm never
-            // follows symlinks during recursion, so open with NoFollow: if an
-            // attacker swaps this just-stat'd directory for a symlink before the
-            // open, O_NOFOLLOW makes openat fail instead of descending off-tree
-            // and deleting unrelated files.
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
-                Ok(fd) => fd,
-                Err(e) => {
-                    // If we can't open the subdirectory for safe traversal,
-                    // try to handle it as best we can with safe operations
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error |= handle_permission_denied(
-                            dir_fd,
-                            entry_name.as_ref(),
-                            &entry_path,
-                            options,
-                        );
-                    } else {
-                        error |= handle_error_with_force(e, &entry_path, options);
+            // Open the subdirectory while the parent is still open, then close
+            // the parent before pushing the child frame so FD use stays O(1)
+            // with depth (GNU rm closes as it descends).
+            //
+            // rm never follows symlinks during recursion, so open with
+            // NoFollow: if an attacker swaps this just-stat'd directory for a
+            // symlink before the open, O_NOFOLLOW makes openat fail instead of
+            // descending off-tree and deleting unrelated files.
+            let child_dir_fd = {
+                let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() else {
+                    stack[frame_idx].error = true;
+                    continue;
+                };
+                match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            stack[frame_idx].error |= handle_permission_denied(
+                                dir_fd,
+                                entry_name.as_ref(),
+                                &entry_path,
+                                options,
+                            );
+                        } else {
+                            stack[frame_idx].error |=
+                                handle_error_with_force(e, &entry_path, options);
+                        }
+                        continue;
                     }
+                }
+            };
+
+            let child_entries = match child_dir_fd.read_dir() {
+                Ok(entries) => entries,
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !options.force {
+                        show_permission_denied_error(&entry_path);
+                    }
+                    drop(child_dir_fd);
+                    stack[frame_idx].error |= !options.force;
+                    continue;
+                }
+                Err(e) => {
+                    drop(child_dir_fd);
+                    stack[frame_idx].error |= handle_error_with_force(e, &entry_path, options);
                     continue;
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(
-                &entry_path,
-                &child_dir_fd,
-                options,
-                root_dev,
-                entry_dev,
-            );
-            error |= child_error;
+            // Close parent descriptor before descending.
+            stack[frame_idx].dir_fd = None;
 
-            // Ask user permission if needed for this subdirectory
-            if !child_error
-                && options.interactive == InteractiveMode::Always
-                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
-            {
-                continue;
-            }
+            let mut child_pending = child_entries;
+            child_pending.reverse();
 
-            // Remove the now-empty subdirectory using safe unlinkat
-            if !child_error {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
-            }
-        } else {
-            // Remove file - check if user wants to remove it first
-            if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+            stack.push(DirWalkFrame {
+                path: entry_path,
+                dir_fd: Some(child_dir_fd),
+                dir_dev: entry_dev,
+                pending: child_pending,
+                error: false,
+                mode: entry_stat.st_mode as libc::mode_t,
+                name_in_parent: entry_name,
+            });
+        } else if prompt_file_with_stat(&entry_path, &entry_stat, options) {
+            if let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() {
+                stack[frame_idx].error |=
+                    handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+            } else {
+                stack[frame_idx].error = true;
             }
         }
     }
 
-    error
+    had_error
 }
 
 #[cfg(target_os = "redox")]
