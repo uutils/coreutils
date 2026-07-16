@@ -414,10 +414,12 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args);
                 let i = args.next_i64(*position);
 
-                check_precision(precision)?;
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
+                }
 
                 num_format::SignedInt {
                     width,
@@ -440,10 +442,12 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args);
                 let i = args.next_u64(*position);
 
-                check_precision(precision)?;
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
+                }
 
                 num_format::UnsignedInt {
                     variant: *variant,
@@ -526,7 +530,7 @@ fn resolve_asterisk_precision(
         None => None,
         Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(loc) {
             v if v >= 0 => usize::try_from(v).ok(),
-            v if v < 0 => Some(0usize),
+            // A negative precision is treated as if the precision were omitted.
             _ => None,
         },
         Some(CanAsterisk::Fixed(w)) => Some(w),
@@ -709,14 +713,14 @@ mod tests {
             );
 
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::SignedInt(-42)]),
                 )
             );
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".into())]),
