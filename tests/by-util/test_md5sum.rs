@@ -53,6 +53,22 @@ macro_rules! test_digest {
             }
 
             #[test]
+            fn test_stdin_with_dash_directory() {
+                let ts = TestScenario::new(util_name!());
+                ts.fixtures.mkdir("-");
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
             fn test_check() {
                 let ts = TestScenario::new(util_name!());
                 println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
