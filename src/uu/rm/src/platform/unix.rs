@@ -468,20 +468,16 @@ pub fn safe_remove_dir_recursive_impl(
 
             if child_error {
                 stack[parent_idx].error = true;
+            } else if options.interactive == InteractiveMode::Always
+                && !prompt_dir_with_mode(&child_path, child_mode, options)
+            {
+                stack.pop();
+                continue;
+            } else if let Some(parent_fd) = stack[parent_idx].dir_fd.as_ref() {
+                stack[parent_idx].error |=
+                    handle_unlink(parent_fd, child_name.as_ref(), &child_path, true, options);
             } else {
-                if options.interactive == InteractiveMode::Always
-                    && !prompt_dir_with_mode(&child_path, child_mode, options)
-                {
-                    stack.pop();
-                    continue;
-                }
-
-                if let Some(parent_fd) = stack[parent_idx].dir_fd.as_ref() {
-                    stack[parent_idx].error |=
-                        handle_unlink(parent_fd, child_name.as_ref(), &child_path, true, options);
-                } else {
-                    stack[parent_idx].error = true;
-                }
+                stack[parent_idx].error = true;
             }
 
             stack.pop();
