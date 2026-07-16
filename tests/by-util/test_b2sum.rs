@@ -5,125 +5,13 @@
 
 use rstest::rstest;
 
+use crate::common_checksum_tests::test_digest;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
 use uutests::util_name;
-// spell-checker:ignore checkfile, testf, ntestf
-macro_rules! get_hash(
-    ($str:expr) => (
-        $str.split(' ').collect::<Vec<&str>>()[0]
-    );
-);
+// spell-checker:ignore testf, ntestf
 
-macro_rules! test_digest_with_len {
-    ($id:ident, $size:expr) => {
-        mod $id {
-            use uutests::util::*;
-            use uutests::util_name;
-            static LENGTH_ARG: &'static str = concat!("--length=", stringify!($size));
-            static EXPECTED_FILE: &'static str = concat!(stringify!($id), ".expected");
-            static CHECK_FILE: &'static str = concat!(stringify!($id), ".checkfile");
-            static INPUT_FILE: &'static str = "input.txt";
-
-            #[test]
-            fn test_single_file() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .arg(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_stdin() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .pipe_in_fixture(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_stdin_with_dash_directory() {
-                let ts = TestScenario::new(util_name!());
-                ts.fixtures.mkdir("-");
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .pipe_in_fixture(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_check() {
-                let ts = TestScenario::new(util_name!());
-                println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
-                println!("Check file='{}'", ts.fixtures.read(CHECK_FILE));
-
-                ts.ucmd()
-                    .args(&[LENGTH_ARG, "--check", CHECK_FILE])
-                    .succeeds()
-                    .no_stderr()
-                    .stdout_is("input.txt: OK\n");
-            }
-
-            #[test]
-            fn test_zero() {
-                let ts = TestScenario::new(util_name!());
-                assert_eq!(
-                    ts.fixtures.read(EXPECTED_FILE),
-                    get_hash!(
-                        ts.ucmd()
-                            .arg(LENGTH_ARG)
-                            .arg("--zero")
-                            .arg(INPUT_FILE)
-                            .succeeds()
-                            .no_stderr()
-                            .stdout_str()
-                    )
-                );
-            }
-
-            #[test]
-            fn test_missing_file() {
-                let ts = TestScenario::new(util_name!());
-                let at = &ts.fixtures;
-
-                at.write("a", "file1\n");
-                at.write("c", "file3\n");
-
-                ts.ucmd()
-                    .args(&[LENGTH_ARG, "a", "b", "c"])
-                    .fails()
-                    .stdout_contains("a\n")
-                    .stdout_contains("c\n")
-                    .stderr_contains("b: No such file or directory");
-            }
-        }
-    };
-}
-
-test_digest_with_len! {b2sum, 512}
+test_digest! {b2sum, 512}
 
 #[test]
 fn test_check_b2sum_length_option_0() {
