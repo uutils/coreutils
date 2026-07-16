@@ -376,8 +376,8 @@ pub fn safe_remove_dir_recursive(
 ///
 /// Only the active directory stays open. Before descending we close the parent
 /// `DirFd` and reopen it later from its saved path, so open-file use stays O(1)
-/// with depth. Deep single-child trees no longer fail with EMFILE (#7995).
-/// Children are still unlinked with `unlinkat` relative to an open parent.
+/// with depth. Deep single-child trees no longer fail with "too many open files"
+/// (#7995). Children are still unlinked with `unlinkat` relative to an open parent.
 struct DirWalkFrame {
     path: std::path::PathBuf,
     dir_fd: Option<DirFd>,
@@ -466,7 +466,9 @@ pub fn safe_remove_dir_recursive_impl(
                 }
             }
 
-            if !child_error {
+            if child_error {
+                stack[parent_idx].error = true;
+            } else {
                 if options.interactive == InteractiveMode::Always
                     && !prompt_dir_with_mode(&child_path, child_mode, options)
                 {
@@ -480,8 +482,6 @@ pub fn safe_remove_dir_recursive_impl(
                 } else {
                     stack[parent_idx].error = true;
                 }
-            } else {
-                stack[parent_idx].error = true;
             }
 
             stack.pop();
