@@ -6,7 +6,7 @@
 
 use crate::error::UError;
 
-use fluent::{FluentArgs, FluentBundle, FluentResource};
+use fluent::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 use fluent_syntax::parser::ParserError;
 
 use std::cell::Cell;
@@ -424,6 +424,31 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
+/// Convert a displayable value to a Fluent argument.
+///
+/// Fluent stores numbers as `f64`, so integers outside the `i64` range cannot
+/// necessarily be rendered exactly. Keep those integers as strings rather than
+/// introducing rounding while formatting a translated message.
+#[doc(hidden)]
+pub fn fluent_value_from_display<T: ToString + ?Sized>(value: &T) -> FluentValue<'static> {
+    let value = value.to_string();
+
+    if let Ok(integer) = value.parse::<i64>() {
+        return integer.into();
+    }
+
+    // If all but +- are digits, but did not fit into i64, keep as string. This
+    let unsigned_digits = value.strip_prefix(['+', '-']).unwrap_or(value.as_str());
+    if !unsigned_digits.is_empty() && unsigned_digits.bytes().all(|b| b.is_ascii_digit()) {
+        return value.into();
+    }
+
+    if let Ok(float) = value.parse::<f64>() {
+        return float.into();
+    }
+    value.into()
+}
+
 /// Function to detect system locale from environment variables
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     let locale_str = std::env::var("LANG")
@@ -645,15 +670,7 @@ macro_rules! translate {
         {
             let mut args = fluent::FluentArgs::new();
             $(
-                let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
-                    args.set($key, num_val);
-                } else if let Ok(float_val) = value_str.parse::<f64>() {
-                    args.set($key, float_val);
-                } else {
-                    // Keep as string if not a number
-                    args.set($key, value_str);
-                }
+                args.set($key, $crate::locale::fluent_value_from_display(&$value));
             )+
             $crate::locale::get_message_with_args($id, args)
         }
@@ -736,6 +753,7 @@ mod tests {
         let en_content = r"
 greeting = Hello, world!
 welcome = Welcome, { $name }!
+number = { $number }
 count-items = You have { $count ->
     [one] { $count } item
    *[other] { $count } items
@@ -1250,6 +1268,10 @@ invalid-syntax = This is { $missing
 
             let result = init_test_localization(&locale, temp_dir.path());
             assert!(result.is_ok());
+
+            // Integers that Fluent cannot represent exactly as f64 remain exact.
+            let number = translate!("number", "number" => u64::MAX);
+            assert_eq!(number, u64::MAX.to_string());
 
             // Test Arabic greeting (RTL text)
             let message = translate!("greeting");

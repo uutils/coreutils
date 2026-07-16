@@ -297,6 +297,20 @@ fn test_relative_size_overflow_preserves_file() {
     assert_eq!(at.read(FILE1), "x");
 }
 
+#[cfg(unix)]
+#[test]
+fn test_io_blocks_overflow_reports_exact_size() {
+    use std::os::unix::fs::MetadataExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+    let block_size = at.metadata(FILE1).blksize();
+
+    ucmd.args(&["--io-blocks", "--size=18446744073709551615", FILE1])
+        .fails_with_code(1)
+        .stderr_contains(format!("{} * {block_size}", u64::MAX));
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
