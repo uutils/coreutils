@@ -857,8 +857,13 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
-            print!("{}", self.line_ending);
+            write!(
+                stdout(),
+                "{}\t{}{}",
+                self.convert_size(grand_total),
+                self.total_text,
+                self.line_ending
+            )?;
         }
 
         Ok(())
@@ -896,9 +901,9 @@ impl StatPrinter {
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                print!("\t");
+                write!(stdout(), "\t")?;
             } else {
-                print!("???\t");
+                write!(stdout(), "???\t")?;
             }
         }
 
