@@ -364,7 +364,8 @@ impl ChownExecutor {
             match chown_result {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{n}");
+                        // GNU: informational verbose/changes lines go to stdout.
+                        return self.write_verbose_line(&n);
                     }
                     0
                 }
@@ -678,7 +679,8 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{n}");
+                        // GNU: informational verbose/changes lines go to stdout.
+                        ret = ret.max(self.write_verbose_line(&n));
                     }
                     // retain previous errors
                     ret.max(0)
@@ -798,7 +800,8 @@ impl ChownExecutor {
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
-                    show_error!("{output}");
+                    // GNU: informational verbose/changes output goes to stdout.
+                    return self.write_verbose_line(&output);
                 }
                 _ => (),
             }
@@ -817,7 +820,8 @@ impl ChownExecutor {
                     entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                 )
             };
-            show_error!("{output}");
+            // GNU: informational verbose output goes to stdout.
+            return self.write_verbose_line(&output);
         }
         0
     }
