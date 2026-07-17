@@ -424,7 +424,7 @@ impl Display for UIoError {
                 AddrInUse => "Address in use",
                 AddrNotAvailable => "Address not available",
                 BrokenPipe => "Broken pipe",
-                AlreadyExists => "Already exists",
+                AlreadyExists => "File exists",
                 WouldBlock => "Would block",
                 InvalidInput => "Invalid input",
                 InvalidData => "Invalid data",
