@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
+// spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, underflowed, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
 mod blocks;
 mod bufferedoutput;
@@ -1224,7 +1224,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
+        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
@@ -1418,13 +1418,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
 /// a `count=N` if present.
-fn calc_loop_bsize(
-    count: Option<Num>,
-    rstat: &ReadStat,
-    wstat: &WriteStat,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1432,8 +1426,17 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
+            // `count=N iflag=count_bytes` limits the *input*, and
+            // `below_count_limit` gates the copy loop on bytes read, so the
+            // remaining budget must be derived from bytes read as well.
+            // Deriving it from bytes written underflowed whenever a
+            // conversion wrote more than `bmax` bytes (`conv=sync` padding,
+            // `conv=block` record expansion): a panic in debug builds, and a
+            // wrapped result in release builds that unlocked a full-sized
+            // read on every following iteration, overshooting the count
+            // limit.
             let bmax: u128 = bmax.into();
-            let bremain: u128 = bmax - wstat.bytes_total;
+            let bremain: u128 = bmax.saturating_sub(rstat.bytes_total.into());
             cmp::min(ideal_bsize as u128, bremain) as usize
         }
         None => ideal_bsize,
@@ -1670,6 +1673,49 @@ mod tests {
         let settings = Parser::new().parse(args).unwrap();
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
+        );
+    }
+
+    #[test]
+    fn test_calc_loop_bsize_count_bytes_remaining_from_bytes_read() {
+        use crate::progress::ReadStat;
+        use crate::{Num, calc_loop_bsize};
+
+        let rstat = ReadStat {
+            reads_complete: 1,
+            reads_partial: 0,
+            records_truncated: 0,
+            bytes_total: 512,
+        };
+        // 488 input bytes of the 1000-byte budget remain, so the next read
+        // must be capped to them.
+        assert_eq!(
+            calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
+            488
+        );
+
+        let exhausted = ReadStat {
+            reads_complete: 2,
+            reads_partial: 0,
+            records_truncated: 0,
+            bytes_total: 1000,
+        };
+        assert_eq!(
+            calc_loop_bsize(Some(Num::Bytes(1000)), &exhausted, 512, 512),
+            0
+        );
+
+        // If the accounting ever overshoots the budget, the saturating
+        // subtraction must degrade to a zero-sized read instead of wrapping.
+        let exceeded = ReadStat {
+            reads_complete: 1,
+            reads_partial: 1,
+            records_truncated: 0,
+            bytes_total: 1001,
+        };
+        assert_eq!(
+            calc_loop_bsize(Some(Num::Bytes(1000)), &exceeded, 512, 512),
+            0
         );
     }
 }

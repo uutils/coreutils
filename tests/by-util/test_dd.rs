@@ -2157,3 +2157,34 @@ fn test_bs_not_positive() {
         }
     }
 }
+
+/// `count=N iflag=count_bytes` limits the number of *input* bytes, but the
+/// per-iteration read size used to be derived from the bytes *written*.
+/// A conversion that writes more than N bytes (`conv=block` record
+/// expansion, `conv=sync` padding of partial reads) made that subtraction
+/// underflow: a panic in debug builds, and a wrapped value in release
+/// builds that unlocked full-sized reads and bypassed the count limit.
+#[test]
+fn test_count_bytes_with_expanding_block_conv() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input.txt", &"aaaaaaaaaa\n".repeat(182));
+    ucmd.args(&[
+        "if=input.txt",
+        "of=output.bin",
+        "conv=block",
+        "cbs=1024",
+        "count=1000",
+        "iflag=count_bytes",
+    ])
+    .succeeds()
+    // Exactly 1000 input bytes are read, in two loop iterations (one full
+    // 512-byte read, then a partial 488-byte read), independent of what
+    // the conversion emits.
+    .stderr_contains("1+1 records in");
+    // Chunk-local block conversion turns the 512 + 488 input bytes into
+    // 47 + 45 records of cbs bytes. GNU emits 91 records here because it
+    // converts records across read boundaries (a pre-existing divergence,
+    // see #13434), so this legitimately becomes 91 * 1024 if that is ever
+    // unified.
+    assert_eq!(at.read_bytes("output.bin").len(), 92 * 1024);
+}
