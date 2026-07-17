@@ -776,7 +776,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        // Existing non-directory targets include regular files *and* special
+        // nodes (e.g. /dev/full). `Path::is_file()` is false for char devices,
+        // so without this branch we wrongly report "invalid target ... No such
+        // file" instead of attempting remove+install like GNU (issue #9934).
+        if target.is_file() || is_new_file_path(&target) || (target.exists() && !target.is_dir()) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
