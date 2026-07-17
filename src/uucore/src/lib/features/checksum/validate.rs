@@ -1290,6 +1290,8 @@ mod tests {
                 FileChecksumResult::CantOpen,
                 b"filename: FAILED open or read\n",
             ),
+            // A non-UTF-8 OsString cannot be built from bytes on Windows.
+            #[cfg(unix)]
             (
                 #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
                 os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),
