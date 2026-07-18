@@ -73,6 +73,16 @@ fn test_stdin() {
 }
 
 #[test]
+fn test_stdin_with_dash_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("-");
+
+    ucmd.pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("crc_stdin.expected");
+}
+
+#[test]
 fn test_empty_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
