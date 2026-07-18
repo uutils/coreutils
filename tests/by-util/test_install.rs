@@ -2944,9 +2944,7 @@ fn test_install_dev_null_to_dev_full_permission() {
         .arg("/dev/null")
         .arg("/dev/full")
         .fails()
-        .stderr_contains("cannot remove '/dev/full'")
-        .stderr_contains("Permission denied")
-        .stderr_does_not_contain("invalid target");
+        .stderr_is("install: cannot remove '/dev/full': Permission denied\n");
 }
 
 #[test]
