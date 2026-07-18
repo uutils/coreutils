@@ -363,11 +363,13 @@ impl ChownExecutor {
 
             match chown_result {
                 Ok(n) => {
-                    if !n.is_empty() {
+                    if n.is_empty() {
+                        0
+                    } else {
                         // GNU: informational verbose/changes lines go to stdout.
-                        return self.write_verbose_line(&n);
+                        // Do not return early: recursive descent still has to run.
+                        self.write_verbose_line(&n)
                     }
-                    0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {

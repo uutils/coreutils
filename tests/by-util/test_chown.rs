@@ -725,8 +725,8 @@ fn test_chown_recursive() {
         .arg("a")
         .arg("z")
         .succeeds()
-        .stdout_contains("ownership of \'a/a\' retained as")
-        .stdout_contains("ownership of \'z/y\' retained as");
+        .stdout_contains("ownership of 'a/a' retained as")
+        .stdout_contains("ownership of 'z/y' retained as");
 }
 
 #[test]
