@@ -163,7 +163,6 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
     Ok(())
 }
 
-
 /// Find the element `x` in `vec` and remove it, returning its index.
 fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
 where
