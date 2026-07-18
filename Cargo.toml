@@ -418,7 +418,7 @@ divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.13.0"
 file_diff = "1.0.0"
-filetime = "0.2.23"
+filetime = "0.2.29"
 foldhash = "0.2.0"
 fs_extra = "1.3.0"
 fts-sys = "0.2.16"
@@ -450,7 +450,7 @@ num-bigint = "0.4.4"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.14.0"
+parse_datetime = "0.15.0"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
@@ -466,7 +466,7 @@ rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 # raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
-rustix = { version = "1.1.4", features = ["param", "use-libc-auxv"] }
+rustix = { version = "1.1.4", features = ["param", "use-libc-auxv", "time"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"

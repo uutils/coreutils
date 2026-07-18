@@ -11,9 +11,9 @@ use rustix::process::{
     test_kill_current_process_group, test_kill_process, test_kill_process_group,
 };
 use std::cmp::Ordering;
-use std::io;
+use std::io::{self, BufWriter, Write};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::signals::{
@@ -78,8 +78,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             kill(sig, &pids);
         }
-        Mode::Table => table(),
-        Mode::List => list(&pids_or_signals),
+        Mode::Table => table()?,
+        Mode::List => list(&pids_or_signals)?,
     }
 
     Ok(())
@@ -159,12 +159,27 @@ fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
     Ok(None)
 }
 
-fn table() {
+// Turn a stdout write failure into a user-facing error carrying the OS error
+// message (e.g. "write error: No space left on device"), so a failed write to a
+// full/closed stdout is reported instead of panicking inside `println!`.
+fn stdout_write_error(err: io::Error) -> Box<dyn UError> {
+    USimpleError::new(
+        1,
+        translate!("kill-error-write-error", "err" => strip_errno(&err)),
+    )
+}
+
+fn table() -> UResult<()> {
+    // Buffer the listing so a failed write surfaces as one clean error at flush
+    // rather than the runtime's implicit-flush message on top of ours.
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_value: >#2} {signal_name}");
+            writeln!(out, "{signal_value: >#2} {signal_name}").map_err(stdout_write_error)?;
         }
     }
+    out.flush().map_err(stdout_write_error)?;
+    Ok(())
 }
 
 fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
@@ -181,40 +196,45 @@ fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    if let Ok(signal_value) = signal_name_or_value.parse::<usize>() {
+    // Resolve the signal to the text kill would print, so the write path is the
+    // same for every branch (a single buffered write + flush).
+    let output = if let Some(signal_value) = signal_name_or_value
+        .parse::<usize>()
+        .ok()
+        .and_then(normalize_list_signal_value)
+    {
         // GNU kill accepts plain signal numbers, values masked to the low 8 bits,
         // and exit statuses that encode `128 + signal`.
-        if let Some(signal_value) = normalize_list_signal_value(signal_value) {
-            println!(
-                "{}",
-                signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
-            );
-            return Ok(());
-        }
-    }
+        signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
+    } else if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
+        signal_value.to_string()
+    } else {
+        return Err(USimpleError::new(
+            1,
+            translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
+        ));
+    };
 
-    if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
-        println!("{signal_value}");
-        return Ok(());
-    }
-
-    Err(USimpleError::new(
-        1,
-        translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
-    ))
+    let mut out = BufWriter::new(io::stdout().lock());
+    writeln!(out, "{output}").map_err(stdout_write_error)?;
+    out.flush().map_err(stdout_write_error)?;
+    Ok(())
 }
 
-fn print_signals() {
+fn print_signals() -> UResult<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_name}");
+            writeln!(out, "{signal_name}").map_err(stdout_write_error)?;
         }
     }
+    out.flush().map_err(stdout_write_error)?;
+    Ok(())
 }
 
-fn list(signals: &Vec<String>) {
+fn list(signals: &Vec<String>) -> UResult<()> {
     if signals.is_empty() {
-        print_signals();
+        print_signals()?;
     } else {
         for signal in signals {
             if let Err(e) = print_signal(signal) {
@@ -222,10 +242,7 @@ fn list(signals: &Vec<String>) {
             }
         }
     }
-}
-
-fn rustix_to_io(result: rustix::io::Result<()>) -> io::Result<()> {
-    result.map_err(io::Error::from)
+    Ok(())
 }
 
 // rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
@@ -273,15 +290,15 @@ fn kill(sig: usize, pids: &[i32]) {
     for &pid in pids {
         let result = match pid.cmp(&0) {
             Ordering::Equal => match named {
-                _ if sig == 0 => rustix_to_io(test_kill_current_process_group()),
-                Some(s) => rustix_to_io(kill_current_process_group(s)),
+                _ if sig == 0 => test_kill_current_process_group().map_err(io::Error::from),
+                Some(s) => kill_current_process_group(s).map_err(io::Error::from),
                 None => raw_kill(0, sig),
             },
             Ordering::Greater => {
                 let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
                 match named {
-                    _ if sig == 0 => rustix_to_io(test_kill_process(pid)),
-                    Some(s) => rustix_to_io(kill_process(pid, s)),
+                    _ if sig == 0 => test_kill_process(pid).map_err(io::Error::from),
+                    Some(s) => kill_process(pid, s).map_err(io::Error::from),
                     None => raw_kill(pid.as_raw_nonzero().get(), sig),
                 }
             }
@@ -296,8 +313,8 @@ fn kill(sig: usize, pids: &[i32]) {
                 let pid =
                     Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
                 match named {
-                    _ if sig == 0 => rustix_to_io(test_kill_process_group(pid)),
-                    Some(s) => rustix_to_io(kill_process_group(pid, s)),
+                    _ if sig == 0 => test_kill_process_group(pid).map_err(io::Error::from),
+                    Some(s) => kill_process_group(pid, s).map_err(io::Error::from),
                     None => raw_kill(-pid.as_raw_nonzero().get(), sig),
                 }
             }

@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::{OsWrite, Quotable};
-use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -75,8 +75,8 @@ fn open(name: &OsString) -> UResult<Reader> {
         Ok(Reader::Stdin(stdin()))
     } else {
         let path = Path::new(name);
-
-        // Silent the warning as we want to the error message
+        // some platforms cannot catch those errors when open or read. needs additional cost
+        #[cfg(any(target_os = "wasi", target_os = "windows"))]
         match path.metadata() {
             Ok(_) => {
                 if path.is_dir() {
@@ -100,7 +100,9 @@ fn open(name: &OsString) -> UResult<Reader> {
                 }
             }
         }
-        let f = File::open(path).map_err_context(String::new)?;
+        let f = File::open(path).map_err(|e| {
+            USimpleError::new(1, format!("{}: {}", name.maybe_quote(), strip_errno(&e)))
+        })?;
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(Reader::File(f))

@@ -207,7 +207,7 @@ fn test_reference() {
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from root to root\n");
+            .stderr_is("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from root to root\n");
     }
 }
 
@@ -662,4 +662,19 @@ fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
         .arg(current_gid.to_string())
         .arg("dir")
         .fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("--verbose")
+        .arg(getegid().to_string())
+        .arg("does-not-exist")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("chgrp: write error: No space left on device");
 }

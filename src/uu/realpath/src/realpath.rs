@@ -329,6 +329,9 @@ fn resolve_path(
                     return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
                 }
             }
+        let path_bytes = p.as_os_str().as_encoded_bytes();
+        if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
+            abs.metadata()?; // raise no such file or directory error
         }
     }
 

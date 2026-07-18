@@ -516,7 +516,8 @@ pub fn uu_app() -> Command {
                 .num_args(..=1)
                 .value_name("N")
                 .default_missing_value(HEADER_DEFAULT)
-                .hide_default_value(true),
+                .hide_default_value(true)
+                .require_equals(true),
         )
         .arg(
             Arg::new(ROUND)
