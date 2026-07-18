@@ -189,7 +189,7 @@ fn test_number_width_zero() {
 
 #[test]
 fn test_number_width_too_large() {
-    // Values > i32::MAX must be rejected to match GNU nl behaviour and avoid
+    // Values > i32::MAX must be rejected to match GNU nl behavior and avoid
     // a capacity-overflow panic in " ".repeat(number_width + 1).
     for arg in ["-w2147483648", "--number-width=2147483648"] {
         new_ucmd!()
