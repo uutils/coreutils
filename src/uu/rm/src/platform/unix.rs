@@ -392,10 +392,14 @@ struct DirWalkFrame {
 /// Re-open the parent of `child` without using the absolute path.
 ///
 /// Deep trees (GNU `rm/deep-2`) build paths longer than `PATH_MAX`, so
-/// `DirFd::open(path)` fails with `ENAMETOOLONG`. `openat(child, "..")` stays
-/// relative and keeps FD use O(1) when paired with close-before-descend.
+/// `DirFd::open(path)` fails with "file name too long". `openat(child, "..")`
+/// stays relative and keeps FD use O(1) when paired with close-before-descend.
+///
+/// Use `NoFollow`: the security harness requires every non-AT_FDCWD `openat`
+/// with `O_DIRECTORY` to carry `O_NOFOLLOW`. `..` is never a symlink in a
+/// normal directory, so this still restores the parent safely.
 fn reopen_parent_from_child(child: &DirFd) -> std::io::Result<DirFd> {
-    child.open_subdir(OsStr::new(".."), SymlinkBehavior::Follow)
+    child.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)
 }
 
 #[cfg(not(target_os = "redox"))]
