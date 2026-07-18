@@ -601,6 +601,14 @@ fn test_invalid_format_string() {
 }
 
 #[test]
+fn test_invalid_format_string_with_too_many_colons() {
+    new_ucmd!()
+        .arg("+%_::::z")
+        .succeeds()
+        .stdout_is("%_::::z\n");
+}
+
+#[test]
 fn test_capitalized_numeric_time_zone() {
     // %z     +hhmm numeric time zone (e.g., -0400)
     // # is supposed to capitalize, which makes little sense here, but keep coverage
