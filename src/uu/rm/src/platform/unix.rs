@@ -395,9 +395,9 @@ struct DirWalkFrame {
 /// `DirFd::open(path)` fails with "file name too long". `openat(child, "..")`
 /// stays relative and keeps FD use O(1) when paired with close-before-descend.
 ///
-/// Use `NoFollow`: the security harness requires every non-AT_FDCWD `openat`
-/// with `O_DIRECTORY` to carry `O_NOFOLLOW`. `..` is never a symlink in a
-/// normal directory, so this still restores the parent safely.
+/// Use `NoFollow`: the security harness requires every relative directory
+/// `openat` (not the top-level command path) to carry `O_NOFOLLOW`. `..` is
+/// never a symlink in a normal directory, so this still restores the parent.
 fn reopen_parent_from_child(child: &DirFd) -> std::io::Result<DirFd> {
     child.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)
 }
