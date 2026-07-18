@@ -979,7 +979,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     // If it fails, map the error to include the filename context
     // and strip the OS error number to match GNU behavior.
-    let buf = read_to_end(path).map_err(|e| PrError::PathError {
+    let buf = read_to_end(path).map_err(|e| PrError::Path {
         path: path.to_string(),
         msg: strip_errno(&e),
     })?;
@@ -1152,7 +1152,7 @@ fn get_file_line_groups(
     let mut all_lines = vec![];
     for (file_id, path) in paths.iter().enumerate() {
         // Read the entire contents of the file into a buffer.
-        let buf = read_to_end(path).map_err(|e| PrError::PathError {
+        let buf = read_to_end(path).map_err(|e| PrError::Path {
             path: (*path).to_string(),
             msg: strip_errno(&e),
         })?;
