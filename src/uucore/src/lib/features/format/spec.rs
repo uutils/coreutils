@@ -550,9 +550,9 @@ fn write_padded(
 
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        super::write_padding(&mut writer, b' ', padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        super::write_padding(&mut writer, b' ', padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)

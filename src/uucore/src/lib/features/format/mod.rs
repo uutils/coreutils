@@ -146,6 +146,23 @@ fn check_width(width: usize) -> std::io::Result<()> {
     }
 }
 
+/// Write `count` copies of `pad` to `writer`.
+///
+/// Unlike `write!(writer, "{s:>width$}")`, this does not feed the width into the
+/// standard formatting machinery, which panics once a dynamic width exceeds
+/// `u16::MAX`. The padding is emitted in fixed-size chunks, so a wide field
+/// costs no extra memory.
+fn write_padding(mut writer: impl Write, pad: u8, count: usize) -> std::io::Result<()> {
+    let chunk = [pad; 64];
+    let mut remaining = count;
+    while remaining > 0 {
+        let n = remaining.min(chunk.len());
+        writer.write_all(&chunk[..n])?;
+        remaining -= n;
+    }
+    Ok(())
+}
+
 /// Reject a precision larger than printf/C allows (`i32::MAX`).
 ///
 /// A precision near `usize::MAX` would otherwise overflow the precision/exponent

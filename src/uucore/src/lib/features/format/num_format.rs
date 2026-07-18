@@ -6,6 +6,7 @@
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
+use bigdecimal::RoundingMode;
 use bigdecimal::num_bigint::ToBigInt;
 use num_traits::Signed;
 use num_traits::Zero;
@@ -385,6 +386,21 @@ fn zero_pad_to(s: &str, width: usize) -> String {
     }
 }
 
+/// Render zero with `precision` digits after the decimal point, as the `%e`,
+/// `%g` and `%a` formatters need for a zero value.
+///
+/// `format!("{:.precision$}", 0.0)` would panic once the precision exceeds
+/// `u16::MAX`.
+fn zero_with_fraction_digits(precision: usize) -> String {
+    if precision == 0 {
+        return String::from("0");
+    }
+    let mut out = String::with_capacity(precision + 2);
+    out.push_str("0.");
+    out.extend(std::iter::repeat_n('0', precision));
+    out
+}
+
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     if negative {
         String::from("-")
@@ -426,10 +442,79 @@ fn format_float_decimal(
             // Optimization when printing integers.
             return bi.to_str_radix(10);
         } else if force_decimal == ForceDecimal::Yes {
-            return format!("{bd:.0}.");
+            return format!("{}.", decimal_digits(bd, 0));
         }
     }
-    format!("{bd:.precision$}")
+    decimal_digits(bd, precision)
+}
+
+/// Render `bd` in decimal notation with exactly `precision` fractional digits.
+///
+/// The digits are placed here rather than with `format!("{bd:.precision$}")`
+/// because that path has two limits that `printf`/`seq` input reaches. The
+/// standard formatting machinery panics with "Formatting argument out of range"
+/// once a dynamic precision exceeds `u16::MAX`, and `bigdecimal`'s `Display`
+/// stops zero-padding past `FMT_MAX_INTEGER_PADDING` digits and returns the
+/// value unpadded, so `%.1000f` of `1` printed `1` instead of `1.000...`.
+fn decimal_digits(bd: &BigDecimal, precision: usize) -> String {
+    let scale = bd.fractional_digit_count();
+
+    // Expanding an integer magnitude costs one output byte per power of ten.
+    // Above `MAX_FORMAT_WIDTH` powers, defer to `bigdecimal`'s exponential form
+    // rather than allocate gigabytes. Below it the value is expanded in full:
+    // `%f` is decimal by definition, and `bigdecimal`'s `Display` otherwise falls
+    // back to exponential past 1000 integer zeros (so `%f` of `1e5000` used to
+    // print `1e+5000`), which this keeps as a plain decimal instead.
+    if scale < -(super::MAX_FORMAT_WIDTH as i64) {
+        return format!("{bd:.0}");
+    }
+
+    // Rounding is only needed when the value holds more fractional digits than
+    // were asked for. That case produces exactly `precision` fractional digits
+    // with no padding, so `bigdecimal`'s `Display` handles it correctly and more
+    // cheaply than a manual round; only step in once the precision would make it
+    // panic. When no rounding is needed the missing digits are all zeros and get
+    // appended as text below, which keeps a large precision cheap.
+    if scale > precision as i64 && u16::try_from(precision).is_ok() {
+        return format!("{bd:.precision$}");
+    }
+    let (digits, scale) = if scale > precision as i64 {
+        bd.with_scale_round(precision as i64, RoundingMode::default())
+            .into_bigint_and_exponent()
+    } else {
+        bd.as_bigint_and_exponent()
+    };
+    let digits = digits.to_str_radix(10);
+
+    // `digits` is the value scaled by `10^scale`, so the decimal point belongs
+    // `scale` places from the right.
+    let mut out = String::with_capacity(digits.len() + precision + 2);
+    if scale <= 0 {
+        // An integer, held as `digits` followed by `-scale` zeros. Zero keeps a
+        // single digit rather than growing a run of leading zeros.
+        out.push_str(&digits);
+        if digits != "0" {
+            out.extend(std::iter::repeat_n('0', -scale as usize));
+        }
+        if precision > 0 {
+            out.push('.');
+            out.extend(std::iter::repeat_n('0', precision));
+        }
+    } else {
+        let scale = scale as usize;
+        if let Some(int_len) = digits.len().checked_sub(scale).filter(|len| *len > 0) {
+            out.push_str(&digits[..int_len]);
+            out.push('.');
+            out.push_str(&digits[int_len..]);
+        } else {
+            // No integer digits, so the fraction starts with leading zeros.
+            out.push_str("0.");
+            out.extend(std::iter::repeat_n('0', scale - digits.len()));
+            out.push_str(&digits);
+        }
+        out.extend(std::iter::repeat_n('0', precision - scale));
+    }
+    out
 }
 
 /// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
@@ -484,7 +569,7 @@ fn format_float_scientific(
         return if force_decimal == ForceDecimal::Yes && precision == 0 {
             format!("0.{exp_char}+00")
         } else {
-            format!("{:.precision$}{exp_char}+00", 0.0)
+            format!("{}{exp_char}+00", zero_with_fraction_digits(precision))
         };
     }
 
@@ -521,9 +606,7 @@ fn format_float_shortest(
     if BigDecimal::zero().eq(bd) {
         return match (force_decimal, precision) {
             (ForceDecimal::Yes, 1) => "0.".into(),
-            (ForceDecimal::Yes, _) => {
-                format!("{:.*}", precision - 1, 0.0)
-            }
+            (ForceDecimal::Yes, _) => zero_with_fraction_digits(precision - 1),
             (ForceDecimal::No, _) => "0".into(),
         };
     }
@@ -624,7 +707,10 @@ fn format_float_hexadecimal(
         return if force_decimal == ForceDecimal::Yes && precision.unwrap_or(0) == 0 {
             format!("0x0.{exp_char}+0")
         } else {
-            format!("0x{:.*}{exp_char}+0", precision.unwrap_or(0), 0.0)
+            format!(
+                "0x{}{exp_char}+0",
+                zero_with_fraction_digits(precision.unwrap_or(0))
+            )
         };
     }
 
@@ -770,15 +856,25 @@ fn write_output(
     super::check_width(remaining_width)?;
 
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            super::write_padding(&mut writer, b' ', remaining_width.saturating_sub(s.len()))
+        }
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
                 // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+                // Since we now add sign_indicator and s together, plus 1
+                let width = remaining_width + 1;
+                let len = sign_indicator.len() + s.len();
+                super::write_padding(&mut writer, b' ', width.saturating_sub(len))?;
+                writer.write_all(sign_indicator.as_bytes())?;
+                writer.write_all(s.as_bytes())
             } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
+                writer.write_all(sign_indicator.as_bytes())?;
+                super::write_padding(&mut writer, b' ', remaining_width.saturating_sub(s.len()))?;
+                writer.write_all(s.as_bytes())
             }
         }
         NumberAlignment::RightZero => {
@@ -789,7 +885,14 @@ fn write_output(
                 ("", s.as_str())
             };
             let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(prefix.as_bytes())?;
+            super::write_padding(
+                &mut writer,
+                b'0',
+                remaining_width.saturating_sub(rest.len()),
+            )?;
+            writer.write_all(rest.as_bytes())
         }
     }
 }
@@ -1266,6 +1369,28 @@ mod test {
         let s = fmt(&format, 255u64);
         assert_eq!(s.len(), 100_000);
         assert!(s.ends_with("0ff"));
+    }
+
+    #[test]
+    fn format_float_large_precision_and_width() {
+        // A precision above u16::MAX must not panic here either (#12708), and
+        // a precision above 1000 must still print its zeros.
+        let one = ExtendedBigDecimal::BigDecimal(BigDecimal::from_str("1").unwrap());
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%.100000f").unwrap();
+        let s = fmt(&format, &one);
+        assert_eq!(s.len(), 100_002);
+        assert!(s.starts_with("1."));
+        assert!(s.ends_with('0'));
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%.1000f").unwrap();
+        assert_eq!(fmt(&format, &one), format!("1.{}", "0".repeat(1000)));
+
+        let format = Format::<Float, &ExtendedBigDecimal>::parse("%100000f").unwrap();
+        let s = fmt(&format, &one);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("1.000000"));
+        assert!(s.starts_with(' '));
     }
 
     #[test]

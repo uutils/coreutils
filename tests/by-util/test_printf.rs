@@ -1529,6 +1529,81 @@ fn test_large_width_format() {
 }
 
 #[test]
+fn large_width_pads_instead_of_aborting() {
+    // A dynamic width above u16::MAX makes std::fmt panic with "Formatting
+    // argument out of range", which the release profile turns into SIGABRT.
+    // 65535 always worked, so 65536 is the interesting boundary.
+    let cases = [
+        ("%65536d", "1", " ".repeat(65535) + "1"),
+        ("%70000d", "1", " ".repeat(69999) + "1"),
+        ("%70000s", "x", " ".repeat(69999) + "x"),
+        ("%70000c", "y", " ".repeat(69999) + "y"),
+        ("%-70000d", "1", "1".to_string() + &" ".repeat(69999)),
+        ("%070000d", "1", "0".repeat(69999) + "1"),
+    ];
+
+    for (format, arg, expected) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn large_precision_pads_instead_of_aborting() {
+    let cases = [
+        ("%.70000f", "1", format!("1.{}", "0".repeat(70000))),
+        ("%.70000f", "0", format!("0.{}", "0".repeat(70000))),
+        ("%.70000e", "0", format!("0.{}e+00", "0".repeat(70000))),
+        ("%.70000E", "0", format!("0.{}E+00", "0".repeat(70000))),
+        ("%.70000a", "0", format!("0x0.{}p+0", "0".repeat(70000))),
+        ("%#.70000g", "0", format!("0.{}", "0".repeat(69999))),
+        ("%#.70000G", "0", format!("0.{}", "0".repeat(69999))),
+    ];
+
+    for (format, arg, expected) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn precision_above_1000_keeps_fractional_zeros() {
+    // bigdecimal's Display stops zero-padding an integer past
+    // FMT_MAX_INTEGER_PADDING (1000) and returns the digits unpadded, so this
+    // used to print "1" with no fractional part at all.
+    new_ucmd!()
+        .args(&["%.1000f", "1"])
+        .succeeds()
+        .stdout_only(format!("1.{}", "0".repeat(1000)));
+
+    new_ucmd!()
+        .args(&["%.5000f", "100"])
+        .succeeds()
+        .stdout_only(format!("100.{}", "0".repeat(5000)));
+
+    // A value with a fractional part took a different bigdecimal branch and
+    // was already correct; keep it that way.
+    new_ucmd!()
+        .args(&["%.1000f", "1.5"])
+        .succeeds()
+        .stdout_only(format!("1.5{}", "0".repeat(999)));
+}
+
+#[test]
+fn large_integer_magnitude_stays_decimal() {
+    // A large integer magnitude hits the same bigdecimal padding cap and used
+    // to print in exponential form (`1e+2000`), which `%f` must not do.
+    new_ucmd!()
+        .args(&["%.0f", "1e2000"])
+        .succeeds()
+        .stdout_only(format!("1{}", "0".repeat(2000)));
+}
+
+#[test]
 fn test_extreme_field_width_overflow() {
     // Test the specific case that was causing panic due to integer overflow
     // in the field width parsing.
