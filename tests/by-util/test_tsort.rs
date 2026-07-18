@@ -245,3 +245,13 @@ fn test_only_one_input_file() {
         .stdout_is("")
         .stderr_is(TSORT_EXTRA_OPERAND_ERROR);
 }
+
+#[test]
+fn test_invalid_utf8_bytes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("f", b"q\na\nz\n\xFF\n");
+
+    ucmd.arg("f")
+        .succeeds()
+        .stdout_is_bytes(b"q\nz\na\n\xEF\xBF\xBD\n");
+}
