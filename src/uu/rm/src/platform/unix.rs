@@ -5,7 +5,7 @@
 
 // Unix-specific implementations for the rm utility
 
-// spell-checker:ignore fstatat unlinkat statx behaviour
+// spell-checker:ignore fstatat unlinkat statx behaviour NOFILE PATH_MAX
 
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
@@ -374,11 +374,11 @@ pub fn safe_remove_dir_recursive(
 /// Frame on the explicit directory-walk stack used by
 /// [`safe_remove_dir_recursive_impl`].
 ///
-/// Only the active directory stays open. Before descending we close the parent
-/// `DirFd` and restore it later with `openat(child, "..")`, so open-file use
-/// stays O(1) with depth and we never re-open a path longer than `PATH_MAX`
-/// (#7995, GNU `tests/rm/deep-2`). Children are still unlinked with `unlinkat`
-/// relative to an open parent.
+/// Directory FDs are kept open while under [`DIR_FD_BUDGET`]. Past the budget
+/// we close the parent before descending and restore it with
+/// `openat(child, "..")` + `O_NOFOLLOW`, so worst-case open dirs stay bounded
+/// (#7995) without reopening long paths (GNU `tests/rm/deep-2`). Children are
+/// unlinked with `unlinkat` relative to an open parent.
 struct DirWalkFrame {
     path: std::path::PathBuf,
     dir_fd: Option<DirFd>,
@@ -389,17 +389,29 @@ struct DirWalkFrame {
     name_in_parent: std::ffi::OsString,
 }
 
+/// Soft cap on simultaneously open directory FDs during recursive rm.
+///
+/// Shallow/wide trees (the recursive-tree benchmark (depth 5)) stay under this
+/// budget and avoid openat("..") churn. Deep trees still close-before-descend
+/// past the cap so FD use stays bounded under tight NOFILE limits (#7995).
+/// Keep well below the low-NOFILE regression soft limit (32) after stdio.
+const DIR_FD_BUDGET: usize = 16;
+
 /// Re-open the parent of `child` without using the absolute path.
 ///
-/// Deep trees (GNU `rm/deep-2`) build paths longer than `PATH_MAX`, so
-/// `DirFd::open(path)` fails with "file name too long". `openat(child, "..")`
-/// stays relative and keeps FD use O(1) when paired with close-before-descend.
+/// Used when the parent was closed after hitting [`DIR_FD_BUDGET`]. Deep trees
+/// (GNU `rm/deep-2`) exceed `PATH_MAX`, so path reopen fails with "file name
+/// too long". `openat(child, "..")` stays relative.
 ///
 /// Use `NoFollow`: the security harness requires every relative directory
 /// `openat` (not the top-level command path) to carry `O_NOFOLLOW`. `..` is
 /// never a symlink in a normal directory, so this still restores the parent.
 fn reopen_parent_from_child(child: &DirFd) -> std::io::Result<DirFd> {
     child.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)
+}
+
+fn open_dir_fd_count(stack: &[DirWalkFrame]) -> usize {
+    stack.iter().filter(|frame| frame.dir_fd.is_some()).count()
 }
 
 #[cfg(not(target_os = "redox"))]
@@ -411,7 +423,7 @@ pub fn safe_remove_dir_recursive_impl(
     parent_dev: u64,
 ) -> bool {
     // Snapshot entries from the caller's DirFd, then re-open so the walk owns
-    // every descriptor on the stack (parent FDs are closed while descended).
+    // the root descriptor (and later frames under the FD budget).
     let root_entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
@@ -584,9 +596,7 @@ pub fn safe_remove_dir_recursive_impl(
                 continue;
             }
 
-            // Open the subdirectory while the parent is still open, then close
-            // the parent before pushing the child frame so FD use stays O(1)
-            // with depth (GNU rm closes as it descends).
+            // Open the subdirectory while the parent is still open.
             //
             // rm never follows symlinks during recursion, so open with
             // NoFollow: if an attacker swaps this just-stat'd directory for a
@@ -633,8 +643,14 @@ pub fn safe_remove_dir_recursive_impl(
                 }
             };
 
-            // Close parent descriptor before descending.
-            stack[frame_idx].dir_fd = None;
+            // Hybrid FD budget: keep ancestors open for shallow trees (benchmark
+            // depth ~5). Only close the parent when pushing the child would
+            // exceed DIR_FD_BUDGET; restore later via openat("..").
+            // open_dir_fd_count includes this parent; +1 is the child about to
+            // be pushed.
+            if open_dir_fd_count(&stack) + 1 > DIR_FD_BUDGET {
+                stack[frame_idx].dir_fd = None;
+            }
 
             let mut child_pending = child_entries;
             child_pending.reverse();
