@@ -375,9 +375,10 @@ pub fn safe_remove_dir_recursive(
 /// [`safe_remove_dir_recursive_impl`].
 ///
 /// Only the active directory stays open. Before descending we close the parent
-/// `DirFd` and reopen it later from its saved path, so open-file use stays O(1)
-/// with depth. Deep single-child trees no longer fail with "too many open files"
-/// (#7995). Children are still unlinked with `unlinkat` relative to an open parent.
+/// `DirFd` and restore it later with `openat(child, "..")`, so open-file use
+/// stays O(1) with depth and we never re-open a path longer than `PATH_MAX`
+/// (#7995, GNU `tests/rm/deep-2`). Children are still unlinked with `unlinkat`
+/// relative to an open parent.
 struct DirWalkFrame {
     path: std::path::PathBuf,
     dir_fd: Option<DirFd>,
@@ -386,6 +387,15 @@ struct DirWalkFrame {
     error: bool,
     mode: libc::mode_t,
     name_in_parent: std::ffi::OsString,
+}
+
+/// Re-open the parent of `child` without using the absolute path.
+///
+/// Deep trees (GNU `rm/deep-2`) build paths longer than `PATH_MAX`, so
+/// `DirFd::open(path)` fails with `ENAMETOOLONG`. `openat(child, "..")` stays
+/// relative and keeps FD use O(1) when paired with close-before-descend.
+fn reopen_parent_from_child(child: &DirFd) -> std::io::Result<DirFd> {
+    child.open_subdir(OsStr::new(".."), SymlinkBehavior::Follow)
 }
 
 #[cfg(not(target_os = "redox"))]
@@ -444,26 +454,45 @@ pub fn safe_remove_dir_recursive_impl(
             let child_path = stack[frame_idx].path.clone();
             let child_mode = stack[frame_idx].mode;
             let child_name = stack[frame_idx].name_in_parent.clone();
-            // Drop this directory's FD before unlinking / restoring parent.
-            stack[frame_idx].dir_fd = None;
 
             if stack.len() == 1 {
+                // Root frame: caller removes the top directory.
+                stack[frame_idx].dir_fd = None;
                 had_error = child_error;
                 stack.pop();
                 break;
             }
 
             let parent_idx = frame_idx - 1;
+            // Restore the parent FD from the child via ".." before dropping the
+            // child FD. Do not DirFd::open(parent_path): deep trees exceed PATH_MAX.
             if stack[parent_idx].dir_fd.is_none() {
-                match DirFd::open(&stack[parent_idx].path, SymlinkBehavior::NoFollow) {
-                    Ok(fd) => stack[parent_idx].dir_fd = Some(fd),
-                    Err(e) => {
-                        stack[parent_idx].error |=
-                            handle_error_with_force(e, &stack[parent_idx].path, options);
-                        stack.pop();
-                        continue;
+                let child_fd = stack[frame_idx].dir_fd.take();
+                match child_fd.as_ref() {
+                    Some(fd) => match reopen_parent_from_child(fd) {
+                        Ok(parent_fd) => stack[parent_idx].dir_fd = Some(parent_fd),
+                        Err(e) => {
+                            stack[parent_idx].error |=
+                                handle_error_with_force(e, &stack[parent_idx].path, options);
+                            stack.pop();
+                            continue;
+                        }
+                    },
+                    None => {
+                        // Defensive fallback for short paths only; long paths fail.
+                        match DirFd::open(&stack[parent_idx].path, SymlinkBehavior::NoFollow) {
+                            Ok(fd) => stack[parent_idx].dir_fd = Some(fd),
+                            Err(e) => {
+                                stack[parent_idx].error |=
+                                    handle_error_with_force(e, &stack[parent_idx].path, options);
+                                stack.pop();
+                                continue;
+                            }
+                        }
                     }
                 }
+            } else {
+                stack[frame_idx].dir_fd = None;
             }
 
             if child_error {
@@ -489,6 +518,8 @@ pub fn safe_remove_dir_recursive_impl(
         };
         let entry_path = stack[frame_idx].path.join(&entry_name);
 
+        // Parent FD is restored via openat("..") when a child finishes. Path
+        // reopen is only a last resort for short paths (PATH_MAX trees break).
         if stack[frame_idx].dir_fd.is_none() {
             match DirFd::open(&stack[frame_idx].path, SymlinkBehavior::NoFollow) {
                 Ok(fd) => stack[frame_idx].dir_fd = Some(fd),
