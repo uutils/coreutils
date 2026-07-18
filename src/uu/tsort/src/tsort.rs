@@ -136,7 +136,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
     // From1 To1 From2 To2 ...
     // with tokens separated by whitespaces
 
-    for line in reader.lines() {
+    for line in reader.split(b'\n') {
         let line = line.map_err(|e| {
             if e.kind() == io::ErrorKind::IsADirectory {
                 TsortError::IsDir(graph.name())
@@ -144,6 +144,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
                 e.into()
             }
         })?;
+        let line = String::from_utf8_lossy(&line);
         for token in line.split_whitespace() {
             // Intern the token and get a Sym
             let token_sym = graph.interner.get_or_intern(token);
@@ -161,6 +162,7 @@ fn process_input<R: BufRead>(reader: R, graph: &mut Graph) -> Result<(), TsortEr
 
     Ok(())
 }
+
 
 /// Find the element `x` in `vec` and remove it, returning its index.
 fn remove<T>(vec: &mut Vec<T>, x: T) -> Option<usize>
