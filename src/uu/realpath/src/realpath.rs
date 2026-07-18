@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) retcode rsplit
+// spell-checker:ignore (ToDO) retcode
 
 use clap::{
     Arg, ArgAction, ArgMatches, Command,
@@ -299,7 +299,10 @@ fn resolve_path(
             .to_str()
             .is_some_and(|name| name.len() > MAX_PATH)
     }) {
-        return Err(Error::new(ErrorKind::InvalidInput, translate!("File name too long")));
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            translate!("realpath-file-name-too-long"),
+        ));
     }
 
     // GNU realpath compatibility: If a path explicitly references a directory modifier
@@ -324,14 +327,11 @@ fn resolve_path(
 
             if !parent_path.is_empty() {
                 let parent = Path::new(&parent_path);
-                // Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
+                // Fix: Check symlink metadata. If it doesn't exist AND isn't a broken symlink, fail early.
                 if !parent.exists() && parent.symlink_metadata().is_err() {
                     return Err(Error::new(ErrorKind::NotFound, "No such file or directory"));
                 }
             }
-        let path_bytes = p.as_os_str().as_encoded_bytes();
-        if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
-            abs.metadata()?; // raise no such file or directory error
         }
     }
 
