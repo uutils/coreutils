@@ -1066,10 +1066,9 @@ impl Options {
 
         let copy_mode = CopyMode::from_matches(matches);
 
-        let backup_mode = match backup_control::determine_backup_mode(matches) {
-            Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
-            Ok(mode) => mode,
-        };
+        let backup_mode =
+            backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)
+                .map_err(|e| CpError::Backup(BackupError(format!("{e}"))))?;
         let update_mode = update_control::determine_update_mode(matches);
 
         if backup_mode != BackupMode::None
