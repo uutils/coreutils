@@ -15,3 +15,4 @@ realpath-help-relative-base = print absolute paths unless paths below DIR
 
 # Error messages
 realpath-invalid-empty-operand = invalid operand: empty string
+realpath-file-name-too-long = File name too long
