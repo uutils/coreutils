@@ -173,7 +173,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -435,7 +435,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -854,7 +854,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
 dependencies = [
  "data-encoding",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -876,7 +876,7 @@ dependencies = [
  "defmt-parser",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -885,7 +885,7 @@ version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
 dependencies = [
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -940,7 +940,7 @@ checksum = "97369cbbc041bc366949bc74d34658d6cda5621039731c6310521892a3a20ae0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -951,7 +951,7 @@ checksum = "8dc51d98e636f5e3b0759a39257458b22619cac7e96d932da6eeb052891bb67c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1133,7 +1133,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54f0d287c53ffd184d04d8677f590f4ac5379785529e5e08b1c8083acdd5c198"
 dependencies = [
  "memchr",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -1202,7 +1202,7 @@ checksum = "e835b70203e41293343137df5c0664546da5745f82ec9b84d40be8336958447b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -1759,7 +1759,7 @@ checksum = "d0879bd39df99c4c5e2c6615ccc026391a423dde10532c573e6086eb94a802cc"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -2175,7 +2175,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -2378,7 +2378,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
 dependencies = [
  "proc-macro2",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -2611,7 +2611,7 @@ dependencies = [
  "regex",
  "relative-path",
  "rustc_version",
- "syn",
+ "syn 2.0.117",
  "unicode-ident",
 ]
 
@@ -2623,7 +2623,7 @@ checksum = "b3a8fb4672e840a587a66fc577a5491375df51ddb88f2a2c2a792598c326fe14"
 dependencies = [
  "quote",
  "rand 0.8.6",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -2703,7 +2703,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "selinux-sys",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
 ]
 
 [[package]]
@@ -2751,7 +2751,7 @@ checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -2953,6 +2953,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2fac314a64dc9a36e61a9eb4261a5e9bbfbc922b27e518af97bc32b926cf967"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
 name = "synstructure"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2960,7 +2971,7 @@ checksum = "728a70f3dbaf5bab7f0c4b1ac8d7ae5ea60a4b5549c8a5914361c99147a709d2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -3015,11 +3026,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.18"
+version = "2.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
+checksum = "09a43598840e33d5b0331f38c5e30d13bb11c11210a4b58f0d9b18a5a5eefcd9"
 dependencies = [
- "thiserror-impl 2.0.18",
+ "thiserror-impl 2.0.19",
 ]
 
 [[package]]
@@ -3030,18 +3041,18 @@ checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.18"
+version = "2.0.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
+checksum = "43cbfe0cf76104d42a574802844187e84a305e531ed54455f11fbde0f10541cd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 3.0.0",
 ]
 
 [[package]]
@@ -3314,7 +3325,7 @@ dependencies = [
  "memchr",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "winapi-util",
  "windows-sys 0.61.2",
@@ -3330,7 +3341,7 @@ dependencies = [
  "libc",
  "rustix",
  "selinux",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3358,7 +3369,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3378,7 +3389,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3417,7 +3428,7 @@ dependencies = [
  "rustix",
  "selinux",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "walkdir",
  "windows-sys 0.61.2",
@@ -3432,7 +3443,7 @@ dependencies = [
  "fluent",
  "regex",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3478,7 +3489,7 @@ dependencies = [
  "libc",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3491,7 +3502,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3533,7 +3544,7 @@ dependencies = [
  "glob",
  "rustc-hash",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3556,7 +3567,7 @@ dependencies = [
  "fluent",
  "nix",
  "rust-ini",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3569,7 +3580,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3584,7 +3595,7 @@ dependencies = [
  "num-bigint",
  "num-traits",
  "onig",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3617,7 +3628,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -3640,7 +3651,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3651,7 +3662,7 @@ dependencies = [
  "clap",
  "fluent",
  "memchr",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3699,7 +3710,7 @@ dependencies = [
  "filetime",
  "fluent",
  "selinux",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3712,7 +3723,7 @@ dependencies = [
  "fluent",
  "memchr",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3743,7 +3754,7 @@ dependencies = [
  "clap",
  "fluent",
  "rustix",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3772,7 +3783,7 @@ dependencies = [
  "selinux",
  "tempfile",
  "terminal_size",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "uutils_term_grid",
 ]
@@ -3826,7 +3837,7 @@ dependencies = [
  "fluent",
  "rand 0.10.2",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3855,7 +3866,7 @@ dependencies = [
  "rustc-hash",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -3891,7 +3902,7 @@ dependencies = [
  "fluent",
  "libc",
  "rustix",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3914,7 +3925,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3968,7 +3979,7 @@ dependencies = [
  "itertools 0.15.0",
  "memchr",
  "regex",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -3997,7 +4008,7 @@ dependencies = [
  "clap",
  "fluent",
  "regex",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4038,7 +4049,7 @@ dependencies = [
  "indicatif",
  "libc",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4061,7 +4072,7 @@ dependencies = [
  "fluent",
  "libc",
  "selinux",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4075,7 +4086,7 @@ dependencies = [
  "fluent",
  "num-bigint",
  "num-traits",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4184,7 +4195,7 @@ dependencies = [
  "rustix",
  "self_cell",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4198,7 +4209,7 @@ dependencies = [
  "memchr",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4208,7 +4219,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4219,7 +4230,7 @@ dependencies = [
  "clap",
  "fluent",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uu_stdbuf_libstdbuf",
  "uucore",
 ]
@@ -4275,7 +4286,7 @@ dependencies = [
  "memmap2",
  "regex",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4315,7 +4326,7 @@ dependencies = [
  "fluent",
  "libc",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4343,7 +4354,7 @@ dependencies = [
  "parse_datetime",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
  "windows-sys 0.61.2",
 ]
@@ -4391,7 +4402,7 @@ dependencies = [
  "rustc-hash",
  "rustix",
  "string-interner",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4425,7 +4436,7 @@ dependencies = [
  "fluent",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4455,7 +4466,7 @@ dependencies = [
  "clap",
  "fluent",
  "jiff",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "uucore",
 ]
 
@@ -4489,7 +4500,7 @@ dependencies = [
  "libc",
  "rustix",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "unicode-width 0.2.2",
  "uucore",
 ]
@@ -4572,7 +4583,7 @@ dependencies = [
  "shake",
  "sm3",
  "tempfile",
- "thiserror 2.0.18",
+ "thiserror 2.0.19",
  "time",
  "unic-langid",
  "unit-prefix",
@@ -4695,7 +4706,7 @@ dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
  "wasm-bindgen-shared",
 ]
 
@@ -4779,7 +4790,7 @@ checksum = "053e2e040ab57b9dc951b72c264860db7eb3b0200ba345b4e4c3b14f67855ddf"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -4790,7 +4801,7 @@ checksum = "3f316c4a2570ba26bbec722032c4099d8c8bc095efccdc15688708623367e358"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5041,7 +5052,7 @@ checksum = "de844c262c8848816172cef550288e7dc6c7b7814b4ee56b3e1553f275f1858e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
  "synstructure",
 ]
 
@@ -5078,7 +5089,7 @@ checksum = "fa4f8080344d4671fb4e831a13ad1e68092748387dfc4f55e356242fae12ce3e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5089,7 +5100,7 @@ checksum = "70e3cd084b1788766f53af483dd21f93881ff30d7320490ec3ef7526d203bad4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -5109,7 +5120,7 @@ checksum = "11532158c46691caf0f2593ea8358fed6bbf68a0315e80aae9bd41fbade684a1"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
  "synstructure",
 ]
 
@@ -5145,7 +5156,7 @@ checksum = "625dc425cab0dca6dc3c3319506e6593dcb08a9f387ea3b284dbd52a92c40555"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.117",
 ]
 
 [[package]]
