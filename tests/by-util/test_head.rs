@@ -905,10 +905,7 @@ fn test_verbose_header_write_error() {
     // With -v, head always prints the header; any write failure must be
     // reported gracefully rather than causing an abort (#13264).
     use std::fs::OpenOptions;
-    let dev_full = OpenOptions::new()
-        .write(true)
-        .open("/dev/full")
-        .unwrap();
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
     new_ucmd!()
         .arg("-v")
         .pipe_in("")
