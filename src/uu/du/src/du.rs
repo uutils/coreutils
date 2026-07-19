@@ -328,8 +328,8 @@ fn safe_du(
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // Get initial stat for this path - use pre-computed stat if available
     let mut my_stat = if let Some(initial_stat) = initial_stat {
-        // Use pre-computed stat from parent loop (avoids re-statting the entry with a separate syscall)
-        let s = match initial_stat {
+        // Use pre-computed stat from parent loop
+        match initial_stat {
             Ok(s) => s,
             Err(e) => {
                 let error = e.map_err_context(
@@ -343,8 +343,7 @@ fn safe_du(
                     "Error already handled",
                 )))));
             }
-        };
-        s
+        }
     } else if let Some(parent_fd) = parent_fd {
         // We have a parent fd, this is a subdirectory - use openat
         let dir_name = path.file_name().unwrap_or(path.as_os_str());
