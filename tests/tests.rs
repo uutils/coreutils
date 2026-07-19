@@ -453,3 +453,15 @@ mod test_whoami;
 #[cfg(feature = "yes")]
 #[path = "by-util/test_yes.rs"]
 mod test_yes;
+
+#[cfg(any(
+    feature = "b2sum",
+    feature = "md5sum",
+    feature = "sha1sum",
+    feature = "sha224sum",
+    feature = "sha256sum",
+    feature = "sha384sum",
+    feature = "sha512sum"
+))]
+#[path = "by-util/common_checksum_tests.rs"]
+pub(crate) mod common_checksum_tests;
