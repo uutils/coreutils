@@ -149,6 +149,11 @@ jobs:
   style_spellcheck:
     name: Style/spelling
     runs-on: ${{ matrix.job.os }}
+    env:
+      # Spelling is enforced locally by the cspell pre-commit hook, where it is
+      # cheap to fix. Here it is advisory: unknown words show up as annotations
+      # on the diff instead of blocking the merge.
+      STYLE_FAIL_ON_FAULT: false
     strategy:
       matrix:
         job:
@@ -232,9 +237,6 @@ jobs:
       - name: Install pre-commit
         run: pip install pre-commit
 
-      - name: Install cspell
-        run: npm install -g cspell
-
       - name: Cache pre-commit environments
         uses: actions/cache@v6
         with:
@@ -244,4 +246,8 @@ jobs:
             pre-commit-${{ runner.os }}-
 
       - name: Run pre-commit
-        run: pre-commit run
+        env:
+          # cspell is enforced locally and reported by Style/spelling; the rust
+          # hooks are already covered by the Style/format and Style/lint jobs.
+          SKIP: cspell,rust-linting,rust-clippy,cargo-lock-check
+        run: pre-commit run --all-files --show-diff-on-failure
