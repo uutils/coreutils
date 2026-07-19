@@ -281,7 +281,7 @@ jobs:
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
-      RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
+      # RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
     strategy:
       fail-fast: false
       matrix:
