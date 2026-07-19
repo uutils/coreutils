@@ -301,6 +301,12 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
+      shell: powershell
+      run: |
+        # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
+        # See: https://github.com/appveyor/ci/issues/3777
+        Set-ProcessMitigation -System -Disable ForceRelocateImages
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
