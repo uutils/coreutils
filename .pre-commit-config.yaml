@@ -28,6 +28,22 @@ repos:
         files: \.ftl$
         args: [--config, .github/fluent_linter_config.yml, src/uu/]
 
+  - repo: https://github.com/streetsidesoftware/cspell-cli
+    rev: v10.0.1
+    hooks:
+      - id: cspell
+        # Pinned so the check does not depend on the node version a contributor
+        # happens to have installed; cspell v10 requires node >= 22.18.
+        language_version: '22.18.0'
+        args:
+          - --config
+          - .vscode/cSpell.json
+          - --no-must-find-files
+          - --no-progress
+          - --no-summary
+          - --gitignore
+          - --files # must stay last: pre-commit appends the filenames here
+
   - repo: local
     hooks:
       - id: rust-linting
@@ -51,12 +67,6 @@ repos:
         pass_filenames: false
         files: 'Cargo\.(toml|lock)$'
         language: system
-      - id: cspell
-        name: Code spell checker (cspell)
-        description: Run cspell to check for spelling errors (if available).
-        entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
-        pass_filenames: true
-        language: system
 
 ci:
-  skip: [rust-linting, rust-clippy, cargo-lock-check, cspell]
+  skip: [rust-linting, rust-clippy, cargo-lock-check]
