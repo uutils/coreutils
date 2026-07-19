@@ -1160,7 +1160,6 @@ fn birth_supported() -> bool {
 fn test_du_time_directory() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let separator = std::path::MAIN_SEPARATOR;
 
     at.mkdir("d");
     at.touch("d/old");
@@ -1198,7 +1197,10 @@ fn test_du_time_directory() {
         .arg("--time")
         .arg("d/old")
         .succeeds();
-    result.stdout_only(format!("0\t2020-01-01 00:00\td{separator}old\n"));
+    #[cfg(not(windows))]
+    result.stdout_only("0\t2020-01-01 00:00\td/old\n");
+    #[cfg(windows)]
+    result.stdout_only("0\t2020-01-01 00:00\td\\old\n");
 
     let result = ts.ucmd().env("TZ", "UTC").arg("--time").arg("d").succeeds();
     let stdout = result.stdout_str();
@@ -1218,14 +1220,16 @@ fn test_du_time_directory() {
         .succeeds();
     let stdout = result.stdout_str();
 
-    assert!(
-        stdout.contains(&format!("2020-01-01 00:00\td{separator}old\n")),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains(&format!("2023-01-01 00:00\td{separator}new\n")),
-        "{stdout}"
-    );
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/new\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td\\new\n"), "{stdout}");
+    }
     assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
 }
 
@@ -1234,7 +1238,6 @@ fn test_du_time_directory() {
 fn test_du_time_directory_nested() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let separator = std::path::MAIN_SEPARATOR;
 
     at.mkdir_all("d/sub");
     at.touch("d/old");
@@ -1284,20 +1287,21 @@ fn test_du_time_directory_nested() {
         .succeeds();
     let stdout = result.stdout_str();
 
-    assert!(
-        stdout.contains(&format!("2020-01-01 00:00\td{separator}old\n")),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains(&format!(
-            "2023-01-01 00:00\td{separator}sub{separator}new\n"
-        )),
-        "{stdout}"
-    );
-    assert!(
-        stdout.contains(&format!("2023-01-01 00:00\td{separator}sub\n")),
-        "{stdout}"
-    );
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub/new\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(
+            stdout.contains("2023-01-01 00:00\td\\sub\\new\n"),
+            "{stdout}"
+        );
+        assert!(stdout.contains("2023-01-01 00:00\td\\sub\n"), "{stdout}");
+    }
     assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
 }
 

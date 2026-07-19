@@ -83,7 +83,7 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
-    time_field: Option<MetadataTimeField>,
+    time: Option<MetadataTimeField>,
 }
 
 struct StatPrinter {
@@ -157,8 +157,8 @@ impl Stat {
         let file_info = get_file_info(path, &metadata);
         let blocks = get_blocks(path, &metadata);
         let latest_time = options
-            .time_field
-            .and_then(|field| metadata_get_time(&metadata, field));
+            .time
+            .and_then(|time| metadata_get_time(&metadata, time));
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -176,7 +176,7 @@ impl Stat {
     fn new_from_dirfd(
         dir_fd: &DirFd,
         full_path: &Path,
-        time_field: Option<MetadataTimeField>,
+        time: Option<MetadataTimeField>,
     ) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
@@ -194,7 +194,7 @@ impl Stat {
         // This is still needed for compatibility but should work since we're dealing with
         // the root path which should be accessible
         let std_metadata = fs::symlink_metadata(full_path)?;
-        let latest_time = time_field.and_then(|field| metadata_get_time(&std_metadata, field));
+        let latest_time = time.and_then(|time| metadata_get_time(&std_metadata, time));
 
         Ok(Self {
             path: full_path.to_path_buf(),
@@ -304,9 +304,9 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 #[cfg(all(unix, not(target_os = "redox")))]
 fn time_from_raw_stat(
     entry_stat: &uucore::safe_traversal::Metadata,
-    time_field: MetadataTimeField,
+    time: MetadataTimeField,
 ) -> Option<SystemTime> {
-    match time_field {
+    match time {
         MetadataTimeField::Modification => entry_stat.modified(),
         MetadataTimeField::Access => entry_stat.accessed(),
         MetadataTimeField::Change => entry_stat.changed(),
@@ -326,8 +326,26 @@ fn safe_du(
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Get initial stat for this path - use DirFd if available to avoid path length issues
-    let mut my_stat = if let Some(parent_fd) = parent_fd {
+    // Get initial stat for this path - use pre-computed stat if available
+    let mut my_stat = if let Some(initial_stat) = initial_stat {
+        // Use pre-computed stat from parent loop (avoids re-statting the entry with a separate syscall)
+        let s = match initial_stat {
+            Ok(s) => s,
+            Err(e) => {
+                let error = e.map_err_context(
+                    || translate!("du-error-cannot-access", "path" => path.quote()),
+                );
+                if let Err(send_error) = print_tx.send(Err(error)) {
+                    return Err(Box::new(send_error));
+                }
+                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                    0,
+                    "Error already handled",
+                )))));
+            }
+        };
+        s
+    } else if let Some(parent_fd) = parent_fd {
         // We have a parent fd, this is a subdirectory - use openat
         let dir_name = path.file_name().unwrap_or(path.as_os_str());
         match parent_fd.metadata_at(dir_name, SymlinkBehavior::NoFollow) {
@@ -340,6 +358,10 @@ fn safe_du(
                 });
                 let blocks = safe_metadata.blocks();
 
+                let latest_time = options
+                    .time
+                    .and_then(|field| time_from_raw_stat(&safe_metadata, field));
+
                 // For compatibility, still try to get std::fs::Metadata
                 // but fallback to a minimal approach if it fails
                 let std_metadata = fs::symlink_metadata(path).unwrap_or_else(|_| {
@@ -347,10 +369,6 @@ fn safe_du(
                     // This should rarely happen but provides a fallback
                     fs::symlink_metadata("/").expect("root should be accessible")
                 });
-
-                let latest_time = options
-                    .time_field
-                    .and_then(|field| metadata_get_time(&std_metadata, field));
 
                 Stat {
                     path: path.to_path_buf(),
@@ -391,7 +409,7 @@ fn safe_du(
             Err(_e) => {
                 // Try using our new DirFd method for the root directory
                 match DirFd::open(path, SymlinkBehavior::Follow) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time_field) {
+                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
                         Ok(s) => s,
                         Err(e) => {
                             let error = e.map_err_context(
@@ -498,81 +516,79 @@ fn safe_du(
 
         let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
         let latest_time = options
-            .time_field
-            .and_then(|field| time_from_raw_stat(&safe_metadata, field));
+            .time
+            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
 
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
-        let this_stat = if is_dir {
-            // For directories, recurse using safe_du
-            Stat {
-                path: path.join(&entry_name),
-                size: 0,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                // We need a fake metadata - create one from symlink_metadata of parent
-                // This is a workaround since we can't get real metadata without the full path
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        } else {
-            // For files
-            Stat {
-                path: path.join(&entry_name),
-                #[allow(clippy::unnecessary_cast)]
-                size: entry_stat.st_size as u64,
-                #[allow(clippy::unnecessary_cast)]
-                blocks: entry_stat.st_blocks as u64,
-                inodes: 1,
-                inode: file_info,
-                metadata: my_stat.metadata.clone(),
-                latest_time,
-            }
-        };
-
-        // Check excludes
+        // Check excludes using entry name first (avoids path construction for excluded entries)
         for pattern in &options.excludes {
-            if pattern.matches(&this_stat.path.to_string_lossy())
-                || pattern.matches(&entry_name.to_string_lossy())
-            {
+            if pattern.matches(&entry_name.to_string_lossy()) {
                 if options.verbose {
+                    let entry_path = path.join(&entry_name);
                     println!(
                         "{}",
-                        translate!("du-verbose-ignored", "path" => this_stat.path.quote())
+                        translate!("du-verbose-ignored", "path" => entry_path.quote())
                     );
                 }
                 continue 'file_loop;
             }
         }
 
-        // Handle inodes
-        if let Some(inode) = this_stat.inode {
+        // Handle inodes before constructing full path
+        if let Some(inode) = file_info {
             if seen_inodes.contains(&inode) && !options.count_links {
                 continue;
             }
             seen_inodes.insert(inode);
         }
 
+        let entry_path = path.join(&entry_name);
+
+        // Check excludes against full path for entries that passed name-only check
+        for pattern in &options.excludes {
+            if pattern.matches(&entry_path.to_string_lossy()) {
+                if options.verbose {
+                    println!(
+                        "{}",
+                        translate!("du-verbose-ignored", "path" => entry_path.quote())
+                    );
+                }
+                continue 'file_loop;
+            }
+        }
+
         // Process directories recursively
         if is_dir {
             if options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
+                if let (Some(this_inode), Some(my_inode)) = (file_info, my_stat.inode) {
                     if this_inode.dev_id != my_inode.dev_id {
                         continue;
                     }
                 }
             }
 
+            // We need a fake metadata - create one from symlink_metadata of parent
+            // This is a workaround since we can't get real metadata without the full path
+            let dir_stat = Stat {
+                path: entry_path.clone(),
+                size: 0,
+                #[allow(clippy::unnecessary_cast)]
+                blocks: entry_stat.st_blocks as u64,
+                inodes: 1,
+                inode: file_info,
+                metadata: my_stat.metadata.clone(),
+                latest_time,
+            };
+
             let this_stat = safe_du(
-                &this_stat.path,
+                &entry_path,
                 options,
                 depth + 1,
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
-                None,
+                Some(Ok(dir_stat)),
             )?;
 
             if !options.separate_dirs {
@@ -590,6 +606,19 @@ fn safe_du(
                 depth: depth + 1,
             }))?;
         } else {
+            // For files
+            let this_stat = Stat {
+                path: entry_path,
+                #[allow(clippy::unnecessary_cast)]
+                size: entry_stat.st_size as u64,
+                #[allow(clippy::unnecessary_cast)]
+                blocks: entry_stat.st_blocks as u64,
+                inodes: 1,
+                inode: file_info,
+                metadata: my_stat.metadata.clone(),
+                latest_time,
+            };
+
             my_stat.size += this_stat.size;
             my_stat.blocks += this_stat.blocks;
             my_stat.inodes += 1;
@@ -1132,7 +1161,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
-        time_field: time,
+        time,
     };
 
     let time_format = if time.is_some() {
