@@ -89,8 +89,7 @@ struct ParsedSpec<'a> {
     /// Flag characters from `[_0^#+-]`.
     flags: &'a str,
     /// Explicit width, if present. `None` means no width was specified.
-    /// A value that overflows `usize` is represented as `Some(usize::MAX)` so
-    /// the downstream allocation check surfaces it as `FieldWidthTooLarge`.
+    /// Width overflows are handled naturally by usize parsing.
     width: Option<usize>,
     /// The specifier itself, including any leading colons (e.g. `Y`, `:z`, `::z`).
     spec: &'a str,
@@ -355,7 +354,11 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;
-    let mut result = value.to_string();
+    let mut result = if specifier.ends_with('N') {
+        value.trim_end_matches(' ').to_string()
+    } else {
+        value.to_string()
+    };
 
     // Determine default pad character based on specifier type
     // Determine default pad character based on specifier type.
@@ -425,6 +428,14 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
 
     // If no_pad flag is active, suppress all padding and return
     if no_pad {
+        if specifier.ends_with('N') {
+            let trimmed = result.trim_end();
+            if let Some(w) = width {
+                let truncated: String = trimmed.chars().take(w).collect();
+                return Ok(truncated);
+            }
+            return Ok(trimmed.to_string());
+        }
         return Ok(strip_default_padding(&result));
     }
 
@@ -470,6 +481,15 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         }
     }
 
+    if specifier.ends_with('N') && effective_width != 0 {
+        result.truncate(effective_width);
+        result.extend(std::iter::repeat_n(
+            '0',
+            effective_width.saturating_sub(result.len()),
+        ));
+        return Ok(result);
+    }
+
     // Apply width padding
     if effective_width > result.len() {
         let padding = effective_width - result.len();
@@ -490,10 +510,6 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.extend(std::iter::repeat_n(pad_char, padding));
             padded.push_str(&result);
             result = padded;
-        }
-    } else if specifier.ends_with('N') {
-        if effective_width <= get_default_width(specifier) && effective_width != 0 {
-            result.truncate(effective_width);
         }
     }
 
@@ -645,6 +661,51 @@ mod tests {
         // %1d: width 1 < "01".len() → strip zero padding → "1"
         let result = format_with_modifiers(&date, "%1d", &config).unwrap();
         assert_eq!(result, "1");
+    }
+
+    #[test]
+    fn test_n_specifier_no_flag_full_width() {
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        let result = format_with_modifiers(&date, "%N", &config).unwrap();
+        // %N without width should return 9 digits
+        assert_eq!(result.len(), 9);
+    }
+
+    #[test]
+    fn test_n_specifier_truncates_from_right() {
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        let result = format_with_modifiers(&date, "%3N", &config).unwrap();
+        // %kN should produce the first k digits
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_n_specifier_flag() {
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        let result = format_with_modifiers(&date, "%-3N", &config).unwrap();
+        // %-kN should produce the first k digits from the right
+        assert_eq!(result.len(), 3);
+    }
+
+    #[test]
+    fn test_large_width() {
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        let result = format_with_modifiers(&date, "%20N", &config).unwrap();
+        // %kN (k >= 9) produces the output with (k - 9) trailing zeros
+        assert_eq!(result.len(), 20);
+    }
+
+    #[test]
+    fn test_large_width_flag() {
+        let date = make_test_date(1999, 6, 1, 0);
+        let config = get_config();
+        let result = format_with_modifiers(&date, "%-20N", &config).unwrap();
+        // %-kN (k >= 9) returns the 9 digits of the nanosecond value
+        assert_eq!(result.len(), 9);
     }
 
     #[test]
@@ -1026,6 +1087,7 @@ mod tests {
 
         for (input, expected) in cases {
             let actual = parse_format_spec(input).map(|p| (p.flags, p.width, p.spec, p.len));
+
             assert_eq!(actual, *expected, "input = {input:?}");
         }
     }
