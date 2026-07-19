@@ -515,6 +515,25 @@ fn test_kill_with_signal_and_table() {
         .fails();
 }
 
+// Listing signals to a full device must report the write error and exit
+// non-zero, not panic/abort. Covers -l, -l <name>, --list <number>, and --table.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_kill_list_signals_write_error_is_reported() {
+    for args in [
+        vec!["-l"],
+        vec!["-l", "TERM"],
+        vec!["--list", "9"],
+        vec!["--table"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .set_stdout(std::fs::File::create("/dev/full").unwrap())
+            .fails()
+            .stderr_is("kill: write error: No space left on device\n");
+    }
+}
+
 /// Test that `kill -1` (signal without PID) reports "no process ID" error
 /// instead of being misinterpreted as pid=-1 which would kill all processes.
 /// This matches GNU kill behavior.

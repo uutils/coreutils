@@ -11,9 +11,10 @@ use rustix::process::{
     test_kill_current_process_group, test_kill_process, test_kill_process_group,
 };
 use std::cmp::Ordering;
-use std::io;
+use std::io::{self, BufWriter, Write};
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::signals::{
@@ -40,6 +41,14 @@ pub enum Mode {
     Table,
     List,
 }
+
+#[derive(Debug, Error)]
+enum KillError {
+    #[error("{}", translate!("kill-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
+}
+
+impl UError for KillError {}
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -78,8 +87,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
             kill(sig, &pids);
         }
-        Mode::Table => table(),
-        Mode::List => list(&pids_or_signals),
+        Mode::Table => table()?,
+        Mode::List => list(&pids_or_signals)?,
     }
 
     Ok(())
@@ -159,12 +168,17 @@ fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
     Ok(None)
 }
 
-fn table() {
+fn table() -> UResult<()> {
+    // Buffer the listing so a failed write surfaces as one clean error at flush
+    // rather than the runtime's implicit-flush message on top of ours.
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_value: >#2} {signal_name}");
+            writeln!(out, "{signal_value: >#2} {signal_name}").map_err(KillError::Write)?;
         }
     }
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
 fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
@@ -181,40 +195,45 @@ fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    if let Ok(signal_value) = signal_name_or_value.parse::<usize>() {
+    // Resolve the signal to the text kill would print, so the write path is the
+    // same for every branch (a single buffered write + flush).
+    let output = if let Some(signal_value) = signal_name_or_value
+        .parse::<usize>()
+        .ok()
+        .and_then(normalize_list_signal_value)
+    {
         // GNU kill accepts plain signal numbers, values masked to the low 8 bits,
         // and exit statuses that encode `128 + signal`.
-        if let Some(signal_value) = normalize_list_signal_value(signal_value) {
-            println!(
-                "{}",
-                signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
-            );
-            return Ok(());
-        }
-    }
+        signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
+    } else if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
+        signal_value.to_string()
+    } else {
+        return Err(USimpleError::new(
+            1,
+            translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
+        ));
+    };
 
-    if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
-        println!("{signal_value}");
-        return Ok(());
-    }
-
-    Err(USimpleError::new(
-        1,
-        translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
-    ))
+    let mut out = BufWriter::new(io::stdout().lock());
+    writeln!(out, "{output}").map_err(KillError::Write)?;
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
-fn print_signals() {
+fn print_signals() -> UResult<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_name}");
+            writeln!(out, "{signal_name}").map_err(KillError::Write)?;
         }
     }
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
-fn list(signals: &Vec<String>) {
+fn list(signals: &Vec<String>) -> UResult<()> {
     if signals.is_empty() {
-        print_signals();
+        print_signals()?;
     } else {
         for signal in signals {
             if let Err(e) = print_signal(signal) {
@@ -222,6 +241,7 @@ fn list(signals: &Vec<String>) {
             }
         }
     }
+    Ok(())
 }
 
 // rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
