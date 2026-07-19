@@ -1761,6 +1761,53 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     assert!(output.stderr.starts_with(expected));
 }
 
+/// Regression test for <https://github.com/uutils/coreutils/issues/13458>:
+/// two deliberately short reads (ibs=3 sees only 2 bytes each) must be
+/// gathered into a single obs=6 output block without pulling stale bytes
+/// from the ibs-aligned gap into the output.
+///
+/// The writer below runs `printf` inside `sh`, where it is a builtin, so this
+/// needs no `printf` feature.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
+    // Create the FIFO.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    let fifoname = at.plus_as_string("fifo");
+
+    // Start a `dd` process that reads from the fifo (so it will wait
+    // until the writer process starts).
+    let mut reader_command = Command::new(get_tests_binary());
+    let child = reader_command
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .spawn()
+        .unwrap();
+
+    // Start different processes to write to the FIFO, with a small
+    // pause in between.
+    let mut writer_command = Command::new("sh");
+    let _ = writer_command
+        .args([
+            "-c",
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+        ])
+        .spawn()
+        .unwrap()
+        .wait();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout, b"abcd");
+    let expected = b"0+2 records in\n0+1 records out\n4 bytes copied";
+    assert!(output.stderr.starts_with(expected));
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
