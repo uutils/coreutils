@@ -249,12 +249,18 @@ fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
 /// Block size for file in question, or if file does not yet exist, for the
 /// parent directory of the file.
 fn io_block_size(path: &Path, metadata: Option<&std::fs::Metadata>) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    eprintln!(
+        "DEBUG: getting block size {path:?} {metadata:?} {:?}",
+        metadata.map(|v| v.blksize())
+    );
     metadata.map_or_else(
         || {
             let parent = path
                 .parent()
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .unwrap_or_else(|| Path::new("."));
+            eprintln!("DEBUG: parent is {parent:?}");
             uucore::fs::sane_blksize::sane_blksize_from_path(parent)
         },
         uucore::fs::sane_blksize::sane_blksize_from_metadata,
