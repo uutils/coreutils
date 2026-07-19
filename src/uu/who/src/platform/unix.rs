@@ -209,8 +209,9 @@ impl Who {
                 .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
-            println!("{}", users.join(" "));
-            println!("{}", translate!("who-user-count", "count" => users.len()));
+            let mut out = stdout().lock();
+            writeln!(out, "{}", users.join(" "))?;
+            writeln!(out, "{}", translate!("who-user-count", "count" => users.len()))?;
         } else {
             let records = utmpx::Utmpx::iter_all_records_from(f);
 
