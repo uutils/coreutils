@@ -10,7 +10,9 @@
 use crate::display::Quotable;
 use crate::error::{UResult, USimpleError, strip_errno};
 pub use crate::features::entries;
-use crate::show_error;
+use crate::{show_error, translate};
+
+use thiserror::Error;
 
 use clap::{Arg, ArgMatches, Command};
 
@@ -36,6 +38,12 @@ use std::os::unix::fs::MetadataExt;
 
 use std::os::unix::ffi::OsStrExt;
 use std::path::{MAIN_SEPARATOR, Path};
+
+#[derive(Debug, Error)]
+enum PermsError {
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    Write(IOError),
+}
 
 /// The various level of verbosity
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -278,9 +286,14 @@ pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Erro
 
 impl ChownExecutor {
     pub fn exec(&self) -> UResult<()> {
+        use std::io::Write;
         let mut ret = 0;
         for f in &self.files {
             ret |= self.traverse(f);
+        }
+        if let Err(e) = std::io::stdout().flush() {
+            show_error!("{}", PermsError::Write(e));
+            ret |= 1;
         }
         if ret != 0 {
             return Err(ret.into());
@@ -293,11 +306,11 @@ impl ChownExecutor {
         let path = root.as_ref();
         let Some(meta) = self.obtain_meta(path, self.dereference) else {
             if self.verbosity.level == VerbosityLevel::Verbose {
-                println!(
+                self.write_verbose_line(&format!(
                     "failed to change ownership of {} to {}",
                     path.quote(),
                     self.raw_owner
-                );
+                ));
             }
             return 1;
         };
@@ -350,10 +363,13 @@ impl ChownExecutor {
 
             match chown_result {
                 Ok(n) => {
-                    if !n.is_empty() {
-                        show_error!("{n}");
+                    if n.is_empty() {
+                        0
+                    } else {
+                        // GNU: informational verbose/changes lines go to stdout.
+                        // Do not return early: recursive descent still has to run.
+                        self.write_verbose_line(&n)
                     }
-                    0
                 }
                 Err(e) => {
                     if self.verbosity.level != VerbosityLevel::Silent {
@@ -367,8 +383,7 @@ impl ChownExecutor {
                 path,
                 meta.uid(),
                 self.dest_gid.map(|_| meta.gid()),
-            );
-            0
+            )
         };
 
         if self.recursive {
@@ -393,13 +408,14 @@ impl ChownExecutor {
         // Use fchown (safe) to change the directory's ownership
         if let Err(e) = dir_fd.fchown(self.dest_uid, self.dest_gid) {
             let mut error_msg = format!(
-                "changing {} of {}: {e}",
+                "changing {} of {}: {}",
                 if self.verbosity.groups_only {
                     "group"
                 } else {
                     "ownership"
                 },
                 path.quote(),
+                strip_errno(&e),
             );
 
             if self.verbosity.level == VerbosityLevel::Verbose {
@@ -549,12 +565,13 @@ impl ChownExecutor {
                     // Report the successful ownership change using the shared helper
                     self.report_ownership_change_success(&entry_path, meta.uid(), meta.gid());
                 }
-            } else {
-                self.print_verbose_ownership_retained_as(
-                    &entry_path,
-                    meta.uid(),
-                    self.dest_gid.map(|_| meta.gid()),
-                );
+            } else if self.print_verbose_ownership_retained_as(
+                &entry_path,
+                meta.uid(),
+                self.dest_gid.map(|_| meta.gid()),
+            ) != 0
+            {
+                *ret = 1;
             }
 
             // Recurse into subdirectories. Open with the same symlink behavior
@@ -644,11 +661,14 @@ impl ChownExecutor {
             }
 
             if !self.matched(meta.uid(), meta.gid()) {
-                self.print_verbose_ownership_retained_as(
+                if self.print_verbose_ownership_retained_as(
                     path,
                     meta.uid(),
                     self.dest_gid.map(|_| meta.gid()),
-                );
+                ) != 0
+                {
+                    ret = 1;
+                }
                 continue;
             }
             ret = match wrap_chown(
@@ -661,7 +681,8 @@ impl ChownExecutor {
             ) {
                 Ok(n) => {
                     if !n.is_empty() {
-                        show_error!("{n}");
+                        // GNU: informational verbose/changes lines go to stdout.
+                        ret = ret.max(self.write_verbose_line(&n));
                     }
                     // retain previous errors
                     ret.max(0)
@@ -703,7 +724,14 @@ impl ChownExecutor {
         }
     }
 
-    fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) {
+    /// Write a verbose line to stdout without panicking. Returns 1 on write
+    /// failure; the error is reported once at the final flush in `exec`.
+    fn write_verbose_line(&self, line: &str) -> i32 {
+        use std::io::Write;
+        i32::from(writeln!(std::io::stdout(), "{line}").is_err())
+    }
+
+    fn print_verbose_ownership_retained_as(&self, path: &Path, uid: u32, gid: Option<u32>) -> i32 {
         if self.verbosity.level == VerbosityLevel::Verbose {
             let ownership = match (self.dest_uid, self.dest_gid, gid) {
                 (Some(_), Some(_), Some(gid)) => format!(
@@ -716,12 +744,14 @@ impl ChownExecutor {
                 }
                 _ => entries::uid2usr(uid).unwrap_or_else(|_| uid.to_string()),
             };
-            if self.verbosity.groups_only {
-                println!("group of {} retained as {ownership}", path.quote());
+            let line = if self.verbosity.groups_only {
+                format!("group of {} retained as {ownership}", path.quote())
             } else {
-                println!("ownership of {} retained as {ownership}", path.quote());
-            }
+                format!("ownership of {} retained as {ownership}", path.quote())
+            };
+            return self.write_verbose_line(&line);
         }
+        0
     }
 
     /// Try to open directory with error reporting
@@ -772,7 +802,8 @@ impl ChownExecutor {
                             entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                         )
                     };
-                    show_error!("{output}");
+                    // GNU: informational verbose/changes output goes to stdout.
+                    return self.write_verbose_line(&output);
                 }
                 _ => (),
             }
@@ -791,7 +822,8 @@ impl ChownExecutor {
                     entries::gid2grp(dest_gid).unwrap_or_else(|_| dest_gid.to_string())
                 )
             };
-            show_error!("{output}");
+            // GNU: informational verbose output goes to stdout.
+            return self.write_verbose_line(&output);
         }
         0
     }
@@ -893,7 +925,7 @@ pub fn chown_base(
     let mut help = false;
     // stop processing options on --
     for arg in args.iter().take_while(|s| *s != "--") {
-        if arg.to_string_lossy().starts_with("--reference=") || arg == "--reference" {
+        if arg.as_encoded_bytes().starts_with(b"--reference=") || arg == "--reference" {
             reference = true;
         } else if arg == "--help" {
             // we stop processing once we see --help,
