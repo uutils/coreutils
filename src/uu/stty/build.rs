@@ -14,5 +14,5 @@ fn main() {
             target_os = "openbsd",
             target_vendor = "apple"
         ) },
-    }
+    };
 }

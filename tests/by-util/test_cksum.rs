@@ -1559,6 +1559,40 @@ fn test_check_md5_format() {
         .stdout_contains("not-empty: OK");
 }
 
+// The digest in check mode must be computed over the raw bytes of the file:
+// on Windows, no CRLF -> LF conversion must happen (matching generation).
+#[test]
+fn test_check_crlf_file_hashed_as_raw_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // md5 of the raw bytes b"abc\r\nd\r"; hashing with CRLF converted to LF
+    // would yield b7597fc3635cfc9b646eee54636dfa5a instead.
+    at.write_bytes("f", b"abc\r\nd\r");
+    at.write("CHECKSUM", "e5bd2e073913d2cb78174d5be11ab1e9  f\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK");
+
+    // Same with the binary marker `*`.
+    at.write("CHECKSUM_BINARY", "e5bd2e073913d2cb78174d5be11ab1e9 *f\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("CHECKSUM_BINARY")
+        .succeeds()
+        .stdout_contains("f: OK");
+}
+
 // Manage the mixed behavior
 // cksum --check -a sm3 CHECKSUMS
 // when CHECKSUM contains among other lines:
