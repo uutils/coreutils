@@ -1507,7 +1507,7 @@ fn test_format_precision_zero_with_to_scale_issue_11667() {
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
     new_ucmd!()
-        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .pipe_in(*b"10\n\xFF")
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");

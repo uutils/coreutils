@@ -1,7 +1,7 @@
 name: Fuzzing
 
 # spell-checker:ignore (people) taiki-e
-# spell-checker:ignore (misc) fuzzer
+# spell-checker:ignore (misc) fuzzer PIPESTATUS
 
 env:
   CARGO_INCREMENTAL: "0"
@@ -67,37 +67,45 @@ jobs:
     - name: Run `cargo-fuzz build`
       # Force the correct target
       # https://github.com/rust-fuzz/cargo-fuzz/issues/398
-      run: cargo fuzz build --target $(rustc --print host-tuple)
+      run: cargo fuzz build --target host-tuple
 
   fuzz-run:
     needs: fuzz-build
-    name: Fuzz
+    name: Fuzz (${{ matrix.group.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     env:
       RUN_FOR: 60
     strategy:
       matrix:
-        test-target:
-          - { name: fuzz_test, should_pass: true }
-          - { name: fuzz_date, should_pass: true }
-          - { name: fuzz_expr, should_pass: true }
-          - { name: fuzz_printf, should_pass: true }
-          - { name: fuzz_echo, should_pass: true }
-          - { name: fuzz_seq, should_pass: false }
-          - { name: fuzz_sort, should_pass: false }
-          - { name: fuzz_wc, should_pass: false }
-          - { name: fuzz_cut, should_pass: false }
-          - { name: fuzz_split, should_pass: false }
-          - { name: fuzz_tr, should_pass: false }
-          - { name: fuzz_env, should_pass: false }
-          - { name: fuzz_cksum, should_pass: false }
-          - { name: fuzz_parse_glob, should_pass: true }
-          - { name: fuzz_parse_size, should_pass: false }
-          - { name: fuzz_parse_time, should_pass: false }
-          - { name: fuzz_seq_parse_number, should_pass: false }
-          - { name: fuzz_non_utf8_paths, should_pass: true }
-          - { name: fuzz_dirname, should_pass: true }
+        group:
+          - name: smoke
+            targets: |
+              fuzz_test:true
+              fuzz_date:true
+              fuzz_expr:true
+              fuzz_printf:true
+              fuzz_echo:true
+          - name: parsers
+            targets: |
+              fuzz_parse_glob:true
+              fuzz_parse_size:false
+              fuzz_parse_time:false
+              fuzz_seq_parse_number:false
+          - name: commands-a
+            targets: |
+              fuzz_seq:false
+              fuzz_sort:false
+              fuzz_wc:false
+              fuzz_cut:false
+              fuzz_split:false
+          - name: commands-b
+            targets: |
+              fuzz_tr:false
+              fuzz_env:false
+              fuzz_cksum:false
+              fuzz_non_utf8_paths:true
+              fuzz_dirname:true
 
     steps:
     - uses: actions/checkout@v7.0.0
@@ -110,91 +118,86 @@ jobs:
     - name: Emulate a nightly toolchain
       run: |
         echo "RUSTC_BOOTSTRAP=1" >> "${GITHUB_ENV}"
-    - name: Run ${{ matrix.test-target.name }} for XX seconds
-      id: run_fuzzer
+    - name: Run ${{ matrix.group.name }} fuzz targets
       shell: bash
-      continue-on-error: ${{ !matrix.test-target.should_pass }}
       run: |
+        set -o pipefail
         mkdir -p fuzz/stats
-        STATS_FILE="fuzz/stats/${{ matrix.test-target.name }}.txt"
-        # Force the correct target
-        # https://github.com/rust-fuzz/cargo-fuzz/issues/398
-        cargo fuzz run --target $(rustc --print host-tuple) ${{ matrix.test-target.name }} -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+        REQUIRED_TARGET_FAILED=0
 
-        # Extract key stats from the output
-        if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
-          RUNS=$(grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}')
-          echo "runs=$RUNS" >> "$GITHUB_OUTPUT"
-        else
-          echo "runs=unknown" >> "$GITHUB_OUTPUT"
-        fi
+        while IFS=: read -r TARGET SHOULD_PASS; do
+          [ -n "$TARGET" ] || continue
 
-        if grep -q "stat::average_exec_per_sec" "$STATS_FILE"; then
-          EXEC_RATE=$(grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}')
-          echo "exec_rate=$EXEC_RATE" >> "$GITHUB_OUTPUT"
-        else
-          echo "exec_rate=unknown" >> "$GITHUB_OUTPUT"
-        fi
+          STATS_FILE="fuzz/stats/${TARGET}.txt"
+          # Force the correct target
+          # https://github.com/rust-fuzz/cargo-fuzz/issues/398
+          set +e
+          cargo fuzz run --target host-tuple "$TARGET" -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+          FUZZ_STATUS=${PIPESTATUS[0]}
+          set -e
 
-        if grep -q "stat::new_units_added" "$STATS_FILE"; then
-          NEW_UNITS=$(grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}')
-          echo "new_units=$NEW_UNITS" >> "$GITHUB_OUTPUT"
-        else
-          echo "new_units=unknown" >> "$GITHUB_OUTPUT"
-        fi
+          # Save should_pass value to file for summary job to use
+          echo "$SHOULD_PASS" > "fuzz/stats/${TARGET}.should_pass"
 
-        # Save should_pass value to file for summary job to use
-        echo "${{ matrix.test-target.should_pass }}" > "fuzz/stats/${{ matrix.test-target.name }}.should_pass"
+          # Print stats to job output for immediate visibility
+          echo "----------------------------------------"
+          echo "FUZZING STATISTICS FOR $TARGET"
+          echo "----------------------------------------"
+          echo "Runs:           $(grep -q "stat::number_of_executed_units" "$STATS_FILE" && grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
+          echo "Execution Rate: $(grep -q "stat::average_exec_per_sec" "$STATS_FILE" && grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}' || echo "unknown") execs/sec"
+          echo "New Units:      $(grep -q "stat::new_units_added" "$STATS_FILE" && grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
+          echo "Expected:       $SHOULD_PASS"
+          echo "Exit code:      $FUZZ_STATUS"
+          if grep -q "SUMMARY: " "$STATS_FILE"; then
+            echo "Status:         $(grep "SUMMARY: " "$STATS_FILE" | head -1)"
+          else
+            echo "Status:         Completed"
+          fi
+          echo "----------------------------------------"
 
-        # Print stats to job output for immediate visibility
-        echo "----------------------------------------"
-        echo "FUZZING STATISTICS FOR ${{ matrix.test-target.name }}"
-        echo "----------------------------------------"
-        echo "Runs:           $(grep -q "stat::number_of_executed_units" "$STATS_FILE" && grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
-        echo "Execution Rate: $(grep -q "stat::average_exec_per_sec" "$STATS_FILE" && grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}' || echo "unknown") execs/sec"
-        echo "New Units:      $(grep -q "stat::new_units_added" "$STATS_FILE" && grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}' || echo "unknown")"
-        echo "Expected:       ${{ matrix.test-target.should_pass }}"
-        if grep -q "SUMMARY: " "$STATS_FILE"; then
-          echo "Status:         $(grep "SUMMARY: " "$STATS_FILE" | head -1)"
-        else
-          echo "Status:         Completed"
-        fi
-        echo "----------------------------------------"
+          # Add summary to GitHub step summary
+          echo "### Fuzzing Results for $TARGET" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
 
-        # Add summary to GitHub step summary
-        echo "### Fuzzing Results for ${{ matrix.test-target.name }}" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-        echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+          if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
+            echo "| Runs | $(grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
+          fi
 
-        if grep -q "stat::number_of_executed_units" "$STATS_FILE"; then
-          echo "| Runs | $(grep "stat::number_of_executed_units" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
-        fi
+          if grep -q "stat::average_exec_per_sec" "$STATS_FILE"; then
+            echo "| Execution Rate | $(grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}') execs/sec |" >> $GITHUB_STEP_SUMMARY
+          fi
 
-        if grep -q "stat::average_exec_per_sec" "$STATS_FILE"; then
-          echo "| Execution Rate | $(grep "stat::average_exec_per_sec" "$STATS_FILE" | awk '{print $2}') execs/sec |" >> $GITHUB_STEP_SUMMARY
-        fi
+          if grep -q "stat::new_units_added" "$STATS_FILE"; then
+            echo "| New Units | $(grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
+          fi
 
-        if grep -q "stat::new_units_added" "$STATS_FILE"; then
-          echo "| New Units | $(grep "stat::new_units_added" "$STATS_FILE" | awk '{print $2}') |" >> $GITHUB_STEP_SUMMARY
-        fi
+          echo "| Should pass | $SHOULD_PASS |" >> $GITHUB_STEP_SUMMARY
+          echo "| Exit code | $FUZZ_STATUS |" >> $GITHUB_STEP_SUMMARY
 
-        echo "| Should pass | ${{ matrix.test-target.should_pass }} |" >> $GITHUB_STEP_SUMMARY
+          if grep -q "SUMMARY: " "$STATS_FILE"; then
+            echo "| Status | $(grep "SUMMARY: " "$STATS_FILE" | head -1) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Status | Completed |" >> $GITHUB_STEP_SUMMARY
+          fi
 
-        if grep -q "SUMMARY: " "$STATS_FILE"; then
-          echo "| Status | $(grep "SUMMARY: " "$STATS_FILE" | head -1) |" >> $GITHUB_STEP_SUMMARY
-        else
-          echo "| Status | Completed |" >> $GITHUB_STEP_SUMMARY
-        fi
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-        echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "$SHOULD_PASS" = "true" ] && [ "$FUZZ_STATUS" -ne 0 ]; then
+            REQUIRED_TARGET_FAILED=1
+          fi
+        done <<< "${{ matrix.group.targets }}"
+
+        exit "$REQUIRED_TARGET_FAILED"
     - name: Upload Stats
+      if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: fuzz-stats-${{ matrix.test-target.name }}
+        name: fuzz-stats-${{ matrix.group.name }}
         path: |
-          fuzz/stats/${{ matrix.test-target.name }}.txt
-          fuzz/stats/${{ matrix.test-target.name }}.should_pass
+          fuzz/stats/*.txt
+          fuzz/stats/*.should_pass
         retention-days: 5
   fuzz-summary:
     needs: fuzz-run

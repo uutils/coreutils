@@ -1364,51 +1364,6 @@ fn test_chmod_non_utf8_paths() {
     );
 }
 
-#[cfg(all(target_os = "linux", feature = "chmod"))]
-#[test]
-#[ignore = "covered by util/check-safe-traversal.sh"]
-fn test_chmod_recursive_uses_dirfd_for_subdirs() {
-    use std::process::Command;
-    use uutests::get_tests_binary;
-
-    // strace is required; fail fast if it is missing or not runnable
-    let output = Command::new("strace")
-        .arg("-V")
-        .output()
-        .expect("strace not found; install strace to run this test");
-    assert!(
-        output.status.success(),
-        "strace -V failed; ensure strace is installed and usable"
-    );
-
-    let (at, _ucmd) = at_and_ucmd!();
-    at.mkdir("x");
-    at.mkdir("x/y");
-    at.mkdir("x/y/z");
-
-    let log_path = at.plus_as_string("strace.log");
-
-    let status = Command::new("strace")
-        .arg("-e")
-        .arg("openat")
-        .arg("-o")
-        .arg(&log_path)
-        .arg(get_tests_binary!())
-        .args(["chmod", "-R", "+x", "x"])
-        .current_dir(&at.subdir)
-        .status()
-        .expect("failed to run strace");
-    assert!(status.success(), "strace run failed");
-
-    let log = at.read("strace.log");
-
-    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
-    assert!(
-        !log.contains("openat(AT_FDCWD, \"x/y"),
-        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
-    );
-}
-
 #[test]
 fn test_chmod_operator_only_still_calls_syscall() {
     use uucore::process::geteuid;

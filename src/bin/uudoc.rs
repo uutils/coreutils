@@ -289,10 +289,14 @@ fn main() -> io::Result<()> {
     println!("Gathering utils per platform");
     let utils_per_platform = {
         let mut map = HashMap::new();
-        for platform in ["unix", "macos", "windows", "unix_android"] {
+        for (platform, features) in [
+            ("unix", "feat_os_unix"),
+            ("windows", "feat_os_windows"),
+            ("unix_android", "feat_os_unix_android"),
+        ] {
             let platform_utils: Vec<String> = String::from_utf8(
                 process::Command::new("./util/show-utils.sh")
-                    .arg(format!("--features=feat_os_{platform}"))
+                    .arg(format!("--features={features}"))
                     .output()?
                     .stdout,
             )
@@ -353,7 +357,7 @@ fn main() -> io::Result<()> {
                 "| {:<16} | {:<5} | {:<5} | {:<7} | {:<7} | {:<7} |",
                 format!("**{name}**"),
                 check_supported(name, "linux"),
-                check_supported(name, "macos"),
+                check_supported(name, "unix"),
                 check_supported(name, "windows"),
                 check_supported(name, "unix"),
                 check_supported(name, "unix_android"),
@@ -494,7 +498,8 @@ impl MDWriter<'_, '_> {
             ("linux", "linux"),
             // freebsd is disabled for now because mdbook does not use font-awesome 5 yet.
             // ("unix", "freebsd"),
-            ("macos", "apple"),
+            // macOS uses the same feature set as generic Unix.
+            ("unix", "apple"),
             ("windows", "windows"),
         ] {
             if self.name.contains("sum")

@@ -5,7 +5,7 @@
 // spell-checker:ignore αbcdef ; (people) kkos
 // spell-checker:ignore aabcccd aabcd aabd abbb abbbd abbcabc abbcac abbcbbbd abbcbd
 // spell-checker:ignore abbccd abcabc abcac acabc andand bigcmp bignum emptysub
-// spell-checker:ignore orempty oror bcdef fedcb
+// spell-checker:ignore orempty oror bcdef fedcb GHSA xjfw pqfw
 
 use uutests::new_ucmd;
 
@@ -647,6 +647,38 @@ fn test_long_input() {
     }
 
     new_ucmd!().args(&args).succeeds().stdout_is(RESULT);
+}
+
+#[test]
+fn test_deeply_nested_expression() {
+    // A deeply nested expression should succeed rather than abort due to a
+    // stack overflow in the parser (GHSA-gr9g-xjfw-pqfw).
+    #[cfg(not(windows))]
+    const DEPTH: usize = 10000;
+
+    // On windows there is 8192 characters input limit
+    #[cfg(windows)]
+    const DEPTH: usize = 2000; // 8003 characters (with spaces)
+
+    let mut args: Vec<&str> = vec!["("; DEPTH];
+    args.push("1");
+    args.extend(std::iter::repeat_n(")", DEPTH));
+    new_ucmd!().args(&args).succeeds().stdout_is("1\n");
+}
+
+#[test]
+fn test_deeply_nested_length() {
+    // Keyword operands recurse in the parser just like parentheses do.
+    #[cfg(not(windows))]
+    const DEPTH: usize = 10000;
+
+    // On windows there is 8192 characters input limit
+    #[cfg(windows)]
+    const DEPTH: usize = 1000; // 7002 characters (with spaces)
+
+    let mut args: Vec<&str> = vec!["length"; DEPTH];
+    args.push("1");
+    new_ucmd!().args(&args).succeeds().stdout_is("1\n");
 }
 
 /// Regroup the testcases of the GNU test expr.pl
