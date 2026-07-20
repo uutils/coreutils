@@ -161,7 +161,10 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
+            // Saturate on overflow so a block count that exceeds u64 is caught
+            // by the i64::MAX bound check in `Parser::validate` rather than
+            // wrapping past it.
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
     }
@@ -1429,7 +1432,7 @@ fn calc_loop_bsize(
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
             let rremain = rmax - rsofar;
-            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
+            cmp::min(ideal_bsize as u64, rremain.saturating_mul(ibs as u64)) as usize
         }
         Some(Num::Bytes(bmax)) => {
             let bmax: u128 = bmax.into();
