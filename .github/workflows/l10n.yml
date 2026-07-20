@@ -34,7 +34,7 @@ jobs:
           - { os: macos-latest   , features: "feat_os_unix" }
           - { os: windows-latest , features: "feat_os_windows" }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
@@ -85,7 +85,7 @@ jobs:
     name: L10n/Fluent Syntax Check
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Install Mozilla Fluent Linter
@@ -133,7 +133,7 @@ jobs:
     name: L10n/Clap Error Localization Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -296,7 +296,7 @@ jobs:
     name: L10n/French Integration Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -407,7 +407,7 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -560,7 +560,7 @@ jobs:
           - { os: ubuntu-latest  , features: "feat_os_unix" }
           - { os: macos-latest   , features: "feat_os_unix" }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -894,7 +894,7 @@ jobs:
     name: L10n/Locale Support Verification
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1126,7 +1126,7 @@ jobs:
     name: L10n/Embedded Locale Regression Test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1152,7 +1152,7 @@ jobs:
     name: L10n/Locale Embedding - Cat Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1183,7 +1183,7 @@ jobs:
     name: L10n/Locale Embedding - Ls Utility
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1214,7 +1214,7 @@ jobs:
     name: L10n/Locale Embedding - Multicall Binary
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -1247,7 +1247,7 @@ jobs:
     name: L10n/Locale Embedding - Cargo Install
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
