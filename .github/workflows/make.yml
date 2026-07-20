@@ -331,8 +331,7 @@ jobs:
         ! test -f /tmp/c/usr/local/share/zsh/site-functions/_uu-install
         ! test -f /tmp/c/usr/local/share/bash-completion/completions/uu-head.bash
         ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
-        # package (currently broken...)
-        exit 0
+        # package
         mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
         bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
       env:
