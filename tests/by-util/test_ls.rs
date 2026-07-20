@@ -4227,6 +4227,49 @@ fn test_ls_align_unquoted() {
 }
 
 #[test]
+fn test_ls_color_does_not_make_quoted_names_align_as_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir one");
+    at.touch("file one");
+
+    let args = ["-C", "-T0", "-w=80", "--quoting-style=shell-escape-always"];
+
+    let plain = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    let ansi_re = Regex::new(r"\x1b\[[0-9;]*[A-Za-z]").unwrap();
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
+
+    let long_args = ["-l", "--quoting-style=shell-escape-always"];
+    let plain = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
+}
+
+#[test]
 fn test_ls_align_unquoted_multiline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7556,4 +7599,14 @@ fn test_ls_al_no_capabilities_insufficient_on_wasi() {
         "ls -al stdout leaked a WASI capability error: {}",
         out.stdout_str()
     );
+}
+
+// https://github.com/uutils/coreutils/issues/13280
+// options `--sort`, `--format`, `--time`, and `--blocksize` may be detached
+#[test]
+fn test_long_options_detached() {
+    new_ucmd!().arg("--sort").arg("name").succeeds();
+    new_ucmd!().arg("--format").arg("single-column").succeeds();
+    new_ucmd!().arg("--time").arg("mtime").succeeds();
+    new_ucmd!().arg("--block-size").arg("512").succeeds();
 }

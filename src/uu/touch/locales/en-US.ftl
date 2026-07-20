@@ -21,7 +21,6 @@ touch-error-cannot-touch = cannot touch { $filename }
 touch-error-no-such-file-or-directory = No such file or directory
 touch-error-failed-to-get-attributes = failed to get attributes of { $path }
 touch-error-setting-times-of-path = setting times of { $path }
-touch-error-invalid-date-ts-format = invalid date ts format { $date }
 touch-error-invalid-date-format = invalid date format { $date }
 touch-error-unable-to-parse-date = Unable to parse date: { $date }
 touch-error-windows-stdout-path-failed = GetFinalPathNameByHandleW failed with code { $code }

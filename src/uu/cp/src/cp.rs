@@ -2263,18 +2263,22 @@ fn print_verbose_output(
     progress_bar: Option<&ProgressBar>,
     source: &Path,
     dest: &Path,
-) {
+) -> CopyResult<()> {
     if let Some(pb) = progress_bar {
         // Suspend (hide) the progress bar so the println won't overlap with the progress bar.
-        pb.suspend(|| {
-            print_paths(parents, source, dest);
-        });
+        pb.suspend(|| print_paths(parents, source, dest))
     } else {
-        print_paths(parents, source, dest);
+        print_paths(parents, source, dest)
     }
 }
 
-fn print_paths(parents: bool, source: &Path, dest: &Path) {
+fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
+    use std::io::Write;
+
+    // Buffer the output so a failed write (e.g. stdout redirected to a full
+    // disk) surfaces as one error instead of panicking inside println!.
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let write_err = |e| CpError::IoErrContext(e, translate!("cp-error-write"));
     if parents {
         // For example, if copying file `a/b/c` and its parents
         // to directory `d/`, then print
@@ -2283,11 +2287,13 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) {
         //     a/b -> d/a/b
         //
         for (x, y) in aligned_ancestors(source, dest) {
-            println!("{} -> {}", x.display(), y.display());
+            writeln!(out, "{} -> {}", x.display(), y.display()).map_err(write_err)?;
         }
     }
 
-    println!("{}", context_for(source, dest));
+    writeln!(out, "{}", context_for(source, dest)).map_err(write_err)?;
+    out.flush().map_err(write_err)?;
+    Ok(())
 }
 
 /// Handles the copy mode for a file copy operation.
@@ -2425,7 +2431,15 @@ fn handle_copy_mode(
                 .truncate(false)
                 .create(true)
                 .open(dest)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!(
+                            "cp-error-cannot-create-regular-file",
+                            "path" => dest.quote()
+                        ),
+                    )
+                })?;
         }
     }
 
@@ -2612,7 +2626,7 @@ fn copy_file(
             fs::hard_link(new_source, dest)?;
 
             if options.verbose {
-                print_verbose_output(options.parents, progress_bar, source, dest);
+                print_verbose_output(options.parents, progress_bar, source, dest)?;
             }
 
             return Ok(());
@@ -2662,7 +2676,7 @@ fn copy_file(
     )?;
 
     if options.verbose && performed_action != PerformedAction::Skipped {
-        print_verbose_output(options.parents, progress_bar, source, dest);
+        print_verbose_output(options.parents, progress_bar, source, dest)?;
     }
 
     // TODO: implement something similar to gnu's lchown
