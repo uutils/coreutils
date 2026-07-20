@@ -68,13 +68,34 @@ impl<'a> BufferedOutput<'a> {
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
+        let obs = self.inner.settings.obs;
+
+        // Fast path: with no partial block pending, the complete blocks can
+        // go straight to the inner writer, instead of being copied into the
+        // internal buffer only to be written and cleared again. This is the
+        // common case: whenever the incoming length is a multiple of `obs`
+        // -- as it is for the copy loop's usual full-sized reads -- nothing
+        // is left pending for the next call.
+        if self.buf.is_empty() {
+            let complete = buf.len() - buf.len() % obs;
+            if complete == 0 {
+                // Not even one complete block: buffer the whole thing and
+                // write zero blocks.
+                self.buf.extend_from_slice(buf);
+                return Ok(WriteStat::default());
+            }
+            let wstat = self.inner.write_blocks(&buf[..complete])?;
+            self.buf.extend_from_slice(&buf[complete..]);
+            return Ok(wstat);
+        }
+
         // Split the incoming buffer into two parts: the bytes to write
         // and the bytes to buffer for next time.
         //
         // If `buf` does not include enough bytes to form a full block,
         // just buffer the whole thing and write zero blocks.
         let n = self.buf.len() + buf.len();
-        let rem = n % self.inner.settings.obs;
+        let rem = n % obs;
         let i = buf.len().saturating_sub(rem);
         let (to_write, to_buffer) = buf.split_at(i);
 
