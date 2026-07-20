@@ -11,7 +11,7 @@ use std::io;
 use std::str::Utf8Error;
 
 use uucore::display::Quotable;
-use uucore::error::UError;
+use uucore::error::{UError, strip_errno};
 use uucore::translate;
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
@@ -57,6 +57,9 @@ pub(crate) enum Error {
         operand1: OsString,
         source: io::Error,
     },
+
+    #[error("{}", translate!("runcon-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
 }
 
 impl Error {
@@ -132,6 +135,7 @@ impl UError for Error {
             Self::SELinux { .. } => error_exit_status::ANOTHER_ERROR,
             Self::Io { .. } => error_exit_status::ANOTHER_ERROR,
             Self::Io1 { .. } => error_exit_status::ANOTHER_ERROR,
+            Self::Write(_) => error_exit_status::ANOTHER_ERROR,
         }
     }
 }

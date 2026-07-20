@@ -67,7 +67,7 @@ jobs:
     - name: Run `cargo-fuzz build`
       # Force the correct target
       # https://github.com/rust-fuzz/cargo-fuzz/issues/398
-      run: cargo fuzz build --target $(rustc --print host-tuple)
+      run: cargo fuzz build --target host-tuple
 
   fuzz-run:
     needs: fuzz-build
@@ -123,7 +123,6 @@ jobs:
       run: |
         set -o pipefail
         mkdir -p fuzz/stats
-        HOST_TUPLE=$(rustc --print host-tuple)
         REQUIRED_TARGET_FAILED=0
 
         while IFS=: read -r TARGET SHOULD_PASS; do
@@ -133,7 +132,7 @@ jobs:
           # Force the correct target
           # https://github.com/rust-fuzz/cargo-fuzz/issues/398
           set +e
-          cargo fuzz run --target "$HOST_TUPLE" "$TARGET" -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
+          cargo fuzz run --target host-tuple "$TARGET" -- -max_total_time=${{ env.RUN_FOR }} -timeout=${{ env.RUN_FOR }} -detect_leaks=0 -print_final_stats=1 2>&1 | tee "$STATS_FILE"
           FUZZ_STATUS=${PIPESTATUS[0]}
           set -e
 
