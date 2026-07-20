@@ -126,9 +126,6 @@ mod format {
     pub(crate) const YYYYMMDDHHMMSS: &str = "%Y-%m-%d %H:%M:%S.%f";
     // "%Y-%m-%d %H:%M:%S" 12 chars
     pub(crate) const YYYYMMDDHHMMS: &str = "%Y-%m-%d %H:%M:%S";
-    // "%Y-%m-%d %H:%M" 12 chars
-    // Used for example in tests/touch/no-rights.sh
-    pub(crate) const YYYY_MM_DD_HH_MM: &str = "%Y-%m-%d %H:%M";
     // "%Y%m%d%H%M" 12 chars
     pub(crate) const YYYYMMDDHHMM: &str = "%Y%m%d%H%M";
     // "%Y-%m-%d %H:%M +offset"
@@ -506,11 +503,8 @@ fn touch_file(
             // we can't use File::create to create a directory
             // we cannot use path.is_dir() because it calls fs::metadata which we already called
             // when stable, we can change to use e.kind() == std::io::ErrorKind::IsADirectory
-            let is_directory = if let Some(last_char) = path.to_string_lossy().chars().last() {
-                last_char == std::path::MAIN_SEPARATOR
-            } else {
-                false
-            };
+            let is_directory = path.as_os_str().as_encoded_bytes().last()
+                == Some(&(std::path::MAIN_SEPARATOR as u8));
             if is_directory {
                 let custom_err = Error::other(translate!("touch-error-no-such-file-or-directory"));
                 return Err(custom_err.map_err_context(
@@ -765,7 +759,6 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     for fmt in [
         format::YYYYMMDDHHMMS,
         format::YYYYMMDDHHMMSS,
-        format::YYYY_MM_DD_HH_MM,
         format::YYYYMMDDHHMM_OFFSET,
     ] {
         if let Ok(parsed) = strtime::parse(fmt, s)
@@ -819,7 +812,7 @@ fn prepend_century(s: &str) -> UResult<String> {
     let first_two_digits = first_two.parse::<u32>().map_err(|_| {
         USimpleError::new(
             1,
-            translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+            translate!("touch-error-invalid-date-format", "date" => s.quote()),
         )
     })?;
     Ok(format!(
@@ -862,7 +855,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 
@@ -883,7 +876,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
         .map_err(|_| {
             USimpleError::new(
                 1,
-                translate!("touch-error-invalid-date-ts-format", "date" => s.quote()),
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
             )
         })?;
 
