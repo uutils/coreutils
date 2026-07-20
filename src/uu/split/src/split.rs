@@ -5,48 +5,30 @@
 
 // spell-checker:ignore nbbbb ncccc hexdigit getmaxstdio
 
+mod cli;
 mod filenames;
 mod number;
 mod platform;
 mod strategy;
 
+use crate::cli::ARG_INPUT;
+use crate::cli::ARG_PREFIX;
+use crate::cli::options;
+pub use crate::cli::uu_app;
 use crate::filenames::{FilenameIterator, Suffix, SuffixError};
+use crate::platform::Writer;
 use crate::strategy::{NumberType, Strategy, StrategyError};
-use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, parser::ValueSource};
-use std::env;
+use clap::{ArgMatches, parser::ValueSource};
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, metadata};
 use std::io;
-use std::io::{BufRead, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin};
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UIoError, UResult, USimpleError, UUsageError};
-use uucore::translate;
-
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
-
-use uucore::format_usage;
-use uucore::uio_error;
-
-static OPT_BYTES: &str = "bytes";
-static OPT_LINE_BYTES: &str = "line-bytes";
-static OPT_LINES: &str = "lines";
-static OPT_ADDITIONAL_SUFFIX: &str = "additional-suffix";
-static OPT_FILTER: &str = "filter";
-static OPT_NUMBER: &str = "number";
-static OPT_NUMERIC_SUFFIXES: &str = "numeric-suffixes";
-static OPT_NUMERIC_SUFFIXES_SHORT: &str = "-d";
-static OPT_HEX_SUFFIXES: &str = "hex-suffixes";
-static OPT_HEX_SUFFIXES_SHORT: &str = "-x";
-static OPT_SUFFIX_LENGTH: &str = "suffix-length";
-static OPT_VERBOSE: &str = "verbose";
-static OPT_SEPARATOR: &str = "separator";
-static OPT_ELIDE_EMPTY_FILES: &str = "elide-empty-files";
-static OPT_IO_BLKSIZE: &str = "-io-blksize";
-
-static ARG_INPUT: &str = "input";
-static ARG_PREFIX: &str = "prefix";
+use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -143,16 +125,11 @@ fn should_extract_obs_lines(
     preceding_long_opt_req_value: bool,
     preceding_short_opt_req_value: bool,
 ) -> bool {
-    slice.starts_with('-')
-        && !slice.starts_with("--")
-        && !preceding_long_opt_req_value
+    !preceding_long_opt_req_value
         && !preceding_short_opt_req_value
-        && !slice.starts_with("-a")
-        && !slice.starts_with("-b")
-        && !slice.starts_with("-C")
-        && !slice.starts_with("-l")
-        && !slice.starts_with("-n")
-        && !slice.starts_with("-t")
+        && slice.strip_prefix("-").is_some_and(|s| {
+            !s.as_bytes().first().is_some_and(|s| b"-abClnt".contains(s)) // spell-checker:disable-line
+        })
 }
 
 /// Helper function to [`filter_args`]
@@ -206,195 +183,29 @@ fn handle_preceding_options(
     preceding_long_opt_req_value: &mut bool,
     preceding_short_opt_req_value: &mut bool,
 ) {
+    *preceding_short_opt_req_value = false;
+    *preceding_long_opt_req_value = false;
+
     // capture if current slice is a preceding long option that requires value and does not use '=' to assign that value
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    if slice.starts_with("--") {
-        *preceding_long_opt_req_value = &slice[2..] == OPT_BYTES
-            || &slice[2..] == OPT_LINE_BYTES
-            || &slice[2..] == OPT_LINES
-            || &slice[2..] == OPT_ADDITIONAL_SUFFIX
-            || &slice[2..] == OPT_FILTER
-            || &slice[2..] == OPT_NUMBER
-            || &slice[2..] == OPT_SUFFIX_LENGTH
-            || &slice[2..] == OPT_SEPARATOR;
+    if let Some(opt) = slice.strip_prefix("--") {
+        *preceding_long_opt_req_value = matches!(
+            opt,
+            options::BYTES
+                | options::LINE_BYTES
+                | options::LINES
+                | options::ADDITIONAL_SUFFIX
+                | options::FILTER
+                | options::NUMBER
+                | options::SUFFIX_LENGTH
+                | options::SEPARATOR
+        );
     }
     // capture if current slice is a preceding short option that requires value and does not have value in the same slice (value separated by whitespace)
     // following slice should be treaded as value for this option
     // even if it starts with '-' (which would be treated as hyphen prefixed value)
-    *preceding_short_opt_req_value = slice == "-b"
-        || slice == "-C"
-        || slice == "-l"
-        || slice == "-n"
-        || slice == "-a"
-        || slice == "-t";
-    // slice is a value
-    // reset preceding option flags
-    if !slice.starts_with('-') {
-        *preceding_short_opt_req_value = false;
-        *preceding_long_opt_req_value = false;
-    }
-}
-
-pub fn uu_app() -> Command {
-    Command::new("split")
-        .version(uucore::crate_version!())
-        .help_template(uucore::localized_help_template(uucore::util_name()))
-        .about(translate!("split-about"))
-        .after_help(translate!("split-after-help"))
-        .override_usage(format_usage(&translate!("split-usage")))
-        .infer_long_args(true)
-        // strategy (mutually exclusive)
-        .arg(
-            Arg::new(OPT_BYTES)
-                .short('b')
-                .long(OPT_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help(translate!("split-help-bytes")),
-        )
-        .arg(
-            Arg::new(OPT_LINE_BYTES)
-                .short('C')
-                .long(OPT_LINE_BYTES)
-                .allow_hyphen_values(true)
-                .value_name("SIZE")
-                .help(translate!("split-help-line-bytes")),
-        )
-        .arg(
-            Arg::new(OPT_LINES)
-                .short('l')
-                .long(OPT_LINES)
-                .allow_hyphen_values(true)
-                .value_name("NUMBER")
-                .default_value("1000")
-                .help(translate!("split-help-lines")),
-        )
-        .arg(
-            Arg::new(OPT_NUMBER)
-                .short('n')
-                .long(OPT_NUMBER)
-                .allow_hyphen_values(true)
-                .value_name("CHUNKS")
-                .help(translate!("split-help-number")),
-        )
-        // rest of the arguments
-        .arg(
-            Arg::new(OPT_ADDITIONAL_SUFFIX)
-                .long(OPT_ADDITIONAL_SUFFIX)
-                .allow_hyphen_values(true)
-                .value_name("SUFFIX")
-                .default_value("")
-                .value_parser(clap::value_parser!(OsString))
-                .help(translate!("split-help-additional-suffix")),
-        )
-        .arg(
-            Arg::new(OPT_FILTER)
-                .long(OPT_FILTER)
-                .allow_hyphen_values(true)
-                .value_name("COMMAND")
-                .value_hint(ValueHint::CommandName)
-                .help(translate!("split-help-filter")),
-        )
-        .arg(
-            Arg::new(OPT_ELIDE_EMPTY_FILES)
-                .long(OPT_ELIDE_EMPTY_FILES)
-                .short('e')
-                .help(translate!("split-help-elide-empty-files"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES_SHORT)
-                .short('d')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .help(translate!("split-help-numeric-suffixes-short")),
-        )
-        .arg(
-            Arg::new(OPT_NUMERIC_SUFFIXES)
-                .long(OPT_NUMERIC_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .value_name("FROM")
-                .help(translate!("split-help-numeric-suffixes")),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES_SHORT)
-                .short('x')
-                .action(ArgAction::SetTrue)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .help(translate!("split-help-hex-suffixes-short")),
-        )
-        .arg(
-            Arg::new(OPT_HEX_SUFFIXES)
-                .long(OPT_HEX_SUFFIXES)
-                .require_equals(true)
-                .num_args(0..=1)
-                .overrides_with_all([
-                    OPT_NUMERIC_SUFFIXES,
-                    OPT_NUMERIC_SUFFIXES_SHORT,
-                    OPT_HEX_SUFFIXES,
-                    OPT_HEX_SUFFIXES_SHORT,
-                ])
-                .value_name("FROM")
-                .help(translate!("split-help-hex-suffixes")),
-        )
-        .arg(
-            Arg::new(OPT_SUFFIX_LENGTH)
-                .short('a')
-                .long(OPT_SUFFIX_LENGTH)
-                .allow_hyphen_values(true)
-                .value_name("N")
-                .help(translate!("split-help-suffix-length")),
-        )
-        .arg(
-            Arg::new(OPT_VERBOSE)
-                .long(OPT_VERBOSE)
-                .help(translate!("split-help-verbose"))
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new(OPT_SEPARATOR)
-                .short('t')
-                .long(OPT_SEPARATOR)
-                .allow_hyphen_values(true)
-                .value_name("SEP")
-                .action(ArgAction::Append)
-                .help(translate!("split-help-separator")),
-        )
-        .arg(
-            Arg::new(OPT_IO_BLKSIZE)
-                .long("io-blksize")
-                .alias(OPT_IO_BLKSIZE)
-                .hide(true),
-        )
-        .arg(
-            Arg::new(ARG_INPUT)
-                .default_value("-")
-                .value_hint(ValueHint::FilePath)
-                .value_parser(clap::value_parser!(OsString)),
-        )
-        .arg(
-            Arg::new(ARG_PREFIX)
-                .default_value("x")
-                .value_parser(clap::value_parser!(OsString)),
-        )
+    *preceding_short_opt_req_value = matches!(slice, "-b" | "-C" | "-l" | "-n" | "-a" | "-t");
 }
 
 /// Parameters that control how a file gets split.
@@ -480,7 +291,7 @@ impl Settings {
         // defaults to '\n' - newline character
         // If the same separator (the same value) was used multiple times - `split` should NOT fail
         // If the separator was used multiple times but with different values (not all values are the same) - `split` should fail
-        let separator = match matches.get_many::<String>(OPT_SEPARATOR) {
+        let separator = match matches.get_many::<String>(options::SEPARATOR) {
             Some(mut sep_values) => {
                 let first = sep_values.next().unwrap(); // it is safe to just unwrap here since Clap should not return empty ValuesRef<'_,String> in the option from get_many() call
                 if !sep_values.all(|s| s == first) {
@@ -495,25 +306,26 @@ impl Settings {
             None => b'\n',
         };
 
-        let io_blksize: Option<u64> = if let Some(s) = matches.get_one::<String>(OPT_IO_BLKSIZE) {
-            match parse_size_u64(s) {
-                Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-                Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
-                _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
-            }
-        } else {
-            None
-        };
+        let io_blksize: Option<u64> =
+            if let Some(s) = matches.get_one::<String>(options::IO_BLKSIZE) {
+                match parse_size_u64(s) {
+                    Ok(0) => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
+                    Ok(n) if n <= uucore::fs::sane_blksize::MAX => Some(n),
+                    _ => return Err(SettingsError::InvalidIOBlockSize(s.to_owned())),
+                }
+            } else {
+                None
+            };
 
         let result = Self {
             prefix: matches.get_one::<OsString>(ARG_PREFIX).unwrap().clone(),
             suffix,
             input: matches.get_one::<OsString>(ARG_INPUT).unwrap().clone(),
-            filter: matches.get_one::<String>(OPT_FILTER).cloned(),
+            filter: matches.get_one::<String>(options::FILTER).cloned(),
             strategy,
-            verbose: matches.value_source(OPT_VERBOSE) == Some(ValueSource::CommandLine),
+            verbose: matches.value_source(options::VERBOSE) == Some(ValueSource::CommandLine),
             separator,
-            elide_empty_files: matches.get_flag(OPT_ELIDE_EMPTY_FILES),
+            elide_empty_files: matches.get_flag(options::ELIDE_EMPTY_FILES),
             io_blksize,
         };
 
@@ -541,11 +353,7 @@ impl Settings {
         Ok(result)
     }
 
-    fn instantiate_current_writer(
-        &self,
-        filename: &OsStr,
-        is_new: bool,
-    ) -> io::Result<BufWriter<Box<dyn Write>>> {
+    fn instantiate_current_writer(&self, filename: &OsStr, is_new: bool) -> io::Result<Writer> {
         if platform::paths_refer_to_same_file(&self.input, filename) {
             return Err(io::Error::other(
                 translate!("split-error-would-overwrite-input", "file" => filename.quote()),
@@ -614,15 +422,12 @@ fn custom_write_all<T: Write>(
 /// (i.e. "infinite" input as in `cat /dev/zero | split ...`, `yes | split ...` etc.).
 ///
 /// Note: The `buf` might end up with either partial or entire input content.
-fn get_input_size<R>(
+fn get_input_size(
     input: &OsString,
-    reader: &mut R,
+    reader: &mut impl Read,
     buf: &mut Vec<u8>,
     io_blksize: Option<u64>,
-) -> io::Result<u64>
-where
-    R: BufRead,
-{
+) -> io::Result<u64> {
     // Set read limit to io_blksize if specified
     let read_limit: u64 = if let Some(custom_blksize) = io_blksize {
         custom_blksize
@@ -712,7 +517,7 @@ struct ByteChunkWriter<'a> {
     /// Once the number of bytes written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
     /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    inner: Writer,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -725,7 +530,7 @@ impl<'a> ByteChunkWriter<'a> {
             USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            println!("creating file {}", filename.quote());
+            writeln!(io::stdout(), "creating file {}", filename.quote())?;
         }
         let inner = settings.instantiate_current_writer(&filename, true)?;
         Ok(ByteChunkWriter {
@@ -748,11 +553,7 @@ impl Write for ByteChunkWriter<'_> {
         // this loop writes to the underlying writer that corresponds to
         // the current chunk number.
         let mut carryover_bytes_written: usize = 0;
-        loop {
-            if buf.is_empty() {
-                return Ok(carryover_bytes_written);
-            }
-
+        while !buf.is_empty() {
             if self.num_bytes_remaining_in_current_chunk == 0 {
                 // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
                 self.num_chunks_written += 1;
@@ -763,7 +564,7 @@ impl Write for ByteChunkWriter<'_> {
                     io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
                 })?;
                 if self.settings.verbose {
-                    println!("creating file {}", filename.quote());
+                    writeln!(io::stdout(), "creating file {}", filename.quote())?;
                 }
                 self.inner = self.settings.instantiate_current_writer(&filename, true)?;
             }
@@ -800,6 +601,7 @@ impl Write for ByteChunkWriter<'_> {
             // Remember for the next iteration that we wrote these bytes.
             carryover_bytes_written += num_bytes_written;
         }
+        Ok(carryover_bytes_written)
     }
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
@@ -836,7 +638,7 @@ struct LineChunkWriter<'a> {
     /// Once the number of lines written to this writer exceeds
     /// `chunk_size`, a new writer is initialized and assigned to this
     /// field.
-    inner: BufWriter<Box<dyn Write>>,
+    inner: Writer,
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
@@ -859,72 +661,66 @@ impl<'a> LineChunkWriter<'a> {
     fn start_new_chunk(
         settings: &Settings,
         filename_iterator: &mut FilenameIterator,
-    ) -> io::Result<BufWriter<Box<dyn Write>>> {
+    ) -> io::Result<Writer> {
         let filename = filename_iterator.next().ok_or_else(|| {
             io::Error::other(translate!("split-error-output-file-suffixes-exhausted"))
         })?;
         if settings.verbose {
-            println!("creating file {}", filename.quote());
+            writeln!(io::stdout(), "creating file {}", filename.quote())?;
         }
         settings.instantiate_current_writer(&filename, true)
     }
-}
-
-impl Write for LineChunkWriter<'_> {
-    /// Implements `--lines=NUMBER`
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+    /// Implements `--lines=NUMBER`. GNU is unbuffered.
+    fn copy(&mut self, mut reader: impl Read, io_blksize: usize) -> io::Result<()> {
         // If the number of lines in `buf` exceeds the number of lines
         // remaining in the current chunk, we will need to write to
         // multiple different underlying writers. In that case, each
         // iteration of this loop writes to the underlying writer that
         // corresponds to the current chunk number.
-        let mut prev = 0;
-        let mut total_bytes_written = 0;
-        let sep = self.settings.separator;
-        for i in memchr::memchr_iter(sep, buf) {
-            // If we have exceeded the number of lines to write in the
-            // current chunk, then start a new chunk and its
-            // corresponding writer.
-            if self.num_lines_remaining_in_current_chunk == 0 {
-                self.num_chunks_written += 1;
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                self.num_lines_remaining_in_current_chunk = self.chunk_size;
+        let mut io_blk = vec![0u8; io_blksize];
+        while let buf = reader.read(&mut io_blk).map(|n| &io_blk[..n])?
+            && !buf.is_empty()
+        {
+            let mut prev = 0;
+            let sep = self.settings.separator;
+            for i in memchr::memchr_iter(sep, buf) {
+                // If we have exceeded the number of lines to write in the
+                // current chunk, then start a new chunk and its
+                // corresponding writer.
+                if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.num_chunks_written += 1;
+                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
+                }
+
+                // Write the line, starting from *after* the previous
+                // separator character and ending *after* the current
+                // separator character.
+                custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
+                prev = i + 1;
+                self.num_lines_remaining_in_current_chunk -= 1;
             }
 
-            // Write the line, starting from *after* the previous
-            // separator character and ending *after* the current
-            // separator character.
-            let num_bytes_written = custom_write(&buf[prev..=i], &mut self.inner, self.settings)?;
-            total_bytes_written += num_bytes_written;
-            prev = i + 1;
-            self.num_lines_remaining_in_current_chunk -= 1;
-        }
-
-        // There might be bytes remaining in the buffer, and we write
-        // them to the current chunk. But first, we may need to rotate
-        // the current chunk in case it has already reached its line
-        // limit.
-        if prev < buf.len() {
-            if self.num_lines_remaining_in_current_chunk == 0 {
-                self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
-                self.num_lines_remaining_in_current_chunk = self.chunk_size;
-            }
-            let num_bytes_written =
+            // There might be bytes remaining in the buffer, and we write
+            // them to the current chunk. But first, we may need to rotate
+            // the current chunk in case it has already reached its line
+            // limit.
+            if prev < buf.len() {
+                if self.num_lines_remaining_in_current_chunk == 0 {
+                    self.inner = Self::start_new_chunk(self.settings, &mut self.filename_iterator)?;
+                    self.num_lines_remaining_in_current_chunk = self.chunk_size;
+                }
                 custom_write(&buf[prev..buf.len()], &mut self.inner, self.settings)?;
-            total_bytes_written += num_bytes_written;
+            }
         }
-        Ok(total_bytes_written)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        Ok(())
     }
 }
 
 /// Output file parameters
 struct OutFile {
     filename: OsString,
-    maybe_writer: Option<BufWriter<Box<dyn Write>>>,
+    maybe_writer: Option<Writer>,
     is_new: bool,
 }
 
@@ -933,11 +729,7 @@ struct OutFile {
 /// and [`n_chunks_by_line_round_robin`] functions.
 type OutFiles = Vec<OutFile>;
 trait ManageOutFiles {
-    fn instantiate_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
+    fn instantiate_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer>;
     /// Initialize a new set of output files
     /// Each [`OutFile`] is generated with filename, while the writer for it could be
     /// optional, to be instantiated later by the calling function as needed.
@@ -956,11 +748,7 @@ trait ManageOutFiles {
     /// are flagged as `is_new=false`, so they can be re-opened for appending
     /// instead of created anew if we need to keep writing into them later,
     /// i.e. in case of round robin distribution as in [`n_chunks_by_line_round_robin`]
-    fn get_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>>;
+    fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer>;
 }
 
 impl ManageOutFiles for OutFiles {
@@ -1002,11 +790,7 @@ impl ManageOutFiles for OutFiles {
         Ok(out_files)
     }
 
-    fn instantiate_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+    fn instantiate_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer> {
         let mut count = 0;
         // Use-case for doing multiple tries of closing fds:
         // E.g. split running in parallel to other processes (e.g. another split) doing similar stuff,
@@ -1053,11 +837,7 @@ impl ManageOutFiles for OutFiles {
         }
     }
 
-    fn get_writer(
-        &mut self,
-        idx: usize,
-        settings: &Settings,
-    ) -> UResult<&mut BufWriter<Box<dyn Write>>> {
+    fn get_writer(&mut self, idx: usize, settings: &Settings) -> UResult<&mut Writer> {
         if self[idx].maybe_writer.is_some() {
             Ok(self[idx].maybe_writer.as_mut().unwrap())
         } else {
@@ -1096,15 +876,12 @@ impl ManageOutFiles for OutFiles {
 /// Where CHUNKS
 /// * N
 /// * K/N
-fn n_chunks_by_byte<R>(
+fn n_chunks_by_byte(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+) -> UResult<()> {
     // Get the size of the input in bytes
     let initial_buf = &mut Vec::new();
     let mut num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
@@ -1178,20 +955,8 @@ where
                 }
             };
 
-            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf);
-
-            match n_bytes_read {
-                Ok(n_bytes) => {
-                    num_bytes -= n_bytes as u64;
-                }
-                Err(error) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => error),
-                    ));
-                }
-            }
-
+            let n_bytes_read = reader.by_ref().take(limit).read_to_end(&mut buf).map_err(|e| USimpleError::new(1,translate!("split-error-cannot-read-from-input", "input" => settings.input.maybe_quote(), "error" => e)))?;
+            num_bytes -= n_bytes_read as u64;
             if let Some(chunk_number) = kth_chunk {
                 if i == chunk_number {
                     stdout_writer.write_all(&buf)?;
@@ -1239,19 +1004,24 @@ where
 /// Where CHUNKS
 /// * l/N
 /// * l/K/N
-fn n_chunks_by_line<R>(
+fn n_chunks_by_line(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+    io_blksize: usize,
+) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
     // Get the size of the input in bytes and compute the number
     // of bytes per chunk.
     let initial_buf = &mut Vec::new();
-    let num_bytes = get_input_size(&settings.input, reader, initial_buf, settings.io_blksize)?;
+    let num_bytes = get_input_size(
+        &settings.input,
+        &mut reader,
+        initial_buf,
+        settings.io_blksize,
+    )?;
     let reader = initial_buf.chain(reader);
 
     // If input file is empty and we would not have determined the Kth chunk
@@ -1370,15 +1140,15 @@ where
 /// Where CHUNKS
 /// * r/N
 /// * r/K/N
-fn n_chunks_by_line_round_robin<R>(
+fn n_chunks_by_line_round_robin(
     settings: &Settings,
-    reader: &mut R,
+    reader: &mut impl Read,
     num_chunks: u64,
     kth_chunk: Option<u64>,
-) -> UResult<()>
-where
-    R: BufRead,
-{
+    io_blksize: usize,
+) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let mut reader = BufReader::with_capacity(io_blksize, reader);
     // In Kth chunk of N mode - we will write to stdout instead of to a file.
     let mut stdout_writer = io::stdout().lock();
     // In N chunks mode - we will write to `num_chunks` files
@@ -1467,31 +1237,39 @@ where
     }
 }
 
-fn line_bytes<R>(settings: &Settings, reader: &mut R, chunk_size: usize) -> UResult<()>
-where
-    R: BufRead,
-{
+fn line_bytes(
+    settings: &Settings,
+    reader: &mut impl Read,
+    chunk_size: usize,
+    io_blksize: usize,
+) -> UResult<()> {
+    // todo: GNU is not buffered. So BufReader might wrong.
+    let reader = BufReader::with_capacity(io_blksize, reader);
     let mut filename_iterator = FilenameIterator::new(&settings.prefix, &settings.suffix)?;
+    let mut next_writer = || -> UResult<_> {
+        let name = filename_iterator.next().ok_or_else(|| {
+            USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
+        })?;
+        if settings.verbose {
+            writeln!(
+                io::stdout(),
+                "{}",
+                translate!("split-creating-file", "file" => name.quote())
+            )?;
+        }
+        Ok(settings.instantiate_current_writer(&name, true)?)
+    };
 
-    // Initialize the writer just to satisfy the compiler. It is going
-    // to be overwritten for sure at the beginning of the loop below
-    // because we start with `remaining == 0`, indicating that a new
-    // chunk should start.
-    let mut writer: BufWriter<Box<dyn Write>> = BufWriter::new(Box::new(io::Cursor::new(vec![])));
+    let mut writer = next_writer()?;
+    debug_assert!(chunk_size > 0);
+    let mut remaining = chunk_size;
 
-    let mut remaining = 0;
     for line in lines_with_sep(reader, settings.separator) {
         let line = line?;
         let mut line = &line[..];
         loop {
             if remaining == 0 {
-                let filename = filename_iterator.next().ok_or_else(|| {
-                    USimpleError::new(1, translate!("split-error-output-file-suffixes-exhausted"))
-                })?;
-                if settings.verbose {
-                    println!("creating file {}", filename.quote());
-                }
-                writer = settings.instantiate_current_writer(&filename, true)?;
+                writer = next_writer()?;
                 remaining = chunk_size;
             }
 
@@ -1513,12 +1291,10 @@ where
                 custom_write_all(line, &mut writer, settings)?;
                 remaining -= line.len();
                 break;
-            }
-
-            // If the line is too large to fit in *any* chunk and we are
-            // at the start of a new chunk, write as much as we can of
-            // it and pass the remainder along to the next chunk.
-            if line.len() > chunk_size && remaining == chunk_size {
+            } else if remaining == chunk_size {
+                // If the line is too large to fit in *any* chunk and we are
+                // at the start of a new chunk, write as much as we can of
+                // it and pass the remainder along to the next chunk.
                 custom_write_all(&line[..chunk_size], &mut writer, settings)?;
                 line = &line[chunk_size..];
                 remaining = 0;
@@ -1534,9 +1310,8 @@ where
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn split(settings: &Settings) -> UResult<()> {
-    let r_box = if settings.input == "-" {
+    let mut reader = if settings.input == "-" {
         Box::new(stdin()) as Box<dyn Read>
     } else {
         let r = File::open(Path::new(&settings.input)).map_err_context(
@@ -1546,11 +1321,7 @@ fn split(settings: &Settings) -> UResult<()> {
         let _ = rustix::fs::fadvise(&r, 0, None, rustix::fs::Advice::Sequential);
         Box::new(r) as Box<dyn Read>
     };
-    let mut reader = if let Some(c) = settings.io_blksize {
-        BufReader::with_capacity(c.try_into().unwrap(), r_box)
-    } else {
-        BufReader::new(r_box)
-    };
+    let io_blksize: usize = settings.io_blksize.unwrap_or(8 * 1024).try_into().unwrap();
 
     match settings.strategy {
         Strategy::Number(NumberType::Bytes(num_chunks)) => {
@@ -1560,45 +1331,39 @@ fn split(settings: &Settings) -> UResult<()> {
             n_chunks_by_byte(settings, &mut reader, num_chunks, Some(chunk_number))
         }
         Strategy::Number(NumberType::Lines(num_chunks)) => {
-            n_chunks_by_line(settings, &mut reader, num_chunks, None)
+            n_chunks_by_line(settings, &mut reader, num_chunks, None, io_blksize)
         }
-        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => {
-            n_chunks_by_line(settings, &mut reader, num_chunks, Some(chunk_number))
-        }
+        Strategy::Number(NumberType::KthLines(chunk_number, num_chunks)) => n_chunks_by_line(
+            settings,
+            &mut reader,
+            num_chunks,
+            Some(chunk_number),
+            io_blksize,
+        ),
         Strategy::Number(NumberType::RoundRobin(num_chunks)) => {
-            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, None)
+            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, None, io_blksize)
         }
         Strategy::Number(NumberType::KthRoundRobin(chunk_number, num_chunks)) => {
-            n_chunks_by_line_round_robin(settings, &mut reader, num_chunks, Some(chunk_number))
+            n_chunks_by_line_round_robin(
+                settings,
+                &mut reader,
+                num_chunks,
+                Some(chunk_number),
+                io_blksize,
+            )
         }
         Strategy::Lines(chunk_size) => {
             let mut writer = LineChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            Ok(writer.copy(&mut reader, io_blksize)?)
         }
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
-            copy(&mut reader, &mut writer)
+            // todo: distinct read error and write error
+            io::copy(&mut reader, &mut writer)?;
+            Ok(())
         }
-        Strategy::LineBytes(chunk_size) => line_bytes(settings, &mut reader, chunk_size as usize),
-    }
-}
-
-fn copy(reader: &mut impl Read, writer: &mut impl Write) -> UResult<()> {
-    match io::copy(reader, writer) {
-        Ok(_) => Ok(()),
-        // TODO Since the writer object controls the creation of
-        // new files, we need to rely on the `io::Result`
-        // returned by its `write()` method to communicate any
-        // errors to this calling scope. If a new file cannot be
-        // created because we have exceeded the number of
-        // allowable filenames, we use `ErrorKind::Other` to
-        // indicate that. A special error message needs to be
-        // printed in that case.
-        Err(e) if e.kind() == ErrorKind::Other => Err(USimpleError::new(1, format!("{e}"))),
-        Err(e) => Err(uio_error!(
-            e,
-            "{}",
-            translate!("split-error-input-output-error")
-        )),
+        Strategy::LineBytes(chunk_size) => {
+            line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
+        }
     }
 }

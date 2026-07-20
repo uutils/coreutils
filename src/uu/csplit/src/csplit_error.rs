@@ -6,13 +6,13 @@
 use std::io;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UError;
+use uucore::error::{UError, strip_errno};
 use uucore::translate;
 
 /// Errors thrown by the csplit command
 #[derive(Debug, Error)]
 pub enum CsplitError {
-    #[error("IO error: {}", _0)]
+    #[error("{}", strip_errno(_0))]
     IoError(#[from] io::Error),
     #[error("{}", translate!("csplit-error-line-out-of-range", "pattern" => _0.quote()))]
     LineOutOfRange(String),
@@ -52,5 +52,22 @@ impl UError for CsplitError {
             Self::UError(e) => e.code(),
             _ => 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(unix)]
+    use super::CsplitError;
+
+    #[cfg(unix)]
+    #[test]
+    fn io_error_display_is_clean() {
+        // GNU does not print "IO error:" nor the raw "(os error N)" suffix.
+        let err = CsplitError::IoError(std::io::Error::from_raw_os_error(13));
+        let msg = err.to_string();
+        assert_eq!(msg, "Permission denied");
+        assert!(!msg.contains("IO error:"));
+        assert!(!msg.contains("os error"));
     }
 }

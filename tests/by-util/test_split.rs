@@ -133,6 +133,18 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_split_to_non_seekable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/stdout", "xaa");
+
+    ucmd.args(&["-"])
+        .pipe_in("string")
+        .succeeds()
+        .stdout_is("string");
+}
+
+#[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
@@ -2091,4 +2103,15 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_io_error() {
+    // /proc/self/mem causes EIO
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        //todo: add file path with proper distinction of input/output
+        .stderr_contains("Input/output error\n");
 }

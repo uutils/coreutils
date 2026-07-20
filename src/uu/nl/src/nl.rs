@@ -444,12 +444,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             };
 
             if is_line_numbered {
-                let Some(line_number) = stats.line_number else {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("nl-error-line-number-overflow"),
-                    ));
-                };
+                let line_number = stats.line_number.ok_or_else(|| {
+                    USimpleError::new(1, translate!("nl-error-line-number-overflow"))
+                })?;
                 settings
                     .number_format
                     .format_to(&mut writer, line_number, settings.number_width)

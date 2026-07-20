@@ -447,3 +447,11 @@ fn test_line_width_above_isize_max_is_rejected() {
         .fails()
         .stderr_contains("invalid line width");
 }
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
+}

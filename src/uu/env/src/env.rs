@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable
+// spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
 
 pub mod native_int_str;
 pub mod split_iterator;
@@ -21,10 +21,7 @@ use native_int_str::{
 #[cfg(unix)]
 use nix::libc;
 #[cfg(unix)]
-use nix::sys::signal::{
-    SigHandler::{SigDfl, SigIgn},
-    SigSet, SigmaskHow, Signal, signal, sigprocmask,
-};
+use nix::sys::signal::{SigSet, SigmaskHow, Signal, sigprocmask};
 #[cfg(unix)]
 use nix::unistd::execvp;
 use std::borrow::Cow;
@@ -38,13 +35,18 @@ use std::io;
 use std::io::Write as _;
 use std::io::stderr;
 #[cfg(unix)]
+use std::mem::zeroed;
+#[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
-use uucore::signals::{signal_by_name_or_value, signal_name_by_value, signal_number_upper_bound};
+use uucore::signals::{
+    realtime_signal_bounds, signal_by_name_or_value, signal_name_by_value,
+    signal_number_upper_bound,
+};
 use uucore::translate;
 use uucore::{format_usage, show_warning};
 
@@ -174,12 +176,12 @@ fn parse_signal_opt(target: &mut SignalRequest, opt: &OsStr) -> UResult<()> {
         .filter(|chunk| !chunk.is_empty())
         .map(OsStr::from_bytes)
     {
-        let Some(sig_str) = sig.to_str() else {
-            return Err(USimpleError::new(
+        let sig_str = sig.to_str().ok_or_else(|| {
+            USimpleError::new(
                 1,
                 translate!("env-error-invalid-signal", "signal" => sig.quote()),
-            ));
-        };
+            )
+        })?;
         let sig_val = parse_signal_value(sig_str)?;
         target.signals.insert(sig_val);
     }
@@ -294,16 +296,18 @@ fn build_signal_request(
 }
 
 #[cfg(unix)]
-fn signal_from_value(sig_value: usize) -> UResult<Signal> {
-    Signal::try_from(sig_value as i32).map_err(|_| {
-        USimpleError::new(
-            125,
-            translate!(
-                "env-error-invalid-signal",
-                "signal" => sig_value.to_string().quote()
-            ),
-        )
-    })
+fn signal_is_valid(sig: usize) -> bool {
+    if Signal::try_from(sig as i32).is_err() {
+        // nix::sys::signal does not know about real-time signals, so check that
+        // ourselves.
+        if let Some((rtmin, rtmax)) = realtime_signal_bounds() {
+            return sig >= rtmin && sig <= rtmax;
+        }
+
+        return false;
+    }
+
+    true
 }
 
 fn load_config_file(opts: &mut Options) -> UResult<()> {
@@ -1128,15 +1132,16 @@ fn apply_signal_action<F>(
     signal_fn: F,
 ) -> UResult<()>
 where
-    F: Fn(Signal) -> UResult<()>,
+    F: Fn(usize) -> UResult<()>,
 {
     request.for_each_signal(|sig_value, explicit| {
         // On some platforms ALL_SIGNALS may contain values that are not valid in libc.
         // Skip those invalid ones and continue (GNU env also ignores undefined signals).
-        let Ok(sig) = signal_from_value(sig_value) else {
+        if !signal_is_valid(sig_value) {
             return Ok(());
-        };
-        signal_fn(sig)?;
+        }
+
+        signal_fn(sig_value)?;
         log.record(sig_value, action_kind, explicit);
 
         // Set environment variable to communicate to Rust child processes
@@ -1152,9 +1157,14 @@ where
 }
 
 #[cfg(unix)]
-fn ignore_signal(sig: Signal) -> UResult<()> {
+fn ignore_signal(sig: usize) -> UResult<()> {
     // SAFETY: This is safe because we write the handler for each signal only once, and therefore "the current handler is the default", as the documentation requires it.
-    let result = unsafe { signal(sig, SigIgn) };
+    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
+    // libc::signal directly.
+    let result = unsafe {
+        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
+        nix::errno::Errno::result(res)
+    };
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
@@ -1165,8 +1175,13 @@ fn ignore_signal(sig: Signal) -> UResult<()> {
 }
 
 #[cfg(unix)]
-fn reset_signal(sig: Signal) -> UResult<()> {
-    let result = unsafe { signal(sig, SigDfl) };
+fn reset_signal(sig: usize) -> UResult<()> {
+    // nix::sys::signal::Signal does not cover real-time signals, so we need to call
+    // libc::signal directly.
+    let result = unsafe {
+        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
+        nix::errno::Errno::result(res)
+    };
     if let Err(err) = result {
         return Err(USimpleError::new(
             125,
@@ -1177,9 +1192,42 @@ fn reset_signal(sig: Signal) -> UResult<()> {
 }
 
 #[cfg(unix)]
-fn block_signal(sig: Signal) -> UResult<()> {
-    let mut set = SigSet::empty();
-    set.add(sig);
+fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
+    // nix::sys::signal::Signal does not cover real time signals, so we need to build
+    // sigset_t manually using libc.
+    let mut sigset: libc::sigset_t = unsafe { zeroed() };
+
+    if let Err(err) = unsafe { nix::errno::Errno::result(libc::sigemptyset(&raw mut sigset)) } {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => err.desc()
+            ),
+        ));
+    }
+
+    if let Err(err) =
+        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
+    {
+        return Err(USimpleError::new(
+            125,
+            translate!(
+                "env-error-failed-set-signal-action",
+                "signal" => (sig as i32),
+                "error" => err.desc()
+            ),
+        ));
+    }
+
+    Ok(unsafe { SigSet::from_sigset_t_unchecked(sigset) })
+}
+
+#[cfg(unix)]
+fn block_signal(sig: usize) -> UResult<()> {
+    let set = sigset_from_signal_value(sig)?;
+
     if let Err(err) = sigprocmask(SigmaskHow::SIG_BLOCK, Some(&set), None) {
         return Err(USimpleError::new(
             125,
@@ -1204,7 +1252,7 @@ fn list_signal_handling(log: &SignalActionLog) {
             SignalActionKind::Ignore => "IGNORE",
             SignalActionKind::Block => "BLOCK",
         };
-        let signal_name = signal_name_by_value(sig_value).unwrap_or("?");
+        let signal_name = signal_name_by_value(sig_value).unwrap_or("?".to_string());
         eprintln!("{signal_name:<10} ({}): {action}", sig_value as i32);
     }
 }
