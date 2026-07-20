@@ -44,9 +44,8 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// for callers where xattr preservation is best-effort.
 pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     match copy_xattrs(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
@@ -71,9 +70,8 @@ pub fn copy_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
 ) -> std::io::Result<()> {
     match copy_xattrs_fd(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
@@ -81,10 +79,10 @@ pub fn copy_xattrs_fd_ignore_unsupported(
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
-        if attr_name.to_string_lossy() != "security.selinux" {
-            if let Some(value) = xattr::get(&source, &attr_name)? {
-                xattr::set(&dest, &attr_name, &value)?;
-            }
+        if attr_name.as_bytes() != b"security.selinux"
+            && let Some(value) = xattr::get(&source, &attr_name)?
+        {
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())

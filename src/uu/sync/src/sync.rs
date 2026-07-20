@@ -233,14 +233,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
-                    );
-                    set_exit_code(1);
-                }
+            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty())
+                && (e != Errno::EACCES || path.is_dir())
+            {
+                show_error!(
+                    "{}",
+                    translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
+                );
+                set_exit_code(1);
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
