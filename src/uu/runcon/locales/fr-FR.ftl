@@ -21,6 +21,7 @@ runcon-error-no-command = Aucune commande n'est spécifiée
 runcon-error-selinux-not-enabled = runcon ne peut être utilisé que sur un noyau SELinux
 runcon-error-operation-failed = { $operation } a échoué
 runcon-error-operation-failed-on = { $operation } a échoué sur { $operand }
+runcon-error-write = erreur d'écriture : { $error }
 
 # Noms d'opération
 runcon-operation-getting-current-context = Obtention du contexte de sécurité du processus actuel

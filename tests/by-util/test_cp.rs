@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
 #[cfg(unix)]
 use rstest::rstest;
@@ -2624,6 +2624,16 @@ fn test_cp_reflink_never() {
 
         // Check the content of the destination file
         assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+        // TODO: make Btrfs image without sudo dynamically to support GitHub runner
+        #[cfg(target_os = "linux")]
+        let might_reflink = std::process::Command::new("filefrag")
+            .arg("-v")
+            .arg(TEST_EXISTING_FILE)
+            .output()
+            .map(|o| o.stdout.windows(6).any(|w| w == b"shared"))
+            .unwrap();
+        #[cfg(target_os = "linux")]
+        assert!(!might_reflink, "--reflink=never did not work");
     }
 }
 
@@ -4629,7 +4639,28 @@ fn test_cp_attributes_only_dest_open_error() {
     at.write("s.txt", "hi");
     ucmd.args(&["--attributes-only", "s.txt", "/dev/null/n.txt"])
         .fails_with_code(1)
-        .stderr_contains("cp: 's.txt' -> '/dev/null/n.txt'");
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.arg("source.txt")
+        .arg("/dev/null/n.txt")
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.args(&["--attributes-only", "source.txt", "/dev/null/n.txt"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot create regular file '/dev/null/n.txt': Not a directory\n");
 }
 
 #[test]

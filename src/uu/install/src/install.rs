@@ -24,7 +24,7 @@ use uucore::backup_control::{self, BackupMode};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
@@ -88,8 +88,8 @@ enum InstallError {
     #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "to" => .1.quote()))]
-    BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
+    BackupFailed(PathBuf, #[source] std::io::Error),
 
     #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
     InstallFailed(PathBuf, PathBuf, String),
@@ -908,9 +908,8 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            fs::rename(to, backup_path).map_err(|err| {
-                InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err)
-            })?;
+            fs::rename(to, backup_path)
+                .map_err(|err| InstallError::BackupFailed(to.to_path_buf(), err))?;
         }
         Ok(backup_path)
     } else {
@@ -1371,13 +1370,12 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     // Find the first existing parent directory to get its context
     let mut current_path = path;
     loop {
-        if current_path.exists() {
-            if let Ok(parent_context) = get_selinux_security_context(current_path, false) {
-                if !parent_context.is_empty() {
-                    // Found a context - derive the appropriate context for our target
-                    return Ok(Some(derive_context_from_parent(&parent_context)));
-                }
-            }
+        if current_path.exists()
+            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
+            && !parent_context.is_empty()
+        {
+            // Found a context - derive the appropriate context for our target
+            return Ok(Some(derive_context_from_parent(&parent_context)));
         }
 
         // Move up to parent
