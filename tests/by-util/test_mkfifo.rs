@@ -87,6 +87,16 @@ fn test_create_one_fifo_already_exists() {
 }
 
 #[test]
+fn test_create_fifo_in_missing_directory() {
+    // Regression test for #12669: when the parent directory doesn't exist,
+    // mkfifo used to always report "File exists" regardless of the actual
+    // OS error. It should report the real reason instead, matching GNU.
+    new_ucmd!().arg("no-such-directory/fifo").fails().stderr_is(
+        "mkfifo: cannot create fifo 'no-such-directory/fifo': No such file or directory\n",
+    );
+}
+
+#[test]
 fn test_create_fifo_with_mode_and_umask() {
     use uucore::fs::display_permissions;
     let scene = TestScenario::new(util_name!());
@@ -158,7 +168,9 @@ fn test_create_fifo_permission_denied() {
 
     // We no longer attempt to modify file permission if the file was failed to be created.
     // Therefore the error message should only contain "cannot create".
-    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
+    // The directory has mode 0o644 (no execute bit), so the real OS error is
+    // EACCES ("Permission denied"), not EEXIST ("File exists").
+    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': Permission denied\n");
 
     scene
         .ucmd()
