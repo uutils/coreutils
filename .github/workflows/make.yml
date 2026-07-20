@@ -1,7 +1,6 @@
 name: make
-
 # spell-checker:ignore (abbrev/names) CACHEDIR taiki
-# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs
+# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs EAGAIN
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
@@ -307,11 +306,19 @@ jobs:
         # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
         # See: https://github.com/appveyor/ci/issues/3777
         Set-ProcessMitigation -System -Disable ForceRelocateImages
+    - name: Update MSYS2 packages
+      # msys2-runtime must be upgraded in a separate bash session before the build.
+      # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
+      # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        pacman -Sy --noconfirm --needed make rust base-devel
+      env:
+        CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
         set -x
-        pacman -Sy --noconfirm --needed make rust base-devel
         DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
         ./target/release-small/true
