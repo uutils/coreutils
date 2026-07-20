@@ -386,6 +386,9 @@ struct DirWalkFrame {
     path: std::path::PathBuf,
     dir_fd: Option<DirFd>,
     dir_dev: u64,
+    /// Identity of this directory when first opened (device + inode).
+    /// Checked after `openat(child, "..")` so a moved parent is not unlinked into.
+    dir_ino: u64,
     pending: Vec<std::ffi::OsString>,
     error: bool,
     mode: libc::mode_t,
@@ -401,6 +404,35 @@ struct DirWalkFrame {
 /// `openat` (not the top-level command path) to carry `O_NOFOLLOW`.
 fn reopen_parent_from_child(child: &DirFd) -> std::io::Result<DirFd> {
     child.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)
+}
+
+/// Restore the parent directory FD and confirm it is still the same directory.
+///
+/// Closing the parent before a deep descend leaves a window where that directory
+/// can be renamed/moved. After `openat(child, "..")` (or a path reopen), `fstat`
+/// the result and require the same device + inode we recorded on the way down.
+fn reopen_parent_checked(
+    child: Option<&DirFd>,
+    parent_path: &Path,
+    expected_dev: u64,
+    expected_ino: u64,
+) -> std::io::Result<DirFd> {
+    let parent_fd = match child {
+        Some(fd) => reopen_parent_from_child(fd)?,
+        None => DirFd::open(parent_path, SymlinkBehavior::NoFollow)?,
+    };
+    let st = parent_fd.fstat()?;
+    #[allow(clippy::unnecessary_cast)]
+    let got_dev = st.st_dev as u64;
+    #[allow(clippy::unnecessary_cast)]
+    let got_ino = st.st_ino as u64;
+    if got_dev != expected_dev || got_ino != expected_ino {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "directory changed while removing",
+        ));
+    }
+    Ok(parent_fd)
 }
 
 #[cfg(not(target_os = "redox"))]
@@ -543,7 +575,8 @@ fn safe_remove_dir_recursive_impl_depth(
 /// Iterative remove for subtrees that already sit at [`DIR_FD_BUDGET`].
 ///
 /// Always closes the parent before descending and restores it with
-/// `openat(child, "..")` so open directory FDs stay O(1) for pathological depth.
+/// `openat(child, "..")` plus a device/inode check so open directory FDs stay
+/// O(1) for pathological depth without following a moved parent.
 #[cfg(not(target_os = "redox"))]
 fn safe_remove_dir_deep_o1(
     path: &Path,
@@ -570,10 +603,23 @@ fn safe_remove_dir_deep_o1(
     let mut root_pending = root_entries;
     root_pending.reverse();
 
+    let root_ino = match root_fd.fstat() {
+        Ok(st) => {
+            #[allow(clippy::unnecessary_cast)]
+            {
+                st.st_ino as u64
+            }
+        }
+        Err(e) => {
+            return handle_error_with_force(e, path, options);
+        }
+    };
+
     let mut stack = vec![DirWalkFrame {
         path: path.to_path_buf(),
         dir_fd: Some(root_fd),
         dir_dev,
+        dir_ino: root_ino,
         pending: root_pending,
         error: false,
         mode,
@@ -600,25 +646,24 @@ fn safe_remove_dir_deep_o1(
             }
 
             let parent_idx = stack.len() - 1;
-            // Always closed parent on descend in deep walk — restore via "..".
+            // Always closed parent on descend in deep walk — restore via ".." and
+            // check the recorded parent identity (device + inode) after fstat.
             if stack[parent_idx].dir_fd.is_none() {
-                match child_fd.as_ref() {
-                    Some(fd) => match reopen_parent_from_child(fd) {
-                        Ok(parent_fd) => stack[parent_idx].dir_fd = Some(parent_fd),
-                        Err(e) => {
-                            stack[parent_idx].error |=
-                                handle_error_with_force(e, &stack[parent_idx].path, options);
-                            continue;
-                        }
-                    },
-                    None => match DirFd::open(&stack[parent_idx].path, SymlinkBehavior::NoFollow) {
-                        Ok(fd) => stack[parent_idx].dir_fd = Some(fd),
-                        Err(e) => {
-                            stack[parent_idx].error |=
-                                handle_error_with_force(e, &stack[parent_idx].path, options);
-                            continue;
-                        }
-                    },
+                let expected_dev = stack[parent_idx].dir_dev;
+                let expected_ino = stack[parent_idx].dir_ino;
+                let parent_path = stack[parent_idx].path.clone();
+                match reopen_parent_checked(
+                    child_fd.as_ref(),
+                    &parent_path,
+                    expected_dev,
+                    expected_ino,
+                ) {
+                    Ok(parent_fd) => stack[parent_idx].dir_fd = Some(parent_fd),
+                    Err(e) => {
+                        stack[parent_idx].error |=
+                            handle_error_with_force(e, &stack[parent_idx].path, options);
+                        continue;
+                    }
                 }
             }
             child_fd = None;
@@ -646,7 +691,35 @@ fn safe_remove_dir_deep_o1(
 
         if stack[frame_idx].dir_fd.is_none() {
             match DirFd::open(&stack[frame_idx].path, SymlinkBehavior::NoFollow) {
-                Ok(fd) => stack[frame_idx].dir_fd = Some(fd),
+                Ok(fd) => match fd.fstat() {
+                    Ok(st) => {
+                        #[allow(clippy::unnecessary_cast)]
+                        let got_dev = st.st_dev as u64;
+                        #[allow(clippy::unnecessary_cast)]
+                        let got_ino = st.st_ino as u64;
+                        if got_dev != stack[frame_idx].dir_dev
+                            || got_ino != stack[frame_idx].dir_ino
+                        {
+                            stack[frame_idx].error |= handle_error_with_force(
+                                std::io::Error::new(
+                                    std::io::ErrorKind::NotFound,
+                                    "directory changed while removing",
+                                ),
+                                &stack[frame_idx].path,
+                                options,
+                            );
+                            stack[frame_idx].pending.clear();
+                            continue;
+                        }
+                        stack[frame_idx].dir_fd = Some(fd);
+                    }
+                    Err(e) => {
+                        stack[frame_idx].error |=
+                            handle_error_with_force(e, &stack[frame_idx].path, options);
+                        stack[frame_idx].pending.clear();
+                        continue;
+                    }
+                },
                 Err(e) => {
                     stack[frame_idx].error |=
                         handle_error_with_force(e, &stack[frame_idx].path, options);
@@ -746,10 +819,14 @@ fn safe_remove_dir_deep_o1(
             let mut child_pending = child_entries;
             child_pending.reverse();
 
+            #[allow(clippy::unnecessary_cast)]
+            let entry_ino = entry_stat.st_ino as u64;
+
             stack.push(DirWalkFrame {
                 path: entry_path,
                 dir_fd: Some(child_dir_fd),
                 dir_dev: entry_dev,
+                dir_ino: entry_ino,
                 pending: child_pending,
                 error: false,
                 mode: entry_stat.st_mode as libc::mode_t,
