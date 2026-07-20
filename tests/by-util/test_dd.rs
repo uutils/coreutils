@@ -9,7 +9,7 @@ use uutests::new_ucmd;
 use uutests::util::TestScenario;
 #[cfg(all(unix, not(feature = "feat_selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
 use uutests::util_name;
 
@@ -19,12 +19,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -1588,11 +1583,11 @@ fn test_skip_input_fifo() {
 }
 
 /// Test for reading part of stdin from each of two child processes.
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
-    let printf = format!("{} printf 'abcdef\n'", get_tests_binary());
+    let printf = "printf 'abcdef\n'".to_string();
     let dd_skip = format!("{} dd bs=1 skip=3 count=0", get_tests_binary());
     let dd = format!("{} dd", get_tests_binary());
     UCommand::new()
@@ -1685,12 +1680,7 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1730,12 +1720,7 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1965,7 +1950,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", feature = "printf"))]
+#[cfg(target_os = "linux")]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();

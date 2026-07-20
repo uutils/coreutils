@@ -277,10 +277,13 @@ endif
 install: build install-manpages install-completions install-locales
 	$(INSTALL) -d $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
-	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 ifneq (,$(findstring cygwin,$(OS)))
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else ifneq (,$(findstring windows,$(OS)))
+	@echo "NOTE: Windows stdbuf depends on Cygwin's libstdbuf.dll"
 else
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 endif

@@ -7,6 +7,9 @@ name: FixPR
 env:
   BRANCH_TARGET: main
 
+permissions:
+  contents: write  # FixPR commits Cargo.lock back to main
+
 on:
   # * only trigger on pull request closed to specific branches
   # ref: https://github.community/t/trigger-workflow-only-on-pull-request-merge/17359/9
