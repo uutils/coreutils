@@ -4,7 +4,7 @@ name: CICD
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
 
 env:
@@ -37,7 +37,7 @@ jobs:
     name: Style/cargo-deny
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: EmbarkStudios/cargo-deny-action@v2
@@ -56,7 +56,7 @@ jobs:
           - { os: macos-latest   , features: "feat_Tier1,feat_require_unix,feat_require_unix_utmpx" }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@cargo-udeps
@@ -105,7 +105,7 @@ jobs:
 #          - { os: macos-latest   , features: feat_os_unix }
 #          - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -152,7 +152,7 @@ jobs:
       shell: bash
       run: |
         RUSTDOCFLAGS="-Dwarnings" cargo doc  ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} --no-deps --workspace --document-private-items
-    - uses: DavidAnson/markdownlint-cli2-action@v23
+    - uses: DavidAnson/markdownlint-cli2-action@v24
       with:
         fix: "true"
         globs: |
@@ -168,7 +168,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -237,7 +237,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -255,7 +255,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: "`cargo update` testing"
@@ -280,7 +280,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -301,7 +301,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -323,7 +323,7 @@ jobs:
           - { os: macos-latest   , features: feat_os_unix }
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@nightly
@@ -344,7 +344,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -367,7 +367,7 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          # - { os , target , cargo-options , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
+          # - { os , target , default-features,  features , use-cross , toolchain, skip-tests, workspace-tests, skip-package, skip-publish }
           - { os: ubuntu-latest  , target: arm-unknown-linux-gnueabihf , features: feat_os_unix_gnueabihf , use-cross: use-cross , skip-tests: true }
           - { os: ubuntu-24.04-arm  , target: aarch64-unknown-linux-gnu   , features: feat_os_unix_gnueabihf }
           - { os: ubuntu-latest  , target: aarch64-unknown-linux-musl  , features: feat_os_unix_musl , use-cross: use-cross , skip-tests: true }
@@ -386,14 +386,16 @@ jobs:
           - { os: macos-latest   , target: aarch64-apple-darwin        , workspace-tests: true, check-only: true } # M1 CPU
           - { os: macos-latest   , target: x86_64-apple-darwin         , features: feat_os_unix, workspace-tests: true }
           - { os: windows-latest , target: i686-pc-windows-msvc        , features: feat_os_windows }
-          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows }
+          # msvc and gnu works on the same target. So publishing msvc is enough.
+          - { os: windows-latest , target: x86_64-pc-windows-gnu       , features: feat_os_windows, skip-publish: true }
           - { os: windows-latest , target: x86_64-pc-windows-msvc      , features: feat_os_windows }
           - { os: windows-latest , target: aarch64-pc-windows-msvc     , features: feat_os_windows, use-cross: use-cross , skip-tests: true }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Avoid no space left on device
+      shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
     - uses: dtolnay/rust-toolchain@master
       with:
@@ -604,7 +606,7 @@ jobs:
         # dependencies
         echo "## dependency list"
         cargo fetch --locked --quiet --target $(rustc --print host-tuple)
-        cargo tree --locked --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
+        cargo tree --locked --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} --no-dedupe -e=no-dev --prefix=none | grep -vE "$PWD" | sort --unique
     - name: Check
       shell: bash
       if: matrix.job.skip-publish != true && matrix.job.check-only == true
@@ -612,14 +614,14 @@ jobs:
         # expr breaks redox
         if [[ "${{ matrix.job.target }}" == *"redox"* ]]; then sed -i.b '/"expr",/d' Cargo.toml; fi
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} check \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+        --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     - name: Test
       if: matrix.job.skip-tests != true && matrix.job.check-only != true
       shell: bash
       run: |
         ## Test
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} test --target=${{ matrix.job.target }} \
-        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} \
+        ${{ steps.vars.outputs.CARGO_TEST_OPTIONS}} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }} \
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
@@ -629,15 +631,17 @@ jobs:
       run: |
         ## Build
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
-        --target=${{ matrix.job.target }} ${{ matrix.job.cargo-options }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
+        --target=${{ matrix.job.target }} ${{ steps.vars.outputs.CARGO_FEATURES_OPTION }} ${{ steps.vars.outputs.CARGO_DEFAULT_FEATURES_OPTION }}
     # We don't want to have many duplicated long jobs at here
-    # So we build individual binaries for few platforms until we deduplicate many release build for Linux
-    - name: Build individual binaries
+    # So we build individual binaries (including coreutils) for few platforms until we deduplicate many release build for Linux
+    - name: Build all binaries
       if: matrix.job.skip-tests != true && matrix.job.target == 'x86_64-pc-windows-msvc'
       shell: bash
       run: |
         ${{ steps.vars.outputs.CARGO_CMD }} ${{ steps.vars.outputs.CARGO_CMD_OPTIONS }} build --release --config=profile.release.strip=true \
-        --target=${{ matrix.job.target }} ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }}
+        --target=${{ matrix.job.target }} \
+        ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} \
+        -p coreutils --features=${{ matrix.job.features }}
     - name: Package
       if: matrix.job.skip-publish != true && matrix.job.check-only != true
       shell: bash
@@ -712,7 +716,7 @@ jobs:
           # FIXME: Re-enable Code Coverage on windows, which currently fails due to "profiler_builtins". See #6686.
           # - { os: windows-latest , features: windows, toolchain: stable-x86_64-pc-windows-gnu }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@v2
@@ -807,7 +811,7 @@ jobs:
         # RUSTUP_TOOLCHAIN: ${{ steps.vars.outputs.TOOLCHAIN }}
 
     - name: Upload coverage results (to Codecov.io)
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ${{ steps.run_test_cov.outputs.report }}
@@ -817,7 +821,7 @@ jobs:
         fail_ci_if_error: false
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -826,19 +830,89 @@ jobs:
         flags: coverage,${{ matrix.job.os }}
         fail_ci_if_error: false
 
+  test_openssl:
+    name: Build/OpenSSL
+    needs: [ min_version, deps ]
+    runs-on: ${{ matrix.job.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          # Linux: exercises both vendored (static) and OPENSSL_NO_VENDOR=1
+          # (dynamic against system libcrypto). ubuntu-latest ships libssl-dev.
+          - { os: ubuntu-latest, features: feat_os_unix, dynamic: true }
+          # macOS: vendored only — system libcrypto needs OPENSSL_DIR
+          # pointing at Homebrew, which isn't worth wiring up for a smoke test.
+          - { os: macos-latest, features: feat_os_unix, dynamic: false }
+          # Windows is omitted: the `openssl` dep is `cfg(unix)`, so the
+          # feature is a no-op there and there's nothing to exercise.
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.10
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    # Default mode: `openssl` crate's `vendored` feature builds libcrypto
+    # from source and statically links it (mirrors how `expr` links
+    # oniguruma). Runs the md5sum/sha*sum/cksum integration tests end-to-end
+    # so we'd catch a wrong-digest regression, not just a type error.
+    - name: Test checksum utilities with OpenSSL (vendored / static)
+      shell: bash
+      env:
+        RUST_BACKTRACE: "1"
+      run: |
+        cargo nextest run --hide-progress-bar --profile ci \
+          --features "${{ matrix.job.features }},openssl" \
+          -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
+    # Confirm the vendored build is actually statically linked. If this
+    # regresses, the `vendored` feature has stopped doing its job.
+    - name: Verify static linkage (vendored)
+      if: matrix.job.os == 'ubuntu-latest'
+      shell: bash
+      run: |
+        cargo build --release --features "${{ matrix.job.features }},openssl" --bin coreutils
+        if ldd target/release/coreutils 2>&1 | grep -iE 'libssl|libcrypto'; then
+          echo "ERROR: coreutils dynamically links libssl/libcrypto despite vendored feature"
+          exit 1
+        fi
+        echo "OK: no dynamic libssl/libcrypto linkage"
+    # Second linking mode: OPENSSL_NO_VENDOR=1 links dynamically against
+    # the system libcrypto/libssl.
+    - name: Test checksum utilities with OpenSSL (system / dynamic)
+      if: matrix.job.dynamic
+      shell: bash
+      env:
+        OPENSSL_NO_VENDOR: "1"
+        RUST_BACKTRACE: "1"
+      run: |
+        cargo nextest run --hide-progress-bar --profile ci \
+          --features "${{ matrix.job.features }},openssl" \
+          -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
+
   test_selinux:
     name: Build/SELinux
     needs: [ min_version, deps ]
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Setup Lima
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
     - name: Cache ~/.cache/lima
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -872,7 +946,7 @@ jobs:
           - { os: windows-latest , features: feat_os_windows }
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
@@ -894,14 +968,32 @@ jobs:
     needs: [ min_version, deps ]
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install strace and libselinux headers (needed to build chcon)
+      run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
+    - name: Build utilities with safe traversal
+      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du -p uu_split -p uu_chcon
+    - name: Run safe traversal verification
+      run: ./util/check-safe-traversal.sh
+
+  test_toctou:
+    name: TOCTOU Security Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace
-    - name: Build utilities with safe traversal
-      run: cargo build --profile=release-small -p uu_rm -p uu_chmod -p uu_chown -p uu_chgrp -p uu_mv -p uu_du
-    - name: Run safe traversal verification
-      run: ./util/check-safe-traversal.sh
+    - name: Build utilities for TOCTOU checks
+      run: cargo build --profile=release-small -p uu_mkfifo -p uu_touch -p uu_head
+    - name: Run TOCTOU verification
+      run: ./util/check-toctou.sh

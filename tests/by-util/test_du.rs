@@ -189,6 +189,21 @@ fn test_du_with_posixly_correct() {
 }
 
 #[test]
+fn test_du_time_style_empty() {
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.mkdir("a");
+    ts.ucmd()
+        .args(&["--time", "--time-style=", "a"])
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+    ts.ucmd()
+        .args(&["--time", "a"])
+        .env("TIME_STYLE", "posix-")
+        .fails_with_code(1)
+        .stderr_contains("du: invalid argument '' for 'time style'");
+}
+
+#[test]
 fn test_du_zero_env_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -948,6 +963,26 @@ fn test_du_h_precision() {
     }
 }
 
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_du_h_locale_decimal_separator() {
+    for (locale, expected) in [("fr_FR.UTF-8", "8,4K"), ("C", "8.4K")] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        let fpath = at.plus("test.txt");
+        std::fs::File::create(&fpath)
+            .expect("cannot create test file")
+            .set_len(8500)
+            .expect("cannot truncate test len to size");
+        ucmd.env("LC_ALL", locale)
+            .arg("-h")
+            .arg("--apparent-size")
+            .arg(&fpath)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{}\n", fpath.to_string_lossy()));
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 #[cfg(feature = "touch")]
 #[test]
@@ -1586,6 +1621,7 @@ fn test_du_files0_from() {
 
 #[test]
 fn test_du_files0_from_ignore_duplicate_file_names() {
+    // The same file listed twice is counted once via inode tracking.
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
     let file = "testfile";
@@ -1597,6 +1633,41 @@ fn test_du_files0_from_ignore_duplicate_file_names() {
         .arg("--files0-from=filelist")
         .succeeds()
         .stdout_is(format!("0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_duplicate_file_names_with_count_links() {
+    // With -l the inode dedup is disabled, so a repeated name is listed each time.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file = "testfile";
+
+    at.touch(file);
+    at.write("filelist", &format!("{file}\0{file}\0"));
+
+    ts.ucmd()
+        .arg("-l")
+        .arg("--files0-from=filelist")
+        .succeeds()
+        .stdout_is(format!("0\t{file}\n0\t{file}\n"));
+}
+
+#[test]
+fn test_du_files0_from_missing_file_listed_twice() {
+    // A missing file listed twice must be reported each time, not deduplicated.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("filelist", "missing\0missing\0");
+
+    ts.ucmd()
+        .arg("--files0-from=filelist")
+        .fails_with_code(1)
+        .stdout_is("")
+        .stderr_is(
+            "du: cannot access 'missing': No such file or directory\n\
+             du: cannot access 'missing': No such file or directory\n",
+        );
 }
 
 #[test]

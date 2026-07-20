@@ -184,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
@@ -294,6 +301,16 @@ fn test_numeric_with_trailing_invalid_chars() {
         "numeric_trailing_chars",
         &["-n", "--numeric-sort", "--sort=numeric"],
     );
+}
+
+#[test]
+fn test_numeric_sort_rejects_leading_plus_sign() {
+    // GNU sort -n does not treat '+' as a number sign; lines sort lexicographically.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("+1\n+10\n+2\n")
+        .succeeds()
+        .stdout_is("+1\n+10\n+2\n");
 }
 
 #[test]
@@ -1093,6 +1110,34 @@ fn test_merge_interleaved() {
 }
 
 #[test]
+fn test_merge_preserves_long_lines() {
+    use std::fmt::Write;
+
+    const N_ROWS: usize = 3;
+    const LINE_LEN: usize = 32_000;
+    const LINE_VALUES: [&str; N_ROWS] = ["a", "b", "c"];
+    // Exercise merge reads where long lines span internal chunk boundaries.
+    let input = LINE_VALUES.into_iter().fold(
+        String::with_capacity(N_ROWS * (LINE_LEN + 1)),
+        |mut acc, value| {
+            writeln!(acc, "{}", value.repeat(LINE_LEN)).unwrap();
+            acc
+        },
+    );
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &input);
+
+    let result = ucmd.arg("-m").arg("long-lines.txt").succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert_eq!(stdout.len(), input.len());
+    assert_eq!(stdout.as_slice(), input.as_bytes());
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")
@@ -1548,8 +1593,7 @@ fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "empty.txt"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -1571,10 +1615,9 @@ fn test_wrong_args_exit_code() {
 #[test]
 #[cfg(unix)]
 fn test_tmp_files_deleted_on_sigint() {
-    use std::{fs::read_dir, time::Duration};
-
-    use nix::{sys::signal, unistd::Pid};
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{fs::read_dir, time::Duration};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
@@ -1610,7 +1653,7 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
-    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     // wait for `sort` to exit
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
@@ -1849,6 +1892,25 @@ fn test_files0_from_2a() {
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files0_from_non_utf8() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
 }
 
 #[test]
@@ -2979,6 +3041,49 @@ fn test_consistent_sorting_with_i18n_collate() {
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation() {
+    // Punctuation gets a distinguishing collation weight, so lines differing
+    // only by punctuation sort in a stable order (issue #12542) and are never
+    // merged by -u. This holds across the plain, explicit-key and stable paths,
+    // and in both locales. The wildcard-domain case comes from dehydrated, which
+    // relied on -u keeping a `*.domain.com` alias distinct from the bare domain.
+    // (input, expected, [(locale, args)...])
+    let cases = [
+        (
+            "file10\nfile-10\n",
+            "file-10\nfile10\n",
+            &[("en_US.UTF-8", &[][..]), ("C", &[][..])][..],
+        ),
+        (
+            "EU\nE.U\nE-U\n",
+            "E-U\nE.U\nEU\n",
+            &[
+                ("en_US.UTF-8", &["-u"][..]),
+                ("C", &["-u"][..]),
+                ("en_US.UTF-8", &["-u", "-k1,1"][..]),
+                ("en_US.UTF-8", &["-s", "-k1,1"][..]),
+            ][..],
+        ),
+        (
+            "domain.com\n*.domain.com\ndomain.com\n",
+            "*.domain.com\ndomain.com\n",
+            &[("en_US.UTF-8", &["-u"][..]), ("C", &["-u"][..])][..],
+        ),
+    ];
+
+    for (input, expected, runs) in cases {
+        for (locale, args) in runs {
+            new_ucmd!()
+                .env("LC_ALL", *locale)
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 /* spell-checker: enable */

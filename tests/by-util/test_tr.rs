@@ -75,34 +75,34 @@ fn test_delete() {
 
 #[test]
 fn test_delete_graph_and_print_match_gnu() {
-    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    let input = *b" A!\t\n";
     new_ucmd!()
         .args(&["-d", "[:graph:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b' ', b'\t', b'\n']);
+        .stdout_is_bytes(*b" \t\n");
 
     new_ucmd!()
         .args(&["-d", "[:print:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b'\t', b'\n']);
+        .stdout_is_bytes(*b"\t\n");
 }
 
 #[test]
 fn test_delete_complement_graph_and_print_match_gnu() {
-    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    let input = *b" A!\t\n";
     new_ucmd!()
         .args(&["-d", "-c", "[:graph:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b'A', b'!']);
+        .stdout_is_bytes(*b"A!");
 
     new_ucmd!()
         .args(&["-d", "-c", "[:print:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b' ', b'A', b'!']);
+        .stdout_is_bytes(*b" A!");
 }
 
 #[test]
@@ -1240,7 +1240,7 @@ fn check_against_gnu_tr_tests_invalid_cc() {
         .args(&["[:fooclass:]", "x"])
         .pipe_in("")
         .fails()
-        .stderr_is("tr: invalid character class '[:fooclass:]'\n");
+        .stderr_is("tr: invalid character class 'fooclass'\n");
 }
 
 #[test]
@@ -1649,20 +1649,19 @@ fn test_broken_pipe_no_error() {
         .fails_silently();
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 #[test]
 fn test_stdin_is_socket() {
-    use nix::sys::socket::{AddressFamily, SockFlag, SockType, socketpair};
-    use nix::unistd::write;
+    use std::io::Write as _;
 
-    let (fd1, fd2) = socketpair(
-        AddressFamily::Unix,
-        SockType::Stream,
+    let (fd1, fd2) = rustix::net::socketpair(
+        rustix::net::AddressFamily::UNIX,
+        rustix::net::SocketType::STREAM,
+        rustix::net::SocketFlags::empty(),
         None,
-        SockFlag::empty(),
     )
     .unwrap();
-    write(fd1, b"::").unwrap();
+    std::fs::File::from(fd1).write_all(b"::").unwrap();
     new_ucmd!()
         .args(&[":", ";"])
         .set_stdin(fd2)

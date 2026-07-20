@@ -3,19 +3,23 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) signalname pids killpg
+// spell-checker:ignore (ToDO) signalname pids killpg NOPESIG
 
 use clap::{Arg, ArgAction, Command};
-use nix::sys::signal::{self, Signal};
-use nix::unistd::Pid;
-use std::io::Error;
+use rustix::process::{
+    Pid, Signal, kill_current_process_group, kill_process, kill_process_group,
+    test_kill_current_process_group, test_kill_process, test_kill_process_group,
+};
+use std::cmp::Ordering;
+use std::io::{self, BufWriter, Write};
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::signals::{
     signal_by_name_or_value, signal_list_name_by_value, signal_list_value_by_name_or_number,
-    signal_name_by_value, signal_number_upper_bound,
+    signal_number_upper_bound,
 };
 use uucore::{format_usage, show};
 
@@ -38,10 +42,18 @@ pub enum Mode {
     List,
 }
 
+#[derive(Debug, Error)]
+enum KillError {
+    #[error("{}", translate!("kill-error-write", "error" => strip_errno(.0)))]
+    Write(io::Error),
+}
+
+impl UError for KillError {}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut args = args.collect_ignore();
-    let obs_signal = handle_obsolete(&mut args);
+    let obs_signal = handle_obsolete(&mut args)?;
 
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
@@ -68,35 +80,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 15_usize //SIGTERM
             };
 
-            let sig_name = signal_name_by_value(sig);
-            // Signal does not support converting from EXIT
-            // Instead, nix::signal::kill expects Option::None to properly handle EXIT
-            let sig: Option<Signal> = if sig_name.is_some_and(|name| name == "EXIT") {
-                None
-            } else {
-                let sig = (sig as i32)
-                    .try_into()
-                    .map_err(|e| Error::from_raw_os_error(e as i32))?;
-                Some(sig)
-            };
-
             let pids = parse_pids(&pids_or_signals)?;
             if pids.is_empty() {
-                Err(USimpleError::new(1, translate!("kill-error-no-process-id")))
-            } else {
-                kill(sig, &pids);
-                Ok(())
+                return Err(USimpleError::new(1, translate!("kill-error-no-process-id")));
             }
+
+            kill(sig, &pids);
         }
-        Mode::Table => {
-            table();
-            Ok(())
-        }
-        Mode::List => {
-            list(&pids_or_signals);
-            Ok(())
-        }
+        Mode::Table => table()?,
+        Mode::List => list(&pids_or_signals)?,
     }
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -139,7 +134,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
+fn handle_obsolete(args: &mut Vec<String>) -> UResult<Option<usize>> {
     // Sanity check - need at least the program name and one argument
     if args.len() >= 2 {
         // Old signal can only be in the first argument position
@@ -147,26 +142,43 @@ fn handle_obsolete(args: &mut Vec<String>) -> Option<usize> {
         if let Some(signal) = slice.strip_prefix('-') {
             // With '-', a signal name must start with an uppercase char
             if signal.chars().next().is_some_and(char::is_lowercase) {
-                return None;
+                return Ok(None);
             }
             // Check if it is a valid signal
-            let opt_signal = signal_by_name_or_value(signal);
-            if opt_signal.is_some() {
+            if let Some(signal_value) = signal_by_name_or_value(signal) {
                 // remove the signal before return
                 args.remove(1);
-                return opt_signal;
+                return Ok(Some(signal_value));
+            }
+            // Not a known signal. If the argument still looks like an obsolete
+            // signal specification (a number, or a multi-character uppercase
+            // name), reject it like GNU instead of letting it fall through to
+            // be parsed as a negative PID and silently signalled with SIGTERM.
+            let first = signal.chars().next();
+            let looks_like_signal = first.is_some_and(|c| c.is_ascii_digit())
+                || (signal.len() > 1 && first.is_some_and(|c| c.is_ascii_uppercase()));
+            if looks_like_signal {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("kill-error-invalid-signal", "signal" => signal.quote()),
+                ));
             }
         }
     }
-    None
+    Ok(None)
 }
 
-fn table() {
+fn table() -> UResult<()> {
+    // Buffer the listing so a failed write surfaces as one clean error at flush
+    // rather than the runtime's implicit-flush message on top of ours.
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_value: >#2} {signal_name}");
+            writeln!(out, "{signal_value: >#2} {signal_name}").map_err(KillError::Write)?;
         }
     }
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
 fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
@@ -183,46 +195,64 @@ fn normalize_list_signal_value(signal_value: usize) -> Option<usize> {
 }
 
 fn print_signal(signal_name_or_value: &str) -> UResult<()> {
-    if let Ok(signal_value) = signal_name_or_value.parse::<usize>() {
+    // Resolve the signal to the text kill would print, so the write path is the
+    // same for every branch (a single buffered write + flush).
+    let output = if let Some(signal_value) = signal_name_or_value
+        .parse::<usize>()
+        .ok()
+        .and_then(normalize_list_signal_value)
+    {
         // GNU kill accepts plain signal numbers, values masked to the low 8 bits,
         // and exit statuses that encode `128 + signal`.
-        if let Some(signal_value) = normalize_list_signal_value(signal_value) {
-            println!(
-                "{}",
-                signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
-            );
-            return Ok(());
-        }
-    }
+        signal_list_name_by_value(signal_value).unwrap_or_else(|| signal_value.to_string())
+    } else if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
+        signal_value.to_string()
+    } else {
+        return Err(USimpleError::new(
+            1,
+            translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
+        ));
+    };
 
-    if let Some(signal_value) = signal_list_value_by_name_or_number(signal_name_or_value) {
-        println!("{signal_value}");
-        return Ok(());
-    }
-
-    Err(USimpleError::new(
-        1,
-        translate!("kill-error-invalid-signal", "signal" => signal_name_or_value.quote()),
-    ))
+    let mut out = BufWriter::new(io::stdout().lock());
+    writeln!(out, "{output}").map_err(KillError::Write)?;
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
-fn print_signals() {
+fn print_signals() -> UResult<()> {
+    let mut out = BufWriter::new(io::stdout().lock());
     for signal_value in 0..=signal_number_upper_bound() {
         if let Some(signal_name) = signal_list_name_by_value(signal_value) {
-            println!("{signal_name}");
+            writeln!(out, "{signal_name}").map_err(KillError::Write)?;
         }
     }
+    out.flush().map_err(KillError::Write)?;
+    Ok(())
 }
 
-fn list(signals: &Vec<String>) {
+fn list(signals: &Vec<String>) -> UResult<()> {
     if signals.is_empty() {
-        print_signals();
+        print_signals()?;
     } else {
         for signal in signals {
             if let Err(e) = print_signal(signal) {
                 uucore::show!(e);
             }
         }
+    }
+    Ok(())
+}
+
+// rustix's `Signal` rejects libc-reserved realtime signals, so fall back to a
+// raw `libc::kill` for any value its safe constructor doesn't recognize.
+fn raw_kill(pid: i32, sig: usize) -> io::Result<()> {
+    let sig = i32::try_from(sig).map_err(|_| io::Error::from_raw_os_error(libc::EINVAL))?;
+    // SAFETY: plain FFI call; `kill` has no memory-safety preconditions.
+    if unsafe { libc::kill(pid as libc::pid_t, sig) } == 0 {
+        Ok(())
+    } else {
+        Err(io::Error::last_os_error())
     }
 }
 
@@ -250,13 +280,81 @@ fn parse_pids(pids: &[String]) -> UResult<Vec<i32>> {
         .collect()
 }
 
-fn kill(sig: Option<Signal>, pids: &[i32]) {
+fn kill(sig: usize, pids: &[i32]) {
+    // Standard named signals use rustix's typed API; anything its safe
+    // constructor doesn't recognize (realtime/reserved) falls back to libc.
+    let named = (sig != 0)
+        .then(|| i32::try_from(sig).ok().and_then(Signal::from_named_raw))
+        .flatten();
     for &pid in pids {
-        if let Err(e) = signal::kill(Pid::from_raw(pid), sig) {
-            show!(
-                Error::from_raw_os_error(e as i32)
-                    .map_err_context(|| { translate!("kill-error-sending-signal", "pid" => pid) })
-            );
+        let result = match pid.cmp(&0) {
+            Ordering::Equal => match named {
+                _ if sig == 0 => test_kill_current_process_group().map_err(io::Error::from),
+                Some(s) => kill_current_process_group(s).map_err(io::Error::from),
+                None => raw_kill(0, sig),
+            },
+            Ordering::Greater => {
+                let pid = Pid::from_raw(pid).expect("pid > 0 guaranteed by Ordering::Greater");
+                match named {
+                    _ if sig == 0 => test_kill_process(pid).map_err(io::Error::from),
+                    Some(s) => kill_process(pid, s).map_err(io::Error::from),
+                    None => raw_kill(pid.as_raw_nonzero().get(), sig),
+                }
+            }
+            Ordering::Less => {
+                let Some(abs_pid) = pid.checked_neg() else {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("kill-error-sending-signal", "pid" => pid),
+                    ));
+                    continue;
+                };
+                let pid =
+                    Pid::from_raw(abs_pid).expect("abs_pid > 0 since pid < 0 and pid != i32::MIN");
+                match named {
+                    _ if sig == 0 => test_kill_process_group(pid).map_err(io::Error::from),
+                    Some(s) => kill_process_group(pid, s).map_err(io::Error::from),
+                    None => raw_kill(-pid.as_raw_nonzero().get(), sig),
+                }
+            }
+        };
+        if let Err(e) = result {
+            show!(e.map_err_context(|| translate!("kill-error-sending-signal", "pid" => pid)));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::handle_obsolete;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn test_handle_obsolete() {
+        // A valid obsolete signal (name or number) is consumed; SIGKILL is 9
+        // on every supported platform.
+        let mut a = args(&["kill", "-KILL", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), Some(9));
+        assert_eq!(a, args(&["kill", "123"]));
+
+        let mut a = args(&["kill", "-9", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), Some(9));
+        assert_eq!(a, args(&["kill", "123"]));
+
+        // Things that look like a signal but aren't must error, not fall
+        // through to be read as a negative PID and signalled with SIGTERM.
+        assert!(handle_obsolete(&mut args(&["kill", "-65", "123"])).is_err());
+        assert!(handle_obsolete(&mut args(&["kill", "-NOPESIG", "123"])).is_err());
+
+        // A lowercase leading char is never an obsolete signal; leave args as-is.
+        let mut a = args(&["kill", "-foo", "123"]);
+        assert_eq!(handle_obsolete(&mut a).unwrap(), None);
+        assert_eq!(a, args(&["kill", "-foo", "123"]));
+
+        // Not enough arguments to carry an obsolete signal.
+        assert_eq!(handle_obsolete(&mut args(&["kill"])).unwrap(), None);
     }
 }

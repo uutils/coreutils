@@ -33,7 +33,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Initialize workflow variables
@@ -72,11 +72,11 @@ jobs:
       matrix:
         job:
           - { os: ubuntu-latest  , features: all             , workspace: true }
-          - { os: macos-latest   , features: feat_os_unix }
+          - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -154,7 +154,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Initialize workflow variables
@@ -187,39 +187,22 @@ jobs:
         S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/^(.*):([0-9]+):([0-9]+) - Unknown word \(([^)]+)\).*$/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \`cspell\`: Unknown word '\4' (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
-  toml_format:
-    name: Style/toml
-    runs-on: ubuntu-latest
-    steps:
-      - name: Clone repository
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install taplo-cli
-        uses: taiki-e/install-action@v2
-        with:
-          tool: taplo-cli
-
-      - name: Check
-        run: taplo fmt --check --diff
-
   python:
     name: Style/Python
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
 
       - name: ruff
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           src: "./util"
 
       - name: ruff - format
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           src: "./util"
           args: format --check
@@ -233,7 +216,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
 
@@ -246,11 +229,6 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.x'
-
       - name: Install pre-commit
         run: pip install pre-commit
 
@@ -258,7 +236,7 @@ jobs:
         run: npm install -g cspell
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}

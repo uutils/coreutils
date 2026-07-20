@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (methods) hexdigest funcs nprimes
+// spell-checker:ignore (methods) hexdigest funcs nprimes cmdline
 #![allow(
     clippy::similar_names,
     clippy::cast_possible_truncation,
@@ -1678,14 +1678,25 @@ fn succeeds_with_numbers_larger_than_u256() {
 fn handles_non_unicode_data() {
     let input = b"\0 \xFF\0\xFF\xAA\0\xAA\x44 a&#2\n6 9\x003\xC024\t2\t\t4\x000+4\xFF \xF7\xC1";
     let expected_out = "6: 2 3\n9: 3 3\n2: 2\n4: 2 2\n";
-    let expected_err = r"factor: warning: '': invalid digit found in string
-factor: warning: '\377': invalid digit found in string
-factor: warning: 'a&#2': invalid digit found in string
-factor: warning: '\367\301': invalid digit found in string
+    let expected_err = r"factor: '' is not a valid positive integer
+factor: '\377' is not a valid positive integer
+factor: 'a&#2' is not a valid positive integer
+factor: '\367\301' is not a valid positive integer
 ";
     new_ucmd!()
         .pipe_in(input)
         .fails_with_code(1)
         .stdout_is(expected_out)
         .stderr_is(expected_err);
+}
+
+// GNU's `tests/factor/factor.pl` `cont` test passes `factor a 4` and expects
+// `factor: 'a' is not a valid positive integer` while still factoring 4.
+#[test]
+fn invalid_cmdline_arg_continues() {
+    new_ucmd!()
+        .args(&["a", "4"])
+        .fails_with_code(1)
+        .stdout_is("4: 2 2\n")
+        .stderr_is("factor: 'a' is not a valid positive integer\n");
 }

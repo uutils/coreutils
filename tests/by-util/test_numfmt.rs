@@ -1507,7 +1507,7 @@ fn test_format_precision_zero_with_to_scale_issue_11667() {
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
     new_ucmd!()
-        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .pipe_in(*b"10\n\xFF")
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
@@ -1626,4 +1626,37 @@ fn test_multibyte_suffix_issue11937() {
         .args(&["--suffix=€", "--format=%10.2f", "692"])
         .succeeds()
         .stdout_is("   692.00€\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits() {
+    new_ucmd!()
+        .args(&["--to=iec", "--format=%.65536f", "1"])
+        .succeeds()
+        .stdout_is("1\n");
+}
+
+#[test]
+fn test_format_precision_too_large_on_zero() {
+    new_ucmd!()
+        .args(&["--format=%.40f", "0"])
+        .fails()
+        .code_is(2)
+        .stderr_only(
+            "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
+        );
+    new_ucmd!()
+        .args(&["--format=%.18f", "0"])
+        .succeeds()
+        .stdout_only("0.000000000000000000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/13272
+// argument following `--header` must not be interpreted as the option's value
+#[test]
+fn test_header_detached() {
+    new_ucmd!()
+        .args(&["--header", "1", "2"])
+        .succeeds()
+        .stdout_is("1\n2\n");
 }

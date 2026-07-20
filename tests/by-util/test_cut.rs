@@ -5,8 +5,7 @@
 
 // spell-checker:ignore defg
 
-use uutests::at_and_ucmd;
-use uutests::new_ucmd;
+use uutests::{at_and_ucmd, new_ucmd};
 
 static INPUT: &str = "lists.txt";
 
@@ -42,10 +41,7 @@ static EXAMPLE_SEQUENCES: &[TestedSequence] = &[
     },
 ];
 
-static COMPLEX_SEQUENCE: &TestedSequence = &TestedSequence {
-    name: "",
-    sequence: "9-,6-7,-2,4",
-};
+const COMPLEX_SEQUENCE: &str = "9-,6-7,-2,4";
 
 #[test]
 fn test_no_args() {
@@ -99,7 +95,7 @@ fn test_field_sequence() {
 #[test]
 fn test_whitespace_delimited() {
     new_ucmd!()
-        .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
+        .args(&["-w", "-f", COMPLEX_SEQUENCE, INPUT])
         .succeeds()
         .stdout_only_fixture("whitespace_delimited.expected");
 }
@@ -107,21 +103,21 @@ fn test_whitespace_delimited() {
 #[test]
 fn test_whitespace_with_explicit_delimiter() {
     new_ucmd!()
-        .args(&["-w", "-f", COMPLEX_SEQUENCE.sequence, "-d:"])
+        .args(&["-w", "-f", COMPLEX_SEQUENCE, "-d:"])
         .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_byte() {
     new_ucmd!()
-        .args(&["-w", "-b", COMPLEX_SEQUENCE.sequence])
+        .args(&["-w", "-b", COMPLEX_SEQUENCE])
         .fails_with_code(1);
 }
 
 #[test]
 fn test_whitespace_with_char() {
     new_ucmd!()
-        .args(&["-c", COMPLEX_SEQUENCE.sequence, "-w"])
+        .args(&["-c", COMPLEX_SEQUENCE, "-w"])
         .fails_with_code(1);
 }
 
@@ -129,7 +125,7 @@ fn test_whitespace_with_char() {
 fn test_delimiter_with_byte_and_char() {
     for conflicting_arg in ["-c", "-b"] {
         new_ucmd!()
-            .args(&[conflicting_arg, COMPLEX_SEQUENCE.sequence, "-d="])
+            .args(&[conflicting_arg, COMPLEX_SEQUENCE, "-d="])
             .fails_with_code(1)
             .stderr_is("cut: invalid input: The '--delimiter' ('-d') option can only be used when printing a sequence of fields\n")
 ;
@@ -148,7 +144,7 @@ fn test_too_large() {
 fn test_delimiter() {
     for param in ["-d", "--delimiter", "--del"] {
         new_ucmd!()
-            .args(&[param, ":", "-f", COMPLEX_SEQUENCE.sequence, INPUT])
+            .args(&[param, ":", "-f", COMPLEX_SEQUENCE, INPUT])
             .succeeds()
             .stdout_only_fixture("delimiter_specified.expected");
     }
@@ -165,29 +161,32 @@ fn test_delimiter_with_more_than_one_char() {
 
 #[test]
 fn test_output_delimiter() {
-    // we use -d here to ensure output delimiter
-    // is applied to the current, and not just the default, input delimiter
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-delimiter=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+    for param in ["--output-delimiter=@", "--output-del=@", "-O@"] {
+        // with default field delimiter (tab)
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:\tb:\tc:\n")
+            .succeeds()
+            .stdout_only("a:@b:\n");
 
-    new_ucmd!()
-        .args(&[
-            "-d:",
-            "--output-del=@",
-            "-f",
-            COMPLEX_SEQUENCE.sequence,
-            INPUT,
-        ])
-        .succeeds()
-        .stdout_only_fixture("output_delimiter.expected");
+        // with custom field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .arg("-d:")
+            .pipe_in("a:\tb:\tc\n")
+            .succeeds()
+            .stdout_only("a@\tb\n");
+
+        // with no field delimiter
+        new_ucmd!()
+            .arg(param)
+            .arg("-f1,2")
+            .pipe_in("a:b:c\n")
+            .succeeds()
+            .stdout_only("a:b:c\n");
+    }
 }
 
 #[test]

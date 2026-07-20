@@ -5,10 +5,13 @@
 // spell-checker:ignore datetime
 
 use uucore::error::{UError, UResult, USimpleError};
+use uucore::i18n::UEncoding;
+use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
 use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
@@ -44,8 +47,8 @@ enum StatError {
     StdinFilesystemMode,
     #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", translate!("stat-error-cannot-stat", "file" => file.clone(), "error" => error.clone()))]
-    CannotStat { file: String, error: String },
+    #[error("{}", translate!("stat-error-cannot-statx", "file" => file.clone(), "error" => error.clone()))]
+    CannotStatx { file: String, error: String },
 }
 
 impl UError for StatError {
@@ -80,10 +83,13 @@ struct Flags {
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
+        // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
+        // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
+        let directive: String = slice.chars().skip(beg).take(end - beg).collect();
         return Err(USimpleError::new(
             1,
             StatError::InvalidDirective {
-                directive: slice[beg..end].quote().to_string(),
+                directive: directive.quote().to_string(),
             }
             .to_string(),
         ));
@@ -443,11 +449,29 @@ fn quote_file_name(file_name: &str, quoting_style: &QuotingStyle) -> String {
             let escaped = file_name.replace('\'', r"\'");
             format!("'{escaped}'")
         }
-        QuotingStyle::ShellEscapeAlways => {
-            let quote = if file_name.contains('\'') { '"' } else { '\'' };
-            format!("{quote}{file_name}{quote}")
-        }
+        QuotingStyle::ShellEscapeAlways => escape_name(
+            OsStr::new(file_name),
+            UucoreQuotingStyle::Shell {
+                escape: true,
+                always_quote: true,
+                show_control: true,
+            },
+            UEncoding::Utf8,
+        )
+        .to_string_lossy()
+        .to_string(),
         QuotingStyle::Quote => file_name.to_string(),
+    }
+}
+
+fn warn_invalid_quoting_style(style: &str) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::Relaxed) {
+        show_error!(
+            "{}",
+            translate!("stat-warning-invalid-env-quoting-style", "style" => style.to_string())
+        );
     }
 }
 
@@ -457,10 +481,15 @@ fn get_quoted_file_name(
     file_type: FileType,
     from_user: bool,
 ) -> Result<String, i32> {
-    let quoting_style = env::var("QUOTING_STYLE")
-        .ok()
-        .and_then(|style| style.parse().ok())
-        .unwrap_or_default();
+    let quoting_style = match env::var("QUOTING_STYLE") {
+        Ok(style) => style.parse().unwrap_or_else(|_| {
+            // Match GNU coreutils 9.11: warn (once) when QUOTING_STYLE is set
+            // to a value we don't understand, then fall back to the default.
+            warn_invalid_quoting_style(&style);
+            QuotingStyle::default()
+        }),
+        Err(_) => QuotingStyle::default(),
+    };
 
     if file_type.is_symlink() {
         let quoted_display_name = quote_file_name(display_name, &quoting_style);
@@ -1259,9 +1288,9 @@ impl Stater {
                 Err(e) => {
                     show_error!(
                         "{}",
-                        StatError::CannotStat {
+                        StatError::CannotStatx {
                             file: display_name.quote().to_string(),
-                            error: e.to_string()
+                            error: strip_errno(&e)
                         }
                     );
                     return 1;

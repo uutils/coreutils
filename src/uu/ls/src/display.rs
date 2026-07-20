@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale ilog
+// spell-checker:ignore nohash strtime clocale ilog drwxr
 
 use core::ops::RangeInclusive;
 use std::cell::LazyCell;
@@ -42,6 +42,7 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
+    i18n::{UEncoding, get_ctype_encoding},
     os_str_as_bytes_lossy,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
@@ -52,6 +53,11 @@ use crate::colors::{StyleManager, color_name};
 use crate::config::Files;
 use crate::dired::{self, DiredOutput};
 use crate::{Config, ListState, LsError, PathData, get_block_size};
+use lscolors::Indicator;
+
+/// Width of the standard Unix permissions string (one file-type char plus
+/// nine permission bits, e.g. `drwxr-xr-x`).
+const PERMISSIONS_WIDTH: usize = 10;
 
 // Fields that can be removed or added to the long format
 pub(crate) struct LongFormat {
@@ -75,20 +81,46 @@ pub(crate) struct PaddingCollection {
     #[cfg(unix)]
     pub(crate) minor: usize,
     pub(crate) block_size: usize,
-    /// True if any listed item has an ACL or non-trivial security context,
-    /// which requires reserving one extra column for the `+`/`.` indicator
-    /// so link-count columns align across items with and without it.
-    pub(crate) has_alt_access: bool,
+    /// Width of the permissions field. [`PERMISSIONS_WIDTH`] by default
+    /// (e.g. `drwxr-xr-x`), or one more when any listed item has an ACL or
+    /// non-trivial security context and an extra column must be reserved for
+    /// the `+`/`.` indicator.
+    pub(crate) permissions: usize,
 }
 
 pub(crate) struct DisplayItemName {
     pub(crate) displayed: OsString,
     pub(crate) dired_name_len: usize,
+
+    /// Keep track of whether the quoted name started with a quote, so when
+    /// needed, we don't have to look at the `displayed` field and skip
+    /// the ANSI color codes that were added afterwards.
+    pub(crate) starts_with_quote: bool,
 }
 
-#[derive(PartialEq, Eq)]
+/// Same as above, but without the `dired_name_len` field.
+pub(crate) struct DisplayWithQuote {
+    pub(crate) displayed: OsString,
+    pub(crate) starts_with_quote: bool,
+}
+
+impl From<DisplayItemName> for DisplayWithQuote {
+    fn from(
+        DisplayItemName {
+            displayed,
+            dired_name_len: _,
+            starts_with_quote,
+        }: DisplayItemName,
+    ) -> Self {
+        Self {
+            displayed,
+            starts_with_quote,
+        }
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum IndicatorStyle {
-    None,
     Slash,
     FileType,
     Classify,
@@ -163,6 +195,41 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
     let bytes = os_str_as_bytes_lossy(name);
+
+    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
+    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
+    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
+    // embedded apostrophes and double quotes are left untouched; only control
+    // characters, backslashes and invalid bytes are escaped.
+    if get_ctype_encoding() == UEncoding::Utf8 {
+        let mut quoted = String::with_capacity(name.len() + 6);
+        quoted.push('\u{2018}');
+        for chunk in bytes.utf8_chunks() {
+            for c in chunk.valid().chars() {
+                if c == '\\' {
+                    quoted.push_str("\\\\");
+                } else if c.is_ascii() && c.is_control() {
+                    push_basic_escape(&mut quoted, c as u8);
+                } else if c.is_control() {
+                    // Non-ASCII control characters (the C1 range, e.g.
+                    // U+0085 NEL) are not printable; octal-escape their
+                    // UTF-8 bytes like GNU does for non-printable chars.
+                    let mut buf = [0u8; 4];
+                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
+                        let _ = write!(quoted, "\\{byte:03o}");
+                    }
+                } else {
+                    quoted.push(c);
+                }
+            }
+            for &byte in chunk.invalid() {
+                let _ = write!(quoted, "\\{byte:03o}");
+            }
+        }
+        quoted.push('\u{2019}');
+        return OsString::from(quoted);
+    }
+
     let mut quoted = String::with_capacity(name.len() + 2);
     match style {
         LocaleQuoting::Single => quoted.push('\''),
@@ -302,6 +369,20 @@ fn pad_left(string: &str, count: usize) -> String {
     format!("{string:>count$}")
 }
 
+/// Returns the alternate-access indicator that follows the 9-bit permission
+/// string in long-format output: `.` for a non-trivial security context, `+`
+/// for an ACL, otherwise a space (which acts as a placeholder so columns line
+/// up across items that don't carry an indicator themselves).
+fn alt_access_indicator(item: &PathData, config: &Config, is_acl_set: bool) -> u8 {
+    if item.security_context(config).len() > 1 {
+        b'.'
+    } else if is_acl_set {
+        b'+'
+    } else {
+        b' '
+    }
+}
+
 #[allow(clippy::cognitive_complexity)]
 pub fn display_items(
     items: &[PathData],
@@ -352,7 +433,7 @@ pub fn display_items(
             write!(state.out, "{}", style_manager.apply_normal())?;
         }
 
-        let mut names_vec = Vec::with_capacity(items.len());
+        let mut names_vec: Vec<DisplayWithQuote> = Vec::with_capacity(items.len());
 
         #[cfg(unix)]
         let should_display_leading_info = config.inode || config.alloc_size;
@@ -380,7 +461,7 @@ pub fn display_items(
                 LazyCell::new(|| 0),
             );
 
-            names_vec.push(cell.displayed);
+            names_vec.push(cell.into());
         }
 
         let mut names = names_vec.into_iter();
@@ -409,11 +490,11 @@ pub fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                    write_os_str(&mut state.out, &name.displayed)?;
+                    current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
                 }
                 for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                    let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
@@ -422,7 +503,7 @@ pub fn display_items(
                         current_col += name_width + 2;
                         write!(state.out, ", ")?;
                     }
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
@@ -432,7 +513,7 @@ pub fn display_items(
             }
             _ => {
                 for name in names {
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
@@ -443,7 +524,7 @@ pub fn display_items(
 }
 
 fn display_grid(
-    names: impl Iterator<Item = OsString>,
+    names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
@@ -458,7 +539,7 @@ fn display_grid(
                 write!(out, "  ")?;
             }
             printed_something = true;
-            write_os_str(out, &name)?;
+            write_os_str(out, &name.displayed)?;
         }
         if printed_something {
             writeln!(out)?;
@@ -467,7 +548,7 @@ fn display_grid(
         let names: Vec<String> = {
             let mut buf = Vec::new();
             names
-                .map(|n| {
+                .map(|din| {
                     // In case some names are quoted, GNU adds a space before each
                     // entry that does not start with a quote to make it prettier
                     // on multiline.
@@ -482,10 +563,10 @@ fn display_grid(
                     // ```
                     // FIXME: the Grid crate only supports &str, so can't display raw bytes
                     buf.clear();
-                    if quoted && !os_str_starts_with(&n, b"'") && !os_str_starts_with(&n, b"\"") {
+                    if quoted && !din.starts_with_quote {
                         buf.push(b' ');
                     }
-                    buf.extend(n.as_encoded_bytes());
+                    buf.extend(din.displayed.as_encoded_bytes());
                     String::from_utf8_lossy(&buf).into_owned()
                 })
                 .collect()
@@ -665,6 +746,7 @@ fn display_item_name(
 ) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
+    let starts_with_quote = os_str_starts_with(&name, b"'") || os_str_starts_with(&name, b"\"");
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -686,39 +768,32 @@ fn display_item_name(
         }
     }
 
-    if config.indicator_style != IndicatorStyle::None {
-        let sym = classify_file(path);
+    let is_long_symlink = config.format == Format::Long
+        && path.file_type().is_some_and(FileType::is_symlink)
+        && !path.must_dereference;
 
-        let char_opt = match config.indicator_style {
-            IndicatorStyle::Classify => sym,
-            IndicatorStyle::FileType => {
-                // Don't append an asterisk.
-                match sym {
-                    Some('*') => None,
-                    _ => sym,
-                }
-            }
-            IndicatorStyle::Slash => {
-                // Append only a slash.
-                match sym {
-                    Some('/') => Some('/'),
-                    _ => None,
-                }
-            }
-            IndicatorStyle::None => None,
-        };
-
-        if let Some(c) = char_opt {
+    if !is_long_symlink {
+        if let Some(c) = indicator_char(path, config.indicator_style) {
             let _ = name.write_char(c);
         }
     }
 
     let dired_name_len = if config.dired { name.len() } else { 0 };
 
-    if config.format == Format::Long
-        && path.file_type().is_some_and(FileType::is_symlink)
-        && !path.must_dereference
-    {
+    if is_long_symlink {
+        let has_mi_or_or = style_manager.as_ref().is_some_and(|sm| {
+            sm.has_indicator_style(Indicator::OrphanedSymbolicLink)
+                || sm.has_indicator_style(Indicator::MissingFile)
+        });
+        // Only stat symlink target when:
+        // 1. Color is enabled AND LS_COLORS has mi= or or=, OR
+        // 2. Long format AND (--classify or --file-type)
+        let should_stat_target = has_mi_or_or
+            || matches!(
+                config.indicator_style,
+                Some(IndicatorStyle::Classify) | Some(IndicatorStyle::FileType)
+            );
+
         match path.path().read_link() {
             Ok(target_path) => {
                 name.push(" -> ");
@@ -726,10 +801,11 @@ fn display_item_name(
                 // We might as well color the symlink output after the arrow.
                 // This makes extra system calls, but provides important information that
                 // people run `ls -l --color` are very interested in.
-                if let Some(style_manager) = &mut style_manager {
-                    let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
-                    // We get the absolute path to be able to construct PathData with valid Metadata.
-                    // This is because relative symlinks will fail to get_metadata.
+                let escaped_target = escape_name_with_locale(target_path.as_os_str(), config);
+
+                // We get the absolute path to be able to construct PathData with valid Metadata.
+                // This is because relative symlinks will fail to get_metadata.
+                if should_stat_target {
                     let absolute_target = if target_path.is_relative() {
                         match path.path().parent() {
                             Some(p) => &p.join(&target_path),
@@ -738,7 +814,6 @@ fn display_item_name(
                     } else {
                         &target_path
                     };
-
                     match fs::canonicalize(absolute_target) {
                         Ok(resolved_target) => {
                             let target_data = PathData::new(
@@ -747,45 +822,58 @@ fn display_item_name(
                                 target_path.file_name().map(Cow::Borrowed),
                                 config,
                                 false,
+                                false,
                             );
 
-                            // Check if the target actually needs coloring
-                            let md_option: Option<Metadata> = target_data
-                                .metadata()
-                                .cloned()
-                                .or_else(|| target_data.p_buf.symlink_metadata().ok());
-                            let style = style_manager.colors.style_for_path_with_metadata(
-                                &target_data.p_buf,
-                                md_option.as_ref(),
-                            );
-
-                            if style.is_some() {
-                                // Only apply coloring if there's actually a style
-                                name.push(color_name(
-                                    escaped_target,
-                                    &target_data,
-                                    style_manager,
-                                    None,
-                                    is_wrap(name.len()),
-                                ));
+                            let target_display = if let Some(style_manager) = style_manager {
+                                let md = match target_data.metadata() {
+                                    Some(md) => Some(Cow::Borrowed(md)),
+                                    None => {
+                                        target_data.p_buf.symlink_metadata().ok().map(Cow::Owned)
+                                    }
+                                };
+                                // Check if the target actually needs coloring
+                                if style_manager
+                                    .colors
+                                    .style_for_path_with_metadata(&target_data.p_buf, md.as_deref())
+                                    .is_some()
+                                {
+                                    // Only apply coloring if there's actually a style
+                                    color_name(
+                                        escaped_target,
+                                        &target_data,
+                                        style_manager,
+                                        None,
+                                        is_wrap(name.len()),
+                                    )
+                                } else {
+                                    // For regular files with no coloring, just use plain text
+                                    escaped_target
+                                }
                             } else {
-                                // For regular files with no coloring, just use plain text
-                                name.push(escaped_target);
+                                escaped_target
+                            };
+                            name.push(target_display);
+                            // Add appropriate indicator based on indicator_style
+                            if let Some(c) = indicator_char(&target_data, config.indicator_style) {
+                                let _ = name.write_char(c);
                             }
                         }
                         Err(_) => {
-                            name.push(
-                                style_manager.apply_missing_target_style(
+                            if let Some(style_manager) = &mut style_manager {
+                                name.push(style_manager.apply_missing_target_style(
                                     escaped_target,
                                     is_wrap(name.len()),
-                                ),
-                            );
+                                ));
+                            } else {
+                                // If no coloring is required, we just use target as is.
+                                // with the right quoting
+                                name.push(escaped_target);
+                            }
                         }
                     }
                 } else {
-                    // If no coloring is required, we just use target as is.
-                    // Apply the right quoting
-                    name.push(escape_name_with_locale(target_path.as_os_str(), config));
+                    name.push(&escaped_target);
                 }
             }
             Err(err) => {
@@ -819,6 +907,7 @@ fn display_item_name(
     DisplayItemName {
         displayed: name,
         dired_name_len,
+        starts_with_quote,
     }
 }
 
@@ -877,20 +966,15 @@ fn display_item_long(
         state
             .display_buf
             .extend(display_permissions(md, true).as_bytes());
-        if item.security_context(config).len() > 1 {
-            // GNU `ls` uses a "." character to indicate a file with a security context,
-            // but not other alternate access method.
-            state.display_buf.push(b'.');
-        } else if is_acl_set {
-            state.display_buf.push(b'+');
-        } else {
-            state.display_buf.push(b' ');
+        if padding.permissions > PERMISSIONS_WIDTH {
+            state
+                .display_buf
+                .push(alt_access_indicator(item, config, is_acl_set));
         }
-
-        state.display_buf.extend_pad_left(
-            &display_symlink_count(md),
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        state.display_buf.push(b' ');
+        state
+            .display_buf
+            .extend_pad_left(&display_symlink_count(md), padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -967,7 +1051,7 @@ fn display_item_long(
             LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
 
-        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+        let needs_space = quoted && !item_display.starts_with_quote;
 
         if config.dired {
             let mut dired_name_len = item_display.dired_name_len;
@@ -1035,16 +1119,15 @@ fn display_item_long(
 
         state.display_buf.push(leading_char as u8);
         state.display_buf.extend(b"?????????");
-        if item.security_context(config).len() > 1 {
-            // GNU `ls` uses a "." character to indicate a file with a security context,
-            // but not other alternate access method.
-            state.display_buf.push(b'.');
+        if padding.permissions > PERMISSIONS_WIDTH {
+            // Metadata is unknown, so we can't probe for ACLs; only the
+            // security-context indicator is detectable here.
+            state
+                .display_buf
+                .push(alt_access_indicator(item, config, false));
         }
         state.display_buf.push(b' ');
-        state.display_buf.extend_pad_left(
-            "?",
-            padding.link_count + usize::from(padding.has_alt_access),
-        );
+        state.display_buf.extend_pad_left("?", padding.link_count);
 
         if config.long.owner {
             state.display_buf.push(b' ');
@@ -1102,6 +1185,23 @@ fn display_item_long(
     state.display_buf.clear();
 
     Ok(())
+}
+
+fn indicator_char(path: &PathData, style: Option<IndicatorStyle>) -> Option<char> {
+    let style = style?;
+    let sym = classify_file(path);
+
+    match style {
+        IndicatorStyle::Classify => sym,
+        IndicatorStyle::FileType => match sym {
+            Some('*') => None,
+            _ => sym,
+        },
+        IndicatorStyle::Slash => match sym {
+            Some('/') => Some('/'),
+            _ => None,
+        },
+    }
 }
 
 fn classify_file(path: &PathData) -> Option<char> {
@@ -1227,7 +1327,7 @@ fn calculate_padding_collection(
         major: 1,
         minor: 1,
         block_size: 1,
-        has_alt_access: false,
+        permissions: PERMISSIONS_WIDTH,
     };
 
     for item in items {
@@ -1259,16 +1359,17 @@ fn calculate_padding_collection(
                 padding_collections.context = context_len.max(padding_collections.context);
             }
 
-            // Track whether any item has an ACL or non-trivial security context so
-            // rendering can reserve a single extra column for the `+`/`.` indicator.
+            // If any item has an ACL or non-trivial security context, widen
+            // the permissions column by one to reserve space for the `+`/`.`
+            // indicator.
             {
                 #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
                 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
-                let is_acl_set = has_acl(item.display_name());
+                let is_acl_set = has_acl(item.path());
                 if context_len > 1 || is_acl_set {
-                    padding_collections.has_alt_access = true;
+                    padding_collections.permissions = PERMISSIONS_WIDTH + 1;
                 }
             }
 
@@ -1309,7 +1410,7 @@ fn calculate_padding_collection(
         context: 1,
         size: 1,
         block_size: 1,
-        has_alt_access: false,
+        permissions: PERMISSIONS_WIDTH,
     };
 
     for item in items {

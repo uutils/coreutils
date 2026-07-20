@@ -4,15 +4,15 @@
 // file that was distributed with this source code.
 
 #[cfg(unix)]
-pub use self::unix::is_unsafe_overwrite;
+pub use self::unix::is_safe_overwrite;
 
 #[cfg(windows)]
-pub use self::windows::is_unsafe_overwrite;
+pub use self::windows::is_safe_overwrite;
 
 // WASI: no fstat-based device/inode checks available; assume safe.
 #[cfg(target_os = "wasi")]
-pub fn is_unsafe_overwrite<I, O>(_input: &I, _output: &O) -> bool {
-    false
+pub fn is_safe_overwrite<I, O>(_input: &I, _output: &O) -> bool {
+    true
 }
 
 #[cfg(unix)]

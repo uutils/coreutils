@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) unwritable
+// spell-checker:ignore (ToDO) unwritable GHSA
 use std::fmt::Write;
 
 use uutests::at_and_ucmd;
@@ -232,6 +232,31 @@ fn test_range_permute_no_overflow_0_max() {
         .map(|x| x.parse().unwrap())
         .collect();
     assert_eq!(result_seq.len(), 1, "Miscounted output length!");
+}
+
+#[test]
+fn test_range_full_huge_no_head_count_memory_exhausted() {
+    // Repro for #12500: `shuf -i 1-huge` with no --head-count used to abort
+    // (hashbrown "Hash table capacity overflow" panic, or an allocator abort)
+    // because the sparse iterator reserved a map sized to the whole range.
+    // It must now fail cleanly, like GNU.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
+}
+
+#[test]
+fn test_range_huge_head_count_memory_exhausted() {
+    // Repro for #12500: a large --head-count is just as unsatisfiable as no
+    // --head-count; both used to abort. Must now fail cleanly.
+    let upper_bound = usize::MAX;
+    new_ucmd!()
+        .arg(format!("-n{upper_bound}"))
+        .arg(format!("-i1-{upper_bound}"))
+        .fails_with_code(1)
+        .stderr_only("shuf: memory exhausted\n");
 }
 
 #[test]
@@ -498,6 +523,29 @@ fn test_zero_head_count_file_touch_output_positive_existing() {
         Vec::new(),
         "Output file must exist and be completely empty"
     );
+}
+
+#[test]
+fn test_output_not_truncated_when_input_missing() {
+    // A failure to read the input must leave an existing -o file untouched
+    // instead of truncating it first (data-loss regression, GHSA-5g6r-45q4-3p5r).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    ucmd.args(&["-o", "out", "does-not-exist"])
+        .fails_with_code(1)
+        .stderr_contains("does-not-exist");
+    assert_eq!(at.read("out"), "keep me\n");
+}
+
+#[test]
+fn test_output_not_truncated_when_random_source_missing() {
+    // Same guarantee when the random source can't be opened.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out", "keep me\n");
+    at.write("in", "a\nb\nc\n");
+    ucmd.args(&["-o", "out", "--random-source=does-not-exist", "in"])
+        .fails_with_code(1);
+    assert_eq!(at.read("out"), "keep me\n");
 }
 
 #[test]
@@ -1113,5 +1161,5 @@ fn test_seed_long_range_no_repeat() {
 
 #[test]
 fn test_empty_range_no_repeat() {
-    new_ucmd!().arg("-i4-3").succeeds().no_stderr().no_stdout();
+    new_ucmd!().arg("-i4-3").succeeds().no_output();
 }

@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (words) nosuchgroup groupname
 
+#[cfg(not(target_vendor = "apple"))]
+use rustix::process::getgroups;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use uucore::process::getegid;
@@ -205,7 +207,7 @@ fn test_reference() {
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted (os error 1)\nfailed to change group of '/etc' from root to root\n");
+            .stderr_is("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from root to root\n");
     }
 }
 
@@ -231,8 +233,9 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -246,9 +249,10 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ")
-        .stderr_contains("\nchgrp: group of 'file3' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .stdout_contains("\ngroup of 'file3' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -299,15 +303,13 @@ fn test_big_h() {
 #[cfg(not(target_vendor = "apple"))]
 fn basic_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let one_group = nix::unistd::getgroups().unwrap();
     // if there are no groups we can't run this test.
-    if let Some(group) = one_group.first() {
+    if let Some(group) = getgroups().unwrap().first() {
         at.touch("f1");
         ucmd.arg(group.as_raw().to_string())
             .arg("f1")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -323,7 +325,7 @@ fn test_no_change() {
 fn test_permission_denied() {
     use std::os::unix::prelude::PermissionsExt;
 
-    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+    if let Some(group) = getgroups().unwrap().first() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.mkdir("dir");
         at.touch("dir/file");
@@ -341,7 +343,7 @@ fn test_permission_denied() {
 fn test_subdir_permission_denied() {
     use std::os::unix::prelude::PermissionsExt;
 
-    if let Some(group) = nix::unistd::getgroups().unwrap().first() {
+    if let Some(group) = getgroups().unwrap().first() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.mkdir("dir");
         at.mkdir("dir/subdir");
@@ -359,7 +361,7 @@ fn test_subdir_permission_denied() {
 #[cfg(not(target_vendor = "apple"))]
 fn test_traverse_symlinks() {
     use std::os::unix::prelude::MetadataExt;
-    let groups = nix::unistd::getgroups().unwrap();
+    let groups = getgroups().unwrap();
     if groups.len() < 2 {
         return;
     }
@@ -432,7 +434,7 @@ fn test_from_option() {
     use std::os::unix::fs::MetadataExt;
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let groups = nix::unistd::getgroups().unwrap();
+    let groups = getgroups().unwrap();
     // Skip test if we don't have at least two different groups to work with
     if groups.len() < 2 {
         return;
@@ -496,7 +498,7 @@ fn test_from_with_invalid_group() {
 fn test_verbosity_messages() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let groups = nix::unistd::getgroups().unwrap();
+    let groups = getgroups().unwrap();
     // Skip test if we don't have at least one group to work with
     if groups.is_empty() {
         return;
@@ -511,7 +513,8 @@ fn test_verbosity_messages() {
         .arg("--reference=ref_file")
         .arg("target_file")
         .succeeds()
-        .stderr_contains("group of 'target_file' retained as ");
+        .stdout_contains("group of 'target_file' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -520,7 +523,7 @@ fn test_from_with_reference() {
     use std::os::unix::fs::MetadataExt;
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
-    let groups = nix::unistd::getgroups().unwrap();
+    let groups = getgroups().unwrap();
     if groups.len() < 2 {
         return;
     }
@@ -563,7 +566,7 @@ fn test_numeric_group_formats() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let groups = nix::unistd::getgroups().unwrap();
+    let groups = getgroups().unwrap();
     if groups.len() < 2 {
         return;
     }
@@ -662,4 +665,19 @@ fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
         .arg(current_gid.to_string())
         .arg("dir")
         .fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("--verbose")
+        .arg(getegid().to_string())
+        .arg("does-not-exist")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("chgrp: write error: No space left on device");
 }

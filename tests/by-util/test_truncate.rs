@@ -90,12 +90,6 @@ fn test_failed() {
 }
 
 #[test]
-fn test_failed_2() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[FILE1]).fails();
-}
-
-#[test]
 fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", FILE1]).fails();
@@ -291,15 +285,24 @@ fn test_truncate_bytes_size() {
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
+#[test]
+fn test_relative_size_overflow_preserves_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+
+    ucmd.args(&["--size=+18446744073709551615", FILE1])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+
+    assert_eq!(at.read(FILE1), "x");
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-s", "8", filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "8", filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 8]);
 }
@@ -311,10 +314,7 @@ fn test_new_file_reference() {
     let mut old_file = at.make_file(FILE1);
     old_file.write_all(b"1234567890").unwrap();
     let filename = "new_file_that_does_not_exist_yet";
-    ucmd.args(&["-r", FILE1, filename])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-r", FILE1, filename]).succeeds().no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 10]);
 }
@@ -328,8 +328,7 @@ fn test_new_file_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "+3", "-r", FILE1, filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(at.file_exists(filename));
     assert_eq!(at.read_bytes(filename), vec![b'\0'; 13]);
 }
@@ -341,8 +340,7 @@ fn test_new_file_no_create_size_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-s", "8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -355,8 +353,7 @@ fn test_new_file_no_create_reference_only() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -369,8 +366,7 @@ fn test_new_file_no_create_size_and_reference() {
     let filename = "new_file_that_does_not_exist_yet";
     ucmd.args(&["-r", FILE1, "-s", "+8", "-c", filename])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.file_exists(filename));
 }
 
@@ -414,14 +410,24 @@ fn test_no_such_dir() {
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
 }
 
+/// Test that truncate processes every file even if one fails.
+#[test]
+fn test_continue_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "0", "a", "dir", "b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("dir");
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+}
+
 /// Test that truncate with a relative size less than 0 is not an error.
 #[test]
 fn test_underflow_relative_size() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }
@@ -429,10 +435,7 @@ fn test_underflow_relative_size() {
 #[test]
 fn test_negative_size_with_space() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-s", "-1", FILE1])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-s", "-1", FILE1]).succeeds().no_output();
     assert!(at.file_exists(FILE1));
     assert!(at.read_bytes(FILE1).is_empty());
 }

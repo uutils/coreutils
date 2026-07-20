@@ -872,6 +872,24 @@ fn test_value_too_large() {
 }
 
 #[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_all_but_last_lines() {
     new_ucmd!()
         .args(&["-n", "-15", "lorem_ipsum.txt"])
@@ -896,7 +914,7 @@ fn test_write_to_dev_full() {
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
                 .fails()
-                .stderr_contains("error writing 'standard output': No space left on device");
+                .stderr_is("head: error writing 'standard output': No space left on device\n");
         }
     }
 }
@@ -932,4 +950,76 @@ fn test_do_not_attempt_to_read_a_directory() {
         .arg(".")
         .fails_with_code(1)
         .stderr_contains("error reading '.'");
+}
+
+/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
+#[test]
+fn test_zero_bytes_on_directory_succeeds() {
+    new_ucmd!().args(&["-c", "0", "."]).succeeds().no_output();
+}
+
+/// `head -n0 <directory>` should also succeed.
+#[test]
+fn test_zero_lines_on_directory_succeeds() {
+    new_ucmd!().args(&["-n", "0", "."]).succeeds().no_output();
+}
+
+/// GNU `head` prints the `==> name <==` header for every file argument
+/// (including directories) when invoked with multiple files. With non-zero
+/// output, directories also produce an "Is a directory" error after the
+/// header.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "5", "d", "f"])
+        .fails_with_code(1)
+        .stdout_is("==> d <==\n\n==> f <==\nhello")
+        .stderr_contains("Is a directory");
+}
+
+/// With `-c 0` (zero output), the directory header is still printed but no
+/// error is emitted.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files_zero_output() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "0", "d", "f"])
+        .succeeds()
+        .stdout_is("==> d <==\n\n==> f <==\n")
+        .no_stderr();
+}
+
+/// GNU `head` prints the `==> name <==` header only after the file is
+/// successfully opened. A file that exists but cannot be opened (e.g. no read
+/// permission) must therefore produce only an error and no header.
+#[cfg(unix)]
+#[test]
+fn test_unreadable_file_prints_no_header() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("unreadable", "secret\n");
+    at.write("readable", "hello\n");
+    at.set_mode("unreadable", 0o000);
+
+    // Running as root bypasses permission checks, so the open would succeed.
+    if std::fs::File::open(at.plus("unreadable")).is_ok() {
+        return;
+    }
+
+    ts.ucmd()
+        .args(&["-c", "5", "unreadable", "readable"])
+        .fails_with_code(1)
+        .stdout_is("==> readable <==\nhello")
+        .stdout_does_not_contain("==> unreadable <==")
+        .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
 }

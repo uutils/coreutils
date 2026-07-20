@@ -6,7 +6,7 @@ use uutests::new_ucmd;
 
 #[test]
 fn test_arch() {
-    new_ucmd!().succeeds();
+    new_ucmd!().succeeds().stdout_contains("\n");
 }
 
 #[test]

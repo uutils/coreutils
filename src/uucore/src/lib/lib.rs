@@ -95,10 +95,15 @@ pub use crate::features::mode;
 pub use crate::features::entries;
 #[cfg(all(unix, feature = "perms"))]
 pub use crate::features::perms;
-#[cfg(all(unix, any(feature = "pipes", feature = "buf-copy")))]
+#[cfg(all(
+    any(target_os = "linux", target_os = "android"),
+    any(feature = "pipes", feature = "buf-copy")
+))]
 pub use crate::features::pipes;
 #[cfg(all(unix, feature = "process"))]
 pub use crate::features::process;
+#[cfg(all(unix, feature = "safe-copy"))]
+pub use crate::features::safe_copy;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
 #[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
@@ -181,13 +186,9 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     }
 }
 
-/// Execute utility code for `util`.
-///
-/// This macro expands to a main function that invokes the `uumain` function in `util`
-/// Exits with code returned by `uumain`.
 #[macro_export]
-macro_rules! bin {
-    ($util:ident) => {
+macro_rules! bin_inner {
+    ($util:ident, $post:expr) => {
         pub fn main() {
             use std::io::Write;
             use uucore::locale;
@@ -211,13 +212,28 @@ macro_rules! bin {
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
+            $post
+
+            std::process::exit(code);
+        }
+    };
+}
+/// Execute utility code for `util`.
+///
+/// This macro expands to a main function that invokes the `uumain` function in `util`
+/// Exits with code returned by `uumain`.
+#[macro_export]
+macro_rules! bin {
+    ($util:ident, no_flush) => {
+        ::uucore::bin_inner! {$util, {}}
+    };
+    ($util:ident) => {
+        ::uucore::bin_inner! {$util, {
             // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
             if let Err(e) = std::io::stdout().flush() {
                 eprintln!("Error flushing stdout: {e}");
             }
-
-            std::process::exit(code);
-        }
+        }}
     };
 }
 
@@ -585,7 +601,7 @@ macro_rules! prompt_yes(
 
 /// Represent either a character or a byte.
 /// Used to iterate on partially valid UTF-8 data
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CharByte {
     Char(char),
     Byte(u8),

@@ -31,7 +31,7 @@ jobs:
         job:
           - { features: unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
     - name: Prepare, build and test
@@ -131,9 +131,16 @@ jobs:
         job:
           - { features: unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.0
       with:
         persist-credentials: false
+    - name: Avoid no space left on device # shared with guest?
+      shell: bash
+      run: |
+        mkdir /tmp/empty
+        sudo rsync -a --delete /tmp/empty/ /usr/lib/jvm/
+        sudo rsync -a --delete /tmp/empty/ /usr/share/dotnet/
+        sudo rsync -a --delete /tmp/empty/ /usr/local/lib/android/
     - name: Prepare, build and test
       uses: vmactions/openbsd-vm@v1
       with:
@@ -145,10 +152,14 @@ jobs:
         prepare: |
           # Clean up disk space before installing packages
           df -h
-          rm -rf /usr/share/relink/* /usr/X11R6/* /usr/share/doc/* /usr/share/man/* &
+          mkdir -p empty
+          rsync -a --delete empty/ /usr/share/relink/
+          rsync -a --delete empty/ /usr/X11R6/
+          rsync -a --delete empty/ /usr/share/doc/
+          rsync -a --delete empty/ /usr/share/man/
           pkg_add curl gmake sudo-- jq rust llvm--
           # Clean up package cache after installation
-          pkg_delete -a &
+          pkg_delete -a
           df -h
         run: |
           ## Prepare, build, and test

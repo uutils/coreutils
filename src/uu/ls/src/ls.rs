@@ -90,6 +90,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
+    #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
+    InvalidTabSize(String),
+
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
@@ -111,6 +114,7 @@ impl UError for LsError {
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_) => 2,
+            Self::InvalidTabSize(_) => 2,
         }
     }
 }
@@ -160,7 +164,6 @@ pub fn uu_app() -> Command {
                 "commas",
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([
                 options::FORMAT,
                 options::format::COLUMNS,
@@ -385,7 +388,6 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("birth").alias("creation"),
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
     )
     .arg(
@@ -440,7 +442,6 @@ pub fn uu_app() -> Command {
                 "extension",
                 "width",
             ]))
-            .require_equals(true)
             .overrides_with_all([
                 options::SORT,
                 options::sort::SIZE,
@@ -627,7 +628,6 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::size::BLOCK_SIZE)
             .long(options::size::BLOCK_SIZE)
-            .require_equals(true)
             .value_name("BLOCK_SIZE")
             .help(translate!("ls-help-block-size"))
             .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
@@ -779,6 +779,7 @@ pub fn uu_app() -> Command {
     // Positional arguments
     .arg(
         Arg::new(options::PATHS)
+            .hide(true)
             .action(ArgAction::Append)
             .value_hint(clap::ValueHint::AnyPath)
             .value_parser(ValueParser::os_string()),
@@ -816,6 +817,7 @@ pub struct PathData<'a> {
     p_buf: Cow<'a, Path>,
     must_dereference: bool,
     command_line: bool,
+    is_dot_dir: bool,
 }
 
 impl<'a> PathData<'a> {
@@ -838,6 +840,7 @@ impl<'a> PathData<'a> {
         file_name: Option<Cow<'a, OsStr>>,
         config: &Config,
         command_line: bool,
+        is_dot_dir: bool,
     ) -> Self {
         // We cannot use `Path::ends_with` or `Path::Components`, because they remove occurrences of '.'
         // For '..', the filename is None
@@ -872,6 +875,10 @@ impl<'a> PathData<'a> {
             Dereference::None => false,
         };
 
+        // `.`, `..`, `/` and trailing `..` denote the directory itself, not a symlink: on
+        // Windows/Redox `ls -l` in a symlinked dir would otherwise print `. -> target` (#6467, #7873).
+        let must_dereference = must_dereference || (command_line && p_buf.file_name().is_none());
+
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
@@ -904,6 +911,7 @@ impl<'a> PathData<'a> {
             p_buf,
             must_dereference,
             command_line,
+            is_dot_dir,
         }
     }
 
@@ -973,6 +981,15 @@ impl<'a> PathData<'a> {
     fn display_name(&self) -> &OsStr {
         match self.display_name {
             PathDataDisplayName::SelfReferential => self.p_buf.as_os_str(),
+            PathDataDisplayName::Custom(ref cow) => cow,
+        }
+    }
+
+    fn file_name(&self) -> &OsStr {
+        match self.display_name {
+            PathDataDisplayName::SelfReferential => {
+                self.p_buf.file_name().unwrap_or(self.p_buf.as_os_str())
+            }
             PathDataDisplayName::Custom(ref cow) => cow,
         }
     }
@@ -1164,7 +1181,7 @@ pub fn list_with_output<O: LsOutput>(
     let initial_locs_len = locs.len();
 
     for loc in locs {
-        let path_data = PathData::new(loc.into(), None, None, config, true);
+        let path_data = PathData::new(loc.into(), None, None, config, true, false);
 
         // Getting metadata here is no big deal as it's just the CWD
         // and we really just want to know if the strings exist as files/dirs
@@ -1278,6 +1295,7 @@ fn collect_directory_entries<O: LsOutput>(
             Some(OsStr::new(".").into()),
             config,
             false,
+            true,
         ));
         entries.push(PathData::new(
             dotdot_path(path_data.path()).into(),
@@ -1285,6 +1303,7 @@ fn collect_directory_entries<O: LsOutput>(
             Some(OsStr::new("..").into()),
             config,
             false,
+            true,
         ));
     }
 
@@ -1304,6 +1323,7 @@ fn collect_directory_entries<O: LsOutput>(
                 Some(dir_entry),
                 None,
                 config,
+                false,
                 false,
             ));
         }
@@ -1375,6 +1395,7 @@ fn enter_directory<O: LsOutput>(
             None,
             config,
             entry.command_line,
+            false,
         );
 
         if !entry.is_first {
@@ -1404,12 +1425,9 @@ fn enter_directory<O: LsOutput>(
         write_directory_entries(entries, config, output)?;
 
         if config.recursive {
-            let start = if config.files == Files::All { 2 } else { 0 };
-
             for child in entries
                 .iter()
-                .skip(start)
-                .filter(|p| p.file_type().is_some_and(FileType::is_dir))
+                .filter(|p| p.file_type().is_some_and(FileType::is_dir) && !p.is_dot_dir)
                 .rev()
             {
                 let child_path = child.path().to_path_buf();
@@ -1467,14 +1485,19 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             )
         }),
         Sort::Size => {
-            entries.sort_unstable_by_key(|k| Reverse(k.metadata().map_or(0, Metadata::len)));
+            entries.sort_unstable_by(|a, b| {
+                b.metadata()
+                    .map_or(0, Metadata::len)
+                    .cmp(&a.metadata().map_or(0, Metadata::len))
+                    .then(a.file_name().cmp(b.file_name()))
+            });
         }
         // The default sort in GNU ls is case insensitive
         Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
-                os_str_as_bytes_lossy(a.path().as_os_str()).as_ref(),
-                os_str_as_bytes_lossy(b.path().as_os_str()).as_ref(),
+                os_str_as_bytes_lossy(a.file_name()).as_ref(),
+                os_str_as_bytes_lossy(b.file_name()).as_ref(),
             )
             .then(a.path().cmp(b.path()))
         }),
@@ -1498,7 +1521,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
     }
 
     if config.group_directories_first && config.sort != Sort::None {
-        entries.sort_unstable_by_key(|p| {
+        entries.sort_by_key(|p| {
             let ft = {
                 // We will always try to deref symlinks to group directories, so PathData.md
                 // is not always useful.

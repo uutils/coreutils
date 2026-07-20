@@ -23,13 +23,16 @@ clap = { workspace = true }
 fs_extra = { workspace = true }
 indicatif = { workspace = true }
 libc = { workspace = true }
+nix = { workspace = true }
 rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
   "fsxattr",
   "perms",
+  "safe-copy",
   "update-control",
 ] }
 fluent = { workspace = true }
@@ -43,6 +46,8 @@ windows-sys = { workspace = true, features = [
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
+
 
 [features]
 selinux = ["uucore/selinux"]

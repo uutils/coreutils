@@ -216,7 +216,7 @@ pub struct Config {
     // Dir and vdir needs access to this field
     pub quoting_style: QuotingStyle,
     pub(crate) locale_quoting: Option<LocaleQuoting>,
-    pub(crate) indicator_style: IndicatorStyle,
+    pub(crate) indicator_style: Option<IndicatorStyle>,
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     pub(crate) context: bool,
@@ -598,34 +598,28 @@ fn extract_quoting_style(
 /// # Returns
 ///
 /// An [`IndicatorStyle`] variant representing the indicator style to use.
-fn extract_indicator_style(options: &clap::ArgMatches) -> IndicatorStyle {
+fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => IndicatorStyle::None,
-            "file-type" => IndicatorStyle::FileType,
-            "classify" => IndicatorStyle::Classify,
-            "slash" => IndicatorStyle::Slash,
-            &_ => IndicatorStyle::None,
+            "none" => None,
+            "file-type" => Some(IndicatorStyle::FileType),
+            "classify" => Some(IndicatorStyle::Classify),
+            "slash" => Some(IndicatorStyle::Slash),
+            &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => IndicatorStyle::None,
-            "always" | "yes" | "force" => IndicatorStyle::Classify,
-            "auto" | "tty" | "if-tty" => {
-                if stdout().is_terminal() {
-                    IndicatorStyle::Classify
-                } else {
-                    IndicatorStyle::None
-                }
-            }
-            &_ => IndicatorStyle::None,
+            "never" | "no" | "none" => None,
+            "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
+            "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
+            &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
-        IndicatorStyle::Slash
+        Some(IndicatorStyle::Slash)
     } else if options.get_flag(options::indicator_style::FILE_TYPE) {
-        IndicatorStyle::FileType
+        Some(IndicatorStyle::FileType)
     } else {
-        IndicatorStyle::None
+        None
     }
 }
 
@@ -672,6 +666,20 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     };
 
     Ok(ret)
+}
+
+/// Parses the tab size value from the command line
+fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
+    size_str
+        .parse::<usize>()
+        .ok()
+        .or_else(|| {
+            size_str
+                .strip_prefix("0x")
+                .or_else(|| size_str.strip_prefix("0X"))
+                .and_then(|hex| usize::from_str_radix(hex, 16).ok())
+        })
+        .ok_or_else(|| LsError::InvalidTabSize(size_str.to_string()))
 }
 
 impl Config {
@@ -957,7 +965,7 @@ impl Config {
         } else if options.get_flag(options::dereference::DIR_ARGS) {
             Dereference::DirArgs
         } else if options.get_flag(options::DIRECTORY)
-            || indicator_style == IndicatorStyle::Classify
+            || indicator_style == Some(IndicatorStyle::Classify)
             || format == Format::Long
         {
             Dereference::None
@@ -967,13 +975,11 @@ impl Config {
 
         let tab_size = if needs_color {
             Some(0)
+        } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+            Some(parse_tab_size(size_str)?)
         } else {
-            options
-                .get_one::<String>(options::format::TAB_SIZE)
-                .and_then(|size| size.parse::<usize>().ok())
-                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        }
-        .unwrap_or(SPACES_IN_TAB);
+            None
+        };
 
         Ok(Self {
             format,
@@ -1008,7 +1014,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
-            tab_size,
+            tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
 }
@@ -1060,19 +1066,19 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     Some(format::ISO.to_string() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
-                _ => match field.chars().next().unwrap() {
-                    '+' => {
-                        // recent/older formats are (optionally) separated by a newline
-                        let mut it = field[1..].split('\n');
-                        let recent = it.next().unwrap_or_default();
-                        let older = it.next();
-                        match it.next() {
-                            None => ok((recent, older)),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        }
+                // `field` can be empty here (e.g. --time-style=posix-), so test
+                // the prefix instead of unwrapping the first char.
+                _ if field.starts_with('+') => {
+                    // recent/older formats are (optionally) separated by a newline
+                    let mut it = field[1..].split('\n');
+                    let recent = it.next().unwrap_or_default();
+                    let older = it.next();
+                    match it.next() {
+                        None => ok((recent, older)),
+                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
-                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
-                },
+                }
+                _ => Err(LsError::TimeStyleParseError(String::from(field))),
             }
         }
     } else if options.get_flag(options::FULL_TIME) {

@@ -12,7 +12,7 @@ use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
 #[cfg(all(unix, not(target_os = "macos")))]
-use uucore::process::geteuid;
+use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
 use uutests::util::is_locale_available;
@@ -425,13 +425,12 @@ fn test_date_format_literal() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-12 13:30:00+08:00")
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -446,7 +445,7 @@ fn test_date_set_invalid() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_permissions_error() {
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00+08:00")
@@ -460,7 +459,7 @@ fn test_date_set_permissions_error() {
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
-    if !(geteuid() == 0 || uucore::os::is_wsl_1()) {
+    if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let test_cases = vec!["-1 hour", "-2 days", "-3 weeks", "-1 month"];
 
         for date_str in test_cases {
@@ -494,13 +493,12 @@ fn test_date_set_mac_unavailable() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_2() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01 AWST") // spell-checker:disable-line
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -575,26 +573,24 @@ fn test_date_for_file_mtime() {
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_3() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("Sat 20 Mar 2021 14:53:01") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_date_set_valid_4() {
-    if geteuid() == 0 {
+    if geteuid().is_root() {
         new_ucmd!()
             .arg("--set")
             .arg("2020-03-11 21:45:00") // Local timezone
             .succeeds()
-            .no_stdout()
-            .no_stderr();
+            .no_output();
     }
 }
 
@@ -602,6 +598,14 @@ fn test_date_set_valid_4() {
 fn test_invalid_format_string() {
     // With lenient mode, invalid format sequences are output literally (like GNU date)
     new_ucmd!().arg("+%!").succeeds().stdout_is("%!\n");
+}
+
+#[test]
+fn test_invalid_format_string_with_too_many_colons() {
+    new_ucmd!()
+        .arg("+%_::::z")
+        .succeeds()
+        .stdout_is("%_::::z\n");
 }
 
 #[test]
@@ -1079,6 +1083,27 @@ fn test_date_tz_abbreviation_us_timezones() {
 }
 
 #[test]
+fn test_date_double_timezone_is_invalid() {
+    // A date string that specifies a timezone twice is invalid, matching GNU.
+    // Regression test for issue #12875.
+    for input in ["EST EST", "EST PST", "2021-03-20 14:53:01 EST EST"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+
+    // A single trailing timezone abbreviation must still be accepted.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_date_tz_abbreviation_australian_timezones() {
     // Test Australian timezone abbreviations (uutils supports, GNU does NOT)
     // This demonstrates uutils date going beyond GNU capabilities
@@ -1265,6 +1290,41 @@ fn test_date_military_timezone_j_variations() {
         .succeeds()
         .stdout_contains("00:00:00")
         .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_military_timezone_j_with_time() {
+    // 'J' is local time, so "<digits>j" is the time-of-day form (HH or HHMM)
+    // in the local zone, same as the bare "<digits>" input. GNU accepts it.
+    let test_cases = vec![
+        ("8j", "08:00:00"),
+        ("9j", "09:00:00"),
+        ("9J", "09:00:00"),
+        ("12j", "12:00:00"),
+        ("1230j", "12:30:00"),
+        ("0j", "00:00:00"),
+        ("00j", "00:00:00"),
+    ];
+
+    for (input, expected) in test_cases {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg("+%T")
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // Out-of-range times are rejected, same as the bare digit form
+    for input in ["2400j", "2360j", "12345j"] {
+        new_ucmd!()
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .fails()
+            .stderr_contains("invalid date");
+    }
 }
 
 #[test]
@@ -1846,25 +1906,41 @@ fn test_date_strftime_narrow_width_on_wide_default() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/283 — GNU date floors negative fractional epochs (`@-1.5` -> -2); uutils truncates toward zero (-> -1)."]
 fn test_date_negative_fractional_epoch_flooring() {
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d")
-        .arg("@-1.5")
-        .arg("+%s")
-        .succeeds()
-        .stdout_is("-2\n");
+    // GNU date floors `%s` toward negative infinity for negative fractional
+    // epochs, while jiff truncates toward zero. See parse_datetime issue #283.
+    for (input, format, expected) in [
+        ("@-1.5", "+%s", "-2\n"),
+        ("@-0.25", "+%s", "-1\n"),
+        ("@-2.75", "+%s.%N", "-3.250000000\n"),
+        ("@-100.5", "+%s", "-101\n"),
+        // Positive fractions and whole seconds are unaffected.
+        ("@42.9", "+%s", "42\n"),
+        ("@-7", "+%s", "-7\n"),
+        // `%%s` stays a literal specifier and must not be substituted.
+        ("@-1.5", "+%%s=%s", "%s=-2\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/282 — parse_datetime rejects `HH:MM am/pm` forms (e.g. `2024-06-15 12:00 PM`, `2024-06-15 11:30am`). GNU date accepts them."]
 fn test_date_input_hhmm_ampm() {
-    for input in [
-        "2024-06-15 12:00 PM",
-        "2024-06-15 11:30am",
-        "2024-06-15 3:00 PM",
+    // GNU date accepts a 12-hour meridiem suffix on a combined date+time.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/282.
+    for (input, expected) in [
+        ("2024-06-15 12:00 PM", "12:00\n"),
+        ("2024-06-15 11:30am", "11:30\n"),
+        ("2024-06-15 3:00 PM", "15:00\n"),
+        ("2024-06-15 12:00 AM", "00:00\n"),
+        ("2024-06-15 3:00 p.m.", "15:00\n"),
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
@@ -1872,15 +1948,18 @@ fn test_date_input_hhmm_ampm() {
             .arg("-d")
             .arg(input)
             .arg("+%H:%M")
-            .succeeds();
+            .succeeds()
+            .stdout_is(expected);
     }
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/281 — GNU date re-zones input with trailing TZ abbreviation (e.g. `2024-01-01 EST`) into the local TZ; uutils keeps the input TZ on output."]
 fn test_date_input_trailing_tz_abbrev_rezones() {
     // `TZ=UTC+1 date -d '2024-01-01 EST'` should display the instant in UTC+1
-    // (GNU: 04:00:00 UTC), not leave it in EST (uutils: 00:00:00 -05).
+    // (GNU: 04:00:00 -01:00), not leave it in EST (the pre-fix uutils
+    // behavior was 00:00:00 -05). The trailing abbreviation only specifies
+    // the input timezone; output should be re-zoned to local.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/281.
     new_ucmd!()
         .env("LC_ALL", "C")
         .env("TZ", "UTC+1")
@@ -1975,20 +2054,19 @@ fn test_date_bare_timezone_abbreviation() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/279 — GNU date silently ignores unrecognized trailing tokens (e.g. `8j`), but parse_datetime rejects them."]
+#[ignore = "https://github.com/uutils/parse_datetime/issues/279. GNU date silently ignores unrecognized trailing tokens (e.g. `8 j`), but parse_datetime rejects them."]
 fn test_date_ignores_unrecognized_trailing_tokens() {
     // GNU compatibility: trailing unknown word-tokens after a valid number are ignored.
-    // GNU parses `8j`, `8 j`, etc. as hour 8; our parse_datetime crate errors out.
-    for input in ["8j", "8 j"] {
-        new_ucmd!()
-            .env("TZ", "UTC")
-            .arg("-u")
-            .arg("-d")
-            .arg(input)
-            .arg("+%H:%M:%S")
-            .succeeds()
-            .stdout_only("08:00:00\n");
-    }
+    // GNU parses `8 j` (number, space, token) as hour 8; our parse_datetime crate errors out.
+    // The no-space `8j` form is handled directly (see test_date_military_timezone_j_with_time).
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-u")
+        .arg("-d")
+        .arg("8 j")
+        .arg("+%H:%M:%S")
+        .succeeds()
+        .stdout_only("08:00:00\n");
 }
 
 #[test]
@@ -2563,9 +2641,21 @@ fn test_date_format_modifier_huge_width_fails_without_abort() {
 }
 
 #[test]
+fn test_date_format_modifier_parseable_huge_width_fails_without_hanging() {
+    // Target pointer width can affect the reported parsed width, so assert the
+    // stable diagnostic shape instead of the exact oversized literal.
+    new_ucmd!()
+        .arg("+%8888888888888s")
+        .fails()
+        .code_is(1)
+        .stderr_contains("format modifier width '")
+        .stderr_contains("' is too large for specifier '%s'");
+}
+
+#[test]
 fn test_date_format_large_width_no_oom() {
     // Regression: very large width like %8888888888r caused OOM.
-    // GNU caps width to i32::MAX; verify we don't crash.
+    // Cap supported widths well below that so we don't crash.
     // Use a moderate width with a fixed date to check the code path works.
     new_ucmd!()
         .arg("-d")

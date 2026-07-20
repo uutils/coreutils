@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc
+// spell-checker:ignore memmem algo PCLMULQDQ refin xorout Hdlc libcrypto SSSE FIPS
 
 //! Implementations of digest functions, like md5 and sha1.
 //!
@@ -23,7 +23,7 @@ use memchr::memmem;
 use crate::error::{UResult, USimpleError};
 
 /// Represents the output of a checksum computation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DigestOutput {
     /// Varying-size output
     Vec(Vec<u8>),
@@ -67,11 +67,22 @@ pub trait Digest {
         self.output_bits().div_ceil(8)
     }
 
-    fn result(&mut self) -> DigestOutput {
-        let mut buf: Vec<u8> = vec![0; self.output_bytes()];
+    fn result(&mut self) -> io::Result<DigestOutput> {
+        let mut buf: Vec<u8> = Vec::new();
+        try_reserve_zeroed(&mut buf, self.output_bytes())?;
         self.hash_finalize(&mut buf);
-        DigestOutput::Vec(buf)
+        Ok(DigestOutput::Vec(buf))
     }
+}
+
+/// Grows `buf` to `len` zero bytes, returning an [`io::Error`] with
+/// [`io::ErrorKind::OutOfMemory`] instead of aborting the process if the
+/// allocation can't be satisfied (e.g. an absurdly large `--length`, #12869).
+fn try_reserve_zeroed(buf: &mut Vec<u8>, len: usize) -> io::Result<()> {
+    buf.try_reserve_exact(len)
+        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))?;
+    buf.resize(len, 0);
+    Ok(())
 }
 
 /// first element of the tuple is the blake2b state
@@ -136,6 +147,7 @@ pub struct Blake3 {
 impl Blake3 {
     /// Default length for the BLAKE3 digest in bytes.
     pub const DEFAULT_BYTE_SIZE: usize = 32;
+    pub const DEFAULT_BIT_SIZE: usize = Self::DEFAULT_BYTE_SIZE * 8;
 
     pub fn with_output_bytes(output_bytes: usize) -> Self {
         Self {
@@ -245,12 +257,12 @@ impl Digest for Crc {
         out.copy_from_slice(&self.digest.finalize().to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out: [u8; 8] = [0; 8];
         self.hash_finalize(&mut out);
 
         let x = u64::from_ne_bytes(out);
-        DigestOutput::Crc((x & (u32::MAX as u64)) as u32)
+        Ok(DigestOutput::Crc((x & (u32::MAX as u64)) as u32))
     }
 
     fn reset(&mut self) {
@@ -296,10 +308,10 @@ impl Digest for CRC32B {
         32
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 4];
         self.hash_finalize(&mut out);
-        DigestOutput::Crc(u32::from_be_bytes(out))
+        Ok(DigestOutput::Crc(u32::from_be_bytes(out)))
     }
 }
 
@@ -320,10 +332,10 @@ impl Digest for Bsd {
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
-        DigestOutput::U16(self.state)
+        Ok(DigestOutput::U16(self.state))
     }
 
     fn reset(&mut self) {
@@ -353,10 +365,10 @@ impl Digest for SysV {
         out.copy_from_slice(&(self.state as u16).to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
-        DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
+        Ok(DigestOutput::U16((self.state & (u16::MAX as u32)) as u16))
     }
 
     fn reset(&mut self) {
@@ -385,7 +397,8 @@ macro_rules! impl_digest_common {
             }
 
             fn hash_finalize(&mut self, out: &mut [u8]) {
-                digest::Digest::finalize_into_reset(&mut self.0, out.into());
+                let result = digest::Digest::finalize_reset(&mut self.0);
+                out.copy_from_slice(&result);
             }
 
             fn reset(&mut self) {
@@ -440,27 +453,140 @@ macro_rules! impl_digest_shake {
                 self.bit_size
             }
 
-            fn result(&mut self) -> DigestOutput {
-                let mut bytes = vec![0; self.output_bits().div_ceil(8)];
+            fn result(&mut self) -> io::Result<DigestOutput> {
+                let mut bytes = Vec::new();
+                try_reserve_zeroed(&mut bytes, self.output_bits().div_ceil(8))?;
                 self.hash_finalize(&mut bytes);
-                DigestOutput::Vec(bytes)
+                Ok(DigestOutput::Vec(bytes))
             }
         }
     };
 }
 
+// When the `openssl` feature is enabled, md5/sha1/sha2-family digests are
+// backed by OpenSSL's libcrypto, which provides hand-tuned assembly
+// implementations (AVX2, SSSE3, etc.) that are substantially faster than the
+// pure-Rust crates on CPUs without SHA-NI. The OpenSSL backend is only
+// compiled in on `cfg(unix)`; Windows targets always use the pure-Rust path
+// since libcrypto headers aren't generally available there.
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Md5(md5::Md5);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha1(sha1::Sha1);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha224(sha2::Sha224);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha256(sha2::Sha256);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha384(sha2::Sha384);
+#[cfg(not(all(feature = "openssl", unix)))]
 pub struct Sha512(sha2::Sha512);
+
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Md5, 128);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha1, 160);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha224, 224);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha256, 256);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha384, 384);
+#[cfg(not(all(feature = "openssl", unix)))]
 impl_digest_common!(Sha512, 512);
+
+// When OpenSSL is built in FIPS mode (or otherwise refuses an algorithm —
+// e.g. MD5/SHA-1 in strict legacy-off builds), `Hasher::new` returns Err.
+// To avoid panicking at construction time, each type carries a PureRust
+// fallback variant built from the same crate the non-OpenSSL path uses.
+#[cfg(all(feature = "openssl", unix))]
+macro_rules! impl_digest_openssl {
+    ($algo_type:ident, $size:literal, $md:expr, $rust_type:ty) => {
+        pub enum $algo_type {
+            OpenSsl(openssl::hash::Hasher),
+            PureRust($rust_type),
+        }
+
+        impl $algo_type {
+            pub const BIT_SIZE: usize = $size;
+        }
+
+        impl Default for $algo_type {
+            fn default() -> Self {
+                match openssl::hash::Hasher::new($md) {
+                    Ok(h) => Self::OpenSsl(h),
+                    Err(_) => Self::PureRust(<$rust_type>::default()),
+                }
+            }
+        }
+
+        impl Digest for $algo_type {
+            fn hash_update(&mut self, input: &[u8]) {
+                match self {
+                    Self::OpenSsl(h) => {
+                        h.update(input).expect("OpenSSL hasher update failed");
+                    }
+                    Self::PureRust(h) => digest::Digest::update(h, input),
+                }
+            }
+
+            fn hash_finalize(&mut self, out: &mut [u8]) {
+                match self {
+                    // `finish` finalizes the hash and resets the underlying context.
+                    Self::OpenSsl(h) => {
+                        let result = h.finish().expect("OpenSSL hasher finish failed");
+                        out.copy_from_slice(&result);
+                    }
+                    Self::PureRust(h) => {
+                        let result = digest::Digest::finalize_reset(h);
+                        out.copy_from_slice(&result);
+                    }
+                }
+            }
+
+            fn reset(&mut self) {
+                *self = Self::default();
+            }
+
+            fn output_bits(&self) -> usize {
+                Self::BIT_SIZE
+            }
+        }
+    };
+}
+
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(Md5, 128, openssl::hash::MessageDigest::md5(), md5::Md5);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(Sha1, 160, openssl::hash::MessageDigest::sha1(), sha1::Sha1);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha224,
+    224,
+    openssl::hash::MessageDigest::sha224(),
+    sha2::Sha224
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha256,
+    256,
+    openssl::hash::MessageDigest::sha256(),
+    sha2::Sha256
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha384,
+    384,
+    openssl::hash::MessageDigest::sha384(),
+    sha2::Sha384
+);
+#[cfg(all(feature = "openssl", unix))]
+impl_digest_openssl!(
+    Sha512,
+    512,
+    openssl::hash::MessageDigest::sha512(),
+    sha2::Sha512
+);
 
 pub struct Sha3_224(sha3::Sha3_224);
 pub struct Sha3_256(sha3::Sha3_256);
@@ -472,11 +598,11 @@ impl_digest_common!(Sha3_384, 384);
 impl_digest_common!(Sha3_512, 512);
 
 pub struct Shake128 {
-    digest: sha3::Shake128,
+    digest: shake::Shake128,
     bit_size: usize,
 }
 pub struct Shake256 {
-    digest: sha3::Shake256,
+    digest: shake::Shake256,
     bit_size: usize,
 }
 impl_digest_shake!(Shake128, 256);
@@ -607,7 +733,7 @@ mod tests {
         use super::Md5;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
@@ -615,7 +741,7 @@ mod tests {
         let result_crlf = digest.result();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();

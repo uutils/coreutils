@@ -13,7 +13,9 @@ use std::io::{self, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::TryFromIntError;
 #[cfg(unix)]
 use std::os::fd::AsFd;
-use std::path::{Path, PathBuf};
+#[cfg(windows)]
+use std::path::Path;
+use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
@@ -148,11 +150,12 @@ impl HeadOptions {
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
-
-        options.files = match matches.get_many::<OsString>(options::FILES) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+        options.files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(options)
     }
@@ -162,18 +165,15 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => err),
+        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
     )
 }
 
 // zero-copy fast-path
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn print_n_bytes(input: impl Read + AsFd, n: u64) -> io::Result<u64> {
-    let mut out = io::stdout();
-    let res = uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error);
-    // flush prevents ignoring I/O error
-    out.flush().map_err(wrap_in_stdout_error)?;
-    res
+fn print_n_bytes(input: impl AsFd, n: u64) -> io::Result<u64> {
+    let out = io::stdout();
+    uucore::pipes::send_n_bytes(input, &out, n).map_err(wrap_in_stdout_error)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
@@ -330,7 +330,7 @@ where
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
-            if lines == n + 1 {
+            if lines > n {
                 input.rewind()?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
@@ -447,15 +447,57 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
             Ok(())
         } else {
-            if Path::new(file).is_dir() {
-                show!(USimpleError::new(
-                    1,
-                    translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                ));
-                continue;
-            }
+            // When 0 bytes or 0 lines are requested, there is nothing to
+            // read, so we should succeed on directories just like GNU head
+            // does. Skip opening the file entirely in that case.
+            let zero_output = matches!(options.mode, Mode::FirstBytes(0) | Mode::FirstLines(0));
+
+            // GNU head prints "==> name <==" for existing files and
+            // directories, but NOT for nonexistent ones — those produce
+            // only an error message.
+            let mut print_header = || -> UResult<()> {
+                if (options.files.len() > 1 && !options.quiet) || options.verbose {
+                    if !first {
+                        writeln!(stdout)?;
+                    }
+                    write!(stdout, "==> ")?;
+                    print_verbatim(file).unwrap();
+                    writeln!(stdout, " <==")?;
+                    first = false;
+                }
+                Ok(())
+            };
+
             let mut file_handle = match File::open(file) {
                 Ok(f) => f,
+                Err(err) => {
+                    #[cfg(windows)]
+                    // On Windows, `File::open` on a directory fails with "Permission denied".
+                    if err.kind() == io::ErrorKind::PermissionDenied {
+                        if let Ok(m) = Path::new(file).metadata() {
+                            if m.is_dir() {
+                                // We need to print the header, as we have an existing directory
+                                print_header()?;
+                                if !zero_output {
+                                    show!(USimpleError::new(
+                                        1,
+                                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                                    ));
+                                }
+                                continue;
+                            }
+                        }
+                    }
+
+                    show!(err.map_err_context(
+                        || translate!("head-error-cannot-open", "name" => file.quote())
+                    ));
+                    continue;
+                }
+            };
+
+            let metadata = match file_handle.metadata() {
+                Ok(m) => m,
                 Err(err) => {
                     show!(err.map_err_context(
                         || translate!("head-error-cannot-open", "name" => file.quote())
@@ -463,13 +505,16 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                     continue;
                 }
             };
-            if (options.files.len() > 1 && !options.quiet) || options.verbose {
-                if !first {
-                    writeln!(stdout)?;
+
+            print_header()?;
+            if metadata.is_dir() {
+                if !zero_output {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                    ));
                 }
-                write!(stdout, "==> ")?;
-                print_verbatim(file).unwrap();
-                writeln!(stdout, " <==")?;
+                continue;
             }
             head_file(&mut file_handle, options)?;
             Ok(())

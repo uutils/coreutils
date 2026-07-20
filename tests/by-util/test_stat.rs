@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+// spell-checker:ignore crème brûlée
+
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::unwrap_or_return;
@@ -448,6 +450,85 @@ fn test_quoting_style_locale() {
 }
 
 #[test]
+fn test_quoting_newline_in_filename() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // example from issue #9925
+    at.touch("test\nnewline");
+    ts.ucmd()
+        .args(&["-c", r#"{"name":"%N"}"#, "test\nnewline"])
+        .succeeds()
+        .stdout_only("{\"name\":\"'test'$'\\n''newline'\"}\n");
+
+    // with stat, contiguous escape characters are clumped into one escape sequence
+    at.touch("contiguous\n\nescape_characters");
+    ts.ucmd()
+        .args(&["-c", "%N", "contiguous\n\nescape_characters"])
+        .succeeds()
+        .stdout_only("'contiguous'$'\\n\\n''escape_characters'\n");
+
+    at.touch("multiple\nescape\ncharacters");
+    ts.ucmd()
+        .args(&["-c", "%N", "multiple\nescape\ncharacters"])
+        .succeeds()
+        .stdout_only("'multiple'$'\\n''escape'$'\\n''characters'\n");
+
+    // testing other escape characters
+    at.touch("\t \n \r \x01");
+    ts.ucmd()
+        .args(&["-c", "%N", "\t \n \r \x01"])
+        .succeeds()
+        .stdout_only("''$'\\t'' '$'\\n'' '$'\\r'' '$'\\001'\n");
+}
+
+#[test]
+fn test_quoting_style_invalid_env() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("baguette");
+    at.touch("Croissant");
+    at.touch("Escargot");
+
+    let needle = "ignoring invalid value of environment variable QUOTING_STYLE";
+
+    // A bogus value triggers exactly one warning across multiple files and the
+    // output falls back to the default (shell-escape) style.
+    let res = ts
+        .ucmd()
+        .env("QUOTING_STYLE", "fromage")
+        .args(&["-c", "nom=[%N]", "baguette", "Croissant", "Escargot"])
+        .succeeds();
+    res.stdout_is("nom=['baguette']\nnom=['Croissant']\nnom=['Escargot']\n");
+    assert_eq!(res.stderr_str().matches(needle).count(), 1);
+
+    // An empty value is also invalid and must be reported with empty quotes.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "")
+        .args(&["-c", "%N", "baguette"])
+        .succeeds()
+        .stdout_is("'baguette'\n")
+        .stderr_is("stat: ignoring invalid value of environment variable QUOTING_STYLE: ''\n");
+
+    // %%%N: a literal '%' followed by the quoted name, fallback style applies.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "soufflé")
+        .args(&["-c", "%%%N", "baguette"])
+        .succeeds()
+        .stdout_is("%'baguette'\n")
+        .stderr_is(
+            "stat: ignoring invalid value of environment variable QUOTING_STYLE: 'soufflé'\n",
+        );
+
+    // When the format never consults %N, QUOTING_STYLE must not be parsed at all.
+    ts.ucmd()
+        .env("QUOTING_STYLE", "crème-brûlée")
+        .args(&["-c", "taille=%s genre:%F brut=%n", "baguette"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 fn test_printf_octal_1() {
     let ts = TestScenario::new(util_name!());
     let expected_stdout = vec![0x0A, 0xFF]; // Newline + byte 255
@@ -502,7 +583,21 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+fn test_invalid_directive_after_multibyte_char() {
+    let ts = TestScenario::new(util_name!());
+    for (fmt, directive) in [("€%-", "%-"), ("ä%0", "%0"), ("€%.", "%.")] {
+        ts.ucmd()
+            .args(&["-c", fmt, "."])
+            .fails_with_code(1)
+            .stderr_only(format!("stat: '{directive}': invalid directive\n"));
+    }
+}
+
+#[test]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_stat_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -522,7 +617,7 @@ fn test_stat_selinux() {
     // Count that we have 4 fields
     let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
     let s: Vec<_> = result.stdout_str().split(':').collect();
-    assert!(s.len() == 4);
+    assert_eq!(s.len(), 4);
 }
 
 #[cfg(unix)]
@@ -631,4 +726,13 @@ fn test_correct_metadata() {
             .unwrap();
         assert_eq!(output, &expected);
     }
+}
+
+#[test]
+fn test_no_such_directory_message() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("a")
+        .fails_with_code(1)
+        .stderr_is("stat: cannot statx 'a': No such file or directory\n");
 }

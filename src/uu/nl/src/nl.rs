@@ -254,9 +254,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 );
                 set_exit_code(1);
             } else {
-                let reader = File::open(path).map_err_context(|| file.maybe_quote().to_string())?;
-                let mut buffer = BufReader::new(reader);
-                nl(&mut buffer, &mut stats, &settings)?;
+                match File::open(path) {
+                    Ok(reader) => {
+                        let mut buffer = BufReader::new(reader);
+                        nl(&mut buffer, &mut stats, &settings)?;
+                    }
+                    Err(e) => {
+                        show_error!("{}", e.map_err_context(|| file.maybe_quote().to_string()));
+                        set_exit_code(1);
+                    }
+                }
             }
         }
     }
@@ -437,12 +444,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             };
 
             if is_line_numbered {
-                let Some(line_number) = stats.line_number else {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("nl-error-line-number-overflow"),
-                    ));
-                };
+                let line_number = stats.line_number.ok_or_else(|| {
+                    USimpleError::new(1, translate!("nl-error-line-number-overflow"))
+                })?;
                 settings
                     .number_format
                     .format_to(&mut writer, line_number, settings.number_width)

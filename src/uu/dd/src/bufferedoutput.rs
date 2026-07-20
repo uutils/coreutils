@@ -30,16 +30,16 @@ impl<'a> BufferedOutput<'a> {
     /// Add partial block buffering to the given block writer.
     ///
     /// The internal buffer size is at most the value of `obs` as
-    /// defined in `inner`.
-    pub(crate) fn new(inner: Output<'a>) -> Self {
+    /// defined in `inner`. `obs` may be huge, so the allocation can fail
+    /// without aborting: an oversized `obs` returns an error (like GNU `dd`).
+    pub(crate) fn new(inner: Output<'a>) -> std::io::Result<Self> {
         let obs = inner.settings.obs;
-        Self {
-            inner,
-            buf: Vec::with_capacity(obs),
-        }
+        let mut buf = Vec::new();
+        buf.try_reserve(obs)?;
+        Ok(Self { inner, buf })
     }
 
-    pub(crate) fn discard_cache(&self, offset: libc::off_t, len: libc::off_t) {
+    pub(crate) fn discard_cache(&self, offset: u64, len: u64) {
         self.inner.discard_cache(offset, len);
     }
 
@@ -118,7 +118,7 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(&[]).unwrap();
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 0);
@@ -136,7 +136,7 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"ab").unwrap();
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 0);
@@ -154,7 +154,7 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"abcd").unwrap();
         assert_eq!(wstat.writes_complete, 1);
         assert_eq!(wstat.writes_partial, 0);

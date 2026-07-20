@@ -101,3 +101,4 @@ pr-error-column-merge-conflict = impossible de spécifier le nombre de colonnes 
 pr-error-across-merge-conflict = impossible de spécifier à la fois l'impression transversale et l'impression en parallèle
 pr-error-invalid-pages-range = argument --pages invalide '{$start}:{$end}'
 pr-error-invalid-expand-tab-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-e': '{$arg}'
+pr-error-invalid-number-argument = Caractères supplémentaires ou nombre invalide dans l'argument de '-n': '{$arg}'

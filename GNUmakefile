@@ -9,6 +9,7 @@ MULTICALL       ?= n
 COMPLETIONS     ?= y
 MANPAGES        ?= y
 LOCALES         ?= y
+# allow bootstrapping by our install. mkdir, chmod and cp should be avoided
 INSTALL         ?= install
 
 # Needed for the foreach loops to split each loop into a separate command
@@ -81,7 +82,7 @@ $(info Detected OS = $(OS))
 ifeq (,$(findstring windows,$(OS)))
 	FEATURE_EXTRACT_UTILS := feat_os_unix
 else
-	FEATURE_EXTRACT_UTILS := feat_Tier1
+	FEATURE_EXTRACT_UTILS := windows
 endif
 PROGS := $(shell cargo tree --depth 1 --features $(FEATURE_EXTRACT_UTILS) --format "{p}" --prefix none | sed -E -n 's/^uu_([^ ]+).*/\1/p')
 
@@ -159,7 +160,7 @@ test_toybox:
 
 toybox-src:
 	if [ ! -e "$(TOYBOX_SRC)" ] ; then \
-		mkdir -p "$(TOYBOX_ROOT)" ; \
+		$(INSTALL) -d "$(TOYBOX_ROOT)" ; \
 		curl -Ls "https://github.com/landley/toybox/archive/refs/tags/$(TOYBOX_VER).tar.gz" -o "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		tar -C "$(TOYBOX_ROOT)" -xf "$(TOYBOX_ROOT)/$(TOYBOX_VER).tar.gz" ; \
 		sed -i -e "s|TESTDIR=\".*\"|TESTDIR=\"$(BUILDDIR)\"|g" $(TOYBOX_SRC)/scripts/test.sh; \
@@ -168,7 +169,7 @@ toybox-src:
 
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
-		mkdir -p "$(BUSYBOX_ROOT)" ; \
+		$(INSTALL) -d "$(BUSYBOX_ROOT)" ; \
 		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 	fi ;
@@ -204,7 +205,7 @@ build-uudoc:
 	@unset CARGO_BUILD_TARGET && ${CARGO} build ${CARGOFLAGS} --bin uudoc --features "uudoc ${EXES}" ${PROFILE_CMD} --no-default-features
 
 install-manpages: build-uudoc
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/man/man1
+	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/man/man1
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR_UUDOC)/uudoc manpage $(prog) > $(DESTDIR)$(DATAROOTDIR)/man/man1/$(PROG_PREFIX)$(prog).1 $(newline) \
 	)
@@ -215,9 +216,9 @@ endif
 ifeq ($(COMPLETIONS),y)
 
 install-completions: build-uudoc
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
-	mkdir -p $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
+	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions
+	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions
+	$(INSTALL) -d $(DESTDIR)$(DATAROOTDIR)/fish/vendor_completions.d
 	$(foreach prog, $(INSTALLEES), \
 		$(BUILDDIR_UUDOC)/uudoc completion $(prog) zsh > $(DESTDIR)$(DATAROOTDIR)/zsh/site-functions/_$(PROG_PREFIX)$(prog) $(newline) \
 		$(BUILDDIR_UUDOC)/uudoc completion $(prog) bash > $(DESTDIR)$(DATAROOTDIR)/bash-completion/completions/$(PROG_PREFIX)$(prog).bash $(newline) \
@@ -231,7 +232,7 @@ ifeq ($(LOCALES),y)
 locales:
 	@# Copy uucore common locales
 	@if [ -d "$(BASEDIR)/src/uucore/locales" ]; then \
-		mkdir -p "$(BUILDDIR)/locales/uucore"; \
+		$(INSTALL) -d "$(BUILDDIR)/locales/uucore"; \
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
 			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
@@ -239,7 +240,7 @@ locales:
 	# Copy utility-specific locales
 	@for prog in $(INSTALLEES); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
-			mkdir -p "$(BUILDDIR)/locales/$$prog"; \
+			$(INSTALL) -d "$(BUILDDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
 					$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/$$prog/"; \
@@ -256,7 +257,7 @@ INSTALLEES_WITH_EXTRA_LOCALE = \
 install-locales:
 	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
-			mkdir -p "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
+			$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
 			for locale_file in "$(BASEDIR)"/src/uu/$$prog/locales/*.ftl; do \
 				if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
 					$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog/"; \
@@ -270,12 +271,15 @@ install-locales:
 endif
 
 install: build install-manpages install-completions install-locales
-	mkdir -p $(INSTALLDIR_BIN)
+	$(INSTALL) -d $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
-	mkdir -p $(DESTDIR)$(LIBSTDBUF_DIR)
 ifneq (,$(findstring cygwin,$(OS)))
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else ifneq (,$(findstring windows,$(OS)))
+	@echo "NOTE: Windows stdbuf depends on Cygwin's libstdbuf.dll"
 else
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 endif

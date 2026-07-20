@@ -96,32 +96,19 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 /// # Returns
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(target_os = "openbsd")]
+#[cfg(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "fuchsia",
+    target_os = "openbsd"
+))]
+#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    use libc::CLOCK_BOOTTIME;
-    use libc::clock_gettime;
+    use rustix::time::{ClockId, clock_gettime};
 
-    use libc::c_int;
-    use libc::timespec;
+    let tp = clock_gettime(ClockId::Boottime);
 
-    let mut tp: timespec = timespec {
-        tv_sec: 0,
-        tv_nsec: 0,
-    };
-
-    // OpenBSD prototype: clock_gettime(clk_id: ::clockid_t, tp: *mut ::timespec) -> ::c_int;
-    let ret: c_int = unsafe { clock_gettime(CLOCK_BOOTTIME, &raw mut tp) };
-
-    if ret == 0 {
-        #[cfg(target_pointer_width = "64")]
-        let uptime: i64 = tp.tv_sec;
-        #[cfg(not(target_pointer_width = "64"))]
-        let uptime: i64 = tp.tv_sec.into();
-
-        Ok(uptime)
-    } else {
-        Err(UptimeError::SystemUptime)?
-    }
+    Ok(tp.tv_sec as i64)
 }
 
 /// Get the system uptime
@@ -134,7 +121,12 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
 #[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(
+    target_os = "linux",
+    target_os = "android",
+    target_os = "fuchsia",
+    target_os = "openbsd"
+)))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     use crate::utmpx::BOOT_TIME;
     use crate::utmpx::Utmpx;
@@ -222,10 +214,11 @@ impl FormattedUptime {
     }
 
     fn get_human_readable_uptime(&self) -> String {
+        // Hours are not zero-padded (issue #13027); minutes always are.
         translate!(
         "uptime-format",
         "days" => self.days,
-        "time" => format!("{:02}:{:02}", self.hours, self.mins))
+        "time" => format!("{}:{:02}", self.hours, self.mins))
     }
 
     fn get_pretty_print_uptime(&self) -> String {
@@ -413,7 +406,7 @@ pub fn format_nusers(n: usize) -> String {
     )
 }
 
-/// Get the number of users currently logged in in a human-readable format
+/// Get the number of users currently logged in, in a human-readable format
 ///
 /// # Returns
 ///
@@ -493,6 +486,28 @@ mod tests {
         assert_eq!("0 users", format_nusers(0));
         assert_eq!("1 user", format_nusers(1));
         assert_eq!("2 users", format_nusers(2));
+    }
+
+    #[test]
+    fn test_human_readable_uptime_hours_not_zero_padded() {
+        unsafe {
+            std::env::set_var("LANG", "en_US.UTF-8");
+        }
+        let _ = locale::setup_localization("uptime");
+        // Hours below 10 are not zero-padded (issue #13027).
+        assert_eq!(
+            "1:27",
+            FormattedUptime::new(3600 + 27 * 60).get_human_readable_uptime()
+        );
+        assert_eq!(
+            "9:05",
+            FormattedUptime::new(9 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
+        // Two-digit hours are unchanged.
+        assert_eq!(
+            "10:05",
+            FormattedUptime::new(10 * 3600 + 5 * 60).get_human_readable_uptime()
+        );
     }
 
     /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.

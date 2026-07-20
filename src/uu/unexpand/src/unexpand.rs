@@ -115,11 +115,11 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
 
     // Handle the increment if specified
     // Only add an extra tab stop if increment is non-zero
-    if let Some(inc) = increment_size {
-        if inc > 0 {
-            let last = *nums.last().unwrap();
-            nums.push(last + inc);
-        }
+    if let Some(inc) = increment_size.filter(|&i| i > 0) {
+        let last = *nums.last().unwrap();
+        // Reject a last stop + increment that overflows usize instead of panicking/wrapping (matches GNU).
+        let next = last.checked_add(inc).ok_or(ParseError::TabSizeTooLarge)?;
+        nums.push(next);
     }
 
     if let (false, _) = nums
@@ -171,11 +171,12 @@ impl Options {
         let aflag = (matches.get_flag(options::ALL) || matches.contains_id(options::TABS))
             && !matches.get_flag(options::FIRST_ONLY);
         let utf8 = !matches.get_flag(options::NO_UTF8);
-
-        let files = match matches.get_many::<OsString>(options::FILE) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILE)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
@@ -246,6 +247,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::FilePath)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
@@ -304,6 +306,8 @@ fn open(path: &OsString) -> UResult<BufReader<Input>> {
         Ok(BufReader::new(Input::Stdin(stdin())))
     } else {
         let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
         Ok(BufReader::new(Input::File(f)))
     }
 }

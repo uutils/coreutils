@@ -20,10 +20,12 @@ test = false
 doctest = false
 
 [dependencies]
-libc = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
 fluent = { workspace = true }
+libc = { workspace = true }
+rustix = { workspace = true, features = ["thread"] }
+uucore = { workspace = true, features = ["fs"] }
+
 
 [[bin]]
 name = "nproc"

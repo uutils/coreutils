@@ -7,7 +7,7 @@ on:
   pull_request:
   push:
     branches:
-      - '*'
+      - main
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -21,9 +21,13 @@ jobs:
   benchmarks:
     name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }} (CodSpeed)
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       CARGO_INCREMENTAL: 0
     strategy:
+      # Stagger the jobs: 70 concurrent runners hitting the GitHub cache API
+      # (rust-cache + sccache + CodSpeed) at once triggers HTTP 429s.
+      max-parallel: 12
       matrix:
         type: [simulation, memory]
         package: [
@@ -35,7 +39,9 @@ jobs:
           uu_dd,
           uu_df,
           uu_du,
+          uu_echo,
           uu_expand,
+          uu_expr,
           uu_fold,
           uu_hostname,
           uu_join,
@@ -48,7 +54,9 @@ jobs:
           uu_shuf,
           uu_sort,
           uu_split,
+          uu_tee,
           uu_timeout,
+          uu_tr,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
@@ -60,7 +68,7 @@ jobs:
           uu_false
         ]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7.0.0
         with:
           persist-credentials: false
 

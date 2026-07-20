@@ -38,6 +38,13 @@ use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
 use uucore::translate;
 
+/// Upper bound on the field width we will allocate for. Anything wider is
+/// rejected as `FieldWidthTooLarge` instead of being handed to the allocator.
+/// A huge request (e.g. `%6666666666666D`) would otherwise abort the process
+/// under a sanitizer before `try_reserve` could fail gracefully, and OOM
+/// elsewhere.
+const MAX_FORMAT_WIDTH: usize = u16::MAX as usize;
+
 /// Error type for format modifier operations
 #[derive(Debug)]
 pub enum FormatError {
@@ -70,6 +77,13 @@ impl From<jiff::Error> for FormatError {
     }
 }
 
+fn field_width_too_large(width: usize, specifier: &str) -> FormatError {
+    FormatError::FieldWidthTooLarge {
+        width,
+        specifier: specifier.to_string(),
+    }
+}
+
 /// A parsed `%`-format specifier: `%[flags][width][:colons]<letter>`.
 struct ParsedSpec<'a> {
     /// Flag characters from `[_0^#+-]`.
@@ -86,7 +100,7 @@ struct ParsedSpec<'a> {
 
 /// Try to parse a format spec at the start of `s`.
 ///
-/// Implements the grammar `%[_0^#+-]*[0-9]*:*[a-zA-Z]` anchored at the
+/// Implements the grammar `%[_0^#+-]*[0-9]*:{0,3}[a-zA-Z]` anchored at the
 /// beginning of `s`. Returns `None` if `s` does not start with `%` or no
 /// valid specifier follows.
 fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
@@ -115,9 +129,9 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
         None
     };
 
-    // Specifier: zero or more `:` followed by a single ASCII letter.
+    // Specifier: up to three `:` followed by a single ASCII letter.
     let spec_start = pos;
-    while pos < bytes.len() && bytes[pos] == b':' {
+    while pos < bytes.len() && bytes[pos] == b':' && pos - spec_start < 3 {
         pos += 1;
     }
     if pos >= bytes.len() || !bytes[pos].is_ascii_alphabetic() {
@@ -422,6 +436,9 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
         None if underscore_flag || pad_char != default_pad => get_default_width(specifier),
         None => 0,
     };
+    if effective_width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(effective_width, specifier));
+    }
 
     // When the requested width is narrower than the default formatted width, GNU first removes default padding and then reapplies the requested width.
     if effective_width > 0 && effective_width < result.len() {
@@ -491,19 +508,16 @@ fn try_alloc_padded(
     width: usize,
     specifier: &str,
 ) -> Result<String, FormatError> {
-    let target_len =
-        current_len
-            .checked_add(padding)
-            .ok_or_else(|| FormatError::FieldWidthTooLarge {
-                width,
-                specifier: specifier.to_string(),
-            })?;
+    if width > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(width, specifier));
+    }
+
+    let target_len = current_len
+        .checked_add(padding)
+        .ok_or_else(|| field_width_too_large(width, specifier))?;
     let mut s = String::new();
     s.try_reserve(target_len)
-        .map_err(|_| FormatError::FieldWidthTooLarge {
-            width,
-            specifier: specifier.to_string(),
-        })?;
+        .map_err(|_| field_width_too_large(width, specifier))?;
     Ok(s)
 }
 
@@ -870,6 +884,29 @@ mod tests {
     }
 
     #[test]
+    fn test_try_alloc_padded_rejects_width_above_supported_max() {
+        // A target length exactly at the cap is allowed; one byte over is rejected.
+        assert!(try_alloc_padded(0, MAX_FORMAT_WIDTH, MAX_FORMAT_WIDTH, "Y").is_ok());
+        let err = try_alloc_padded(1, 1, MAX_FORMAT_WIDTH + 1, "s").unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width, specifier }
+            if width == MAX_FORMAT_WIDTH + 1 && specifier == "s"
+        ));
+    }
+
+    #[test]
+    fn test_apply_modifiers_rejects_width_above_review_cap() {
+        let width = u16::MAX as usize + 1;
+        let err = apply_modifiers("00", &spec("", Some(width), "S")).unwrap_err();
+        assert!(matches!(
+            err,
+            FormatError::FieldWidthTooLarge { width: rejected, specifier }
+            if rejected == width && specifier == "S"
+        ));
+    }
+
+    #[test]
     fn test_underscore_flag_without_width() {
         // %_m should pad month to default width 2 with spaces
         assert_eq!(apply_modifiers("6", &spec("_", None, "m")).unwrap(), " 6");
@@ -969,6 +1006,7 @@ mod tests {
             ("%:z", Some(("", None, ":z", 3))),
             ("%::z", Some(("", None, "::z", 4))),
             ("%:::z", Some(("", None, ":::z", 5))),
+            ("%::::z", None),
             ("%-3:z", Some(("-", Some(3), ":z", 5))),
             // ---- only the spec is consumed; trailing text is ignored ----
             ("%Y-%m-%d", Some(("", None, "Y", 2))),

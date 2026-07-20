@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit RLIMIT_NOFILE rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -38,8 +38,6 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
-#[cfg(not(target_os = "wasi"))]
-use std::num::NonZero;
 use std::ops::Range;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -286,7 +284,6 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -460,7 +457,6 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: String::new(),
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -668,10 +664,11 @@ impl<'a> Line<'a> {
             );
         }
         if settings.mode == SortMode::Numeric {
-            // exclude inf, nan, scientific notation
+            // exclude inf, nan, scientific notation; GNU -n does not treat '+' as a sign
             let line_num_float = (!line.iter().any(u8::is_ascii_alphabetic))
                 .then(|| std::str::from_utf8(line).ok())
                 .flatten()
+                .filter(|s| !s.trim_ascii_start().starts_with('+'))
                 .and_then(|s| s.parse::<f64>().ok());
             line_data.line_num_floats.push(line_num_float);
         }
@@ -1371,13 +1368,12 @@ fn make_sort_mode_arg(mode: &'static str, short: char, help: String) -> Arg {
     ))
 ))]
 fn get_rlimit() -> UResult<usize> {
-    use nix::sys::resource::{RLIM_INFINITY, Resource, getrlimit};
+    use rustix::process::{Resource, getrlimit};
 
-    let (rlim_cur, _rlim_max) = getrlimit(Resource::RLIMIT_NOFILE)
-        .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
-    if rlim_cur == RLIM_INFINITY {
-        return Err(UUsageError::new(2, translate!("sort-failed-fetch-rlimit")));
-    }
+    let rlim_cur = getrlimit(Resource::Nofile)
+        .current
+        .ok_or_else(|| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))?;
+
     usize::try_from(rlim_cur)
         .map_err(|_| UUsageError::new(2, translate!("sort-failed-fetch-rlimit")))
 }
@@ -1410,8 +1406,6 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
 
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
-    use nix::libc;
-
     fn count_dir(path: &str) -> Option<usize> {
         let entries = std::fs::read_dir(path).ok()?;
         let mut count = 0usize;
@@ -1631,7 +1625,7 @@ where
             break;
         }
 
-        if starts_with_plus(&arg) {
+        if arg.as_encoded_bytes().first() == Some(&b'+') {
             let as_str = arg.to_string_lossy();
             if let Some(from_spec) = as_str.strip_prefix('+') {
                 if let Some(from) = parse_legacy_part(from_spec) {
@@ -1673,17 +1667,6 @@ where
     }
 
     (processed, legacy_warnings)
-}
-
-fn starts_with_plus(arg: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        arg.as_bytes().first() == Some(&b'+')
-    }
-    #[cfg(not(unix))]
-    {
-        arg.to_string_lossy().starts_with('+')
-    }
 }
 
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
@@ -1770,7 +1753,6 @@ fn locale_failed_to_set() -> bool {
 
 #[cfg(unix)]
 fn locale_failed_to_set() -> bool {
-    use nix::libc;
     unsafe { libc::setlocale(libc::LC_COLLATE, c"".as_ptr()).is_null() }
 }
 
@@ -2045,27 +2027,36 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
+
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
                 }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
+                .into());
+            }
+
+            let f: OsString = {
+                #[cfg(unix)]
+                {
+                    OsStr::from_bytes(&line).to_os_string()
+                }
+                #[cfg(not(unix))]
+                {
+                    OsString::from(String::from_utf8_lossy(&line).into_owned())
+                }
+            };
+
+            match f.to_str() {
+                Some(s) if s == STDIN_FILE => {
+                    return Err(SortError::MinusInStdIn.into());
                 }
                 _ => {}
             }
 
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            files.push(f);
         }
+
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
@@ -2121,21 +2112,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    if matches.contains_id(options::PARALLEL) {
-        // "0" is default - threads = num of cores
-        settings.threads = matches
-            .get_one::<String>(options::PARALLEL)
-            .map_or_else(|| "0".to_string(), String::from);
-        #[cfg(not(target_os = "wasi"))]
-        {
-            let num_threads = match settings.threads.parse::<usize>() {
-                Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
-                Ok(n) => n,
-            };
-            let _ = rayon::ThreadPoolBuilder::new()
-                .num_threads(num_threads)
-                .build_global();
-        }
+
+    // WASI doesn't support threads, so we ignore the corresponding option
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let threads = matches
+            .get_one::<u64>(options::PARALLEL)
+            .copied()
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build_global();
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -2198,13 +2185,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         translate!(
                             "sort-maximum-batch-size-rlimit",
                             "rlimit" => {
-                                let Some(rlimit) = fd_soft_limit() else {
-                                    return Err(UUsageError::new(
-                                        2,
-                                        translate!("sort-failed-fetch-rlimit"),
-                                    ));
-                                };
-                                rlimit
+                                fd_soft_limit().ok_or_else(|| {
+                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
+                                })?
                             }
                         )
                     }
@@ -2543,6 +2526,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
+            .value_parser(clap::value_parser!(u64).range(1..))
             .value_name("NUM_THREADS"),
     )
     .arg(

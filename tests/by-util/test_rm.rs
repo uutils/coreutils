@@ -196,6 +196,63 @@ fn test_recursive() {
 }
 
 #[test]
+fn test_one_file_system_same_device() {
+    // Cross-device skipping needs a mount point (root privileges), so here we
+    // only guard the single-device case: the whole tree must still be removed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_one_file_system_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--one-file-system")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(&file));
+    assert!(!at.dir_exists(&subdir));
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_all_same_device() {
+    // Refusing to cross a device boundary needs a mount point (root
+    // privileges); without one, --preserve-root=all must remove the tree as
+    // usual since it stays on a single device.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_preserve_root_all_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--preserve-root=all")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_rejects_unknown_value() {
+    new_ucmd!()
+        .arg("--preserve-root=bogus")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_contains("invalid value 'bogus'");
+}
+
+#[test]
 fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
@@ -1580,4 +1637,41 @@ fn test_symlink_to_dot_protection() {
     assert!(at.dir_exists("subdir"));
     assert!(at.file_exists("subdir/file"));
     assert!(at.file_exists("topfile"));
+}
+
+#[test]
+fn test_dash_hint_shown_for_existing_dash_file() {
+    // A dash-prefixed name that exists is parsed as an option; rm should point
+    // the user at the `./` workaround instead of silently failing.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("-z");
+    let result = ucmd.arg("-z").fails_with_code(1);
+    result.stderr_contains("./-z' to remove the file '-z'.");
+    result.stderr_contains("--help' for more information.");
+    assert!(at.file_exists("-z"));
+}
+
+#[test]
+fn test_dash_hint_absent_without_matching_file() {
+    // When no such file is on disk there is nothing to suggest, so the hint
+    // line must be omitted entirely.
+    new_ucmd!()
+        .arg("-q")
+        .fails_with_code(1)
+        .stderr_does_not_contain("to remove the file");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_dash_hint_is_shell_escaped() {
+    // Awkward characters in the name (here a tab and a quote) must be escaped so
+    // the printed command can be pasted into a shell verbatim.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let name = "-a\tb'c";
+    at.touch(name);
+    ucmd.arg(name)
+        .fails_with_code(1)
+        .stderr_contains("./'-a'$'\\t''b'\\''c'' to remove the file '-a'$'\\t''b'\\''c'.");
 }

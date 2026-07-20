@@ -7,13 +7,13 @@
 
 mod platform;
 
-use crate::platform::is_unsafe_overwrite;
+use crate::platform::is_safe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 use std::ffi::OsString;
 use std::fs::{File, metadata};
 use std::io::{self, BufWriter, ErrorKind, IsTerminal, Read, Write};
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
@@ -22,10 +22,6 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
-
-/// Linux splice support
-#[cfg(any(target_os = "linux", target_os = "android"))]
-mod splice;
 
 // Allocate 32 digits for the line number.
 // An estimate is that we can print about 1e8 lines/seconds, so 32 digits
@@ -103,7 +99,7 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg(any(unix, target_os = "wasi"))]
 impl From<rustix::io::Errno> for CatError {
     fn from(value: rustix::io::Errno) -> Self {
         Self::Io(value.into())
@@ -170,14 +166,14 @@ struct OutputState {
     one_blank_kept: bool,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 trait FdReadable: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 trait FdReadable: Read {}
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl<T> FdReadable for T where T: Read + AsFd {}
-#[cfg(not(unix))]
+#[cfg(not(any(unix, target_os = "wasi")))]
 impl<T> FdReadable for T where T: Read {}
 
 /// Represents an open file handle, stream, or other device
@@ -373,12 +369,13 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+            let is_interactive = stdin.is_terminal();
+            if !is_safe_overwrite(&stdin, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: io::stdin().is_terminal(),
+                is_interactive,
             };
             cat_handle(&mut handle, options, state)
         }
@@ -387,7 +384,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
             let file = File::open(path)?;
-            if is_unsafe_overwrite(&file, &io::stdout()) {
+            if !is_safe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
@@ -483,46 +480,43 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let mut stdout = stdout;
+    // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    {
-        // If we're on Linux or Android, try to use the splice() system call
-        // for faster writing. If it works, we're done.
-        if !splice::write_fast_using_splice(handle, &mut stdout)? {
-            return Ok(());
-        }
+    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok() {
+        return Ok(());
     }
+
     // If we're not on Linux or Android, or the splice() call failed,
     // fall back on slower writing.
-    print_slow(handle, stdout)
+    print_unbuffered(handle, stdout)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
-#[cfg_attr(not(any(target_os = "linux", target_os = "android")), inline)]
-fn print_slow<R: FdReadable>(handle: &mut InputHandle<R>, stdout: io::Stdout) -> CatResult<()> {
-    let mut stdout_lock = stdout.lock();
+fn print_unbuffered<R: FdReadable>(
+    handle: &mut InputHandle<R>,
+    stdout: io::Stdout,
+) -> CatResult<()> {
+    #[cfg(any(unix, target_os = "wasi"))]
+    let mut stdout = uucore::io::RawWriter(stdout); // use raw syscall to remove buffering
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    let mut stdout = stdout.lock();
     let mut buf = [0; 1024 * 64];
     loop {
         match handle.reader.read(&mut buf) {
+            Ok(0) => return Ok(()),
             Ok(n) => {
-                if n == 0 {
-                    break;
-                }
-                stdout_lock
+                stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)?;
+                // cannot use rustix::io on Windows
+                // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
+                #[cfg(not(any(unix, target_os = "wasi")))]
+                stdout.flush().inspect_err(handle_broken_pipe)?;
             }
-            Err(e) if e.kind() == ErrorKind::Interrupted => {}
-            Err(e) => return Err(e.into()),
+            Err(e) if e.kind() != ErrorKind::Interrupted => return Err(e.into()),
+            _ => {}
         }
     }
-
-    // If the splice() call failed and there has been some data written to
-    // stdout via while loop above AND there will be second splice() call
-    // that will succeed, data pushed through splice will be output before
-    // the data buffered in stdout.lock. Therefore additional explicit flush
-    // is required here.
-    stdout_lock.flush().inspect_err(handle_broken_pipe)?;
-    Ok(())
 }
 
 /// Outputs file contents to stdout in a line-by-line fashion,

@@ -689,7 +689,7 @@ fn test_hex_offset() {
                    00000000 00000000 00000000 00000000
             000010 00000000 00000000 00000000 00000000
                    00000000 00000000 00000000 00000000
-            00001F
+            00001f
             ",
     );
 
@@ -1342,4 +1342,55 @@ fn test_write_error_dev_full() {
         .fails()
         .code_is(1)
         .stderr_contains("No space left on device");
+}
+
+#[test]
+fn test_hex_lowercase() {
+    let input = [0u8; 10];
+    // Test verifies that the output hex byte offset is in lowercase
+    new_ucmd!()
+        .arg("-Ax")
+        .run_piped_stdin(input)
+        .success()
+        .no_stderr()
+        .stdout_only(unindent(
+            r"
+                000000 000000 000000 000000 000000 000000
+                00000a
+            ",
+        ));
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_is_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.mkdir("a");
+
+    scene
+        .ucmd()
+        .args(&["a"])
+        .fails_with_code(1)
+        .stderr_is("od: a: Is a directory\n");
+}
+
+// Regression: offset must be 4, not 3, and -N must be respected
+#[test]
+fn test_od_strings_with_n_flag() {
+    let input = b"foo\0bar\0";
+
+    new_ucmd!()
+        .args(&["--strings", "-N7"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+
+    new_ucmd!()
+        .args(&["--strings", "-N8"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
 }

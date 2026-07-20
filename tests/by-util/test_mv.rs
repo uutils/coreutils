@@ -10,7 +10,10 @@ use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
 use std::path::Path;
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 use uucore::selinux::get_getfattr_output;
 use uutests::new_ucmd;
 #[cfg(unix)]
@@ -69,7 +72,7 @@ fn test_mv_with_source_file_opened_and_target_file_exists() {
 
     at.touch(dst);
 
-    ucmd.arg(src).arg(dst).succeeds().no_stderr().no_stdout();
+    ucmd.arg(src).arg(dst).succeeds().no_output();
 
     drop(f);
 }
@@ -361,8 +364,7 @@ fn test_mv_arg_update_interactive() {
         .arg("-i")
         .arg("--update")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
 }
 
 #[test]
@@ -637,13 +639,7 @@ fn test_mv_broken_symlink_to_another_fs() {
         TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
     let dest = other_fs_tempdir.path().join("foo");
 
-    scene
-        .ucmd()
-        .arg("foo")
-        .arg(dest)
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    scene.ucmd().arg("foo").arg(dest).succeeds().no_output();
 }
 
 #[test]
@@ -1161,8 +1157,7 @@ fn test_mv_arg_update_none() {
         .arg(file2)
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(file2), file2_content);
 }
@@ -1183,8 +1178,7 @@ fn test_mv_arg_update_all() {
         .arg(file2)
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(file2), file1_content);
 }
@@ -1208,8 +1202,7 @@ fn test_mv_arg_update_older_dest_not_older() {
         .arg(new)
         .arg("--update=older")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), new_content);
 }
@@ -1236,8 +1229,7 @@ fn test_mv_arg_update_none_then_all() {
         .arg("--update=none")
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "old content\n");
 }
@@ -1264,8 +1256,7 @@ fn test_mv_arg_update_all_then_none() {
         .arg("--update=all")
         .arg("--update=none")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(new), "new content\n");
 }
@@ -1289,8 +1280,7 @@ fn test_mv_arg_update_older_dest_older() {
         .arg(old)
         .arg("--update=all")
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     assert_eq!(at.read(old), new_content);
 }
@@ -1335,12 +1325,7 @@ fn test_mv_arg_update_short_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(new)
-        .arg(old)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(new).arg(old).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(old), new_content);
 }
@@ -1361,12 +1346,7 @@ fn test_mv_arg_update_short_no_overwrite() {
 
     at.write(new, new_content);
 
-    ucmd.arg(old)
-        .arg(new)
-        .arg("-u")
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.arg(old).arg(new).arg("-u").succeeds().no_output();
 
     assert_eq!(at.read(new), new_content);
 }
@@ -2639,8 +2619,52 @@ fn test_mv_cross_device_permission_denied() {
         .expect("Unable to restore directory permissions");
 }
 
+/// Regression for #10015. The cross-device fallback unlinks the destination
+/// and then creates a new file at the same path. An attacker who can write
+/// to the destination directory could race to plant a symlink in that
+/// window; without `O_NOFOLLOW` on the create, the copy would write through
+/// the symlink. The deterministic stand-in here pre-plants the symlink:
+/// `safe_copy::create_dest_restrictive` must refuse it with `ELOOP` rather
+/// than truncate `victim`.
 #[test]
-#[cfg(feature = "selinux")]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_refuses_planted_symlink_dest() {
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("payload", "PAYLOAD_FROM_SRC");
+
+    let dst_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let victim = dst_dir.path().join("victim");
+    std::fs::write(&victim, "PROTECTED_DATA").expect("write victim");
+    let target = dst_dir.path().join("target");
+    symlink(&victim, &target).expect("plant symlink");
+
+    // mv replaces the symlink at `target` with a fresh regular file. The
+    // important invariant is that `victim` is never opened for write.
+    scene
+        .ucmd()
+        .arg("-f")
+        .arg("payload")
+        .arg(target.to_str().unwrap())
+        .succeeds();
+
+    assert_eq!(
+        std::fs::read_to_string(&victim).expect("victim still readable"),
+        "PROTECTED_DATA",
+        "cross-device mv must not write through a planted symlink at dest"
+    );
+}
+
+#[test]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_mv_selinux_context() {
     let test_cases = [
         ("-Z", None),
@@ -2865,6 +2889,87 @@ fn test_mv_xattr_enotsup_silent() {
     }
 }
 
+/// Cross-device mv of a symlink onto an existing file must replace the
+/// destination atomically, matching GNU.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_exists");
+    fs::write(&dst_path, "placeholder").expect("Failed to write placeholder dst");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    assert!(
+        dst_path.is_symlink(),
+        "dst_exists should now be a symlink after the cross-device move"
+    );
+    assert_eq!(
+        fs::read_link(&dst_path).expect("read_link failed"),
+        Path::new("/etc/passwd"),
+    );
+    assert!(
+        !at.symlink_exists("src_link"),
+        "source symlink should be gone"
+    );
+}
+
+/// Cross-device mv of a symlink onto an existing directory (`-T`) must
+/// fail without destroying the directory or its contents.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_symlink_onto_existing_dir() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    symlink("/etc/passwd", at.plus("src_link")).expect("Failed to create source symlink");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_dir = other_fs_tempdir.path().join("dst_dir");
+    fs::create_dir(&dst_dir).expect("Failed to create destination directory");
+    fs::write(dst_dir.join("guard"), "preserved").expect("Failed to write guard file");
+
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(at.plus_as_string("src_link"))
+        .arg(dst_dir.to_str().unwrap())
+        .fails();
+
+    assert!(
+        dst_dir.is_dir(),
+        "destination directory must still exist after failed mv"
+    );
+    assert!(
+        dst_dir.join("guard").is_file(),
+        "destination directory contents must be untouched"
+    );
+    assert!(
+        at.symlink_exists("src_link"),
+        "source symlink must not be removed when mv fails"
+    );
+}
+
 /// Test that symlinks inside directories are preserved during cross-device moves
 /// (not expanded into full copies of their targets)
 #[test]
@@ -3011,7 +3116,7 @@ fn test_mv_cross_device_file_symlink_preserved() {
 /// Non-root users can chgrp to any group they belong to.
 #[cfg(target_os = "linux")]
 fn find_other_group(current: u32) -> Option<u32> {
-    nix::unistd::getgroups().ok()?.iter().find_map(|group| {
+    rustix::process::getgroups().ok()?.iter().find_map(|group| {
         let gid = group.as_raw();
         (gid != current).then_some(gid)
     })

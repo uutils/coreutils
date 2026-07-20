@@ -53,6 +53,22 @@ macro_rules! test_digest {
             }
 
             #[test]
+            fn test_stdin_with_dash_directory() {
+                let ts = TestScenario::new(util_name!());
+                ts.fixtures.mkdir("-");
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
             fn test_check() {
                 let ts = TestScenario::new(util_name!());
                 println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
@@ -125,8 +141,7 @@ fn test_check_md5_ignore_missing() {
         .arg("--ignore-missing")
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 
     scene
         .ccmd("md5sum")
@@ -164,8 +179,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n");
     }
     #[cfg(windows)]
     {
@@ -184,8 +198,7 @@ fn test_check_md5sum() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\ndd: OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\ndd: OK\n");
     }
 }
 
@@ -210,7 +223,27 @@ fn test_check_md5sum_only_one_space() {
         .arg("-c")
         .arg("check.md5sum")
         .succeeds()
-        .stdout_only("a: OK\n b: OK\nc: OK\n");
+        .stdout_only("a: OK\n' b': OK\nc: OK\n");
+}
+
+// A generated checksum file must verify against the same file on all
+// platforms: generation and --check both hash raw bytes, so on Windows a file
+// containing CRLFs must not be hashed with CRLF -> LF conversion in check mode.
+#[test]
+fn test_check_generate_round_trip_crlf_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("f", b"abc\r\nd\r");
+    let result = scene.ccmd("md5sum").arg("f").succeeds();
+    at.write_bytes("CHECKSUM", result.stdout());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_only("f: OK\n");
 }
 
 #[test]
@@ -237,8 +270,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\n*c: OK\ndd: OK\n : OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\n'*c': OK\ndd: OK\n' ': OK\n");
     }
     #[cfg(windows)]
     {
@@ -257,8 +289,7 @@ fn test_check_md5sum_reverse_bsd() {
             .arg("-c")
             .arg("check.md5sum")
             .succeeds()
-            .stdout_is("a: OK\n b: OK\ndd: OK\n")
-            .stderr_is("");
+            .stdout_only("a: OK\n' b': OK\ndd: OK\n");
     }
 }
 
@@ -384,7 +415,7 @@ fn test_check_with_escape_filename() {
         .arg("-c")
         .arg("check.md5")
         .succeeds();
-    result.stdout_is("\\a\\nb: OK\n");
+    result.stdout_is("'a'$'\\n''b': OK\n");
 }
 
 #[test]
@@ -463,8 +494,7 @@ fn test_check_status_code() {
         .arg("--status")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stderr_is("")
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -510,7 +540,7 @@ fn test_check_one_two_space_star() {
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .fails()
-        .stdout_is("*empty: FAILED open or read\n");
+        .stdout_is("'*empty': FAILED open or read\n");
 
     at.touch("*empty");
     // Should pass as we have the file
@@ -519,7 +549,7 @@ fn test_check_one_two_space_star() {
         .arg("--check")
         .arg(at.subdir.join("in.md5"))
         .succeeds()
-        .stdout_is("*empty: OK\n");
+        .stdout_is("'*empty': OK\n");
 }
 
 #[test]
