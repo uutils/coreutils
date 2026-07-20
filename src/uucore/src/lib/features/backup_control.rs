@@ -60,7 +60,7 @@
 //!             "command", "--backup=t", "--suffix=bak~"
 //!         ]);
 //!
-//!     let backup_mode = match backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches) {
+//!     let backup_mode = match backup_control::determine_backup_mode(&matches) {
 //!         Err(e) => {
 //!             show!(e);
 //!             return;
@@ -309,7 +309,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///             "command", "-b", "--backup=t"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches).unwrap();
+///     let backup_mode = backup_control::determine_backup_mode(&matches).unwrap();
 ///     assert_eq!(backup_mode, BackupMode::Numbered)
 /// }
 /// ```
@@ -332,7 +332,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///             "command", "-b", "--backup=n"
 ///         ]);
 ///
-///     let backup_mode = backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches);
+///     let backup_mode = backup_control::determine_backup_mode(&matches);
 ///
 ///     assert!(backup_mode.is_err());
 ///     let err = backup_mode.unwrap_err();
@@ -341,7 +341,7 @@ pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
 ///     show!(err);
 /// }
 /// ```
-pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> UResult<BackupMode> {
+pub fn determine_backup_mode(matches: &ArgMatches) -> UResult<BackupMode> {
     if matches.contains_id(arguments::OPT_BACKUP) {
         // Use method to determine the type of backups to make. When this option
         // is used but method is not specified, then the value of the
@@ -350,7 +350,7 @@ pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> U
         if let Some(method) = matches.get_one::<String>(arguments::OPT_BACKUP) {
             // Second argument is for the error string that is returned.
             match_method(method, "backup type")
-        } else if let Some(method) = env_ctl {
+        } else if let Ok(method) = env::var("VERSION_CONTROL") {
             // Second argument is for the error string that is returned.
             match_method(&method, "$VERSION_CONTROL")
         } else {
@@ -361,7 +361,7 @@ pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> U
         // the short form of this option, -b does not accept any argument.
         // if VERSION_CONTROL is not set then using -b is equivalent to
         // using --backup=existing.
-        if let Some(method) = env_ctl {
+        if let Ok(method) = env::var("VERSION_CONTROL") {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             Ok(BackupMode::Existing)
@@ -369,7 +369,7 @@ pub fn determine_backup_mode(env_ctl: Option<String>, matches: &ArgMatches) -> U
     } else if matches.contains_id(arguments::OPT_SUFFIX) {
         // Suffix option is enough to determine mode even if --backup is not set.
         // If VERSION_CONTROL is not set, the default backup type is 'existing'.
-        if let Some(method) = env_ctl {
+        if let Ok(method) = env::var("VERSION_CONTROL") {
             match_method(&method, "$VERSION_CONTROL")
         } else {
             Ok(BackupMode::Existing)
@@ -508,7 +508,7 @@ mod tests {
     #[test]
     fn test_backup_mode_short_only() {
         let matches = make_app().get_matches_from(vec!["command", "-b"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
     }
 
@@ -516,7 +516,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_preferred_over_short() {
         let matches = make_app().get_matches_from(vec!["command", "-b", "--backup=none"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::None);
     }
 
@@ -524,7 +524,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_without_args_no_env() {
         let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
     }
 
@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args() {
         let matches = make_app().get_matches_from(vec!["command", "--backup=simple"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::Simple);
     }
 
@@ -540,7 +540,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args_invalid() {
         let matches = make_app().get_matches_from(vec!["command", "--backup=foobar"]);
-        let result = determine_backup_mode(None, &matches);
+        let result = determine_backup_mode(&matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("invalid argument 'foobar' for 'backup type'"));
@@ -550,7 +550,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_args_ambiguous() {
         let matches = make_app().get_matches_from(vec!["command", "--backup=n"]);
-        let result = determine_backup_mode(None, &matches);
+        let result = determine_backup_mode(&matches);
         assert!(result.is_err());
         let text = format!("{}", result.unwrap_err());
         assert!(text.contains("ambiguous argument 'n' for 'backup type'"));
@@ -560,51 +560,7 @@ mod tests {
     #[test]
     fn test_backup_mode_long_with_arg_shortened() {
         let matches = make_app().get_matches_from(vec!["command", "--backup=si"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
-        assert_eq!(result, BackupMode::Simple);
-    }
-
-    // -b doesn't ignores the "VERSION_CONTROL" environment variable
-    #[test]
-    fn test_backup_mode_short_does_not_ignore_env() {
-        let matches = make_app().get_matches_from(vec!["command", "-b"]);
-        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
-        assert_eq!(result, BackupMode::Numbered);
-    }
-
-    // --backup can be passed without an argument, but reads env var if existent
-    #[test]
-    fn test_backup_mode_long_without_args_with_env() {
-        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-        let result = determine_backup_mode(Some("none".into()), &matches).unwrap();
-        assert_eq!(result, BackupMode::None);
-    }
-
-    // --backup errors on invalid VERSION_CONTROL env var
-    #[test]
-    fn test_backup_mode_long_with_env_var_invalid() {
-        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-        let result = determine_backup_mode(Some("foobar".into()), &matches);
-        assert!(result.is_err());
-        let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("invalid argument 'foobar' for '$VERSION_CONTROL'"));
-    }
-
-    // --backup errors on ambiguous VERSION_CONTROL env var
-    #[test]
-    fn test_backup_mode_long_with_env_var_ambiguous() {
-        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-        let result = determine_backup_mode(Some("n".into()), &matches);
-        assert!(result.is_err());
-        let text = format!("{}", result.unwrap_err());
-        assert!(text.contains("ambiguous argument 'n' for '$VERSION_CONTROL'"));
-    }
-
-    // --backup accepts shortened env vars (si for simple)
-    #[test]
-    fn test_backup_mode_long_with_env_var_shortened() {
-        let matches = make_app().get_matches_from(vec!["command", "--backup"]);
-        let result = determine_backup_mode(Some("si".into()), &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::Simple);
     }
 
@@ -612,16 +568,8 @@ mod tests {
     #[test]
     fn test_backup_mode_suffix_without_backup_option() {
         let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
-        let result = determine_backup_mode(None, &matches).unwrap();
+        let result = determine_backup_mode(&matches).unwrap();
         assert_eq!(result, BackupMode::Existing);
-    }
-
-    // Using --suffix without --backup uses env var if existing
-    #[test]
-    fn test_backup_mode_suffix_without_backup_option_with_env_var() {
-        let matches = make_app().get_matches_from(vec!["command", "--suffix", ".bak"]);
-        let result = determine_backup_mode(Some("numbered".into()), &matches).unwrap();
-        assert_eq!(result, BackupMode::Numbered);
     }
 
     #[test]

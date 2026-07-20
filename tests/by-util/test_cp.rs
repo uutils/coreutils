@@ -1379,6 +1379,90 @@ fn test_cp_backup_off() {
     assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
 }
 
+// The VERSION_CONTROL variable selects the backup type when the command line
+// does not. These run the real binary so the variable is set on the child
+// process, which is the only safe way to test it.
+#[test]
+fn test_cp_backup_short_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
+fn test_cp_backup_long_without_arg_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "none")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.file_exists(format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+}
+
+// Abbreviations are accepted, here "si" for "simple"
+#[test]
+fn test_cp_backup_env_abbreviated() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "si")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        "How are you?\n"
+    );
+}
+
+// --suffix alone is enough to enable backups, and the type still comes from env
+#[test]
+fn test_cp_backup_suffix_without_backup_reads_env() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.env("VERSION_CONTROL", "numbered")
+        .arg("--suffix")
+        .arg(".keep")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.~1~")),
+        "How are you?\n"
+    );
+}
+
+// "n" could be "none" or "numbered", so it must be rejected
+#[test]
+fn test_cp_backup_env_ambiguous() {
+    new_ucmd!()
+        .env("VERSION_CONTROL", "n")
+        .arg("--backup")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails()
+        .stderr_contains("ambiguous argument 'n' for '$VERSION_CONTROL'");
+}
+
 #[test]
 fn test_cp_backup_no_clobber_conflicting_options() {
     new_ucmd!()
