@@ -85,7 +85,9 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
             InputKind::File(path) => {
-                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
+                if let Err(err) = tail_file(settings, &mut printer, input, path, &mut observer, 0) {
+                    show!(err);
+                }
             }
         }
     }

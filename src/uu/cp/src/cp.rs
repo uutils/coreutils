@@ -2431,7 +2431,15 @@ fn handle_copy_mode(
                 .truncate(false)
                 .create(true)
                 .open(dest)
-                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!(
+                            "cp-error-cannot-create-regular-file",
+                            "path" => dest.quote()
+                        ),
+                    )
+                })?;
         }
     }
 

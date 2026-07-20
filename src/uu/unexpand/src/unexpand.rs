@@ -117,7 +117,9 @@ fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
     // Only add an extra tab stop if increment is non-zero
     if let Some(inc) = increment_size.filter(|&i| i > 0) {
         let last = *nums.last().unwrap();
-        nums.push(last + inc);
+        // Reject a last stop + increment that overflows usize instead of panicking/wrapping (matches GNU).
+        let next = last.checked_add(inc).ok_or(ParseError::TabSizeTooLarge)?;
+        nums.push(next);
     }
 
     if let (false, _) = nums
