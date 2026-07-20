@@ -226,6 +226,26 @@ fn test_check_md5sum_only_one_space() {
         .stdout_only("a: OK\n' b': OK\nc: OK\n");
 }
 
+// A generated checksum file must verify against the same file on all
+// platforms: generation and --check both hash raw bytes, so on Windows a file
+// containing CRLFs must not be hashed with CRLF -> LF conversion in check mode.
+#[test]
+fn test_check_generate_round_trip_crlf_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("f", b"abc\r\nd\r");
+    let result = scene.ccmd("md5sum").arg("f").succeeds();
+    at.write_bytes("CHECKSUM", result.stdout());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_only("f: OK\n");
+}
+
 #[test]
 fn test_check_md5sum_reverse_bsd() {
     let scene = TestScenario::new(util_name!());
