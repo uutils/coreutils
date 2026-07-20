@@ -1202,7 +1202,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
-        BlockWriter::Buffered(BufferedOutput::new(o))
+        BlockWriter::Buffered(BufferedOutput::new(o)?)
     } else {
         BlockWriter::Unbuffered(o)
     };
@@ -1411,8 +1411,9 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
 // https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
-    // calculate the lcm from gcd
-    (ibs / gcd) * obs
+    // calculate the lcm from gcd; saturate so an oversized product fails at
+    // allocation instead of panicking here
+    (ibs / gcd).saturating_mul(obs)
 }
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting

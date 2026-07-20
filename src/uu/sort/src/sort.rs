@@ -1625,7 +1625,7 @@ where
             break;
         }
 
-        if starts_with_plus(&arg) {
+        if arg.as_encoded_bytes().first() == Some(&b'+') {
             let as_str = arg.to_string_lossy();
             if let Some(from_spec) = as_str.strip_prefix('+') {
                 if let Some(from) = parse_legacy_part(from_spec) {
@@ -1667,17 +1667,6 @@ where
     }
 
     (processed, legacy_warnings)
-}
-
-fn starts_with_plus(arg: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        arg.as_bytes().first() == Some(&b'+')
-    }
-    #[cfg(not(unix))]
-    {
-        arg.to_string_lossy().starts_with('+')
-    }
 }
 
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {

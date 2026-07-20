@@ -276,6 +276,25 @@ FIRST!SECOND@THIRD#FOURTH!ABCDEFG
     }
 }
 
+// With `-s`, each input file is written as its own output line, so the
+// delimiter list must restart from its first element for every file instead
+// of carrying the cycle over from the previous one.
+#[test]
+fn test_serial_delimiter_list_resets_per_file() {
+    for option_style in ["-d", "--delimiters"] {
+        for serial in ["-s", "--serial"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.write("f1", "a\nb\n");
+            at.write("f2", "c\nd\ne\n");
+            at.write("f3", "f\ng\n");
+
+            ucmd.args(&[option_style, ":|", serial, "f1", "f2", "f3"])
+                .succeeds()
+                .stdout_only("a:b\nc:d|e\nf:g\n");
+        }
+    }
+}
+
 #[test]
 #[cfg(unix)]
 fn test_non_utf8_input() {
