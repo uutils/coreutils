@@ -233,8 +233,9 @@ fn test_reference_multi_no_equal() {
         .arg("file1")
         .arg("file2")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -248,9 +249,10 @@ fn test_reference_last() {
         .arg("--reference")
         .arg("ref_file")
         .succeeds()
-        .stderr_contains("chgrp: group of 'file1' retained as ")
-        .stderr_contains("\nchgrp: group of 'file2' retained as ")
-        .stderr_contains("\nchgrp: group of 'file3' retained as ");
+        .stdout_contains("group of 'file1' retained as ")
+        .stdout_contains("\ngroup of 'file2' retained as ")
+        .stdout_contains("\ngroup of 'file3' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -511,7 +513,8 @@ fn test_verbosity_messages() {
         .arg("--reference=ref_file")
         .arg("target_file")
         .succeeds()
-        .stderr_contains("group of 'target_file' retained as ");
+        .stdout_contains("group of 'target_file' retained as ")
+        .no_stderr();
 }
 
 #[test]
@@ -662,4 +665,19 @@ fn test_chgrp_exit_code_not_being_overwritten_by_last_file() {
         .arg(current_gid.to_string())
         .arg("dir")
         .fails();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn verbose_missing_file_write_error_is_reported_not_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("--verbose")
+        .arg(getegid().to_string())
+        .arg("does-not-exist")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("chgrp: write error: No space left on device");
 }
