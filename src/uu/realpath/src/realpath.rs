@@ -296,8 +296,8 @@ fn resolve_path(
 ) -> std::io::Result<()> {
     let abs = canonicalize(p, can_mode, resolve)?;
     if can_mode == MissingHandling::Normal {
-        let path_str = p.to_string_lossy();
-        if path_str.ends_with("/.") || path_str.ends_with("/./") {
+        let path_bytes = p.as_os_str().as_encoded_bytes();
+        if path_bytes.ends_with(b"/.") || path_bytes.ends_with(b"/./") {
             abs.metadata()?; // raise no such file or directory error
         }
     }
