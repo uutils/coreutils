@@ -6,7 +6,7 @@
 //! Benchmarks for `ptx`.
 //!
 //! Each bench redirects fd 1 onto /dev/null so the (very large) permuted index
-//! does not flood the harness's terminal. It is restored after each iteration.
+//! does not flood the harness's terminal. It is restored afterwards.
 
 #[cfg(unix)]
 mod benches {
@@ -44,7 +44,7 @@ mod benches {
 
     /// Benchmark the common case of many short lines.
     #[divan::bench(args = [100_000])]
-    fn ptx_many_lines(bencher: Bencher, num_lines: usize) {
+    fn ptx_short_lines(bencher: Bencher, num_lines: usize) {
         let data = text_data::generate_by_lines(num_lines, 80);
         bench_ptx(bencher, &data, &[]);
     }
@@ -56,7 +56,7 @@ mod benches {
 
     /// Benchmark -r on many short lines.
     #[divan::bench(args = [100_000])]
-    fn ptx_input_references_many_lines(bencher: Bencher, num_lines: usize) {
+    fn ptx_input_references_short_lines(bencher: Bencher, num_lines: usize) {
         let data = text_data::generate_by_lines(num_lines, 80);
         bench_ptx(bencher, &data, &["-r"]);
     }
