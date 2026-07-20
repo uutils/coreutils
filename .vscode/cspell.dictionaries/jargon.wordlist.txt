@@ -34,6 +34,7 @@ dequeue
 dev
 EINTR
 eintr
+ELOOP
 nextest
 SIGUSR
 nonprinting
@@ -161,6 +162,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strtime
 strcoll
 subcommand
 subexpression

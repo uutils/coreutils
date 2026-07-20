@@ -1310,8 +1310,7 @@ fn rename_file_fallback(
             & 0o7777;
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        // copy_stream has fast-path for Linux
-        uucore::buf_copy::copy_stream(&mut &src_file, &mut dst_file)
+        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
         #[cfg(not(any(target_os = "macos", target_os = "redox")))]

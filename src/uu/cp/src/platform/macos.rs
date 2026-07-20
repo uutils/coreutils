@@ -11,6 +11,7 @@ use std::path::Path;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
+use uucore::safe_copy::{create_dest_restrictive, open_source};
 use uucore::translate;
 
 use uucore::mode::get_umask;
@@ -28,7 +29,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
     source_is_stream: bool,
-    _nofollow: bool,
+    nofollow: bool,
 ) -> CopyResult<CopyDebug> {
     if sparse_mode != SparseMode::Auto {
         return Err(translate!("cp-error-sparse-not-supported")
@@ -103,25 +104,47 @@ pub(crate) fn copy_on_write(
         }
         copy_debug.reflink = OffloadReflinkDebug::Yes;
         if source_is_stream {
-            let mut src_file = File::open(source)?;
+            let mut src_file =
+                File::open(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             let mode = 0o622 & !get_umask();
             let mut dst_file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .mode(mode)
-                .open(dest)?;
+                .open(dest)
+                .map_err(|e| {
+                    CpError::IoErrContext(
+                        e,
+                        translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                    )
+                })?;
 
-            let dest_is_stream = is_stream(&dst_file.metadata()?);
+            let dest_is_stream = is_stream(
+                &dst_file
+                    .metadata()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            );
             if !dest_is_stream {
                 // `copy_stream` doesn't clear the dest file, if dest is not a stream, we should clear it manually.
-                dst_file.set_len(0)?;
+                dst_file
+                    .set_len(0)
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             }
 
-            buf_copy::copy_stream(&mut src_file, &mut dst_file)
+            buf_copy::copy_fast(&mut src_file, &mut dst_file)
                 .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         } else {
-            fs::copy(source, dest).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut src_file = open_source(source, nofollow)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+            let mut dst_file = create_dest_restrictive(dest, false).map_err(|e| {
+                CpError::IoErrContext(
+                    e,
+                    translate!("cp-error-cannot-create-regular-file", "path" => dest.quote()),
+                )
+            })?;
+            std::io::copy(&mut src_file, &mut dst_file)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
         }
     }
 
