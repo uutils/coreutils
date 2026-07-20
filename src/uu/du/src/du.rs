@@ -11,9 +11,11 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
@@ -39,8 +41,8 @@ use uucore::{format_usage, show, show_error, show_warning};
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
+    FileStandardInfo, GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -204,14 +206,25 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
     metadata.blocks()
 }
 
+// `File::open()` alone cannot open directories on Windows (`CreateFile`
+// fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
+// use that flag explicitly to be able to query directories as well as files.
+#[cfg(windows)]
+fn open_for_query(path: &Path) -> std::io::Result<File> {
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
 #[cfg(windows)]
 fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let Ok(file) = File::open(path) else {
-        return size_on_disk; // opening directories will fail
+    let Ok(file) = open_for_query(path) else {
+        return size_on_disk;
     };
 
     unsafe {
@@ -249,7 +262,7 @@ fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
 fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
-    let Ok(file) = File::open(path) else {
+    let Ok(file) = open_for_query(path) else {
         return result;
     };
 
@@ -844,8 +857,13 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
-            print!("{}", self.line_ending);
+            write!(
+                stdout(),
+                "{}\t{}{}",
+                self.convert_size(grand_total),
+                self.total_text,
+                self.line_ending
+            )?;
         }
 
         Ok(())
@@ -873,7 +891,7 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+        write!(stdout(), "{}\t", self.convert_size(size))?;
 
         if let Some(md_time) = &self.time {
             if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
@@ -883,14 +901,14 @@ impl StatPrinter {
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                print!("\t");
+                write!(stdout(), "\t")?;
             } else {
-                print!("???\t");
+                write!(stdout(), "???\t")?;
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -938,8 +956,10 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            // Keep every entry: duplicates are handled later via inode tracking
-            // (which -l disables), matching GNU. Missing files must each report.
+            // Do not deduplicate here: GNU du processes every entry and
+            // relies on inode-based deduplication during traversal (which is
+            // disabled by --count-links). Deduplicating by name would, e.g.,
+            // collapse repeated missing files into a single error.
             paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
@@ -1035,16 +1055,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         read_files_from(file_from)?
     } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
-        let files = files.map(PathBuf::from);
-        if count_links {
-            files.collect()
-        } else {
-            // Deduplicate while preserving order
-            let mut seen = HashSet::default();
-            files
-                .filter(|path| seen.insert(path.clone()))
-                .collect::<Vec<_>>()
-        }
+        // Do not deduplicate by name: GNU du processes every operand and relies
+        // on inode-based deduplication during traversal (disabled by
+        // --count-links), so repeated missing files are reported once each.
+        files.map(PathBuf::from).collect()
     } else {
         vec![PathBuf::from(".")]
     };

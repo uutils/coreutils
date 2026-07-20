@@ -44,9 +44,8 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
 /// for callers where xattr preservation is best-effort.
 pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     match copy_xattrs(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
@@ -71,9 +70,8 @@ pub fn copy_xattrs_fd_ignore_unsupported(
     dest: &std::fs::File,
 ) -> std::io::Result<()> {
     match copy_xattrs_fd(source, dest) {
-        Ok(()) => Ok(()),
         Err(e) if is_xattr_unsupported(&e) => Ok(()),
-        Err(e) => Err(e),
+        res => res,
     }
 }
 
