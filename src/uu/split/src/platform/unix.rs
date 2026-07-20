@@ -186,8 +186,11 @@ fn create_or_truncate_output_file(input: &OsStr, filename: &OsStr) -> Result<std
                 ));
             }
 
-            file.set_len(0).map_err(|e| open_file_error(filename, e))?;
-            Ok(file)
+            match file.set_len(0) {
+                // allow writing to symlink to nonseekable
+                Err(e) if e.kind() != ErrorKind::InvalidInput => Err(open_file_error(filename, e)),
+                _ => Ok(file),
+            }
         }
         Err(e) => Err(open_file_error(filename, e)),
     }

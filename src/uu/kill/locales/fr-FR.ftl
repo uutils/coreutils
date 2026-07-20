@@ -12,4 +12,4 @@ kill-error-no-process-id = aucun ID de processus spécifié
 kill-error-invalid-signal = { $signal } : signal invalide
 kill-error-parse-argument = échec de l'analyse de l'argument { $argument } : { $error }
 kill-error-sending-signal = échec de l'envoi du signal au processus { $pid }
-kill-error-write-error = erreur d'écriture : { $err }
+kill-error-write = erreur d'écriture : { $error }
