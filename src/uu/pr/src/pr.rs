@@ -397,8 +397,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         files.into_iter().map(|i| vec![i]).collect()
     };
 
+    let operands = parse_column_page_operands(&args);
+
     for file_group in file_groups {
-        let result_options = build_options(&matches, &file_group, &args.join(" "));
+        let result_options = build_options(&matches, &file_group, &operands);
         let options = match result_options {
             Ok(options) => options,
             Err(err) => {
@@ -427,17 +429,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-/// Returns re-written arguments which are passed to the program.
-/// Removes -column and +page option as getopts cannot parse things like -3 etc
-/// # Arguments
-/// * `args` - Command line arguments
+/// Rewrite arguments before clap parsing, preserving legacy numeric operands.
 fn recreate_arguments(args: &[String]) -> Vec<String> {
-    let column_page_option = Regex::new(r"^[-+]\d+.*").unwrap();
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
     let e_regex = Regex::new(r"^-e").unwrap();
     let mut arguments = args.to_owned();
-    let num_option = args.iter().find_position(|x| n_regex.is_match(x.trim()));
+    let num_option = args
+        .iter()
+        .take_while(|arg| arg.as_str() != "--")
+        .find_position(|x| n_regex.is_match(x.trim()));
     if let Some((pos, _value)) = num_option {
         if let Some(num_val_opt) = args.get(pos + 1) {
             if !num_regex.is_match(num_val_opt) {
@@ -452,6 +453,7 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
     // the default values for the -e flag is '-e' is present without direct arguments.
     let expand_tabs_option = arguments
         .iter()
+        .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| e_regex.is_match(x.trim()));
     if let Some((pos, value)) = expand_tabs_option {
         if value.trim().len() <= 2 {
@@ -459,10 +461,66 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         }
     }
 
+    // Remove only whole-token legacy operands before clap parsing.
+    let mut past_terminator = false;
     arguments
         .into_iter()
-        .filter(|i| !column_page_option.is_match(i))
+        .filter(|arg| {
+            if past_terminator {
+                return true;
+            }
+            if arg == "--" {
+                past_terminator = true;
+                return true;
+            }
+            as_column_operand(arg).is_none() && as_page_operand(arg).is_none()
+        })
         .collect()
+}
+
+#[derive(Default)]
+struct ColumnPageOperands {
+    column: Option<String>,
+    page: Option<String>,
+}
+
+/// Extract legacy `-COLUMN` and `+FIRST[:LAST]` operands before `--`.
+fn parse_column_page_operands(args: &[String]) -> ColumnPageOperands {
+    let mut operands = ColumnPageOperands::default();
+    for arg in args {
+        if arg == "--" {
+            break;
+        }
+        if operands.column.is_none() {
+            if let Some(digits) = as_column_operand(arg) {
+                operands.column = Some(digits.to_string());
+                continue;
+            }
+        }
+        if operands.page.is_none() {
+            if let Some(spec) = as_page_operand(arg) {
+                operands.page = Some(spec.to_string());
+            }
+        }
+    }
+    operands
+}
+
+/// Return the digits from a whole-token `-COLUMN` operand.
+fn as_column_operand(arg: &str) -> Option<&str> {
+    arg.strip_prefix('-')
+        .filter(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// Return the range from a whole-token `+FIRST[:LAST]` operand.
+fn as_page_operand(arg: &str) -> Option<&str> {
+    let spec = arg.strip_prefix('+')?;
+    let is_digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let valid = match spec.split_once(':') {
+        Some((first, last)) => is_digits(first) && is_digits(last),
+        None => is_digits(spec),
+    };
+    valid.then_some(spec)
 }
 
 fn print_error(matches: &ArgMatches, err: &PrError) {
@@ -508,7 +566,7 @@ fn get_date_format(matches: &ArgMatches) -> String {
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
-    free_args: &str,
+    operands: &ColumnPageOperands,
 ) -> Result<OutputOptions, PrError> {
     let form_feed_used = matches.get_flag(options::FORM_FEED);
 
@@ -672,9 +730,8 @@ fn build_options(
     };
 
     // +page option is less priority than --pages
-    let page_plus_re = Regex::new(r"\s*\+(\d+:*\d*)\s*").unwrap();
-    let res = page_plus_re.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
+    let plus_page = operands.page.as_deref();
+    let res = plus_page.map(|unparsed_num| {
         let x: Vec<_> = unparsed_num.split(':').collect();
         x[0].to_string()
             .parse::<usize>()
@@ -687,18 +744,14 @@ fn build_options(
         None => 1,
     };
 
-    let res = page_plus_re
-        .captures(free_args)
-        .map(|i| i.get(1).unwrap().as_str().trim())
-        .filter(|i| i.contains(':'))
-        .map(|unparsed_num| {
-            let x: Vec<_> = unparsed_num.split(':').collect();
-            x[1].to_string()
-                .parse::<usize>()
-                .map_err(|_e| PrError::EncounteredErrors {
-                    msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
-                })
-        });
+    let res = plus_page.filter(|i| i.contains(':')).map(|unparsed_num| {
+        let x: Vec<_> = unparsed_num.split(':').collect();
+        x[1].to_string()
+            .parse::<usize>()
+            .map_err(|_e| PrError::EncounteredErrors {
+                msg: format!("invalid {} argument {}", "+", unparsed_num.quote()),
+            })
+    });
     let end_page_in_plus_option = match res {
         Some(res) => Some(res?),
         None => None,
@@ -826,10 +879,7 @@ fn build_options(
         });
     }
 
-    let re_col = Regex::new(r"\s*-(\d+)\s*").unwrap();
-
-    let res = re_col.captures(free_args).map(|i| {
-        let unparsed_num = i.get(1).unwrap().as_str().trim();
+    let res = operands.column.as_deref().map(|unparsed_num| {
         unparsed_num
             .parse::<usize>()
             .map_err(|_e| PrError::EncounteredErrors {

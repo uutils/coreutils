@@ -19,7 +19,7 @@ use std::process;
 use std::sync::LazyLock;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -91,6 +91,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<&String> = cmd_iter.collect();
 
     let err = process::Command::new(cmd).args(args).exec();
+
+    show_error!(
+        "{}",
+        translate!("nohup-error-failed-to-run-command", "command" => cmd.quote(), "error" => strip_errno(&err))
+    );
 
     match err.kind() {
         ErrorKind::NotFound => set_exit_code(EXIT_ENOENT),

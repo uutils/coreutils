@@ -17,6 +17,7 @@ use std::process;
 use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+use uucore::error::strip_errno;
 use uucore::process::{getegid, geteuid};
 #[cfg(all(
     feature = "feat_selinux",
@@ -1381,6 +1382,20 @@ fn test_install_backup_custom_suffix_via_env() {
     assert!(at.file_exists(file_a));
     assert!(at.file_exists(file_b));
     assert!(at.file_exists(format!("{file_b}{suffix}")));
+}
+
+#[test]
+fn test_install_backup_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    at.touch("target");
+    at.mkdir("target.backup");
+    let error = strip_errno(&fs::rename(at.plus("target"), at.plus("target.backup")).unwrap_err());
+
+    ucmd.env("SIMPLE_BACKUP_SUFFIX", ".backup")
+        .args(&["--backup", "source", "target"])
+        .fails()
+        .stderr_is(format!("install: cannot backup 'target': {error}\n"));
 }
 
 #[test]
