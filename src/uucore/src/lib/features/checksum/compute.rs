@@ -242,16 +242,8 @@ where
             return Err(Box::new(ChecksumError::RawMultipleFiles));
         }
 
-        let filepath = Path::new(filename);
         let stdin_buf;
         let file_buf;
-        if filepath.is_dir() {
-            show!(USimpleError::new(
-                1,
-                translate!("error-is-a-directory", "file" => filepath.display())
-            ));
-            continue;
-        }
 
         // Handle the file input
         let mut file = io::BufReader::with_capacity(
@@ -260,6 +252,14 @@ where
                 stdin_buf = io::stdin();
                 Box::new(stdin_buf) as Box<dyn io::Read>
             } else {
+                let filepath = Path::new(filename);
+                if filepath.is_dir() {
+                    show!(USimpleError::new(
+                        1,
+                        translate!("error-is-a-directory", "file" => filepath.display())
+                    ));
+                    continue;
+                }
                 file_buf = match File::open(filepath) {
                     Ok(file) => {
                         #[cfg(any(

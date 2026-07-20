@@ -151,6 +151,11 @@ fn paste(
 
             stdout.write_all(&output)?;
             stdout.write_all(line_ending_byte_array_ref)?;
+
+            // In serial mode each input file is concatenated onto its own
+            // output line, so the delimiter list has to restart from its first
+            // element for the next file rather than carrying the cycle over.
+            delimiter_state.reset_to_first_delimiter();
         }
     } else {
         let mut eof = vec![false; input_source_vec_len];
@@ -307,7 +312,6 @@ impl<'a> DelimiterState<'a> {
     }
 
     /// This should only be used to return to the start of the delimiter list after a file has been processed.
-    /// This should only be used when the "serial" option is disabled.
     /// This is a no-op unless there are multiple delimiters.
     fn reset_to_first_delimiter(&mut self) {
         if let DelimiterState::MultipleDelimiters {

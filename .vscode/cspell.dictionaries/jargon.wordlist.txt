@@ -162,6 +162,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strtime
 strcoll
 subcommand
 subexpression
