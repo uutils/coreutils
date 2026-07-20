@@ -23,7 +23,7 @@ use memchr::memmem;
 use crate::error::{UResult, USimpleError};
 
 /// Represents the output of a checksum computation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DigestOutput {
     /// Varying-size output
     Vec(Vec<u8>),
@@ -733,7 +733,7 @@ mod tests {
         use super::Md5;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
@@ -741,7 +741,7 @@ mod tests {
         let result_crlf = digest.result();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();
