@@ -1051,6 +1051,20 @@ fn float_with_zero_precision_should_pad() {
 }
 
 #[test]
+fn int_with_zero_precision_and_zero_value() {
+    new_ucmd!().args(&["%.0d", "0"]).succeeds().stdout_only("");
+    new_ucmd!()
+        .args(&["%#.0o", "0"])
+        .succeeds()
+        .stdout_only("0");
+    // A negative `*` precision counts as no precision at all.
+    new_ucmd!()
+        .args(&["%.*d", "-1", "0"])
+        .succeeds()
+        .stdout_only("0");
+}
+
+#[test]
 fn float_non_finite() {
     new_ucmd!()
         .args(&[
