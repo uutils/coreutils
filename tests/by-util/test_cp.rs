@@ -1463,6 +1463,35 @@ fn test_cp_backup_env_ambiguous() {
         .stderr_contains("ambiguous argument 'n' for '$VERSION_CONTROL'");
 }
 
+// A rejected backup type must be reported once, like GNU does. cp used to wrap
+// the error in a message that repeated the program name, giving "cp: cp: ...".
+#[test]
+fn test_cp_backup_invalid_env_reports_program_name_once() {
+    let result = new_ucmd!()
+        .env("VERSION_CONTROL", "bogus")
+        .arg("-b")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails();
+    assert_eq!(
+        result.stderr_str().lines().next(),
+        Some("cp: invalid argument 'bogus' for '$VERSION_CONTROL'")
+    );
+}
+
+#[test]
+fn test_cp_backup_invalid_option_reports_program_name_once() {
+    let result = new_ucmd!()
+        .arg("--backup=bogus")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .fails();
+    assert_eq!(
+        result.stderr_str().lines().next(),
+        Some("cp: invalid argument 'bogus' for 'backup type'")
+    );
+}
+
 #[test]
 fn test_cp_backup_no_clobber_conflicting_options() {
     new_ucmd!()
