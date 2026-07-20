@@ -192,7 +192,17 @@ struct WordRef {
     local_line_nr: usize,
     position: usize,
     position_end: usize,
-    filename: OsString,
+    // Character offset of `position` within the line. Fully derived from
+    // `(line, position)`, which precede it in the derived `Ord`/`Eq`, so it can
+    // never change the comparison result: whenever every preceding field ties,
+    // this one ties too. Cached here purely to avoid rescanning the line prefix
+    // on every output call (see `prepare_line_chunks`).
+    char_position: usize,
+    // Index into `FileMap` of the file this word came from. Stored instead of a
+    // cloned `OsString` to avoid duplicating the filename once per word; the name
+    // is looked up by index when needed. Acts as a deterministic `Ord` tiebreaker,
+    // though `global_line_nr` already uniquely identifies the line beforehand.
+    file_idx: usize,
 }
 
 #[derive(Debug, Error)]
@@ -353,7 +363,7 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     };
 
     let mut word_set: BTreeSet<WordRef> = BTreeSet::new();
-    for (file, lines) in file_map {
+    for (file_idx, (_filename, lines)) in file_map.iter().enumerate() {
         let mut count: usize = 0;
         let offs = lines.offset;
         for line in &lines.lines {
@@ -362,6 +372,14 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                 Some(x) => (x.start(), x.end()),
                 None => (0, 0),
             };
+            // Running cursor for byte -> character offset conversion. `find_iter`
+            // yields matches in increasing byte position, so we only count the
+            // characters between the previous keyword and the current one instead
+            // of rescanning from the start of the line every time. For ASCII lines
+            // byte and character offsets coincide, so the conversion is a no-op.
+            let line_is_ascii = line.is_ascii();
+            let mut last_byte = 0usize;
+            let mut last_char = 0usize;
             // match words with given regex
             for mat in reg.find_iter(line) {
                 let (mut beg, end) = (mat.start(), mat.end());
@@ -390,13 +408,25 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
                 if config.ignore_case {
                     word = word.to_uppercase();
                 }
+                // Convert the byte offset `beg` to a character offset, reusing the
+                // running cursor. `beg` is strictly increasing across matches, so
+                // we only count the characters since the previous keyword.
+                let char_position = if line_is_ascii {
+                    beg
+                } else {
+                    let cp = last_char + line[last_byte..beg].chars().count();
+                    last_byte = beg;
+                    last_char = cp;
+                    cp
+                };
                 word_set.insert(WordRef {
                     word,
-                    filename: file.clone(),
+                    file_idx,
                     global_line_nr: offs + count,
                     local_line_nr: count,
                     position: beg,
                     position_end: end,
+                    char_position,
                 });
             }
             count += 1;
@@ -405,16 +435,18 @@ fn create_word_set(config: &Config, filter: &WordFilter, file_map: &FileMap) -> 
     word_set
 }
 
-fn get_reference(config: &Config, word_ref: &WordRef, line: &str, context_reg: &Regex) -> String {
+fn get_reference(
+    config: &Config,
+    word_ref: &WordRef,
+    filename: &OsStr,
+    line: &str,
+    context_reg: &Regex,
+) -> String {
     if config.auto_ref {
-        if word_ref.filename == "-" {
+        if filename == "-" {
             format!(":{}", word_ref.local_line_nr + 1)
         } else {
-            format!(
-                "{}:{}",
-                word_ref.filename.maybe_quote(),
-                word_ref.local_line_nr + 1
-            )
+            format!("{}:{}", filename.maybe_quote(), word_ref.local_line_nr + 1)
         }
     } else if config.input_ref {
         let (beg, end) = match context_reg.find(line) {
@@ -752,8 +784,9 @@ fn prepare_line_chunks(
     chars_line: &[char],
     reference: &str,
 ) -> (String, String, String, String, String) {
-    // Convert byte positions to character positions
-    let ref_char_position = line[..word_ref.position].chars().count();
+    // Character position of the keyword start is precomputed in `create_word_set`
+    // (see `WordRef::char_position`), avoiding a rescan of the line prefix here.
+    let ref_char_position = word_ref.char_position;
     let char_position_end = ref_char_position
         + line[word_ref.position..word_ref.position_end]
             .chars()
@@ -762,13 +795,9 @@ fn prepare_line_chunks(
     // Extract the text before the keyword
     let all_before = if config.input_ref {
         let before = &line[..word_ref.position];
-        let before_char_count = before.chars().count();
-        let trimmed_char_count = before
-            .trim_start_matches(reference)
-            .trim_start()
-            .chars()
-            .count();
-        let trim_offset = before_char_count - trimmed_char_count;
+        let before_char_count = word_ref.char_position;
+        let stripped = before.trim_start_matches(reference).trim_start();
+        let trim_offset = before[..before.len() - stripped.len()].chars().count();
         &chars_line[trim_offset..before_char_count]
     } else {
         &chars_line[..ref_char_position]
@@ -803,7 +832,7 @@ fn write_traditional_output(
 
     if !config.right_ref {
         let max_ref_len = if config.auto_ref {
-            get_auto_max_reference_len(words)
+            get_auto_max_reference_len(words, file_map)
         } else {
             0
         };
@@ -813,18 +842,10 @@ fn write_traditional_output(
     }
 
     for word_ref in words {
-        // Since `ptx` accepts duplicate file arguments (e.g., `ptx file file`),
-        // simply looking up by filename is ambiguous.
-        // We use the `global_line_nr` (which is unique across the entire input stream)
-        // to identify which file covers this line.
-        let (_, file_map_value) = file_map
-            .iter()
-            .find(|(name, content)| {
-                name == &word_ref.filename
-                    && word_ref.global_line_nr >= content.offset
-                    && word_ref.global_line_nr < content.offset + content.lines.len()
-            })
-            .expect("Missing file in file map");
+        // `word_ref.file_idx` points directly at the originating `FileMap` entry.
+        // This unambiguously handles duplicate file arguments (e.g. `ptx file file`),
+        // which are stored as separate entries, without scanning by filename.
+        let (filename, file_map_value) = &file_map[word_ref.file_idx];
         let FileContent {
             ref lines,
             ref chars_lines,
@@ -833,6 +854,7 @@ fn write_traditional_output(
         let reference = get_reference(
             config,
             word_ref,
+            filename,
             &lines[word_ref.local_line_nr],
             &context_reg,
         );
@@ -870,7 +892,7 @@ fn write_traditional_output(
     Ok(())
 }
 
-fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
+fn get_auto_max_reference_len(words: &BTreeSet<WordRef>, file_map: &FileMap) -> usize {
     //Get the maximum length of the reference field
     let line_num = words
         .iter()
@@ -886,8 +908,9 @@ fn get_auto_max_reference_len(words: &BTreeSet<WordRef>) -> usize {
 
     let filename_len = words
         .iter()
-        .filter(|w| w.filename != "-")
-        .map(|w| w.filename.maybe_quote().to_string().len())
+        .map(|w| &file_map[w.file_idx].0)
+        .filter(|&name| name != "-")
+        .map(|name| name.maybe_quote().to_string().len())
         .max()
         .unwrap_or(0);
 
