@@ -425,10 +425,14 @@ fn construct_extended_big_decimal(
         } else {
             let new_scale = -exponent + scale;
 
-            // BigDecimal "only" supports i64 scale.
+            // BigDecimal supports an i64 scale, but a magnitude anywhere near that
+            // range is already many orders beyond any real floating-point type (a
+            // long double tops out around 10^±4932), and formatting it would mean
+            // materializing quintillions of digits. Cap the scale at `i32` so such
+            // values are treated as overflow/underflow, like a real float would.
             // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
-            if let Some(new_scale) = new_scale.to_i64() {
-                BigDecimal::from_bigint(signed_digits, new_scale)
+            if let Some(new_scale) = new_scale.to_i32() {
+                BigDecimal::from_bigint(signed_digits, new_scale.into())
             } else {
                 return Err(make_error(new_scale.is_negative(), negative));
             }

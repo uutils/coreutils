@@ -5217,3 +5217,13 @@ fn test_follow_symlink_target_change() {
         .stdout_contains("A\n")
         .stdout_contains("B\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_contains("hello");
+}
