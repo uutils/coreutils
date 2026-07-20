@@ -1376,3 +1376,21 @@ fn test_is_a_directory() {
         .fails_with_code(1)
         .stderr_is("od: a: Is a directory\n");
 }
+
+// Regression: offset must be 4, not 3, and -N must be respected
+#[test]
+fn test_od_strings_with_n_flag() {
+    let input = b"foo\0bar\0";
+
+    new_ucmd!()
+        .args(&["--strings", "-N7"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+
+    new_ucmd!()
+        .args(&["--strings", "-N8"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+}
