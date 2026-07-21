@@ -1193,16 +1193,19 @@ fn test_rm_recursive_long_path_safe_traversal() {
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_rm_recursive_deep_tree_low_nofile() {
-    // Regression for #7995: recursive rm held one DirFd per nesting level and
-    // failed with EMFILE on deep trees under a tight NOFILE limit. GNU rm keeps
-    // FD use O(1) with depth; we should too.
+    // Regression for #7995: recursive rm used to keep one DirFd open per nesting
+    // level (plus a readdir dup), so deep chains under a tight NOFILE failed with
+    // EMFILE / residual "Directory not empty". GNU rm keeps directory FD use O(1)
+    // in depth; the walk must close the parent under pressure and restore via
+    // openat(child, ".."), not retain an ancestor chain.
     use rlimit::Resource;
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // ~80 nested dirs is enough to exhaust a soft NOFILE of 32 if each level
-    // keeps its parent open, while remaining cheap to create.
+    // Depth 80 exhausts NOFILE=32 if each level keeps its parent open, while
+    // remaining cheap to create. Main fails this class; the dual-mode walk must
+    // remove the whole tree with no stderr.
     let depth = 80;
     let mut deep_path = String::from("rm_emfile_deep");
     at.mkdir(&deep_path);
@@ -1212,7 +1215,7 @@ fn test_rm_recursive_deep_tree_low_nofile() {
     }
     at.write(&format!("{deep_path}/leaf"), "data");
 
-    // Leave headroom for stdio + a few helpers, but far below `depth`.
+    // Soft NOFILE well below `depth` (stdio + helpers still fit).
     ts.ucmd()
         .arg("-rf")
         .arg("rm_emfile_deep")
@@ -1221,6 +1224,115 @@ fn test_rm_recursive_deep_tree_low_nofile() {
         .no_stderr();
 
     assert!(!at.dir_exists("rm_emfile_deep"));
+}
+
+/// Boundary for dual-mode headroom: parent must be closed before `read_dir`
+/// dups the child FD when free slots are scarce (inherited descriptors).
+///
+/// Uses a small helper binary that opens many FDs then execs `rm` so the
+/// inherited table is tight without Python pipe overhead.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_rm_recursive_low_nofile_with_inherited_fds() {
+    use std::io::Write;
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let depth = 40;
+    let mut deep_path = String::from("rm_inherit_deep");
+    at.mkdir(&deep_path);
+    for _ in 0..depth {
+        deep_path = format!("{deep_path}/x");
+        at.mkdir(&deep_path);
+    }
+    at.write(&format!("{deep_path}/leaf"), "data");
+
+    // Build a tiny C helper once per test run under the fixture dir.
+    // Open N /dev/null FDs WITHOUT O_CLOEXEC so they survive execv into rm
+    // (O_CLOEXEC would false-green this as a plain NOFILE smoke test).
+    let helper_src = at.plus("inherit_exec_rm.c");
+    let helper_bin = at.plus("inherit_exec_rm");
+    {
+        let mut f = std::fs::File::create(&helper_src).expect("helper source");
+        f.write_all(
+            br#"
+#define _GNU_SOURCE
+#include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/resource.h>
+#include <unistd.h>
+
+int main(int argc, char **argv) {
+    /* usage: inherit_exec_rm <n_extra_fds> <multicall_bin> <util> <target> */
+    if (argc < 5) {
+        fprintf(stderr, "usage: %s <n_extra_fds> <bin> <util> <target>\n", argv[0]);
+        return 2;
+    }
+    int n = atoi(argv[1]);
+    struct rlimit rl = { .rlim_cur = 32, .rlim_max = 32 };
+    if (setrlimit(RLIMIT_NOFILE, &rl) != 0) {
+        perror("setrlimit");
+        return 3;
+    }
+    for (int i = 0; i < n; i++) {
+        /* Must survive execv - no O_CLOEXEC. */
+        int fd = open("/dev/null", O_RDONLY);
+        if (fd < 0) {
+            perror("open /dev/null");
+            return 4;
+        }
+        /* Belt: clear FD_CLOEXEC if the environment set it. */
+        int flags = fcntl(fd, F_GETFD);
+        if (flags >= 0) {
+            fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC);
+        }
+    }
+    char *const args[] = { argv[2], argv[3], "-rf", argv[4], NULL };
+    execv(argv[2], args);
+    perror("execv");
+    return 5;
+}
+"#,
+        )
+        .expect("write helper");
+    }
+    let cc = Command::new("cc")
+        .args([
+            "-O0",
+            "-o",
+            helper_bin.to_str().unwrap(),
+            helper_src.to_str().unwrap(),
+        ])
+        .output()
+        .expect("spawn cc");
+    assert!(
+        cc.status.success(),
+        "cc failed: {}",
+        String::from_utf8_lossy(&cc.stderr)
+    );
+
+    // Leave a few free slots under NOFILE=32 after helper opens extras + stdio.
+    // 18 extra FDs is enough to force pressure without preventing openat(child).
+    // Multicall binary: util name is the first argument after the path.
+    let rm_bin = ts.bin_path.clone();
+    let out = Command::new(&helper_bin)
+        .args(["18", rm_bin.to_str().unwrap(), "rm", "rm_inherit_deep"])
+        .current_dir(&at.subdir)
+        .output()
+        .expect("run inherit helper");
+    assert!(
+        out.status.success(),
+        "helper/rm failed status={:?} stdout={} stderr={}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    assert!(!at.dir_exists("rm_inherit_deep"));
 }
 
 #[cfg(all(not(windows), feature = "chmod"))]
