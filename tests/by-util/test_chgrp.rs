@@ -487,7 +487,7 @@ fn test_from_with_invalid_group() {
 
     ucmd.arg("--from")
         .arg("nonexistent_group")
-        .arg("staff")
+        .arg("nobody") // assumption: group exists
         .arg("test_file")
         .fails()
         .stderr_is(err_msg);
