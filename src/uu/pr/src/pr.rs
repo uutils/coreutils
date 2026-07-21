@@ -375,7 +375,7 @@ pub fn uu_app() -> Command {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args = args.collect_ignore();
+    let args = args.collect_lossy();
 
     let opt_args = recreate_arguments(&args);
 

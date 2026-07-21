@@ -1071,3 +1071,15 @@ fn test_merge_empty_input() {
         .succeeds()
         .no_output();
 }
+
+#[cfg(unix)]
+#[test]
+fn test_non_unicode_argument() {
+    let param = uucore::os_str_from_bytes(b"some-\xFFfile")
+        .expect("Only unix platforms can test non-unicode names");
+
+    new_ucmd!()
+        .arg(&param)
+        .fails_with_code(1)
+        .stderr_contains("No such file or directory");
+}
