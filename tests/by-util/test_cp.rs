@@ -951,6 +951,32 @@ fn test_cp_recursive_symlink_preserves_target_mode() {
     );
 }
 
+// With --remove-destination onto a symlink, cp removes the link and creates a
+// fresh regular file, so the final chmod must not be skipped based on the
+// destination's pre-copy symlink state. GNU cp gives the new file the source
+// mode masked by the umask (664 & ~022 = 644 here); skipping the chmod leaves
+// it at the restrictive 0o600 creation mode (or at the raw cloned source mode
+// on filesystems that copy via clonefile).
+#[test]
+#[cfg(unix)]
+fn test_cp_remove_destination_symlink_applies_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.set_mode("src", 0o664);
+    at.touch("target");
+    at.symlink_file("target", "dst");
+
+    ucmd.umask(0o022)
+        .arg("--remove-destination")
+        .arg("src")
+        .arg("dst")
+        .succeeds();
+
+    assert!(!at.is_symlink("dst"));
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o777, 0o644);
+}
+
 #[test]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
