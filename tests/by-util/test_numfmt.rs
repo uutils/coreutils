@@ -432,6 +432,16 @@ fn test_format_selected_field() {
 }
 
 #[test]
+fn test_field_with_multibyte_whitespace_separator() {
+    // A multibyte Unicode whitespace separator (U+3000) before a selected field
+    // is normalized to a single space rather than sliced mid-character.
+    new_ucmd!()
+        .args(&["--field", "2", "1　2"])
+        .succeeds()
+        .stdout_only("1 2\n");
+}
+
+#[test]
 fn test_format_selected_fields() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])

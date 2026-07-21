@@ -845,7 +845,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
                 writer.write_all(b" ").unwrap();
-                &prefix[1..]
+                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
             };
