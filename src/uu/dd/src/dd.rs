@@ -1426,15 +1426,8 @@ fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            // `count=N iflag=count_bytes` limits the *input*, and
-            // `below_count_limit` gates the copy loop on bytes read, so the
-            // remaining budget must be derived from bytes read as well.
-            // Deriving it from bytes written underflowed whenever a
-            // conversion wrote more than `bmax` bytes (`conv=sync` padding,
-            // `conv=block` record expansion): a panic in debug builds, and a
-            // wrapped result in release builds that unlocked a full-sized
-            // read on every following iteration, overshooting the count
-            // limit.
+            // The budget is on the *input*: derive it from bytes read, not
+            // written (which can exceed it and underflow), like below_count_limit.
             let bmax: u128 = bmax.into();
             let bremain: u128 = bmax.saturating_sub(rstat.bytes_total.into());
             cmp::min(ideal_bsize as u128, bremain) as usize

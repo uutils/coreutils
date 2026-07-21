@@ -2143,12 +2143,8 @@ fn test_bs_not_positive() {
     }
 }
 
-/// `count=N iflag=count_bytes` limits the number of *input* bytes, but the
-/// per-iteration read size used to be derived from the bytes *written*.
-/// A conversion that writes more than N bytes (`conv=block` record
-/// expansion, `conv=sync` padding of partial reads) made that subtraction
-/// underflow: a panic in debug builds, and a wrapped value in release
-/// builds that unlocked full-sized reads and bypassed the count limit.
+/// Regression test for #13434: with `count=N iflag=count_bytes`, a conversion
+/// writing more than N bytes made the per-iteration read-size math underflow.
 #[test]
 fn test_count_bytes_with_expanding_block_conv() {
     let (at, mut ucmd) = at_and_ucmd!();
