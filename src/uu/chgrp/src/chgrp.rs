@@ -67,8 +67,6 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 }
 
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
-    let (dest_gid, raw_group) = get_dest_gid(matches)?;
-
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
         match parse_gid_from_str(from_group) {
@@ -83,6 +81,8 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     } else {
         IfFrom::All
     };
+
+    let (dest_gid, raw_group) = get_dest_gid(matches)?;
 
     Ok(GidUidOwnerFilter {
         dest_gid,

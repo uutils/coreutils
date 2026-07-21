@@ -478,14 +478,26 @@ fn test_from_option() {
 #[test]
 #[cfg(not(any(target_os = "android", target_os = "macos")))]
 fn test_from_with_invalid_group() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("test_file");
 
     let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
 
-    ucmd.arg("--from")
+    scene
+        .ucmd()
+        .arg("--from")
         .arg("nonexistent_group")
         .arg("nobody") // assumption: group exists
+        .arg("test_file")
+        .fails()
+        .stderr_is(err_msg);
+
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg("nonexistent_group")
+        .arg("another_nonexistent_group")
         .arg("test_file")
         .fails()
         .stderr_is(err_msg);
