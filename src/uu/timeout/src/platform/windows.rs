@@ -13,22 +13,23 @@
 
 use std::io;
 use std::process::Child;
-use std::sync::Mutex;
 
 use uucore::process::{
-    Job, configure_process_group, enable_ctrl_forwarding, last_ctrl_signal,
-    send_signal_to_console_group, send_signal_to_process, send_signal_to_tree,
+    Job, configure_process_group, enable_ctrl_forwarding, send_signal_to_console_group,
+    send_signal_to_process, send_signal_to_tree,
 };
 
 const SIGNAL_INT: usize = 2;
 const SIGNAL_QUIT: usize = 3;
 
-/// The job object tracking the child's process tree (non-foreground mode
-/// only; `None` also when job assignment failed and we degraded to
-/// per-process signalling). Replaced on every spawn so that repeated
-/// in-process invocations of `uumain` (benchmarks, fuzzing) never signal a
-/// previous run's job.
-static JOB: Mutex<Option<Job>> = Mutex::new(None);
+/// Per-spawn platform state, threaded through [`send_signal`]: the job object
+/// tracking the child's process tree (non-foreground mode only; also `None`
+/// when job assignment failed and we degraded to per-process signalling).
+/// Stack ownership means repeated in-process invocations of `uumain`
+/// (benchmarks, fuzzing) can never signal a previous run's job.
+pub(crate) struct SpawnState {
+    job: Option<Job>,
+}
 
 /// Configure the child's spawn attributes and console-event forwarding, right
 /// before the child is spawned.
@@ -57,19 +58,28 @@ pub(crate) fn prepare(
 /// A child that spawns a grandchild before the assignment completes escapes
 /// the job; the window is sub-millisecond and unix has the analogous escape
 /// (a child can leave the process group via setpgid).
-pub(crate) fn post_spawn(child: &Child, foreground: bool) {
-    if foreground {
-        return;
-    }
-    let job = Job::new().ok().filter(|job| job.assign(child).is_ok());
-    *JOB.lock().unwrap() = job;
+pub(crate) fn post_spawn(child: &Child, foreground: bool) -> SpawnState {
+    let job = if foreground {
+        None
+    } else {
+        Job::new().ok().filter(|job| job.assign(child).is_ok())
+    };
+    SpawnState { job }
 }
 
-pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
+/// `external` is the console event that interrupted the wait, when this send
+/// forwards that event rather than a timeout expiry.
+pub(crate) fn send_signal(
+    process: &mut Child,
+    signal: usize,
+    foreground: bool,
+    external: Option<usize>,
+    state: &SpawnState,
+) {
     // GNU timeout ignores signal-send errors (the child may have just exited),
     // hence the discarded results below.
     if foreground {
-        if matches!(signal, SIGNAL_INT | SIGNAL_QUIT) && last_ctrl_signal() == Some(signal) {
+        if matches!(signal, SIGNAL_INT | SIGNAL_QUIT) && external == Some(signal) {
             // A foreground child shares our console group: the console already
             // delivered this externally received event to it, and re-sending
             // cannot be targeted without hitting ourselves.
@@ -80,10 +90,10 @@ pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) 
         // Deliverable as a catchable CTRL_BREAK to the child's group; without
         // a console, fall back to termination so the signal is never lost.
         if send_signal_to_console_group(process.id(), signal).is_err() {
-            let _ = send_signal_to_tree(process, JOB.lock().unwrap().as_ref(), signal);
+            let _ = send_signal_to_tree(process, state.job.as_ref(), signal);
         }
     } else {
-        let _ = send_signal_to_tree(process, JOB.lock().unwrap().as_ref(), signal);
+        let _ = send_signal_to_tree(process, state.job.as_ref(), signal);
     }
 }
 

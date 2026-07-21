@@ -87,10 +87,22 @@ pub(crate) fn prepare(
     Ok(())
 }
 
-/// Nothing to do after spawning on unix.
-pub(crate) fn post_spawn(_child: &Child, _foreground: bool) {}
+/// Unix keeps no per-spawn platform state; the type exists so the facade
+/// signatures match the Windows implementation (which carries a job object).
+pub(crate) struct SpawnState;
 
-pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
+/// Nothing to do after spawning on unix.
+pub(crate) fn post_spawn(_child: &Child, _foreground: bool) -> SpawnState {
+    SpawnState
+}
+
+pub(crate) fn send_signal(
+    process: &mut Child,
+    signal: usize,
+    foreground: bool,
+    _external: Option<usize>,
+    _state: &SpawnState,
+) {
     // NOTE: GNU timeout doesn't check for errors of signal.
     // The subprocess might have exited just after the timeout.
     let _ = process.send_signal(signal);
