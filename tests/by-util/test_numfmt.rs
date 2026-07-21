@@ -12,6 +12,22 @@ fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_output_write_error_reports_without_panic() {
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .expect("/dev/full should be available on Linux");
+
+    new_ucmd!()
+        .arg("1024")
+        .set_stdout(std::process::Stdio::from(dev_full))
+        .fails_with_code(1)
+        .stderr_contains("numfmt: write error: No space left on device")
+        .stderr_does_not_contain("panicked");
+}
+
 // This test failed when fixing #11653.
 // Add a `--` separator to ensure floats are not rounded(it match the gnu pattern).
 #[test]
