@@ -40,7 +40,7 @@ jobs:
     steps:
     #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -182,7 +182,7 @@ jobs:
     steps:
     #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -194,7 +194,7 @@ jobs:
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
     - name: Cache ~/.cache/lima
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -293,7 +293,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout code (uutils)
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -349,7 +349,7 @@ jobs:
 
         outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutils)
-      uses: actions/checkout@v7.0.0
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false

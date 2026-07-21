@@ -184,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
@@ -1794,6 +1801,16 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
+fn test_files0_from_non_utf8_name() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in(vec![0xff_u8])
+        .fails_with_code(2)
+        .stderr_contains("sort: cannot read");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_files0_read_error() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -1885,6 +1902,25 @@ fn test_files0_from_2a() {
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files0_from_non_utf8() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
 }
 
 #[test]
@@ -3018,22 +3054,46 @@ fn test_consistent_sorting_with_i18n_collate() {
 }
 
 #[test]
-fn test_sort_locale_punctuation_weights() {
-    // Test for issue #12542
-    let input = "file10\nfile-10\n";
-    let expected_output = "file-10\nfile10\n";
+fn test_sort_locale_punctuation() {
+    // Punctuation gets a distinguishing collation weight, so lines differing
+    // only by punctuation sort in a stable order (issue #12542) and are never
+    // merged by -u. This holds across the plain, explicit-key and stable paths,
+    // and in both locales. The wildcard-domain case comes from dehydrated, which
+    // relied on -u keeping a `*.domain.com` alias distinct from the bare domain.
+    // (input, expected, [(locale, args)...])
+    let cases = [
+        (
+            "file10\nfile-10\n",
+            "file-10\nfile10\n",
+            &[("en_US.UTF-8", &[][..]), ("C", &[][..])][..],
+        ),
+        (
+            "EU\nE.U\nE-U\n",
+            "E-U\nE.U\nEU\n",
+            &[
+                ("en_US.UTF-8", &["-u"][..]),
+                ("C", &["-u"][..]),
+                ("en_US.UTF-8", &["-u", "-k1,1"][..]),
+                ("en_US.UTF-8", &["-s", "-k1,1"][..]),
+            ][..],
+        ),
+        (
+            "domain.com\n*.domain.com\ndomain.com\n",
+            "*.domain.com\ndomain.com\n",
+            &[("en_US.UTF-8", &["-u"][..]), ("C", &["-u"][..])][..],
+        ),
+    ];
 
-    new_ucmd!()
-        .env("LC_ALL", "en_US.UTF-8")
-        .pipe_in(input)
-        .succeeds()
-        .stdout_is(expected_output);
-
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .pipe_in(input)
-        .succeeds()
-        .stdout_is(expected_output);
+    for (input, expected, runs) in cases {
+        for (locale, args) in runs {
+            new_ucmd!()
+                .env("LC_ALL", *locale)
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 /* spell-checker: enable */

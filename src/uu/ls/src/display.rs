@@ -42,6 +42,7 @@ use uucore::{
     format::human::human_readable,
     fs::display_permissions,
     fsext::metadata_get_time,
+    i18n::{UEncoding, get_ctype_encoding},
     os_str_as_bytes_lossy,
     quoting_style::{QuotingStyle, locale_aware_escape_dir_name, locale_aware_escape_name},
     show,
@@ -90,6 +91,32 @@ pub(crate) struct PaddingCollection {
 pub(crate) struct DisplayItemName {
     pub(crate) displayed: OsString,
     pub(crate) dired_name_len: usize,
+
+    /// Keep track of whether the quoted name started with a quote, so when
+    /// needed, we don't have to look at the `displayed` field and skip
+    /// the ANSI color codes that were added afterwards.
+    pub(crate) starts_with_quote: bool,
+}
+
+/// Same as above, but without the `dired_name_len` field.
+pub(crate) struct DisplayWithQuote {
+    pub(crate) displayed: OsString,
+    pub(crate) starts_with_quote: bool,
+}
+
+impl From<DisplayItemName> for DisplayWithQuote {
+    fn from(
+        DisplayItemName {
+            displayed,
+            dired_name_len: _,
+            starts_with_quote,
+        }: DisplayItemName,
+    ) -> Self {
+        Self {
+            displayed,
+            starts_with_quote,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -168,6 +195,41 @@ fn escape_name_with_locale(name: &OsStr, config: &Config) -> OsString {
 
 fn locale_quote(name: &OsStr, style: LocaleQuoting) -> OsString {
     let bytes = os_str_as_bytes_lossy(name);
+
+    // In a UTF-8 locale GNU's locale/clocale quoting uses Unicode quotation
+    // marks U+2018 (LEFT) and U+2019 (RIGHT) as delimiters for both styles,
+    // keyed off LC_CTYPE. Since the delimiters differ from any ASCII quote,
+    // embedded apostrophes and double quotes are left untouched; only control
+    // characters, backslashes and invalid bytes are escaped.
+    if get_ctype_encoding() == UEncoding::Utf8 {
+        let mut quoted = String::with_capacity(name.len() + 6);
+        quoted.push('\u{2018}');
+        for chunk in bytes.utf8_chunks() {
+            for c in chunk.valid().chars() {
+                if c == '\\' {
+                    quoted.push_str("\\\\");
+                } else if c.is_ascii() && c.is_control() {
+                    push_basic_escape(&mut quoted, c as u8);
+                } else if c.is_control() {
+                    // Non-ASCII control characters (the C1 range, e.g.
+                    // U+0085 NEL) are not printable; octal-escape their
+                    // UTF-8 bytes like GNU does for non-printable chars.
+                    let mut buf = [0u8; 4];
+                    for &byte in c.encode_utf8(&mut buf).as_bytes() {
+                        let _ = write!(quoted, "\\{byte:03o}");
+                    }
+                } else {
+                    quoted.push(c);
+                }
+            }
+            for &byte in chunk.invalid() {
+                let _ = write!(quoted, "\\{byte:03o}");
+            }
+        }
+        quoted.push('\u{2019}');
+        return OsString::from(quoted);
+    }
+
     let mut quoted = String::with_capacity(name.len() + 2);
     match style {
         LocaleQuoting::Single => quoted.push('\''),
@@ -371,7 +433,7 @@ pub fn display_items(
             write!(state.out, "{}", style_manager.apply_normal())?;
         }
 
-        let mut names_vec = Vec::with_capacity(items.len());
+        let mut names_vec: Vec<DisplayWithQuote> = Vec::with_capacity(items.len());
 
         #[cfg(unix)]
         let should_display_leading_info = config.inode || config.alloc_size;
@@ -399,7 +461,7 @@ pub fn display_items(
                 LazyCell::new(|| 0),
             );
 
-            names_vec.push(cell.displayed);
+            names_vec.push(cell.into());
         }
 
         let mut names = names_vec.into_iter();
@@ -428,11 +490,11 @@ pub fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                    write_os_str(&mut state.out, &name.displayed)?;
+                    current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
                 }
                 for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                    let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
@@ -441,7 +503,7 @@ pub fn display_items(
                         current_col += name_width + 2;
                         write!(state.out, ", ")?;
                     }
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
@@ -451,7 +513,7 @@ pub fn display_items(
             }
             _ => {
                 for name in names {
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
@@ -462,7 +524,7 @@ pub fn display_items(
 }
 
 fn display_grid(
-    names: impl Iterator<Item = OsString>,
+    names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
@@ -477,7 +539,7 @@ fn display_grid(
                 write!(out, "  ")?;
             }
             printed_something = true;
-            write_os_str(out, &name)?;
+            write_os_str(out, &name.displayed)?;
         }
         if printed_something {
             writeln!(out)?;
@@ -486,7 +548,7 @@ fn display_grid(
         let names: Vec<String> = {
             let mut buf = Vec::new();
             names
-                .map(|n| {
+                .map(|din| {
                     // In case some names are quoted, GNU adds a space before each
                     // entry that does not start with a quote to make it prettier
                     // on multiline.
@@ -501,10 +563,10 @@ fn display_grid(
                     // ```
                     // FIXME: the Grid crate only supports &str, so can't display raw bytes
                     buf.clear();
-                    if quoted && !os_str_starts_with(&n, b"'") && !os_str_starts_with(&n, b"\"") {
+                    if quoted && !din.starts_with_quote {
                         buf.push(b' ');
                     }
-                    buf.extend(n.as_encoded_bytes());
+                    buf.extend(din.displayed.as_encoded_bytes());
                     String::from_utf8_lossy(&buf).into_owned()
                 })
                 .collect()
@@ -684,6 +746,7 @@ fn display_item_name(
 ) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
+    let starts_with_quote = os_str_starts_with(&name, b"'") || os_str_starts_with(&name, b"\"");
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -844,6 +907,7 @@ fn display_item_name(
     DisplayItemName {
         displayed: name,
         dired_name_len,
+        starts_with_quote,
     }
 }
 
@@ -987,7 +1051,7 @@ fn display_item_long(
             LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
 
-        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+        let needs_space = quoted && !item_display.starts_with_quote;
 
         if config.dired {
             let mut dired_name_len = item_display.dired_name_len;

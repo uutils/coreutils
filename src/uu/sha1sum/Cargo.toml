@@ -30,6 +30,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
+[features]
+openssl = ["uucore/openssl"]
+
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
 

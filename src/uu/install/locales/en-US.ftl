@@ -29,7 +29,7 @@ install-error-chmod-failed-detailed = { $path }: chmod failed with error { $erro
 install-error-chown-failed = failed to chown { $path }: { $error }
 install-error-invalid-target = invalid target { $path }: No such file or directory
 install-error-target-not-dir = target { $path } is not a directory
-install-error-backup-failed = cannot backup { $from } to { $to }
+install-error-backup-failed = cannot backup { $from }: { $error }
 install-error-install-failed = cannot install { $from } to { $to }: { $error }
 install-error-strip-failed = strip program failed: { $error }
 install-error-strip-abnormal = strip process terminated abnormally - exit code: { $code }
@@ -39,6 +39,7 @@ install-error-invalid-user = invalid user: { $user }
 install-error-invalid-group = invalid group: { $group }
 install-error-omitting-directory = omitting directory { $path }
 install-error-not-a-directory = failed to access { $path }: Not a directory
+install-error-existing-file-not-directory = cannot create directory { $path }: File exists
 install-error-override-directory-failed = cannot overwrite directory { $dir } with non-directory { $file }
 install-error-same-file = { $file1 } and { $file2 } are the same file
 install-error-extra-operand = extra operand { $operand }
@@ -46,7 +47,6 @@ install-error-extra-operand = extra operand { $operand }
 install-error-not-permitted = cannot remove { $path }: Operation not permitted
 install-error-invalid-mode = Invalid mode string: { $error }
 install-error-mutually-exclusive-target = Options --target-directory and --no-target-directory are mutually exclusive
-install-error-mutually-exclusive-compare-preserve = Options --compare and --preserve-timestamps are mutually exclusive
 install-error-mutually-exclusive-compare-strip = Options --compare and --strip are mutually exclusive
 install-error-missing-file-operand = missing file operand
 install-error-missing-destination-operand = missing destination file operand after { $path }
@@ -54,6 +54,7 @@ install-error-failed-to-remove = Failed to remove existing file { $path }. Error
 
 # Warning messages
 install-warning-compare-ignored = the --compare (-C) option is ignored when you specify a mode with non-permission bits
+install-warning-no-strip-with-program = WARNING: ignoring --strip-program option as -s option was not specified
 
 # Verbose output
 install-verbose-creating-directory = creating directory { $path }

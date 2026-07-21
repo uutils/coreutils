@@ -1042,6 +1042,21 @@ fn test_env_block_signal_flag() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_env_block_realtime_signal() {
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal=SIGRTMIN+7", "true"])
+        .succeeds()
+        .no_stderr();
+    new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--block-signal=SIGRTMAX-7", "true"])
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
 #[cfg(unix)]
 fn test_env_list_signal_handling_reports_ignore() {
     let result = new_ucmd!()
@@ -1692,8 +1707,8 @@ mod test_raw_string_parser {
             let mut buffer = [0u8; 4];
             let owl = '🦉'.encode_utf8(&mut buffer);
             owl_invalid_part = owl.bytes().next().unwrap();
-            brace_1 = [b'<'].to_vec();
-            brace_2 = [b'>'].to_vec();
+            brace_1 = b"<".to_vec();
+            brace_2 = b">".to_vec();
         }
         let mut input_ux = brace_1;
         input_ux.push(owl_invalid_part);

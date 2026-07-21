@@ -99,22 +99,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let mut niceness = rustix::process::getpriority_process(None)
+    let current_niceness = rustix::process::getpriority_process(None)
         .map_err(|e| USimpleError::new(125, format!("getpriority: {e}")))?;
-    let (adjustment, mut cmd_iter) = match (
-        matches.get_one::<String>(options::ADJUSTMENT),
-        matches.get_many::<String>(options::COMMAND),
-    ) {
-        (Some(_), None) => {
+
+    let Some(mut cmd_iter) = matches.get_many::<String>(options::COMMAND) else {
+        if matches.contains_id(options::ADJUSTMENT) {
             return Err(UUsageError::new(
                 125,
                 translate!("nice-error-command-required-with-adjustment"),
             ));
         }
-        (Some(nstr), Some(cmd_iter)) => match nstr.parse::<i32>() {
-            Ok(num) => (num, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::PosOverflow => (i32::MAX, cmd_iter),
-            Err(e) if *e.kind() == IntErrorKind::NegOverflow => (i32::MIN, cmd_iter),
+
+        writeln!(stdout(), "{current_niceness}")?;
+        return Ok(());
+    };
+
+    let adjustment = match matches.get_one::<String>(options::ADJUSTMENT) {
+        None => 10,
+        Some(nstr) => match nstr.parse::<i32>() {
+            Ok(num) => num,
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => i32::MAX,
+            Err(e) if *e.kind() == IntErrorKind::NegOverflow => i32::MIN,
             Err(e) => {
                 return Err(USimpleError::new(
                     125,
@@ -122,22 +127,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
         },
-        (_, None) => {
-            writeln!(stdout(), "{niceness}")?;
-            return Ok(());
-        }
-        (_, Some(cmd_iter)) => (10_i32, cmd_iter),
     };
 
-    niceness = niceness.saturating_add(adjustment);
+    let new_niceness = current_niceness.saturating_add(adjustment);
     // We can't use `show_warning` because that will panic if stderr
     // isn't writable. The GNU test suite checks specifically that the
     // exit code when failing to write the advisory is 125, but Rust
     // will produce an exit code of 101 when it panics.
-    if let Err(e) = rustix::process::setpriority_process(None, niceness) {
+    if let Err(e) = rustix::process::setpriority_process(None, new_niceness) {
         let warning_msg = translate!("nice-warning-setpriority", "util_name" => "nice", "error" => strip_errno(&e.into()) );
 
-        if write!(std::io::stderr(), "{warning_msg}").is_err() {
+        if writeln!(std::io::stderr(), "{warning_msg}").is_err() {
             set_exit_code(125);
             return Ok(());
         }

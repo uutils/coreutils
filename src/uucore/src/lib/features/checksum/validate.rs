@@ -693,10 +693,11 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // Set binary to false because --binary is not supported with --check
-
+    // Hash the raw bytes, matching the generation path: as decided in #9168,
+    // the text/binary distinction is ignored when computing digests, so on
+    // Windows no CRLF -> LF conversion must happen here either.
     let (calculated_checksum, _) =
-        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Binary) {
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
@@ -833,9 +834,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let Some(line_info) = LineInfo::parse(line, cached_line_format) else {
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_info =
+        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
@@ -1290,6 +1290,8 @@ mod tests {
                 FileChecksumResult::CantOpen,
                 b"filename: FAILED open or read\n",
             ),
+            // A non-UTF-8 OsString cannot be built from bytes on Windows.
+            #[cfg(unix)]
             (
                 #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
                 os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),
