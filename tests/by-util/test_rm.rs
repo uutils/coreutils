@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile NOFILE EMFILE
+// spell-checker:ignore ENFILE dups CLOEXEC execv fprintf atoi rlim setrlimit perror RDONLY GETFD SETFD
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;

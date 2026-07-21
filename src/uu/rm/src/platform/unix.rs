@@ -6,6 +6,7 @@
 // Unix-specific implementations for the rm utility
 
 // spell-checker:ignore fstatat unlinkat statx behaviour NOFILE PATH_MAX
+// spell-checker:ignore EMFILE ENFILE basenames dups rlim getrlimit RLIM dirfd
 
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
