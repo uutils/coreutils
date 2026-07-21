@@ -583,6 +583,17 @@ fn test_printf_invalid_directive() {
 }
 
 #[test]
+fn test_invalid_directive_after_multibyte_char() {
+    let ts = TestScenario::new(util_name!());
+    for (fmt, directive) in [("€%-", "%-"), ("ä%0", "%0"), ("€%.", "%.")] {
+        ts.ucmd()
+            .args(&["-c", fmt, "."])
+            .fails_with_code(1)
+            .stderr_only(format!("stat: '{directive}': invalid directive\n"));
+    }
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
@@ -606,7 +617,7 @@ fn test_stat_selinux() {
     // Count that we have 4 fields
     let result = ts.ucmd().arg("--printf='%C'").arg("/bin/").succeeds();
     let s: Vec<_> = result.stdout_str().split(':').collect();
-    assert!(s.len() == 4);
+    assert_eq!(s.len(), 4);
 }
 
 #[cfg(unix)]
@@ -715,4 +726,13 @@ fn test_correct_metadata() {
             .unwrap();
         assert_eq!(output, &expected);
     }
+}
+
+#[test]
+fn test_no_such_directory_message() {
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .arg("a")
+        .fails_with_code(1)
+        .stderr_is("stat: cannot statx 'a': No such file or directory\n");
 }

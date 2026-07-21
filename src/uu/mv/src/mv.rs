@@ -172,7 +172,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(env::var("VERSION_CONTROL").ok(), &matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
     if backup_mode != BackupMode::None
@@ -1310,7 +1311,7 @@ fn rename_file_fallback(
             & 0o7777;
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        io::copy(&mut &src_file, &mut dst_file)
+        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
         #[cfg(not(any(target_os = "macos", target_os = "redox")))]

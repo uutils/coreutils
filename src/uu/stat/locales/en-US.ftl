@@ -63,7 +63,7 @@ stat-error-invalid-directive = {$directive}: invalid directive
 stat-error-cannot-read-filesystem = cannot read table of mounted file systems: {$error}
 stat-error-stdin-filesystem-mode = using '-' to denote standard input does not work in file system mode
 stat-error-cannot-read-filesystem-info = cannot read file system information for {$file}: {$error}
-stat-error-cannot-stat = cannot stat {$file}: {$error}
+stat-error-cannot-statx = cannot statx {$file}: {$error}
 
 ## Warning messages
 
@@ -90,7 +90,7 @@ stat-word-id = ID
 stat-word-namelen = Namelen
 stat-word-type = Type
 stat-word-block = Block
-stat-word-size = size
+stat-word-size = Size
 stat-word-fundamental = Fundamental
 stat-word-block-size = block size
 stat-word-blocks = Blocks

@@ -10,7 +10,7 @@
 //! when moving files across different filesystems/partitions.
 
 use rustc_hash::FxHashMap;
-use std::io;
+use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use uucore::display::Quotable;
@@ -126,7 +126,11 @@ impl HardlinkTracker {
             Err(e) => {
                 // Gracefully handle metadata errors by logging and continuing without hardlink tracking
                 if options.verbose {
-                    eprintln!("warning: cannot get metadata for {}: {e}", source.quote());
+                    let _ = writeln!(
+                        io::stderr(),
+                        "warning: cannot get metadata for {}: {e}",
+                        source.quote()
+                    );
                 }
                 return None;
             }
@@ -144,7 +148,8 @@ impl HardlinkTracker {
 
             if has_hardlinks {
                 if options.verbose {
-                    eprintln!(
+                    let _ = writeln!(
+                        io::stderr(),
                         "preserving hardlink {} -> {} (hardlinked)",
                         source.quote(),
                         existing_path.quote()
@@ -179,7 +184,11 @@ impl HardlinkGroupScanner {
             if let Err(e) = self.scan_single_path(file) {
                 if options.verbose {
                     // Only show warnings for verbose mode
-                    eprintln!("warning: failed to scan {}: {e}", file.quote());
+                    let _ = writeln!(
+                        io::stderr(),
+                        "warning: failed to scan {}: {e}",
+                        file.quote()
+                    );
                 }
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
@@ -192,9 +201,11 @@ impl HardlinkGroupScanner {
         if options.verbose {
             let stats = self.stats();
             if stats.total_groups > 0 {
-                eprintln!(
+                let _ = writeln!(
+                    io::stderr(),
                     "found {} hardlink groups with {} total files",
-                    stats.total_groups, stats.total_files
+                    stats.total_groups,
+                    stats.total_files
                 );
             }
         }

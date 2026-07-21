@@ -16,7 +16,7 @@ use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 /// Benchmark ASCII-only data sorting with UTF-8 locale
 #[divan::bench]
 fn sort_ascii_utf8_locale(bencher: Bencher) {
-    let data = text_data::generate_ascii_data_simple(100_000);
+    let data = text_data::generate_ascii_data_simple(1_500_000);
     let file_path = setup_test_file(&data);
     let output_file = NamedTempFile::new().unwrap();
     let output_path = output_file.path().to_str().unwrap().to_string();
@@ -150,6 +150,84 @@ fn sort_long_common_prefix_utf8_locale(bencher: Bencher) {
     ];
     black_box(run_util_function(uumain, &args));
     bencher.bench(|| {
+        black_box(run_util_function(uumain, &args));
+    });
+}
+
+/// Benchmark merging a single pre-sorted file (`sort -m FILE`) with a UTF-8 locale.
+///
+/// This is the worst case for the old implementation: a full ICU collation sort key was
+/// computed for every line even though merging a single file performs no comparisons at
+/// all. The merge path now compares lazily with the collator, so this should be close to
+/// a plain copy regardless of locale.
+#[divan::bench]
+fn merge_single_file_utf8_locale(bencher: Bencher) {
+    // `-m` expects already-sorted input, so sort the generated lines first.
+    let raw = text_data::generate_ascii_data_simple(500_000);
+    let mut lines: Vec<&[u8]> = raw
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
+    lines.sort();
+    let mut data = Vec::with_capacity(raw.len());
+    for line in lines {
+        data.extend_from_slice(line);
+        data.push(b'\n');
+    }
+    let file_path = setup_test_file(&data);
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
+
+    let args = ["-m", "-o", &output_path, file_path.to_str().unwrap()];
+    black_box(run_util_function(uumain, &args));
+    bencher.bench(|| {
+        black_box(run_util_function(uumain, &args));
+    });
+}
+
+/// Benchmark merging several pre-sorted files (`sort -m`) with a UTF-8 locale.
+///
+/// Mirrors `merge_pre_sorted_files` from `sort_bench_merge.rs`, but runs under a UTF-8
+/// locale to exercise the locale-aware merge comparison.
+#[divan::bench]
+fn merge_pre_sorted_files_utf8_locale(bencher: Bencher) {
+    const TOTAL_LINES: usize = 500_000;
+    const NUM_FILES: usize = 8;
+
+    let data = text_data::generate_ascii_data(TOTAL_LINES);
+    let lines: Vec<&[u8]> = data
+        .split(|&b| b == b'\n')
+        .filter(|l| !l.is_empty())
+        .collect();
+    let lines_per_file = lines.len() / NUM_FILES;
+
+    let mut file_paths = Vec::with_capacity(NUM_FILES);
+    for i in 0..NUM_FILES {
+        let start = i * lines_per_file;
+        let end = if i == NUM_FILES - 1 {
+            lines.len()
+        } else {
+            (i + 1) * lines_per_file
+        };
+
+        let mut chunk_lines = lines[start..end].to_vec();
+        chunk_lines.sort();
+
+        let mut chunk_data = Vec::new();
+        for line in chunk_lines {
+            chunk_data.extend_from_slice(line);
+            chunk_data.push(b'\n');
+        }
+        file_paths.push(setup_test_file(&chunk_data));
+    }
+
+    let output_file = NamedTempFile::new().unwrap();
+    let output_path = output_file.path().to_str().unwrap().to_string();
+    let file_args: Vec<&str> = file_paths.iter().map(|p| p.to_str().unwrap()).collect();
+
+    bencher.bench(|| {
+        let mut args = vec!["-m", "-o", output_path.as_str()];
+        args.extend(&file_args);
         black_box(run_util_function(uumain, &args));
     });
 }

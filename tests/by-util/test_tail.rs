@@ -1610,6 +1610,43 @@ fn test_retry7() {
     }
 }
 
+/// Under `--follow=name`, a watched file replaced by a symlink must be reported
+/// as untailable, not silently followed to the link target (which would
+/// exfiltrate its contents).
+#[test]
+#[cfg(unix)]
+#[cfg(not(target_os = "android"))]
+fn test_follow_name_replaced_by_symlink_is_untailable() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("secret", "secret-must-not-leak\n");
+    at.write("watched", "visible\n");
+
+    let mut p = ts
+        .ucmd()
+        .args(&[
+            "-F",
+            "-s.1",
+            "--max-unchanged-stats=1",
+            "--use-polling",
+            "watched",
+        ])
+        .run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+
+    // Swap the watched file for a symlink pointing at a secret file.
+    at.remove("watched");
+    at.symlink_file("secret", "watched");
+    p.delay(1000);
+
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_does_not_contain("secret-must-not-leak")
+        .stderr_contains("has been replaced with an untailable symbolic link");
+}
+
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -5179,4 +5216,14 @@ fn test_follow_symlink_target_change() {
         .with_all_output()
         .stdout_contains("A\n")
         .stdout_contains("B\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_contains("hello");
 }

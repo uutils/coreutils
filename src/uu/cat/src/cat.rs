@@ -7,7 +7,7 @@
 
 mod platform;
 
-use crate::platform::is_unsafe_overwrite;
+use crate::platform::is_safe_overwrite;
 use clap::{Arg, ArgAction, Command};
 use memchr::memchr2;
 use std::ffi::OsString;
@@ -369,12 +369,13 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
     match get_input_type(path)? {
         InputType::StdIn => {
             let stdin = io::stdin();
-            if is_unsafe_overwrite(&stdin, &io::stdout()) {
+            let is_interactive = stdin.is_terminal();
+            if !is_safe_overwrite(&stdin, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
                 reader: stdin,
-                is_interactive: io::stdin().is_terminal(),
+                is_interactive,
             };
             cat_handle(&mut handle, options, state)
         }
@@ -383,7 +384,7 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
             let file = File::open(path)?;
-            if is_unsafe_overwrite(&file, &io::stdout()) {
+            if !is_safe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
             let mut handle = InputHandle {
@@ -481,9 +482,7 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let mut stdout = stdout;
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok()
-        && !uucore::pipes::might_fuse(&handle.reader)
-    {
+    if uucore::pipes::splice_unbounded_auto(&handle.reader, &mut stdout)?.is_ok() {
         return Ok(());
     }
 

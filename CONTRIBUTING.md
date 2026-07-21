@@ -11,7 +11,7 @@ check out these documents:
 - Our community's [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md).
 - [DEVELOPMENT.md](./DEVELOPMENT.md) for setting up your development
   environment.
-- Our [Review Guidelines](https://uutils.github.io/reviews/) for what we expect
+- Our [Review Guidelines](https://uutils.org/reviews/) for what we expect
   from a pull request and how reviews are done.
 
 Now follows a very important warning:
@@ -79,6 +79,22 @@ We have the following goals with our development:
 There are several ways to help and writing code is just one of them. Reporting
 issues and writing documentation are just as important as writing code.
 
+### Reference version of GNU coreutils
+
+We try to stay compatible with the latest stable release of GNU coreutils,
+and sometimes backport changes from GNU's master branch as well.
+
+Since many Linux distributions ship an older GNU coreutils, Canonical
+provides a [more recent build](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference)
+you can use to compare our utilities against upstream before filing a bug
+report. A few caveats:
+
+- The package is PATCHED, so it may differ from upstream.
+- NEVER install this package on your system — it isn't meant for daily use.
+  Instead, manually download and extract the [tarball](https://launchpad.net/~bamf0/+archive/ubuntu/coreutils-reference/+files/gnu-coreutils_9.11-0ubuntu1~ppa3_amd64.deb)
+  and run it from there.
+- Bug reports and fixes for this package itself are not accepted here.
+
 ### Reporting Issues
 
 We can't fix bugs we don't know about, so good issues are super helpful! Here
@@ -91,6 +107,7 @@ are some tips for writing good issues:
 - Make sure to include all relevant information, such as:
   - Which version or commit hash of uutils did you check?
   - Which version of GNU coreutils are you comparing with?
+  - Did you test against the latest version of GNU coreutils?
   - What platform are you on?
 - Provide a way to reliably reproduce the issue.
 - Be as specific as possible!

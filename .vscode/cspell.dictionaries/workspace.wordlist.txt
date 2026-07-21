@@ -100,7 +100,6 @@ chroot
 cksum
 csplit
 dircolors
-hashsum
 hostid
 logname
 mkdir
@@ -361,6 +360,7 @@ uutests
 uutils
 
 # * function names
+sendfile
 execfn
 fadvise
 fstatfs
@@ -375,6 +375,8 @@ weblate
 algs
 wasm
 wasip
+statx
+Statx
 
 # * stty terminal flags
 brkint

@@ -8,7 +8,7 @@ mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::io::{Error, ErrorKind};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -158,10 +158,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let default_shell: &'static OsStr = OsStr::new("/bin/sh");
-    let default_option: &'static OsStr = OsStr::new("-i");
-    let user_shell = std::env::var_os("SHELL");
-
     let options = Options::from(&matches)?;
 
     // We are resolving the path in case it is a symlink or /. or /../
@@ -171,8 +167,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             MissingHandling::Normal,
             ResolveMode::Logical,
         )
-        .unwrap()
-        .to_str()
+        // A NEWROOT that does not resolve is by definition not old `/`, so treat
+        // an Err as a non-match instead of unwrapping it.
+        .ok()
+        .as_deref()
+        .and_then(|p| p.to_str())
             != Some("/")
     {
         return Err(UUsageError::new(
@@ -185,35 +184,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
 
-    let commands: Vec<&OsStr> = matches
-        .get_many::<String>(options::COMMAND)
-        .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());
-
-    // TODO: refactor the args and command matching
-    // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
-    let command = if commands.is_empty() {
-        vec![
-            user_shell.as_deref().unwrap_or(default_shell),
-            default_option,
-        ]
-    } else {
-        commands
+    let mut cmd_iter = matches
+        .get_many::<OsString>(options::COMMAND)
+        .into_iter()
+        .flatten();
+    let (chroot_command, args) = match cmd_iter.next() {
+        Some(c) => (c.clone(), cmd_iter.cloned().collect::<Vec<OsString>>()),
+        None => (
+            std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into()),
+            vec!["-i".into()],
+        ),
     };
-
-    assert!(!command.is_empty());
-    let chroot_command = command[0];
 
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let err = process::Command::new(chroot_command)
-        .args(&command[1..])
-        .exec();
+    let err = process::Command::new(&chroot_command).args(&args).exec();
 
     Err(if err.kind() == ErrorKind::NotFound {
-        ChrootError::CommandNotFound(chroot_command.to_owned(), err)
+        ChrootError::CommandNotFound(chroot_command, err)
     } else {
-        ChrootError::CommandFailed(chroot_command.to_owned(), err)
+        ChrootError::CommandFailed(chroot_command, err)
     }
     .into())
 }
@@ -256,6 +247,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::COMMAND)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString))
                 .hide(true)
                 .index(2),
         )

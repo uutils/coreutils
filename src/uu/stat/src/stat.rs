@@ -11,6 +11,7 @@ use uucore::translate;
 
 use clap::builder::ValueParser;
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::fs::{display_permissions, major, minor};
 use uucore::fsext::{
     FsMeta, MetadataTimeField, StatFs, metadata_get_time, pretty_filetype, pretty_fstype,
@@ -46,8 +47,8 @@ enum StatError {
     StdinFilesystemMode,
     #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", translate!("stat-error-cannot-stat", "file" => file.clone(), "error" => error.clone()))]
-    CannotStat { file: String, error: String },
+    #[error("{}", translate!("stat-error-cannot-statx", "file" => file.clone(), "error" => error.clone()))]
+    CannotStatx { file: String, error: String },
 }
 
 impl UError for StatError {
@@ -82,10 +83,13 @@ struct Flags {
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
 fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
     if end >= bound {
+        // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
+        // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
+        let directive: String = slice.chars().skip(beg).take(end - beg).collect();
         return Err(USimpleError::new(
             1,
             StatError::InvalidDirective {
-                directive: slice[beg..end].quote().to_string(),
+                directive: directive.quote().to_string(),
             }
             .to_string(),
         ));
@@ -1284,9 +1288,9 @@ impl Stater {
                 Err(e) => {
                     show_error!(
                         "{}",
-                        StatError::CannotStat {
+                        StatError::CannotStatx {
                             file: display_name.quote().to_string(),
-                            error: e.to_string()
+                            error: strip_errno(&e)
                         }
                     );
                     return 1;

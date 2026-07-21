@@ -622,6 +622,22 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+#[test]
+fn test_touch_set_date_without_leading_zeroes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_without_leading_zeroes";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2026-6-27 13:12", file])
+        .succeeds()
+        .no_stderr();
+
+    let expected = FileTime::from_unix_time(1_782_537_120, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
 /// Regression test for https://github.com/uutils/coreutils/issues/11804
 ///
 /// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
@@ -787,6 +803,42 @@ fn test_touch_system_fails() {
         .args(&[file])
         .fails()
         .stderr_contains("setting times of '/'");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
+fn test_touch_fifo() {
+    // touch must not hang on a reader-less FIFO and must update its times.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-d", "2020-01-01 00:00:00", "fifo"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("fifo"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
+fn test_touch_dash_updates_stdout_file() {
+    // `touch -` must update the times of the file open as stdout (fd 1), even
+    // when it is read-only, and set them to "now" rather than a 1970 sentinel.
+    use std::fs::File;
+    use std::time::SystemTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("c");
+    // Age the file so the update to "now" is detectable.
+    let old = FileTime::from_unix_time(1_000_000, 0);
+    filetime::set_file_times(at.plus("c"), old, old).unwrap();
+
+    let file = File::open(at.plus("c")).unwrap();
+    ucmd.set_stdout(file).arg("-").succeeds();
+
+    let mtime = at.metadata("c").modified().unwrap();
+    let age = SystemTime::now().duration_since(mtime).unwrap();
+    assert!(age.as_secs() < 60, "touch - left mtime stale: {age:?}");
 }
 
 #[test]
@@ -976,6 +1028,26 @@ fn test_touch_invalid_date_format() {
         .args(&["-m", "-t", "+1000000000000 years", file])
         .fails()
         .stderr_contains("touch: invalid date format '+1000000000000 years'");
+}
+
+#[test]
+fn test_touch_invalid_timestamp_leading_multibyte_char() {
+    for ts in ["€123456789", "€23456789012"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
+    }
+}
+
+#[test]
+fn test_touch_invalid_timestamp_reports_original_input() {
+    for ts in ["2026-04-10", "26-04-10", "00000000"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
+    }
 }
 
 #[test]

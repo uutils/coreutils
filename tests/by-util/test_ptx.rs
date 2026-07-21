@@ -295,6 +295,14 @@ fn test_sentence_regexp_newlines_are_spaces() {
 }
 
 #[test]
+fn test_sentence_regexp_invalid_syntax_failure() {
+    new_ucmd!()
+        .args(&["-S", "^["])
+        .fails()
+        .stderr_contains("Invalid regexp");
+}
+
+#[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
@@ -416,4 +424,12 @@ fn test_invalid_regex_word_trailing_backslash() {
 #[test]
 fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
 }

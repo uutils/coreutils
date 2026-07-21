@@ -102,3 +102,4 @@ pr-error-column-merge-conflict = cannot specify number of columns when printing 
 pr-error-across-merge-conflict = cannot specify both printing across and printing in parallel
 pr-error-invalid-pages-range = invalid --pages argument '{$start}:{$end}'
 pr-error-invalid-expand-tab-argument ='-e' extra characters or invalid number in the argument: ‘{$arg}’
+pr-error-invalid-number-argument ='-n' extra characters or invalid number in the argument: ‘{$arg}’

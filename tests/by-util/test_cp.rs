@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile uufs xattrs ELOOP
+// spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
 // spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
 #[cfg(unix)]
 use rstest::rstest;
@@ -101,6 +101,23 @@ fn test_cp_stream_to_full() {
         .arg("/dev/full")
         .fails()
         .stderr_contains("No space");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_write_error_is_reported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source_file");
+    ucmd.arg("--verbose")
+        .arg("source_file")
+        .arg("dest_file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cp: write error: No space left on device\n");
+
+    // The copy itself should still succeed even though reporting it on
+    // stdout failed.
+    assert!(at.file_exists("dest_file"));
 }
 
 #[test]
@@ -2607,6 +2624,16 @@ fn test_cp_reflink_never() {
 
         // Check the content of the destination file
         assert_eq!(at.read(TEST_EXISTING_FILE), "Hello, World!\n");
+        // TODO: make Btrfs image without sudo dynamically to support GitHub runner
+        #[cfg(target_os = "linux")]
+        let might_reflink = std::process::Command::new("filefrag")
+            .arg("-v")
+            .arg(TEST_EXISTING_FILE)
+            .output()
+            .map(|o| o.stdout.windows(6).any(|w| w == b"shared"))
+            .unwrap();
+        #[cfg(target_os = "linux")]
+        assert!(!might_reflink, "--reflink=never did not work");
     }
 }
 
@@ -2784,6 +2811,167 @@ fn test_cp_sparse_never_reflink_always() {
         "dst_file",
     ])
     .fails();
+}
+
+// Regression test for https://github.com/uutils/coreutils/issues/12186
+// `cp --sparse=always` should be supported on Windows (matching GNU), not
+// rejected with "--sparse is only supported on linux".
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_always_windows() {
+    use std::os::windows::fs::MetadataExt;
+    const BUFFER_SIZE: usize = 4096 * 16 + 3;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A file with long runs of zeros: a candidate for sparse copying.
+    let mut buf = vec![0; BUFFER_SIZE].into_boxed_slice();
+    let bytes_to_touch = [buf.len() / 3, 2 * (buf.len() / 3)];
+    for i in bytes_to_touch {
+        buf[i] = b'x';
+    }
+
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=always", "src_file1", "dst_file_sparse"])
+        .succeeds();
+
+    // The copy must be byte-for-byte identical to the source...
+    assert_eq!(at.read_bytes("dst_file_sparse").into_boxed_slice(), buf);
+
+    // ...and the destination must actually be flagged sparse (proving the
+    // FSCTL_SET_SPARSE path ran rather than a plain copy). The temp dir used by
+    // the test harness is on NTFS, which supports sparse files.
+    assert_ne!(
+        at.metadata("dst_file_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "destination should have the sparse file attribute set"
+    );
+}
+
+// Companion to the regression above: `cp --sparse=never` must also be accepted
+// on Windows and produce a faithful, non-sparse copy (it was rejected by the
+// same "--sparse is only supported on linux" error before #12186).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_never_windows() {
+    use std::os::windows::fs::MetadataExt;
+    const BUFFER_SIZE: usize = 4096 * 4;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    let buf: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
+    at.make_file("src_file1");
+    at.write_bytes("src_file1", &buf);
+
+    ucmd.args(&["--sparse=never", "src_file1", "dst_file_non_sparse"])
+        .succeeds();
+
+    assert_eq!(at.read_bytes("dst_file_non_sparse"), buf);
+
+    assert_eq!(
+        at.metadata("dst_file_non_sparse").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "destination must not be sparse with --sparse=never"
+    );
+}
+
+// `--sparse=auto` (the default) must preserve an already-sparse source on Windows,
+// matching GNU. Before this fix the default mode did a plain copy that dropped the
+// source's holes. A non-sparse source must still copy plainly (no new holes).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_sparse_auto_preserves_sparse_source_windows() {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_SPARSE_FILE: u32 = 0x0000_0200;
+    const BUFFER_SIZE: usize = 1024 * 1024;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // A 1 MiB file with data only near the start and end: a clear sparse candidate.
+    let mut buf = vec![0u8; BUFFER_SIZE].into_boxed_slice();
+    buf[1024] = b'x';
+    buf[BUFFER_SIZE - 2048] = b'y';
+    at.make_file("src");
+    at.write_bytes("src", &buf);
+
+    // Seed a genuinely sparse source via the already-supported --sparse=always.
+    scene
+        .ucmd()
+        .args(&["--sparse=always", "src", "sparse_src"])
+        .succeeds();
+    assert_ne!(
+        at.metadata("sparse_src").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "precondition: seeded source should be sparse"
+    );
+
+    // Default mode is --sparse=auto: an already-sparse source must stay sparse.
+    scene.ucmd().args(&["sparse_src", "auto_dst"]).succeeds();
+    assert_eq!(
+        at.read_bytes("auto_dst").into_boxed_slice(),
+        buf,
+        "auto copy must be byte-for-byte identical to the source"
+    );
+    assert_ne!(
+        at.metadata("auto_dst").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "--sparse=auto should preserve an already-sparse source"
+    );
+
+    // A non-sparse source copied with the default mode must NOT become sparse.
+    at.make_file("plain_src");
+    at.write_bytes("plain_src", &buf);
+    scene.ucmd().args(&["plain_src", "plain_dst"]).succeeds();
+    assert_eq!(
+        at.metadata("plain_dst").file_attributes() & FILE_ATTRIBUTE_SPARSE_FILE,
+        0,
+        "--sparse=auto must not make a non-sparse source sparse"
+    );
+}
+
+// `--reflink=auto` means "clone if possible, else plain copy" (GNU), so on
+// Windows — which has no reflink support — it must fall back to a plain copy
+// rather than fail.
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_reflink_auto_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "hello");
+
+    ucmd.args(&["--reflink=auto", "src", "dst"]).succeeds();
+
+    assert_eq!(at.read("dst"), "hello");
+}
+
+// `--reflink=always` (and bare `--reflink`, which defaults to `always`) must
+// still fail on Windows: cloning was explicitly required but is unsupported.
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_reflink_always_windows() {
+    for argument in ["--reflink=always", "--reflink"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("src", "hello");
+
+        ucmd.args(&[argument, "src", "dst"]).fails();
+    }
+}
+
+// `--debug` must report the sparse detection that actually happened: `zeros`
+// when the sparse copy ran (the test temp dir is NTFS, which supports it).
+#[cfg(target_os = "windows")]
+#[test]
+fn test_cp_debug_sparse_always_windows() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "hello");
+
+    ucmd.args(&["--debug", "--sparse=always", "a", "b"])
+        .succeeds()
+        .stdout_contains(
+            "copy offload: unsupported, reflink: unsupported, sparse detection: zeros",
+        );
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -3608,6 +3796,23 @@ fn test_cp_parents_2_deep_dir() {
     assert!(at.dir_exists("d/e/a/b/c"));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_cp_parents_recursive_source_ending_in_parent_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir_all("src/sub");
+    at.write("src/sub/f", "x\n");
+    at.mkdir("d");
+
+    ucmd.args(&["--parents", "-r", "src/sub/..", "d"])
+        .fails()
+        .stderr_contains("cannot create directory 'd/src/sub/..'")
+        .stderr_contains("File exists");
+
+    assert!(at.dir_exists("d/src/sub"));
+    assert!(!at.file_exists("d/src/sub/f"));
+}
+
 #[test]
 fn test_cp_copy_symlink_contents_recursive() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3686,6 +3891,21 @@ fn test_remove_destination_with_destination_being_a_hardlink_to_source() {
     assert_eq!("", at.resolve_link(hardlink));
     assert!(at.file_exists(file));
     assert!(at.file_exists(hardlink));
+}
+
+#[test]
+fn test_remove_destination_with_destination_being_relative_path_of_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "a";
+    let dest = "./a";
+    at.write(source, "hello");
+
+    ucmd.args(&["--remove-destination", source, dest])
+        .fails()
+        .stderr_contains("are the same file");
+
+    assert!(at.file_exists(source));
+    assert_eq!(at.read(source), "hello");
 }
 
 #[test]
@@ -4410,6 +4630,37 @@ fn test_cp_attributes_only() {
     assert_eq!("b", at.read(b));
     assert_eq!(mode_a, at.metadata(a).mode());
     assert_eq!(mode_b, at.metadata(b).mode());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_attributes_only_dest_open_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("s.txt", "hi");
+    ucmd.args(&["--attributes-only", "s.txt", "/dev/null/n.txt"])
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.arg("source.txt")
+        .arg("/dev/null/n.txt")
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot create regular file '/dev/null/n.txt'");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_cannot_create_regular_file_attributes_only() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("source.txt", "hello");
+    ucmd.args(&["--attributes-only", "source.txt", "/dev/null/n.txt"])
+        .fails_with_code(1)
+        .stderr_only("cp: cannot create regular file '/dev/null/n.txt': Not a directory\n");
 }
 
 #[test]
@@ -7614,6 +7865,153 @@ fn test_cp_archive_deref_flag_ordering() {
     }
 }
 
+/// Regression test: -a keeps recursion when combined with -L/-H/-d.
+/// https://github.com/uutils/coreutils/issues/13207
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_preserves_recursive() {
+    for flags in ["-afL", "-aLf", "-aHL", "-adL"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.mkdir("srcdir");
+        at.touch("srcdir/file.txt");
+        let dest = format!("dest_{}", flags.replace('-', ""));
+        ucmd.args(&[flags, "srcdir", &dest]).succeeds();
+        assert!(
+            at.file_exists(format!("{dest}/file.txt")),
+            "failed for {flags}: destination file missing"
+        );
+    }
+}
+
+/// -aL should preserve file permissions (--preserve=all from -a).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_preserves_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("srcdir");
+    at.touch("srcdir/file.txt");
+    at.set_mode("srcdir/file.txt", 0o705);
+    ucmd.args(&["-aL", "srcdir", "dest"]).succeeds();
+    let mode = at.metadata("dest/file.txt").permissions().mode();
+    assert_eq!(
+        mode & 0o777,
+        0o705,
+        "-aL should preserve mode, got 0o{mode:o}"
+    );
+}
+
+/// -dL should preserve hardlinks (--preserve=links from -d survives -L override).
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_no_deref_preserve_with_deref_keeps_hardlinks() {
+    use std::os::linux::fs::MetadataExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("file1");
+    at.hard_link("file1", "file2");
+    at.mkdir("target_dir");
+    ucmd.args(&["-dL", "file1", "file2", "target_dir"])
+        .succeeds();
+    // -dL: hardlink preserved → target_dir/file1 should have nlink == 2
+    // (both file1 and file2 point to the same inode in target_dir)
+    let nlink = at.metadata("target_dir/file1").st_nlink();
+    assert_eq!(
+        nlink, 2,
+        "-dL should preserve hardlinks (expected nlink=2, got nlink={nlink})"
+    );
+}
+
+/// -aL inside a directory: inner symlinks should be dereferenced,
+/// while -a preserves them (last-flag-wins for dereference).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_symlinks_inside_dir() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -a (no deref): inner symlinks preserved
+    scene.ucmd().args(&["-a", "srcdir", "dest_a"]).succeeds();
+    assert!(
+        at.is_symlink("dest_a/link.txt"),
+        "-a: inner symlink should be preserved"
+    );
+
+    // -aL (last is -L, deref): inner symlinks dereferenced
+    scene.ucmd().args(&["-aL", "srcdir", "dest_aL"]).succeeds();
+    assert!(
+        !at.is_symlink("dest_aL/link.txt"),
+        "-aL: inner symlink should be dereferenced"
+    );
+
+    // -La (last is -a, no deref): inner symlinks preserved
+    scene.ucmd().args(&["-La", "srcdir", "dest_La"]).succeeds();
+    assert!(
+        at.is_symlink("dest_La/link.txt"),
+        "-La: inner symlink should be preserved"
+    );
+}
+
+/// -aH: inner symlinks preserved (a wins for recursive), CLI symlinks followed (H wins for CLI).
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_cli_deref_inner_preserved() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -aH: CLI symlink dereferenced, inner symlinks preserved
+    scene.ucmd().args(&["-aH", "srcdir", "dest_aH"]).succeeds();
+    assert!(
+        at.is_symlink("dest_aH/link.txt"),
+        "-aH: inner symlink should be preserved (a wins for recursive)"
+    );
+
+    // -Ha: CLI + inner symlinks preserved (a wins since last)
+    scene.ucmd().args(&["-Ha", "srcdir", "dest_Ha"]).succeeds();
+    assert!(
+        at.is_symlink("dest_Ha/link.txt"),
+        "-Ha: inner symlink should be preserved (a is last)"
+    );
+}
+
+/// Precedence: repeating the same flag should take the last position.
+#[test]
+#[cfg(unix)]
+fn test_cp_archive_deref_repeated_flag_last_wins() {
+    use std::os::unix::fs::symlink;
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("srcdir");
+    at.touch("srcdir/real.txt");
+    symlink("real.txt", at.plus_as_string("srcdir/link.txt")).unwrap();
+
+    // -aL -a: -a is last, inner symlinks preserved
+    scene
+        .ucmd()
+        .args(&["-aL", "-a", "srcdir", "dest"])
+        .succeeds();
+    assert!(
+        at.is_symlink("dest/link.txt"),
+        "-aL -a: last -a should preserve inner symlinks"
+    );
+
+    // -La -L: -L is last, inner symlinks dereferenced
+    scene
+        .ucmd()
+        .args(&["-La", "-L", "srcdir", "dest2"])
+        .succeeds();
+    assert!(
+        !at.is_symlink("dest2/link.txt"),
+        "-La -L: last -L should dereference inner symlinks"
+    );
+}
+
 #[test]
 fn test_cp_circular_symbolic_links_in_directory() {
     let source_dir = "source_dir";
@@ -8039,4 +8437,14 @@ fn test_cp_p_preserves_posix_acls() {
         String::from_utf8_lossy(&dst_acl.stdout),
         "cp -p must preserve POSIX ACLs (GNU tests/cp/acl regression)",
     );
+}
+
+#[test]
+fn test_progressbar_inexistent_source() {
+    let (_, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("-g")
+        .arg("inexistent1")
+        .arg("inexistent2")
+        .fails_with_code(1)
+        .stderr_contains("cp: cannot stat 'inexistent1': No such file or directory");
 }

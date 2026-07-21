@@ -37,7 +37,6 @@ split-error-would-overwrite-input = { $file } écraserait l'entrée ; abandon
 split-error-cannot-determine-input-size = { $input } : impossible de déterminer la taille de l'entrée
 split-error-cannot-determine-file-size = { $input } : impossible de déterminer la taille du fichier
 split-error-cannot-read-from-input = { $input } : impossible de lire depuis l'entrée : { $error }
-split-error-input-output-error = erreur d'entrée/sortie
 split-error-unable-to-open-file = impossible d'ouvrir { $file } ; abandon
 split-error-unable-to-reopen-file = impossible de rouvrir { $file } ; abandon
 split-error-file-descriptor-limit = limite de descripteurs de fichiers atteinte, mais aucun descripteur de fichier à fermer. { $count } écrivains fermés auparavant.

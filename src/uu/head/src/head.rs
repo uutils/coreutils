@@ -150,11 +150,12 @@ impl HeadOptions {
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
-
-        options.files = match matches.get_many::<OsString>(options::FILES) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+        options.files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(options)
     }
@@ -329,7 +330,7 @@ where
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
-            if lines == n + 1 {
+            if lines > n {
                 input.rewind()?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()

@@ -90,6 +90,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
+    #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
+    InvalidTabSize(String),
+
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
@@ -111,6 +114,7 @@ impl UError for LsError {
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_) => 2,
+            Self::InvalidTabSize(_) => 2,
         }
     }
 }
@@ -160,7 +164,6 @@ pub fn uu_app() -> Command {
                 "commas",
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([
                 options::FORMAT,
                 options::format::COLUMNS,
@@ -385,7 +388,6 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("birth").alias("creation"),
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
     )
     .arg(
@@ -440,7 +442,6 @@ pub fn uu_app() -> Command {
                 "extension",
                 "width",
             ]))
-            .require_equals(true)
             .overrides_with_all([
                 options::SORT,
                 options::sort::SIZE,
@@ -627,7 +628,6 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::size::BLOCK_SIZE)
             .long(options::size::BLOCK_SIZE)
-            .require_equals(true)
             .value_name("BLOCK_SIZE")
             .help(translate!("ls-help-block-size"))
             .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
@@ -874,6 +874,10 @@ impl<'a> PathData<'a> {
             }
             Dereference::None => false,
         };
+
+        // `.`, `..`, `/` and trailing `..` denote the directory itself, not a symlink: on
+        // Windows/Redox `ls -l` in a symlinked dir would otherwise print `. -> target` (#6467, #7873).
+        let must_dereference = must_dereference || (command_line && p_buf.file_name().is_none());
 
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path

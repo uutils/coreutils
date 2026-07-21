@@ -169,7 +169,6 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
 struct Options {
     files: Vec<OsString>,
     tabstops: Vec<usize>,
-    tspaces: String,
     iflag: bool,
     utf8: bool,
 
@@ -187,29 +186,16 @@ impl Options {
 
         let iflag = matches.get_flag(options::INITIAL);
         let utf8 = !matches.get_flag(options::NO_UTF8);
-
-        // avoid allocations when dumping out long sequences of spaces
-        // by precomputing the longest string of spaces we will ever need
-        let nspaces = tabstops
-            .iter()
-            .scan(0, |pr, &it| {
-                let ret = Some(it - *pr);
-                *pr = it;
-                ret
-            })
-            .max()
-            .unwrap(); // length of tabstops is guaranteed >= 1
-        let tspaces = " ".repeat(nspaces);
-
-        let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILES) {
-            Some(s) => s.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
+        let files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(Self {
             files,
             tabstops,
-            tspaces,
             iflag,
             utf8,
             remaining_mode,
@@ -283,11 +269,12 @@ pub fn uu_app() -> Command {
             .action(ArgAction::Append)
             .hide(true)
             .value_hint(clap::ValueHint::FilePath)
+            .default_value("-")
             .value_parser(clap::value_parser!(OsString)),
     )
 }
 
-fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
+fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     let file_buf;
     if path == "-" {
         Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
@@ -300,6 +287,8 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read + 'static>>> {
             ));
         }
         file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+        let _ = rustix::fs::fadvise(&file_buf, 0, None, rustix::fs::Advice::Sequential);
         Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
     }
 }
@@ -325,8 +314,7 @@ fn next_tabstop(tabstops: &[usize], col: usize, remaining_mode: &RemainingMode) 
                 let last_fixed_tabstop = tabstops[num_tabstops - 2];
                 let characters_since_last_tabstop = col - last_fixed_tabstop;
 
-                let steps_required = 1 + characters_since_last_tabstop / step_size;
-                steps_required * step_size - characters_since_last_tabstop
+                step_size - characters_since_last_tabstop % step_size
             }
         }
         RemainingMode::Slash => {
@@ -390,16 +378,16 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
 
 /// Write spaces for a tab expansion.
 #[inline]
-fn write_tab_spaces(
-    output: &mut BufWriter<std::io::Stdout>,
-    nts: usize,
-    tspaces: &str,
-) -> std::io::Result<()> {
-    if nts <= tspaces.len() {
-        output.write_all(&tspaces.as_bytes()[..nts])
-    } else {
-        output.write_all(" ".repeat(nts).as_bytes())
+fn write_spaces(output: &mut impl Write, mut n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 256] = [b' '; 256];
+
+    while n > 0 {
+        let chunk = n.min(SPACES.len());
+        output.write_all(&SPACES[..chunk])?;
+        n -= chunk;
     }
+
+    Ok(())
 }
 
 fn expand_buf(
@@ -412,8 +400,12 @@ fn expand_buf(
     use self::CharType::{Backspace, Other, Tab};
 
     // Fast path: if there are no tabs, backspaces, and (in UTF-8 mode or no carriage returns),
-    // we can write the buffer directly without character-by-character processing
-    if !buf.contains(&b'\t') && !buf.contains(&b'\x08') && (options.utf8 || !buf.contains(&b'\r')) {
+    // we can write the buffer directly without character-by-character processing.
+    // Single pass with early exit instead of up to 3 separate .contains() scans.
+    let needs_processing = buf
+        .iter()
+        .any(|&b| b == b'\t' || b == b'\x08' || (!options.utf8 && b == b'\r'));
+    if !needs_processing {
         output.write_all(buf)?;
         if let Some(n) = buf.iter().rposition(|&b| b == b'\n') {
             *col = buf.len() - n - 1;
@@ -436,7 +428,7 @@ fn expand_buf(
 
                 // now dump out either spaces if we're expanding, or a literal tab if we're not
                 if init || !options.iflag {
-                    write_tab_spaces(output, nts, &options.tspaces)?;
+                    write_spaces(output, nts)?;
                 } else {
                     output.write_all(&buf[byte..byte + nbytes])?;
                 }
@@ -533,6 +525,14 @@ mod tests {
         assert_eq!(next_tabstop(&[1, 5], 0, &RemainingMode::Plus), 1);
         assert_eq!(next_tabstop(&[1, 5], 3, &RemainingMode::Plus), 3);
         assert_eq!(next_tabstop(&[1, 5], 6, &RemainingMode::Plus), 5);
+    }
+
+    #[test]
+    fn test_next_tabstop_remaining_mode_plus_does_not_overflow() {
+        assert_eq!(
+            next_tabstop(&[1, usize::MAX - 2], usize::MAX, &RemainingMode::Plus),
+            usize::MAX - 3
+        );
     }
 
     #[test]

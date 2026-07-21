@@ -403,6 +403,20 @@ pub(crate) fn copy_directory(
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
             build_dir(&new_target, true, options, None)?;
+            if root
+                .components()
+                .next_back()
+                .is_some_and(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                let dest = target.join(root);
+                build_dir(&dest, false, options, Some(root)).map_err(|err| match err {
+                    CpError::IoErr(io_err) => CpError::IoErrContext(
+                        io_err,
+                        format!("cannot create directory {}", dest.quote()),
+                    ),
+                    err => err,
+                })?;
+            }
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -572,7 +586,9 @@ pub(crate) fn copy_directory(
     // Also fix permissions for parent directories,
     // if we were asked to create them.
     if options.parents {
-        let dest = target.join(root.file_name().unwrap());
+        let dest = root
+            .file_name()
+            .map_or_else(|| target.to_path_buf(), |name| target.join(name));
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
                 copy_attributes(
