@@ -2681,12 +2681,12 @@ fn copy_file(
 
     // TODO: implement something similar to gnu's lchown
     //
-    // `dest` may itself be a symlink now: copying a symlink without
-    // dereferencing recreates it as a symlink at the destination. chmod()
-    // follows symlinks, so calling set_permissions on it would change the mode
-    // of the link target, which can live outside the tree being copied. Re-check
-    // the destination and skip it in that case, as GNU cp does.
-    if !dest_is_symlink && !dest.is_symlink() {
+    // Check the destination as it is now, not as it was before the copy:
+    // copying a symlink without dereferencing recreates it as a symlink here,
+    // and chmod() would follow it and change the mode of the link target,
+    // which can live outside the copied tree. Conversely, --remove-destination
+    // replaces a symlink with a regular file that still needs its mode set.
+    if !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.
