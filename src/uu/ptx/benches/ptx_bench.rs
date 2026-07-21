@@ -62,7 +62,7 @@ mod benches {
     }
 
     /// Benchmark -r on long lines
-    #[divan::bench(args = [1, 10, 100, 1000])]
+    #[divan::bench(args = [1000])]
     fn ptx_input_references_long_lines(bencher: Bencher, num_lines: usize) {
         bench_ptx(bencher, &fixed_size_data(num_lines), &["-r"]);
     }
