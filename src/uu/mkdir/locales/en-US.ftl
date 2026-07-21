@@ -16,7 +16,7 @@ mkdir-error-failed-to-create-tree = failed to create whole tree
 mkdir-error-cannot-set-permissions = cannot set permissions { $path }
 
 # Warning messages
-mkdir-warning-context-not-selinux = ignoring --context; it requires an SELinux/SMACK-enabled kernel
+mkdir-warning-context-requires-selinux-smack = ignoring --context; it requires an SELinux/SMACK-enabled kernel
 
 # Verbose output
 mkdir-verbose-created-directory = { $util_name }: created directory { $path }

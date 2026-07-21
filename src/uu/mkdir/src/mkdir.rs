@@ -335,7 +335,10 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                         return Err(USimpleError::new(1, e.to_string()));
                     }
                 } else {
-                    show_warning!("{}", translate!("mkdir-warning-context-not-selinux"));
+                    show_warning!(
+                        "{}",
+                        translate!("mkdir-warning-context-requires-selinux-smack")
+                    );
                 }
             }
 
@@ -347,7 +350,10 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                         std::fs::remove_dir(p)
                     })?;
                 } else {
-                    show_warning!("{}", translate!("mkdir-warning-context-not-selinux"));
+                    show_warning!(
+                        "{}",
+                        translate!("mkdir-warning-context-requires-selinux-smack")
+                    );
                 }
             }
             Ok(())

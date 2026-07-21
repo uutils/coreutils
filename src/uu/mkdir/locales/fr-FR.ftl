@@ -16,7 +16,7 @@ mkdir-error-failed-to-create-tree = échec de la création de l'arborescence com
 mkdir-error-cannot-set-permissions = impossible de définir les permissions { $path }
 
 # Messages d'avertissement
-mkdir-warning-context-not-selinux = --context est ignoré ; cela nécessite un noyau avec SELinux/SMACK activé
+mkdir-warning-context-requires-selinux-smack = --context est ignoré ; cela nécessite un noyau avec SELinux/SMACK activé
 
 # Sortie détaillée
 mkdir-verbose-created-directory = { $util_name } : répertoire créé { $path }
