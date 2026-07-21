@@ -1225,6 +1225,10 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     } else {
         1
     };
+    let bsize = match i.settings.count {
+        Some(Num::Blocks(count)) if count.checked_mul(i.settings.ibs as u64).is_none() => bsize,
+        _ => calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize),
+    };
     let mut storage = AlignedBuffer::try_new(bsize, alignment)?;
     let buf = storage.as_mut_slice();
     let mut conv_buf = Vec::new();
@@ -1409,6 +1413,7 @@ fn read_helper<'a>(
 
     match &i.settings.iconv.mode {
         Some(mode) => {
+            *conv_scratch = Vec::new();
             *conv_scratch =
                 conv_block_unblock_helper(scratch[..data_len].to_vec(), mode, &mut rstat);
             Ok((rstat, conv_scratch.as_slice()))
