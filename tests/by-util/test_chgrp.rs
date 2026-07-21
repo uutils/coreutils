@@ -480,10 +480,8 @@ fn test_from_option() {
 fn test_from_with_invalid_group() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("test_file");
-    #[cfg(not(target_os = "android"))]
+
     let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
-    #[cfg(target_os = "android")]
-    let err_msg = "chgrp: invalid user: 'staff'\n";
 
     ucmd.arg("--from")
         .arg("nonexistent_group")
