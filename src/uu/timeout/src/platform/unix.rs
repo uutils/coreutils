@@ -108,10 +108,22 @@ pub(crate) fn prepare(cmd_builder: &mut std::process::Command, foreground: bool,
     install_signal_handlers(signal);
 }
 
-/// Nothing to do after spawning on unix.
-pub(crate) fn post_spawn(_child: &Child, _foreground: bool) {}
+/// Unix keeps no per-spawn platform state; the type exists so the facade
+/// signatures match the Windows implementation (which carries a job object).
+pub(crate) struct SpawnState;
 
-pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) {
+/// Nothing to do after spawning on unix.
+pub(crate) fn post_spawn(_child: &Child, _foreground: bool) -> SpawnState {
+    SpawnState
+}
+
+pub(crate) fn send_signal(
+    process: &mut Child,
+    signal: usize,
+    foreground: bool,
+    _external: Option<usize>,
+    _state: &SpawnState,
+) {
     // NOTE: GNU timeout doesn't check for errors of signal.
     // The subprocess might have exited just after the timeout.
     let _ = process.send_signal(signal);
@@ -128,8 +140,9 @@ pub(crate) fn send_signal(process: &mut Child, signal: usize, foreground: bool) 
 }
 
 /// The termination signal received by timeout itself while waiting, if any.
+/// Consuming: a second call returns `None`, so read it once per wake.
 pub(crate) fn external_signal() -> Option<usize> {
-    let received_sig = crate::RECEIVED_SIGNAL.load(atomic::Ordering::Relaxed);
+    let received_sig = crate::RECEIVED_SIGNAL.swap(0, atomic::Ordering::Relaxed);
     (received_sig > 0 && received_sig != libc::SIGALRM).then_some(received_sig as usize)
 }
 

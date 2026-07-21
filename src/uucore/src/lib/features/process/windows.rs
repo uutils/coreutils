@@ -14,9 +14,10 @@
 //! layout (matching `uucore::signals::ALL_SIGNALS`), "terminate" signals
 //! force-exit with exit code `128 + n`, and `INT`/`QUIT` map to a
 //! `CTRL_BREAK_EVENT` on a console process group. [`Job`] gives process-tree
-//! termination, and [`enable_ctrl_forwarding`]/[`last_ctrl_signal`] surface
-//! console control events (Ctrl-C, Ctrl-Break, close) as POSIX signal numbers
-//! for forwarding. All raw Win32 calls live in the safe [`sys`] wrappers.
+//! termination, and [`enable_ctrl_forwarding`]/[`take_last_ctrl_signal`]
+//! surface console control events (Ctrl-C, Ctrl-Break, close) as POSIX signal
+//! numbers for forwarding. All raw Win32 calls live in the safe [`sys`]
+//! wrappers.
 
 use std::io;
 use std::os::windows::io::{AsHandle, BorrowedHandle, OwnedHandle};
@@ -48,8 +49,8 @@ pub mod sys {
         AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::{
-        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, SetEvent,
-        SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, ResetEvent,
+        SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects,
         WaitForSingleObject,
     };
     use windows_sys::core::BOOL;
@@ -63,6 +64,8 @@ pub mod sys {
         TimedOut,
     }
 
+    /// Convert a Win32 `BOOL` result into an [`io::Result`]: zero (`FALSE`)
+    /// becomes the error from `GetLastError`.
     fn cvt(result: BOOL) -> io::Result<()> {
         if result == 0 {
             Err(io::Error::last_os_error())
@@ -132,6 +135,12 @@ pub mod sys {
     pub fn set_event(event: BorrowedHandle) -> io::Result<()> {
         // SAFETY: the event handle is valid for the duration of the call.
         cvt(unsafe { SetEvent(event.as_raw_handle() as HANDLE) })
+    }
+
+    /// Return a manual-reset event to the unsignaled state.
+    pub fn reset_event(event: BorrowedHandle) -> io::Result<()> {
+        // SAFETY: the event handle is valid for the duration of the call.
+        cvt(unsafe { ResetEvent(event.as_raw_handle() as HANDLE) })
     }
 
     /// Create a one-shot waitable timer with the best resolution the OS
@@ -373,9 +382,15 @@ impl Job {
 
 /// Manual-reset event signalled by the console control handler to wake
 /// [`ChildExt::wait_or_timeout`]. Unset until [`enable_ctrl_forwarding`]
-/// runs; intentionally lives for the rest of the process.
+/// runs; the handle intentionally lives for the rest of the process.
+///
+/// Ownership of the *signaled state*: `wait_or_timeout` resets the event when
+/// it consumes a wake, and [`enable_ctrl_forwarding`] resets it so each
+/// forwarding session starts clean; the handler only ever sets it.
 static WAKE_EVENT: OnceLock<OwnedHandle> = OnceLock::new();
 /// POSIX signal number of the last console control event received (0 = none).
+/// Consumed (reset to 0) by [`take_last_ctrl_signal`] and cleared by
+/// [`enable_ctrl_forwarding`], so one event is observed at most once.
 static LAST_CTRL_SIGNAL: AtomicI32 = AtomicI32::new(0);
 
 /// Console control handler. Runs on an OS-spawned thread, so it only touches
@@ -407,25 +422,34 @@ unsafe extern "system" fn console_ctrl_handler(ctrl_type: u32) -> BOOL {
 /// letting them terminate this process, and wakes any pending
 /// [`ChildExt::wait_or_timeout`] call that was given a `signaled` flag.
 ///
-/// Use [`last_ctrl_signal`] to read the last event received. Idempotent.
+/// Use [`take_last_ctrl_signal`] to consume the last event received.
+///
+/// Idempotent; every call also discards any event latched by a previous
+/// forwarding session, so repeated in-process runs (benchmarks, fuzzing)
+/// start clean. Events arriving after this call still latch until consumed.
 pub fn enable_ctrl_forwarding() -> io::Result<()> {
-    if WAKE_EVENT.get().is_some() {
-        return Ok(());
+    if WAKE_EVENT.get().is_none() {
+        // Manual-reset so a wakeup latched before a wait starts is never lost.
+        let event = sys::create_manual_reset_event()?;
+        // A racing second caller just drops its event; registering the handler
+        // twice is harmless.
+        let _ = WAKE_EVENT.set(event);
+        // SAFETY: the handler only touches atomics, the immutable `WAKE_EVENT`
+        // cell and a live event handle — sound for arbitrary-thread invocation.
+        unsafe { sys::set_console_ctrl_handler(Some(console_ctrl_handler))? };
     }
-    // Manual-reset so a wakeup latched before a wait starts is never lost.
-    let event = sys::create_manual_reset_event()?;
-    // A racing second caller just drops its event; registering the handler
-    // twice is harmless.
-    let _ = WAKE_EVENT.set(event);
-    // SAFETY: the handler only touches atomics, the immutable `WAKE_EVENT`
-    // cell and a live event handle — sound for arbitrary-thread invocation.
-    unsafe { sys::set_console_ctrl_handler(Some(console_ctrl_handler)) }
+    LAST_CTRL_SIGNAL.store(0, Ordering::Release);
+    if let Some(event) = WAKE_EVENT.get() {
+        let _ = sys::reset_event(event.as_handle());
+    }
+    Ok(())
 }
 
-/// The POSIX signal number corresponding to the last console control event
-/// received since [`enable_ctrl_forwarding`], if any.
-pub fn last_ctrl_signal() -> Option<usize> {
-    match LAST_CTRL_SIGNAL.load(Ordering::Acquire) {
+/// Consume the POSIX signal number of the last console control event received
+/// since [`enable_ctrl_forwarding`], if any, resetting the latch so a stale
+/// event can never influence a later decision.
+pub fn take_last_ctrl_signal() -> Option<usize> {
+    match LAST_CTRL_SIGNAL.swap(0, Ordering::AcqRel) {
         0 => None,
         signal => Some(signal as usize),
     }
@@ -502,11 +526,85 @@ impl ChildExt for Child {
             return self.wait().map(Some);
         }
         if Some(index) == wake_index {
+            // Consume the wake so a handled console event cannot satisfy a
+            // later wait; the latched signal number stays for the caller to
+            // take via `take_last_ctrl_signal`.
+            if let Some(event) = wake_event {
+                let _ = sys::reset_event(event.as_handle());
+            }
             if let Some(flag) = signaled {
                 flag.store(true, Ordering::Relaxed);
             }
         }
         // Console event or timer expiry: the child is still running.
         Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
+
+    /// Poll whether the wake event is currently signaled.
+    fn wake_event_signaled() -> bool {
+        let event = WAKE_EVENT.get().expect("forwarding enabled");
+        matches!(
+            sys::wait_for_one(event.as_handle(), 0).unwrap(),
+            sys::WaitOutcome::Object(0)
+        )
+    }
+
+    /// `LAST_CTRL_SIGNAL` and `WAKE_EVENT` are process-global, so every phase
+    /// runs inside this single test to keep them free of cross-test races
+    /// (cargo runs tests on parallel threads).
+    #[test]
+    fn ctrl_forwarding_latch_and_wake_lifecycle() {
+        // Phase 1: enabling starts clean.
+        enable_ctrl_forwarding().unwrap();
+        assert_eq!(take_last_ctrl_signal(), None);
+        assert!(!wake_event_signaled());
+
+        // Phase 2: a console event latches its signal number exactly once and
+        // signals the wake event; consuming resets the latch.
+        // SAFETY: the handler only touches atomics and the event handle.
+        assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
+        assert!(wake_event_signaled());
+        assert_eq!(take_last_ctrl_signal(), Some(SIGNAL_INT as usize));
+        assert_eq!(take_last_ctrl_signal(), None);
+
+        // Phase 3: unhandled control types latch nothing (5 = logoff).
+        // SAFETY: as above.
+        assert_eq!(unsafe { console_ctrl_handler(5) }, 0);
+        assert_eq!(take_last_ctrl_signal(), None);
+
+        // Phase 4: re-enabling discards state latched by a previous session.
+        // SAFETY: as above.
+        assert_eq!(unsafe { console_ctrl_handler(CTRL_BREAK_EVENT) }, 1);
+        enable_ctrl_forwarding().unwrap();
+        assert_eq!(take_last_ctrl_signal(), None);
+        assert!(!wake_event_signaled());
+
+        // Phase 5: `wait_or_timeout` consumes a wake: it returns promptly
+        // without the child having exited, sets the caller's flag, and leaves
+        // the event unsignaled so it cannot satisfy a later wait.
+        let mut child = Command::new("ping")
+            .args(["-n", "10", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        sys::set_event(WAKE_EVENT.get().unwrap().as_handle()).unwrap();
+        let flag = AtomicBool::new(false);
+        let started = Instant::now();
+        let result = child
+            .wait_or_timeout(Duration::from_secs(60), Some(&flag))
+            .unwrap();
+        assert_eq!(result, None);
+        assert!(flag.load(Ordering::Relaxed));
+        assert!(started.elapsed() < Duration::from_secs(30));
+        assert!(!wake_event_signaled());
+        child.kill().unwrap();
+        child.wait().unwrap();
     }
 }

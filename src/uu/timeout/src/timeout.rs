@@ -225,6 +225,7 @@ fn wait_or_kill_process(
     preserve_status: bool,
     foreground: bool,
     verbose: bool,
+    spawn_state: &platform::SpawnState,
 ) -> std::io::Result<i32> {
     // ignore `SIGTERM` here
     match process.wait_or_timeout(duration, None) {
@@ -245,7 +246,7 @@ fn wait_or_kill_process(
         Ok(None) => {
             let signal = signal_by_name_or_value("KILL").unwrap();
             report_if_verbose(signal, cmd, verbose);
-            platform::send_signal(process, signal, foreground);
+            platform::send_signal(process, signal, foreground, None, spawn_state);
             process.wait()?;
             Ok(ExitStatus::SignalSent(signal).into())
         }
@@ -283,7 +284,7 @@ fn timeout(
         )
     })?;
 
-    platform::post_spawn(process, foreground);
+    let spawn_state = platform::post_spawn(process, foreground);
 
     // Wait for the child process for the specified time period.
     //
@@ -307,12 +308,21 @@ fn timeout(
             Err(exit_code.into())
         }
         Ok(None) => {
+            // `external_signal()` consumes the latched signal, so read it
+            // exactly once: a second read returns `None`, silently flipping
+            // the exit code from 128+n to 124.
             let external_signal = platform::external_signal();
             let is_external_signal = external_signal.is_some();
             let signal_to_send = external_signal.unwrap_or(signal);
 
             report_if_verbose(signal_to_send, &cmd[0], verbose);
-            platform::send_signal(process, signal_to_send, foreground);
+            platform::send_signal(
+                process,
+                signal_to_send,
+                foreground,
+                external_signal,
+                &spawn_state,
+            );
 
             if let Some(kill_after) = kill_after {
                 return match wait_or_kill_process(
@@ -322,6 +332,7 @@ fn timeout(
                     preserve_status,
                     foreground,
                     verbose,
+                    &spawn_state,
                 ) {
                     Ok(status) => Err(status.into()),
                     Err(e) => Err(USimpleError::new(
@@ -352,7 +363,7 @@ fn timeout(
         Err(_) => {
             // We're going to return ERR_EXIT_STATUS regardless of
             // whether `send_signal()` succeeds or fails
-            platform::send_signal(process, signal, foreground);
+            platform::send_signal(process, signal, foreground, None, &spawn_state);
             Err(ExitStatus::TimeoutFailed.into())
         }
     }
