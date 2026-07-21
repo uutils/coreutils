@@ -147,6 +147,21 @@ fn test_huge_block_size_is_rejected_without_panicking() {
 }
 
 #[test]
+fn test_huge_skip_seek_block_count_is_rejected_without_panicking() {
+    // A skip/seek given in blocks is multiplied by the block size (default
+    // 512) before the i64::MAX bound check. 2^55 blocks * 512 == 2^64 used to
+    // wrap past that check (panicking in debug builds, silently skipping
+    // nothing in release builds); it must be rejected cleanly instead.
+    for arg in ["skip=36028797018963968", "seek=36028797018963968"] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
 fn test_huge_obs_reports_memory_error_instead_of_aborting() {
     // Regression test for #12847: a valid but huge `obs` used to abort
     // ("memory allocation of N bytes failed"); it must fail gracefully instead.
