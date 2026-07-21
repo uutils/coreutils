@@ -439,6 +439,12 @@ fn test_field_with_multibyte_whitespace_separator() {
         .args(&["--field", "2", "1　2"])
         .succeeds()
         .stdout_only("1 2\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2"])
+        .pipe_in("1K\u{3000}2K\n")
+        .succeeds()
+        .stdout_only("1K 2000\n");
 }
 
 #[test]
