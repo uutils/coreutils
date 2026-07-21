@@ -878,7 +878,13 @@ fn test_to_unit() {
 #[test]
 fn test_invalid_unit_size() {
     let commands = vec!["from", "to"];
-    let invalid_sizes = vec!["A", "0", "18446744073709551616"];
+    let invalid_sizes = vec![
+        "A",
+        "0",
+        "18446744073709551616",
+        "18446744073709551615K",
+        "18014398509481984Ki",
+    ];
 
     for command in commands {
         for invalid_size in &invalid_sizes {

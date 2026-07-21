@@ -200,8 +200,12 @@ fn parse_unit_size(s: &str) -> Result<usize> {
             if number.is_empty() {
                 return Ok(multiplier);
             }
-            if let Ok(n) = number.parse::<usize>() {
-                return Ok(n * multiplier);
+            if let Some(size) = number
+                .parse::<usize>()
+                .ok()
+                .and_then(|n| n.checked_mul(multiplier))
+            {
+                return Ok(size);
             }
         }
     }
