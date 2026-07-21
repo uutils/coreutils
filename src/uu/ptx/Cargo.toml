@@ -28,8 +28,6 @@ fluent = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
-rustix = { workspace = true, features = ["stdio", "fs"] }
-tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
 [[bin]]
