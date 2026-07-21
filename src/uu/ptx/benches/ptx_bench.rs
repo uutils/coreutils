@@ -49,7 +49,7 @@ mod benches {
         bench_ptx(bencher, &data, &[]);
     }
 
-    #[divan::bench(args = [1, 10, 100, 1000])]
+    #[divan::bench(args = [1000])]
     fn ptx_long_lines(bencher: Bencher, num_lines: usize) {
         bench_ptx(bencher, &fixed_size_data(num_lines), &[]);
     }
