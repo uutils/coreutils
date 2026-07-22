@@ -408,6 +408,39 @@ fn test_date_nano_seconds() {
 }
 
 #[test]
+fn test_date_nano_seconds_modifiers() {
+    let scene = TestScenario::new(util_name!());
+
+    // (epoch_input, format, expected_output)
+    let cases = [
+        ("@0.123456789", "%N", "123456789"),
+        ("@0.123456789", "%3N", "123"),
+        ("@0.123456789", "%6N", "123456"),
+        ("@0.120000000", "%_3N", "12 "),
+        ("@0.100000000", "%_3N", "1  "),
+        ("@0.000000000", "%_3N", "0  "),
+        ("@0.123000000", "%_6N", "123   "),
+        ("@0.123456789", "%-N", "123456789"),
+        ("@0.123456789", "%-3N", "123"),
+    ];
+
+    for (input, fmt, expected) in cases {
+        scene
+            .ucmd()
+            .args(&["-d", input, &format!("+{fmt}")])
+            .succeeds()
+            .stdout_is(format!("{expected}\n"));
+    }
+
+    // width > 9 is invalid
+    scene
+        .ucmd()
+        .arg("+%10N")
+        .fails()
+        .stderr_contains("is too large for specifier");
+}
+
+#[test]
 fn test_date_format_without_plus() {
     // [+FORMAT]
     new_ucmd!()
