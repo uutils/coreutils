@@ -1197,10 +1197,8 @@ fn test_du_time_directory() {
         .arg("--time")
         .arg("d/old")
         .succeeds();
-    #[cfg(not(windows))]
+
     result.stdout_only("0\t2020-01-01 00:00\td/old\n");
-    #[cfg(windows)]
-    result.stdout_only("0\t2020-01-01 00:00\td\\old\n");
 
     let result = ts.ucmd().env("TZ", "UTC").arg("--time").arg("d").succeeds();
     let stdout = result.stdout_str();
