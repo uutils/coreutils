@@ -128,7 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches)?;
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise

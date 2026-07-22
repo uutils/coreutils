@@ -515,7 +515,9 @@ impl Input<'_> {
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read follows the previous one.
+    /// The start of each ibs-sized read follows the previous one; a short
+    /// read ends the fill, so the bytes received so far form one partial
+    /// record for the copy loop (as in GNU dd).
     fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
@@ -530,6 +532,12 @@ impl Input<'_> {
                 rlen if rlen > 0 => {
                     bytes_total += rlen;
                     reads_partial += 1;
+                    // A short read must end this fill: the next read would
+                    // start at the following ibs-aligned chunk, leaving a
+                    // gap of stale bytes inside `buf` that the `truncate`
+                    // below would keep in the output while dropping the
+                    // same number of real trailing bytes (issue #13458).
+                    break;
                 }
                 _ => break,
             }
@@ -1202,7 +1210,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
-        BlockWriter::Buffered(BufferedOutput::new(o))
+        BlockWriter::Buffered(BufferedOutput::new(o)?)
     } else {
         BlockWriter::Unbuffered(o)
     };
@@ -1411,8 +1419,9 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
 // https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
-    // calculate the lcm from gcd
-    (ibs / gcd) * obs
+    // calculate the lcm from gcd; saturate so an oversized product fails at
+    // allocation instead of panicking here
+    (ibs / gcd).saturating_mul(obs)
 }
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting

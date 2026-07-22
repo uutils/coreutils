@@ -311,11 +311,12 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
 
     # #10011: destination created with mode 0600 so other users cannot open
     # the file through its umask-derived initial mode before cp narrows it.
+    # rustix may emit either open(2) or openat(2); accept both.
     echo "cp_perm_test" > test_cp_src_perm
     rm -f test_cp_dst_perm
-    strace -f -e trace=openat -o strace_cp_dest_perm.log \
+    strace -f -e trace=open,openat,openat2 -o strace_cp_dest_perm.log \
         $cp_cmd test_cp_src_perm test_cp_dst_perm 2>/dev/null || true
-    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
+    if ! grep -qE 'open(at)?2?\([^)]*"test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
         cat strace_cp_dest_perm.log
         fail_immediately "cp must create the destination with mode 0600 (issue #10011)"
     fi
@@ -325,9 +326,9 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     # #10017: -P opens source with O_NOFOLLOW so a path swap to a symlink
     # between the lstat check and the open cannot redirect the copy.
     echo "cp_nofollow_test" > test_cp_src
-    strace -f -e trace=openat -o strace_cp_nofollow.log \
+    strace -f -e trace=open,openat,openat2 -o strace_cp_nofollow.log \
         $cp_cmd -P test_cp_src test_cp_dst 2>/dev/null || true
-    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
+    if ! grep -qE 'open(at)?2?\([^)]*"test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
         cat strace_cp_nofollow.log
         fail_immediately "cp -P must open the source with O_NOFOLLOW (issue #10017)"
     fi
@@ -422,6 +423,48 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         rm -f "$shm_probe"
         echo "WARN: mv cross-device xattr check: /dev/shm does not support user xattrs; skipped"
     fi
+    fi
+fi
+
+# mv cross-device must open the destination with O_NOFOLLOW (issue #10015).
+# The EXDEV fallback unlinks the dest then opens with O_CREAT|O_TRUNC; an
+# attacker racing in a planted symlink would otherwise let the copy write
+# through to the symlink's target. rustix may emit either open(2) or
+# openat(2) depending on the path, so the check accepts both.
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv cross-device O_NOFOLLOW check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+        nofollow_src=$(mktemp -p "$TEMP_DIR" mv_nofollow_src.XXXXXX)
+        nofollow_dst=$(mktemp -u -p /dev/shm mv_nofollow_dst.XXXXXX)
+        echo "payload" > "$nofollow_src"
+        echo "existing" > "$nofollow_dst"
+
+        if [ "$USE_MULTICALL" -eq 1 ]; then
+            mv_cmd="$COREUTILS_BIN mv"
+        else
+            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+        fi
+        strace -f -e trace=open,openat,openat2 -o strace_mv_nofollow.log \
+            $mv_cmd -f "$nofollow_src" "$nofollow_dst" 2>/dev/null || true
+
+        nofollow_dst_base=$(basename "$nofollow_dst")
+        # Lines that open the dest with O_CREAT — the dest may appear as a
+        # full path (open) or basename (openat). Every such open must carry
+        # O_NOFOLLOW or the planted-symlink writethrough is possible.
+        dest_creates=$(grep -E "open(at)?2?\(.*\"[^\"]*${nofollow_dst_base}\".*O_CREAT" strace_mv_nofollow.log || true)
+        if [ -z "$dest_creates" ]; then
+            cat strace_mv_nofollow.log
+            fail_immediately "mv cross-device did not open dest with O_CREAT — strace check broken (issue #10015)"
+        fi
+        if echo "$dest_creates" | grep -vq "O_NOFOLLOW"; then
+            cat strace_mv_nofollow.log
+            fail_immediately "mv cross-device must open dest with O_NOFOLLOW (issue #10015)"
+        fi
+        echo "OK: mv cross-device opens dest with O_NOFOLLOW"
+        rm -f "$nofollow_dst"
     fi
 fi
 

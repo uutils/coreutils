@@ -30,13 +30,13 @@ impl<'a> BufferedOutput<'a> {
     /// Add partial block buffering to the given block writer.
     ///
     /// The internal buffer size is at most the value of `obs` as
-    /// defined in `inner`.
-    pub(crate) fn new(inner: Output<'a>) -> Self {
+    /// defined in `inner`. `obs` may be huge, so the allocation can fail
+    /// without aborting: an oversized `obs` returns an error (like GNU `dd`).
+    pub(crate) fn new(inner: Output<'a>) -> std::io::Result<Self> {
         let obs = inner.settings.obs;
-        Self {
-            inner,
-            buf: Vec::with_capacity(obs),
-        }
+        let mut buf = Vec::new();
+        buf.try_reserve(obs)?;
+        Ok(Self { inner, buf })
     }
 
     pub(crate) fn discard_cache(&self, offset: u64, len: u64) {
@@ -74,6 +74,14 @@ impl<'a> BufferedOutput<'a> {
         // If `buf` does not include enough bytes to form a full block,
         // just buffer the whole thing and write zero blocks.
         let n = self.buf.len() + buf.len();
+        if n < self.inner.settings.obs {
+            // Not even one complete block can be formed: buffer everything.
+            // Falling through would pass the pending bytes to the inner
+            // writer and emit them as a premature partial write (reachable
+            // once short reads end a fill early, see issue #13458).
+            self.buf.extend_from_slice(buf);
+            return Ok(WriteStat::default());
+        }
         let rem = n % self.inner.settings.obs;
         let i = buf.len().saturating_sub(rem);
         let (to_write, to_buffer) = buf.split_at(i);
@@ -118,7 +126,7 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(&[]).unwrap();
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 0);
@@ -136,12 +144,34 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"ab").unwrap();
         assert_eq!(wstat.writes_complete, 0);
         assert_eq!(wstat.writes_partial, 0);
         assert_eq!(wstat.bytes_total, 0);
         assert_eq!(output.buf, b"ab");
+    }
+
+    #[test]
+    fn test_buffered_output_write_blocks_lone_partial_accumulates() {
+        let settings = Settings {
+            obs: 6,
+            ..Default::default()
+        };
+        let inner = Output {
+            dst: Dest::Sink,
+            settings: &settings,
+        };
+        let mut output = BufferedOutput::new(inner).unwrap();
+        // Two writes that together still do not fill one block must both
+        // be buffered; the second call must not flush the pending partial
+        // block prematurely.
+        output.write_blocks(b"ab").unwrap();
+        let wstat = output.write_blocks(b"cd").unwrap();
+        assert_eq!(wstat.writes_complete, 0);
+        assert_eq!(wstat.writes_partial, 0);
+        assert_eq!(wstat.bytes_total, 0);
+        assert_eq!(output.buf, b"abcd");
     }
 
     #[test]
@@ -154,7 +184,7 @@ mod tests {
             dst: Dest::Sink,
             settings: &settings,
         };
-        let mut output = BufferedOutput::new(inner);
+        let mut output = BufferedOutput::new(inner).unwrap();
         let wstat = output.write_blocks(b"abcd").unwrap();
         assert_eq!(wstat.writes_complete, 1);
         assert_eq!(wstat.writes_partial, 0);
