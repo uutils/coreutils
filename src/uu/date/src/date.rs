@@ -427,8 +427,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 && time_digits.len() <= 4
                 && time_digits.chars().all(|c| c.is_ascii_digit());
 
-            let date = if is_empty_or_whitespace || is_military_j {
-                // Treat empty string or 'J' as midnight today (00:00:00) in local time
+            let date = if is_empty_or_whitespace || input == "-" || is_military_j {
+                // Treat empty string, single hyphen, or 'J' as midnight today in local time
                 let date_part =
                     strtime::format("%F", &now).unwrap_or_else(|_| String::from("1970-01-01"));
                 let offset = if settings.utc {

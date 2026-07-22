@@ -84,6 +84,14 @@ fn test_single_dash_as_date() {
 }
 
 #[test]
+fn test_single_dash_as_date_string() {
+    new_ucmd!()
+        .args(&["-u", "-d", "-", "+%T"])
+        .succeeds()
+        .stdout_is("00:00:00\n");
+}
+
+#[test]
 fn test_date_email() {
     for param in ["--rfc-email", "--rfc-e", "-R", "--rfc-2822", "--rfc-822"] {
         new_ucmd!().arg(param).succeeds();
