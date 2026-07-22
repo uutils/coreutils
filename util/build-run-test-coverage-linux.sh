@@ -56,8 +56,8 @@ REPORT_PATH="${REPORT_DIR}/total.lcov.info"
 # Some tests set umask(0777) via uutests pre_exec. LLVM profile files created
 # under that umask can be mode 000; later writes fail with EACCES and the error
 # lands on utility stderr (breaks exact asserts, e.g. mkfifo).
-# Default ACL keeps new .profraw files owner-writable. %p-%m avoids a shared
-# %4m profile pool across processes.
+# Default ACL keeps new .profraw files owner-writable. Keep LLVM's bounded
+# online-merge pool (%4m) instead of one file per process (%p-%m).
 prepare_profraw_dir() {
     rm -rf "${PROFRAW_DIR}"
     mkdir -p "${PROFRAW_DIR}"
@@ -94,7 +94,7 @@ export RUSTC_BOOTSTRAP=1
 export CARGO_INCREMENTAL=0
 export RUSTFLAGS="-Cinstrument-coverage -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
 export RUSTDOCFLAGS="-Cpanic=abort"
-export LLVM_PROFILE_FILE="${PROFRAW_DIR}/coverage-%p-%m.profraw"
+export LLVM_PROFILE_FILE="${PROFRAW_DIR}/coverage-%4m.profraw"
 
 # Disable expanded command printing for the rest of the program
 set +x
