@@ -409,21 +409,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         };
 
-        let cmd_result = if let Ok(group) = file_group.iter().exactly_one() {
-            pr(group, &options)
-        } else {
-            mpr(&file_group, &options)
-        };
+        let cmd_result = file_group
+            .iter()
+            .exactly_one()
+            .map_or_else(|_| mpr(&file_group, &options), |group| pr(group, &options));
 
-        let status = match cmd_result {
-            Err(error) => {
-                print_error(&matches, &error);
-                1
-            }
-            _ => 0,
-        };
-        if status != 0 {
-            return Err(status.into());
+        if let Err(e) = cmd_result {
+            print_error(&matches, &e);
+            return Err(1.into());
         }
     }
     Ok(())
