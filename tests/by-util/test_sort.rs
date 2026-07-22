@@ -1488,6 +1488,30 @@ fn test_sigpipe_panic() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_fifo_without_trailing_newline() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut child = ucmd.arg("FIFO").run_no_wait();
+    let fifo = at.plus("FIFO");
+    let writer = std::thread::spawn(move || std::fs::write(fifo, "hello").unwrap());
+    writer.join().unwrap();
+
+    for _ in 0..50 {
+        if child.is_not_alive() {
+            break;
+        }
+        child.delay(100);
+    }
+    if child.is_alive() {
+        child.kill();
+        panic!("sort did not exit after the FIFO writer closed");
+    }
+    child.wait().unwrap().success().stdout_is("hello\n");
+}
+
+#[test]
 fn test_conflict_check_out() {
     let cases = [
         ("-c=silent", "sort: options '-Co' are incompatible\n"),

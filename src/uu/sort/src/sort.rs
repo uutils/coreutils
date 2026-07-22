@@ -2286,13 +2286,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
     }
 
-    // Verify that we can open all input files.
-    // It is the correct behavior to close all files afterwards,
-    // and to reopen them at a later point. This is different from how the output file is handled,
-    // probably to prevent running out of file descriptors.
-    for file in &files {
-        open(file)?;
-    }
+    let opened_inputs = if settings.merge || settings.check {
+        Vec::new()
+    } else {
+        files.iter().map(open).collect::<UResult<Vec<_>>>()?
+    };
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
@@ -2311,7 +2309,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed(needs_locale_collation);
 
-    let result = exec(&mut files, &settings, output, &mut tmp_dir);
+    let result = exec(&mut files, opened_inputs, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
     // for signal handler to do its work and terminate the program.
     tmp_dir.wait_if_signal();
@@ -2562,6 +2560,7 @@ pub fn uu_app() -> Command {
 
 fn exec(
     files: &mut [OsString],
+    opened_inputs: Vec<Box<dyn Read + Send>>,
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -2578,7 +2577,7 @@ fn exec(
             check::check(files.first().unwrap(), settings)
         }
     } else {
-        let mut lines = files.iter().map(open);
+        let mut lines = opened_inputs.into_iter().map(Ok);
         ext_sort(&mut lines, settings, output, tmp_dir)
     }
 }
