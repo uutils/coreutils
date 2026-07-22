@@ -84,6 +84,10 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
+    // Whether `--time` was requested. When it is not, the `metadata` field of a
+    // directory `Stat` produced during safe traversal is never inspected, so we
+    // can skip the expensive full-path stat used to populate it.
+    report_time: bool,
 }
 
 struct StatPrinter {
@@ -313,81 +317,30 @@ fn safe_du(
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Get initial stat for this path - use DirFd if available to avoid path length issues
-    let mut my_stat = if let Some(parent_fd) = parent_fd {
-        // We have a parent fd, this is a subdirectory - use openat
-        let dir_name = path.file_name().unwrap_or(path.as_os_str());
-        match parent_fd.metadata_at(dir_name, SymlinkBehavior::NoFollow) {
-            Ok(safe_metadata) => {
-                // Create Stat from safe metadata
-                let file_info = safe_metadata.file_info();
-                let file_info_option = Some(FileInfo {
-                    file_id: file_info.inode() as u128,
-                    dev_id: file_info.device(),
-                });
-                let blocks = safe_metadata.blocks();
-
-                // For compatibility, still try to get std::fs::Metadata
-                // but fallback to a minimal approach if it fails
-                let std_metadata = fs::symlink_metadata(path).unwrap_or_else(|_| {
-                    // If we can't get std metadata, create a minimal fake one
-                    // This should rarely happen but provides a fallback
-                    fs::symlink_metadata("/").expect("root should be accessible")
-                });
-
-                Stat {
-                    path: path.to_path_buf(),
-                    size: if safe_metadata.is_dir() {
-                        0
-                    } else {
-                        safe_metadata.len()
-                    },
-                    blocks,
-                    inodes: 1,
-                    inode: file_info_option,
-                    metadata: std_metadata,
+    // The caller provides an already-computed stat for this entry, which lets us
+    // avoid re-stating it here. For subdirectories this saves both a redundant
+    // `fstatat` and an expensive full-path `lstat` per directory (the dominant cost
+    // when traversing deep trees). The root directory may instead carry an error,
+    // in which case we fall back to opening it directly with a DirFd.
+    let initial_stat = initial_stat.unwrap_or_else(|| Stat::new(path, None, options));
+    let mut my_stat = match initial_stat {
+        Ok(mut s) => {
+            // For subdirectories the `metadata` field is a cheap placeholder (the
+            // parent directory's metadata). It is only consulted by `--time`, so we
+            // only pay for a real stat of this entry when time reporting is asked for.
+            if options.report_time && parent_fd.is_some() {
+                if let Ok(md) = fs::symlink_metadata(&s.path) {
+                    s.metadata = md;
                 }
             }
-            Err(e) => {
-                let error = e.map_err_context(
-                    || translate!("du-error-cannot-access", "path" => path.quote()),
-                );
-                if let Err(send_error) = print_tx.send(Err(error)) {
-                    return Err(Box::new(send_error));
-                }
-                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                    0,
-                    "Error already handled",
-                )))));
-            }
+            s
         }
-    } else {
-        // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        let initial_stat = match initial_stat {
-            Some(s) => s,
-            None => Stat::new(path, None, options),
-        };
-
-        match initial_stat {
-            Ok(s) => s,
-            Err(_e) => {
-                // Try using our new DirFd method for the root directory
-                match DirFd::open(path, SymlinkBehavior::Follow) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            let error = e.map_err_context(
-                                || translate!("du-error-cannot-access", "path" => path.quote()),
-                            );
-                            if let Err(send_error) = print_tx.send(Err(error)) {
-                                return Err(Box::new(send_error));
-                            }
-                            return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                                0,
-                                "Error already handled",
-                            )))));
-                        }
-                    },
+        Err(_e) => {
+            // Only the root path can reach this branch (subdirectories always pass a
+            // valid stat). Try using our DirFd method for the root directory.
+            match DirFd::open(path, SymlinkBehavior::Follow) {
+                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
+                    Ok(s) => s,
                     Err(e) => {
                         let error = e.map_err_context(
                             || translate!("du-error-cannot-access", "path" => path.quote()),
@@ -400,6 +353,18 @@ fn safe_du(
                             "Error already handled",
                         )))));
                     }
+                },
+                Err(e) => {
+                    let error = e.map_err_context(
+                        || translate!("du-error-cannot-access", "path" => path.quote()),
+                    );
+                    if let Err(send_error) = print_tx.send(Err(error)) {
+                        return Err(Box::new(send_error));
+                    }
+                    return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                        0,
+                        "Error already handled",
+                    )))));
                 }
             }
         }
@@ -540,14 +505,17 @@ fn safe_du(
                 }
             }
 
+            // Reuse the stat we already computed for this entry instead of
+            // re-stating it inside the recursive call.
+            let sub_path = this_stat.path.clone();
             let this_stat = safe_du(
-                &this_stat.path,
+                &sub_path,
                 options,
                 depth + 1,
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
-                None,
+                Some(Ok(this_stat)),
             )?;
 
             if !options.separate_dirs {
@@ -1086,6 +1054,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+        report_time: time.is_some(),
     };
 
     let time_format = if time.is_some() {
