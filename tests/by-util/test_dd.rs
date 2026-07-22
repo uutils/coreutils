@@ -2189,3 +2189,113 @@ fn test_bs_not_positive() {
         }
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn test_skip_i64_max() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let infile_name = "infile";
+    at.touch(infile_name);
+    let infile = at.plus(infile_name);
+
+    new_ucmd!()
+        .args(&[
+            format!("if={}", infile.display()),
+            "of=outfile".to_string(),
+            "bs=1".to_string(),
+            "skip=9223372036854775807".to_string(),
+        ])
+        .fails()
+        .no_stdout()
+        .code_is(1)
+        .stderr_does_not_contain(format!(
+            "dd: '{}': cannot skip to specified offset",
+            infile.display()
+        ))
+        .stderr_contains(format!(
+            "dd: error reading '{}': Invalid argument\n0+0 records in\n0+0 records out\n",
+            infile.display()
+        ));
+
+    at.write("infile", "abcd");
+
+    new_ucmd!()
+        .args(&[
+            format!("if={}", infile.display()),
+            "of=outfile".to_string(),
+            "bs=1".to_string(),
+            "skip=9223372036854775807".to_string(),
+        ])
+        .fails()
+        .no_stdout()
+        .code_is(1)
+        .stderr_contains(format!(
+            "dd: '{}': cannot skip to specified offset\ndd: error reading '{}': Invalid argument\n0+0 records in\n0+0 records out\n",
+            infile.display(),
+            infile.display()
+        ));
+}
+
+#[test]
+#[cfg(unix)]
+fn test_seek_i64_max_infile_not_empty() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let infile_name = "infile";
+    let outfile_name = "outfile";
+    let infile = at.plus(infile_name);
+    let outfile = at.plus(outfile_name);
+
+    at.write(infile_name, "a");
+    at.touch(outfile_name);
+
+    new_ucmd!()
+        .args(&[
+            format!("if={}", infile.display()),
+            format!("of={}", outfile.display()),
+            "bs=1".to_string(),
+            "seek=9223372036854775807".to_string(),
+        ])
+        .fails()
+        .no_stdout()
+        .code_is(1)
+        .stderr_contains(format!(
+            "dd: error writing '{}': Invalid argument\n1+0 records in\n0+0 records out\n",
+            outfile.display()
+        ));
+
+    at.write(infile_name, "ab");
+
+    new_ucmd!()
+        .args(&[
+            format!("if={}", infile.display()),
+            format!("of={}", outfile.display()),
+            "bs=1".to_string(),
+            "seek=9223372036854775807".to_string(),
+        ])
+        .fails()
+        .no_stdout()
+        .code_is(1)
+        .stderr_contains(format!(
+            "dd: error writing '{}': Invalid argument\n1+0 records in\n0+0 records out\n",
+            outfile.display()
+        ));
+
+    new_ucmd!()
+        .args(&[
+            format!("if={}", infile.display()),
+            format!("of={}", outfile.display()),
+            "bs=1".to_string(),
+            "seek=9223372036854775806".to_string(),
+        ])
+        .fails()
+        .no_stdout()
+        .code_is(1)
+        .stderr_contains(format!(
+            "dd: error writing '{}': Invalid argument\n2+0 records in\n1+0 records out\n",
+            outfile.display()
+        ));
+}

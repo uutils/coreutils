@@ -293,7 +293,26 @@ impl Source {
                     }
                 }
             }
+            #[cfg(not(unix))]
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
+            #[cfg(unix)]
+            Self::File(f) => {
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
+                match n.try_into() {
+                    Ok(n) => {
+                        let pos = f.seek(SeekFrom::Current(n))?;
+                        if file_len > 0 && pos > file_len {
+                            Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid skip"))
+                        } else {
+                            Ok(pos)
+                        }
+                    }
+                    Err(_) => Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!("invalid input buffer: {n}"),
+                    )),
+                }
+            }
             #[cfg(unix)]
             Self::Fifo(f) => read_and_discard(f, n, ibs),
         }
@@ -409,7 +428,23 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            match src.skip(settings.skip, settings.ibs) {
+                Ok(_) => {}
+                Err(e)
+                    if e.kind() == io::ErrorKind::InvalidInput
+                        && e.to_string() == "invalid skip" =>
+                {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-cannot-skip-offset", "file" => filename.display())
+                    );
+                    #[cfg(unix)]
+                    set_exit_code(1);
+                }
+                Err(e) => return Err(e.into()),
+            }
         }
         Ok(Self { src, settings })
     }
@@ -478,7 +513,25 @@ impl Read for Input<'_> {
                 Ok(len) => return Ok(len),
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
                 Err(_) if self.settings.iconv.noerror => return Ok(base_idx),
+                #[cfg(not(unix))]
                 Err(e) => return Err(e),
+                #[cfg(unix)]
+                Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
+                    // GNU compatibility:
+                    // this case prints the stats but sets the exit code to 1
+                    if let Some(infile) = &self.settings.infile {
+                        show_error!(
+                            "{}",
+                            translate!("dd-error-reading-invalid", "file" => infile)
+                        );
+                        set_exit_code(1);
+                    }
+                    return Ok(0);
+                }
+                Err(e) => {
+                    println!("catch the error");
+                    return Err(e);
+                }
             }
         }
     }
@@ -880,18 +933,30 @@ impl<'a> Output<'a> {
             dst.set_len(settings.seek).ok();
         }
 
-        Self::prepare_file(dst, settings)
+        Self::prepare_file(filename, dst, settings)
     }
 
-    fn prepare_file(dst: File, settings: &'a Settings) -> UResult<Self> {
+    fn prepare_file(filename: &Path, dst: File, settings: &'a Settings) -> UResult<Self> {
         let density = if settings.oconv.sparse {
             Density::Sparse
         } else {
             Density::Dense
         };
         let mut dst = Dest::File(dst, density);
-        dst.seek(settings.seek, settings.obs)
-            .map_err_context(|| translate!("dd-error-failed-to-seek"))?;
+        match dst.seek(settings.seek, settings.obs) {
+            Ok(offset) => Ok(offset),
+            Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
+                print!("====debug_for_test_fail====");
+                show_error!(
+                    "{}",
+                    translate!("dd-error-writing-invalid", "file" => filename.display())
+                );
+                #[cfg(unix)]
+                set_exit_code(1);
+                return Ok(Self { dst, settings });
+            }
+            Err(e) => Err(e).map_err_context(|| translate!("dd-error-failed-to-seek")),
+        }?;
         Ok(Self { dst, settings })
     }
 
@@ -911,7 +976,7 @@ impl<'a> Output<'a> {
             .map_err(|e| uucore::error::UIoError::from(io::Error::from(e)))?;
         }
 
-        Self::prepare_file(fx.into_file(), settings)
+        Self::prepare_file(Path::new("stdout"), fx.into_file(), settings)
     }
 
     /// Instantiate this struct with the given named pipe as a destination.
@@ -990,6 +1055,12 @@ impl<'a> Output<'a> {
                     }
                 }
                 Err(e) if e.kind() == io::ErrorKind::Interrupted => (),
+                Err(e) if e.kind() == io::ErrorKind::InvalidInput => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "invalid input buffer",
+                    ));
+                }
                 Err(e) => return Err(e),
             }
         }
@@ -1243,7 +1314,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1256,6 +1326,34 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             i.discard_cache(offset, len);
         }
         read_offset += read_len;
+
+        // Update the read stats before writing for better error handling
+        rstat += rstat_update;
+
+        // we need to break the loop when encountering an invalid input buffer
+        let wstat_update = match o.write_blocks(&buf) {
+            Ok(wstat) => wstat,
+            Err(e)
+                if e.kind() == io::ErrorKind::InvalidInput
+                    && e.to_string() == "invalid input buffer" =>
+            {
+                // GNU compatibility:
+                // this case prints the stats but sets the exit code to 1
+                if let Some(outfile) = &i.settings.outfile {
+                    show_error!(
+                        "{}",
+                        translate!("dd-error-writing-invalid", "file" => outfile)
+                    );
+                    #[cfg(unix)]
+                    set_exit_code(1);
+                }
+                break;
+            }
+            Err(e) => {
+                show_error!("capture the error: {}", buf.len());
+                return Err(e);
+            }
+        };
 
         // Discard the system file cache for the written portion
         // of the output file.
@@ -1275,7 +1373,6 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // error. Since it is just reporting progress and is not
         // crucial to the operation of `dd`, let's just ignore the
         // error.
-        rstat += rstat_update;
         wstat += wstat_update;
         #[cfg(target_os = "linux")]
         if check_and_reset_sigusr1() {
