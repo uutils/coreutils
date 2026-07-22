@@ -513,11 +513,11 @@ impl Input<'_> {
         // TODO: Is there a way to discard filesystem cache on other targets?
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read follows the previous one; a short
-    /// read ends the fill, so the bytes received so far form one partial
-    /// record for the copy loop (as in GNU dd).
+    /// Fills `buf` with consecutive input blocks, stopping after a short read.
+    ///
+    /// # Returns
+    ///
+    /// The read statistics and the length of the valid prefix in `buf`.
     fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
@@ -553,9 +553,11 @@ impl Input<'_> {
         ))
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
+    /// Fills `buf` in input-block-size chunks, padding short blocks with `pad`.
+    ///
+    /// # Returns
+    ///
+    /// The read statistics and the length of the valid prefix in `buf`.
     fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
