@@ -2026,6 +2026,7 @@ dependencies = [
  "clap",
  "fluent",
  "nom",
+ "rustix",
  "uucore",
 ]
 
