@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile NOFILE EMFILE
-// spell-checker:ignore ENFILE dups CLOEXEC setrlimit RDONLY GETFD SETFD
+// spell-checker:ignore ENFILE dups CLOEXEC setrlimit RDONLY GETFD SETFD rlim rlimit
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1231,7 +1231,8 @@ fn test_rm_recursive_deep_tree_low_nofile() {
 /// dups the child FD when free slots are scarce (inherited descriptors).
 ///
 /// Opens extra non-CLOEXEC FDs in the child via `pre_exec` so they survive into
-/// `rm` under a tight NOFILE limit.
+/// `rm` under a tight NOFILE limit. Opens best-effort: cargo test parents may
+/// already own many FDs, so a hard open quota would EMFILE before `rm` starts.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_rm_recursive_low_nofile_with_inherited_fds() {
@@ -1251,9 +1252,8 @@ fn test_rm_recursive_low_nofile_with_inherited_fds() {
     }
     at.write(&format!("{deep_path}/leaf"), "data");
 
-    // Leave a few free slots under NOFILE=32 after opening extras + stdio.
-    // 18 extra FDs is enough to force pressure without preventing openat(child).
-    let extra_fds = 18usize;
+    // Soft NOFILE well below depth; open as many sticky FDs as the limit allows.
+    let extra_fds = 24usize;
     let mut cmd = Command::new(&ts.bin_path);
     cmd.args(["rm", "-rf", "rm_inherit_deep"])
         .current_dir(&at.subdir);
@@ -1262,17 +1262,18 @@ fn test_rm_recursive_low_nofile_with_inherited_fds() {
     unsafe {
         cmd.pre_exec(move || {
             let rl = libc::rlimit {
-                rlim_cur: 32,
-                rlim_max: 32,
+                rlim_cur: 48,
+                rlim_max: 48,
             };
-            if libc::setrlimit(libc::RLIMIT_NOFILE, &rl) != 0 {
+            if libc::setrlimit(libc::RLIMIT_NOFILE, std::ptr::from_ref(&rl)) != 0 {
                 return Err(std::io::Error::last_os_error());
             }
             let path = CString::new("/dev/null").unwrap();
             for _ in 0..extra_fds {
                 let fd = libc::open(path.as_ptr(), libc::O_RDONLY);
                 if fd < 0 {
-                    return Err(std::io::Error::last_os_error());
+                    // Already under pressure from inherited descriptors; continue.
+                    break;
                 }
                 let flags = libc::fcntl(fd, libc::F_GETFD);
                 if flags >= 0 {

@@ -814,15 +814,13 @@ mod restore_identity_tests {
         let wrong_ino = (st.st_ino as u64).wrapping_add(1);
         let wrong_dev = (st.st_dev as u64).wrapping_add(1);
 
-        let err_ino = match restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) {
-            Ok(_) => panic!("expected inode mismatch"),
-            Err(e) => e,
+        let Err(err_ino) = restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) else {
+            panic!("expected inode mismatch");
         };
         assert_eq!(err_ino.to_string(), "directory changed while removing");
 
-        let err_dev = match restore_parent_dirfd(&child_fd, wrong_dev, st.st_ino as u64) {
-            Ok(_) => panic!("expected device mismatch"),
-            Err(e) => e,
+        let Err(err_dev) = restore_parent_dirfd(&child_fd, wrong_dev, st.st_ino as u64) else {
+            panic!("expected device mismatch");
         };
         assert_eq!(err_dev.to_string(), "directory changed while removing");
     }
