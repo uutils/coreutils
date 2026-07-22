@@ -2721,6 +2721,31 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+#[test]
+fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13501:
+    // combining `-a` (show `.`/`..`) with `-R` (recursive) and `-v`
+    // (version/natural sort) used to make `ls` recurse into the listed
+    // `.`/`..` entries themselves, walking all the way up to the
+    // filesystem root instead of stopping at the leaf directories.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+
+    #[cfg(unix)]
+    let out = "a/b:\n.\n..\nc\n\na/b/c:\n.\n..\n";
+    #[cfg(windows)]
+    let out = "a/b:\n.\n..\nc\n\na/b\\c:\n.\n..\n";
+    scene
+        .ucmd()
+        .arg("-aRv")
+        .arg("a/b")
+        .succeeds()
+        .stdout_is(out);
+}
+
 /// The quoting module regroups tests that check the behavior of ls when
 /// quoting and escaping special characters with different quoting styles.
 #[cfg(unix)]
