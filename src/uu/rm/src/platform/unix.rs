@@ -353,7 +353,8 @@ pub fn safe_remove_dir_recursive(
     };
 
     // Entries of the root directory have the root itself as their parent.
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev, root_dev);
+    // Move the already-open FD into the walk so we do not reopen the path.
+    let error = safe_remove_dir_recursive_impl(path, dir_fd, options, root_dev, root_dev);
 
     // After processing all children, remove the directory itself
     if error {
@@ -391,9 +392,8 @@ pub fn safe_remove_dir_recursive(
 
 /// One directory on the removal stack.
 ///
-/// Hold parent FDs while the process still has free NOFILE slots (main-like
-/// shallow path). Under FD pressure, close the parent before deeper work and
-/// restore it with `openat(child, "..")` so deep trees cannot burn RLIMIT (#7995).
+/// Hold parent FDs while free NOFILE slots remain. Under FD pressure, close the
+/// parent before deeper work and restore it with `openat(child, "..")`.
 struct DirWalkFrame {
     /// Display / prompt / error path only — never used to reopen intermediate dirs.
     path: std::path::PathBuf,
@@ -508,34 +508,18 @@ fn restore_parent_dirfd(
 
 /// Iterative recursive remove with dual FD modes.
 ///
-/// Hold ancestor directory FDs while free NOFILE slots remain (shallow / CodSpeed
-/// path). Parent must stay open to `openat` the child; after the child is open,
-/// close the parent under pressure **before** `read_dir` (which dups the child
-/// FD). Restore closed parents with `openat(child, "..")` + device/inode check
-/// so deep trees stay within RLIMIT (#7995).
+/// Hold ancestor directory FDs while free NOFILE slots remain. The parent must
+/// stay open to `openat` the child; after the child is open, close the parent
+/// under pressure before `read_dir` (which dups the child FD). Restore closed
+/// parents with `openat(child, "..")` plus a device/inode check.
 #[cfg(not(target_os = "redox"))]
 pub fn safe_remove_dir_recursive_impl(
     path: &Path,
-    _dir_fd: &DirFd,
+    root_fd: DirFd,
     options: &Options,
     root_dev: u64,
     _parent_dev: u64,
 ) -> bool {
-    // Own a root FD for the stack. The caller's FD stays borrowed for API
-    // stability; one extra open of the user-supplied path (Follow, top-level only).
-    let root_fd = match DirFd::open(path, SymlinkBehavior::Follow) {
-        Ok(fd) => fd,
-        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-            if !options.force {
-                show_permission_denied_error(path);
-            }
-            return !options.force;
-        }
-        Err(e) => {
-            return handle_error_with_force(e, path, options);
-        }
-    };
-
     let root_entries = match root_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
@@ -740,9 +724,8 @@ pub fn safe_remove_dir_recursive_impl(
             #[allow(clippy::unnecessary_cast)]
             let child_ino = child_stat.st_ino as u64;
 
-            // Child is open. Close parent under pressure BEFORE read_dir: that
-            // path dups the child FD (uucore safe_traversal), so checking after
-            // read_dir is too late for the reserve (#7995 / C1).
+            // Child is open. Close parent under pressure before read_dir, which dups the
+            // child FD and would otherwise spend the reserved slot.
             // walk_open is ancestors only; +1 for this child.
             walk_open = walk_open.saturating_add(1);
             if should_close_parent(soft_nofile, walk_open, ambient_non_walk) {
@@ -800,7 +783,7 @@ pub fn safe_remove_dir_recursive_impl(
 #[cfg(target_os = "redox")]
 pub fn safe_remove_dir_recursive_impl(
     _path: &Path,
-    _dir_fd: &DirFd,
+    _root_fd: DirFd,
     _options: &Options,
     _root_dev: u64,
     _parent_dev: u64,
@@ -808,4 +791,34 @@ pub fn safe_remove_dir_recursive_impl(
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
     true // Return error
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+mod restore_identity_tests {
+    use super::restore_parent_dirfd;
+    use std::ffi::OsStr;
+    use std::fs;
+    use tempfile::tempdir;
+    use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+
+    #[test]
+    fn restore_parent_rejects_identity_mismatch() {
+        let dir = tempdir().unwrap();
+        let parent = dir.path().join("parent");
+        let child = parent.join("child");
+        fs::create_dir_all(&child).unwrap();
+
+        let parent_fd = DirFd::open(&parent, SymlinkBehavior::NoFollow).unwrap();
+        let child_fd = parent_fd
+            .open_subdir(OsStr::new("child"), SymlinkBehavior::NoFollow)
+            .unwrap();
+        let st = parent_fd.fstat().unwrap();
+        let wrong_ino = (st.st_ino as u64).wrapping_add(1);
+
+        let err = match restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) {
+            Ok(_) => panic!("expected identity mismatch"),
+            Err(e) => e,
+        };
+        assert_eq!(err.to_string(), "directory changed while removing");
+    }
 }
