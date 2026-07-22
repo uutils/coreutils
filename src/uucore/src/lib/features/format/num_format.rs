@@ -278,21 +278,21 @@ impl Formatter<&ExtendedBigDecimal> for Float {
         // overflow/underflow, so this only guards values built without going
         // through it; treat them the same way a real float would (as +-inf/0)
         // rather than erroring.
-        if let ExtendedBigDecimal::BigDecimal(bd) = &abs {
-            if i32::try_from(bd.fractional_digit_count()).is_err() {
-                let overflow = bd.fractional_digit_count().is_negative();
-                let abs = if overflow {
-                    ExtendedBigDecimal::Infinity
-                } else {
-                    ExtendedBigDecimal::zero()
-                };
-                if alignment == NumberAlignment::RightZero {
-                    alignment = NumberAlignment::RightSpace;
-                }
-                let s = format_float_non_finite(&abs, self.case);
-                let sign_indicator = get_sign_indicator(self.positive_sign, negative);
-                return write_output(writer, sign_indicator, s, self.width, alignment);
+        if let ExtendedBigDecimal::BigDecimal(bd) = &abs
+            && i32::try_from(bd.fractional_digit_count()).is_err()
+        {
+            let overflow = bd.fractional_digit_count().is_negative();
+            let abs = if overflow {
+                ExtendedBigDecimal::Infinity
+            } else {
+                ExtendedBigDecimal::zero()
+            };
+            if alignment == NumberAlignment::RightZero {
+                alignment = NumberAlignment::RightSpace;
             }
+            let s = format_float_non_finite(&abs, self.case);
+            let sign_indicator = get_sign_indicator(self.positive_sign, negative);
+            return write_output(writer, sign_indicator, s, self.width, alignment);
         }
 
         let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
