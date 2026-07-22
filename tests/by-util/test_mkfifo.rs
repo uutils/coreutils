@@ -21,7 +21,7 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_create_fifo_missing_operand() {
-    new_ucmd!().fails().stderr_is("mkfifo: missing operand\n");
+    new_ucmd!().fails(); // clap provided error message
 }
 
 #[test]
