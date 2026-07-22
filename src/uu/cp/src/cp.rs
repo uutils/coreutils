@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore RDONLY futimens utimensat
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -1903,7 +1904,23 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
-        if dest.is_symlink() {
+        // `set_file_times` opens the destination (O_RDONLY) before calling
+        // futimens; opening a FIFO or device with no peer blocks forever, and a
+        // socket cannot be opened at all. For symlinks and these special files
+        // use the path-based, no-follow variant, which sets the times via
+        // utimensat without opening.
+        #[cfg(unix)]
+        let no_open = {
+            let ft = source_metadata.file_type();
+            dest.is_symlink()
+                || ft.is_fifo()
+                || ft.is_socket()
+                || ft.is_char_device()
+                || ft.is_block_device()
+        };
+        #[cfg(not(unix))]
+        let no_open = dest.is_symlink();
+        if no_open {
             filetime::set_symlink_file_times(dest, atime, mtime)?;
         } else {
             filetime::set_file_times(dest, atime, mtime)?;
