@@ -1205,8 +1205,8 @@ fn test_rm_recursive_deep_tree_low_nofile() {
     let at = &ts.fixtures;
 
     // Depth 80 exhausts NOFILE=32 if each level keeps its parent open, while
-    // remaining cheap to create. Main fails this class; the dual-mode walk must
-    // remove the whole tree with no stderr.
+    // remaining cheap to create. The dual-mode walk must remove the whole tree
+    // with no stderr.
     let depth = 80;
     let mut deep_path = String::from("rm_emfile_deep");
     at.mkdir(&deep_path);
@@ -1231,7 +1231,7 @@ fn test_rm_recursive_deep_tree_low_nofile() {
 /// dups the child FD when free slots are scarce (inherited descriptors).
 ///
 /// Opens extra non-CLOEXEC FDs in the child via `pre_exec` so they survive into
-/// `rm` without a separate C helper binary.
+/// `rm` under a tight NOFILE limit.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_rm_recursive_low_nofile_with_inherited_fds() {
@@ -1251,7 +1251,7 @@ fn test_rm_recursive_low_nofile_with_inherited_fds() {
     }
     at.write(&format!("{deep_path}/leaf"), "data");
 
-    // Leave a few free slots under NOFILE=32 after helper opens extras + stdio.
+    // Leave a few free slots under NOFILE=32 after opening extras + stdio.
     // 18 extra FDs is enough to force pressure without preventing openat(child).
     let extra_fds = 18usize;
     let mut cmd = Command::new(&ts.bin_path);

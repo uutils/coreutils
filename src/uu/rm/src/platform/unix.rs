@@ -354,7 +354,7 @@ pub fn safe_remove_dir_recursive(
 
     // Entries of the root directory have the root itself as their parent.
     // Move the already-open FD into the walk so we do not reopen the path.
-    let error = safe_remove_dir_recursive_impl(path, dir_fd, options, root_dev, root_dev);
+    let error = safe_remove_dir_recursive_impl(path, dir_fd, options, root_dev);
 
     // After processing all children, remove the directory itself
     if error {
@@ -469,7 +469,7 @@ fn should_close_parent(
     if soft == 0 {
         return true;
     }
-    // Huge / "unlimited" soft limits: hold parents like main.
+    // Huge soft limits: keep parents open.
     if soft > 1_000_000 {
         return false;
     }
@@ -513,12 +513,11 @@ fn restore_parent_dirfd(
 /// under pressure before `read_dir` (which dups the child FD). Restore closed
 /// parents with `openat(child, "..")` plus a device/inode check.
 #[cfg(not(target_os = "redox"))]
-pub fn safe_remove_dir_recursive_impl(
+pub(crate) fn safe_remove_dir_recursive_impl(
     path: &Path,
     root_fd: DirFd,
     options: &Options,
     root_dev: u64,
-    _parent_dev: u64,
 ) -> bool {
     let root_entries = match root_fd.read_dir() {
         Ok(entries) => entries,
@@ -781,12 +780,11 @@ pub fn safe_remove_dir_recursive_impl(
 }
 
 #[cfg(target_os = "redox")]
-pub fn safe_remove_dir_recursive_impl(
+pub(crate) fn safe_remove_dir_recursive_impl(
     _path: &Path,
     _root_fd: DirFd,
     _options: &Options,
     _root_dev: u64,
-    _parent_dev: u64,
 ) -> bool {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
@@ -814,11 +812,18 @@ mod restore_identity_tests {
             .unwrap();
         let st = parent_fd.fstat().unwrap();
         let wrong_ino = (st.st_ino as u64).wrapping_add(1);
+        let wrong_dev = (st.st_dev as u64).wrapping_add(1);
 
-        let err = match restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) {
-            Ok(_) => panic!("expected identity mismatch"),
+        let err_ino = match restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) {
+            Ok(_) => panic!("expected inode mismatch"),
             Err(e) => e,
         };
-        assert_eq!(err.to_string(), "directory changed while removing");
+        assert_eq!(err_ino.to_string(), "directory changed while removing");
+
+        let err_dev = match restore_parent_dirfd(&child_fd, wrong_dev, st.st_ino as u64) {
+            Ok(_) => panic!("expected device mismatch"),
+            Err(e) => e,
+        };
+        assert_eq!(err_dev.to_string(), "directory changed while removing");
     }
 }
