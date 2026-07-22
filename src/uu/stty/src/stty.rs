@@ -530,8 +530,14 @@ fn parse_saved_state(arg: &str) -> Option<Vec<u32>> {
     // Validate all parts are non-empty valid hex
     let mut values = Vec::with_capacity(expected_parts);
     for (i, part) in parts.iter().enumerate() {
+        // `from_str_radix` doesn't document its behavior for this case,
+        // thus, we do this to guarantee stability
         if part.is_empty() {
             return None; // GNU rejects empty hex values
+        }
+        // TO-DO: avoid `from_str_radix`
+        if part.as_bytes()[0] == b'+' {
+            return None;
         }
         let val = u32::from_str_radix(part, 16).ok()?;
 
@@ -1420,6 +1426,18 @@ mod tests {
     fn test_parse_rows_cols_overflow() {
         assert_eq!(parse_rows_cols("65536"), Some(0)); // wraps to 0
         assert_eq!(parse_rows_cols("65537"), Some(1)); // wraps to 1
+    }
+
+    #[test]
+    fn test_sane_parse_saved_state() {
+        let result = parse_saved_state("00:01:ff:7f");
+        assert_eq!(&result, Some(&[0, 1, 255, 127]));
+    }
+
+    #[test]
+    fn test_parse_saved_state_no_plus() {
+        let result = parse_saved_state("+00:+01:+ff:+7f");
+        assert_eq!(&result, None);
     }
 
     // Sane control character defaults
