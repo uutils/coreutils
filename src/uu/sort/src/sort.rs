@@ -27,6 +27,7 @@ use custom_str_cmp::custom_str_cmp;
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
+use memchr::memchr_iter;
 use numeric_str_cmp::{NumInfo, NumInfoParseSettings, human_numeric_str_cmp, numeric_str_cmp};
 use rand::{RngExt as _, rng};
 #[cfg(not(target_os = "wasi"))]
@@ -216,7 +217,7 @@ enum SortMode {
 
 /// Return the length of the byte slice while ignoring embedded NULs (used for debug underline alignment).
 fn count_non_null_bytes(bytes: &[u8]) -> usize {
-    bytes.iter().filter(|&&c| c != b'\0').count()
+    bytes.len() - memchr_iter(b'\0', bytes).count()
 }
 
 pub struct Output {
@@ -934,12 +935,8 @@ fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool)
 /// Split between separators. These separators are not included in fields.
 /// The result is stored into `token_buffer`.
 fn tokenize_with_separator(line: &[u8], separator: u8, token_buffer: &mut Vec<Field>) {
-    let separator_indices = line
-        .iter()
-        .enumerate()
-        .filter_map(|(i, &c)| if c == separator { Some(i) } else { None });
     let mut start = 0;
-    for sep_idx in separator_indices {
+    for sep_idx in memchr_iter(separator, line) {
         token_buffer.push(start..sep_idx);
         start = sep_idx + 1;
     }
