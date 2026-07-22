@@ -46,12 +46,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         raw_separator
     };
-
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
-
+    #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .cloned()
+        .collect();
     tac(&files, before, regex, separator)
 }
 
@@ -88,6 +88,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
