@@ -84,9 +84,8 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
-    // Whether `--time` was requested. When it is not, the `metadata` field of a
-    // directory `Stat` produced during safe traversal is never inspected, so we
-    // can skip the expensive full-path stat used to populate it.
+    // Avoid full-path stats unless `--time` needs them.
+    #[cfg(all(unix, not(target_os = "redox")))]
     report_time: bool,
 }
 
@@ -1054,6 +1053,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+        #[cfg(all(unix, not(target_os = "redox")))]
         report_time: time.is_some(),
     };
 
