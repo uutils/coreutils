@@ -34,7 +34,7 @@ use thiserror::Error;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{FromIo, UError, UResult, set_exit_code},
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
@@ -1123,8 +1123,10 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn flush(&mut self) -> UResult<()> {
-        self.state.out.flush()?;
-        Ok(())
+        self.state
+            .out
+            .flush()
+            .map_err_context(|| translate!("common-write-error"))
     }
 
     fn finalize(&mut self, config: &Config) -> UResult<()> {
@@ -1262,6 +1264,7 @@ pub fn list_with_output<O: LsOutput>(
     }
 
     output.finalize(config)?;
+    output.flush()?;
     Ok(())
 }
 
