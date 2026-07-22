@@ -4377,6 +4377,7 @@ dependencies = [
  "fluent",
  "nom 8.0.0",
  "rustix",
+ "tempfile",
  "uucore",
 ]
 
