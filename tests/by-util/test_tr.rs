@@ -1635,6 +1635,7 @@ fn test_octal_escape_ambiguous_followed_by_non_utf8() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: strace cannot trace WebAssembly")]
 fn test_sequential_fadvise() {
     let (at, _ucmd) = at_and_ucmd!();
     at.write("input", "abc");
