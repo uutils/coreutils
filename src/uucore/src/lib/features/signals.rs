@@ -395,11 +395,10 @@ pub static ALL_SIGNALS: [&str; 32] = [
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
-    if let Ok(value) = signal_name_upcase.parse() {
-        if is_signal(value) {
-            return Some(value);
-        }
+    if let Some(value) = signal_name_upcase.parse().ok().filter(|&v| is_signal(v)) {
+        return Some(value);
     }
+
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
     if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
@@ -411,18 +410,18 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     }
 
     realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
-        if signal_name.starts_with("RTMIN+") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMIN+").parse::<usize>() {
-                let value = rtmin + n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMIN+")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmin + n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
-        if signal_name.starts_with("RTMAX-") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMAX-").parse::<usize>() {
-                let value = rtmax - n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMAX-")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmax - n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
         match signal_name {
