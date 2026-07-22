@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore bigdecimal prec cppreference
+// spell-checker:ignore bigdecimal prec cppreference bignums
 //! Utilities for formatting numbers in various formats
 
 use bigdecimal::BigDecimal;
@@ -13,7 +13,7 @@ use std::cmp::min;
 use std::io::Write;
 
 use super::{
-    ExtendedBigDecimal, FormatError,
+    ExtendedBigDecimal, FormatError, check_precision,
     spec::{CanAsterisk, Spec},
 };
 
@@ -73,7 +73,9 @@ pub enum NumberAlignment {
 
 pub struct SignedInt {
     pub width: usize,
-    pub precision: usize,
+    // None if no precision is given. Some(0) is an explicit `.0`, which prints
+    // no digits at all for a zero value.
+    pub precision: Option<usize>,
     pub positive_sign: PositiveSign,
     pub alignment: NumberAlignment,
 }
@@ -82,10 +84,10 @@ impl Formatter<i64> for SignedInt {
     fn fmt(&self, writer: impl Write, x: i64) -> std::io::Result<()> {
         // -i64::MIN is actually 1 larger than i64::MAX, so we need to cast to i128 first.
         let abs = (x as i128).abs();
-        let s = if self.precision > 0 {
-            zero_pad_to(&abs.to_string(), self.precision)
-        } else {
-            abs.to_string()
+        let s = match (self.precision, abs) {
+            (Some(0), 0) => String::new(),
+            (Some(precision), _) => zero_pad_to(&abs.to_string(), precision),
+            (None, _) => abs.to_string(),
         };
 
         let sign_indicator = get_sign_indicator(self.positive_sign, x.is_negative());
@@ -112,8 +114,8 @@ impl Formatter<i64> for SignedInt {
         };
 
         let precision = match precision {
-            Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            Some(CanAsterisk::Fixed(x)) => Some(x),
+            None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
@@ -129,7 +131,9 @@ impl Formatter<i64> for SignedInt {
 pub struct UnsignedInt {
     pub variant: UnsignedIntVariant,
     pub width: usize,
-    pub precision: usize,
+    // None if no precision is given. Some(0) is an explicit `.0`, which prints
+    // no digits at all for a zero value.
+    pub precision: Option<usize>,
     pub alignment: NumberAlignment,
 }
 
@@ -149,11 +153,22 @@ impl Formatter<u64> for UnsignedInt {
         let prefix = match (x, self.variant) {
             (1.., UnsignedIntVariant::Hexadecimal(Case::Lowercase, Prefix::Yes)) => "0x",
             (1.., UnsignedIntVariant::Hexadecimal(Case::Uppercase, Prefix::Yes)) => "0X",
-            (1.., UnsignedIntVariant::Octal(Prefix::Yes)) if s.len() >= self.precision => "0",
+            (1.., UnsignedIntVariant::Octal(Prefix::Yes))
+                if s.len() >= self.precision.unwrap_or(0) =>
+            {
+                "0"
+            }
             _ => "",
         };
 
-        s = format!("{prefix}{}", zero_pad_to(&s, self.precision));
+        // `%#o` is the exception: the `#` flag still forces a single `0`.
+        s = match (self.precision, x) {
+            (Some(0), 0) => match self.variant {
+                UnsignedIntVariant::Octal(Prefix::Yes) => String::from("0"),
+                _ => String::new(),
+            },
+            (precision, _) => format!("{prefix}{}", zero_pad_to(&s, precision.unwrap_or(0))),
+        };
         write_output(writer, String::new(), s, self.width, self.alignment)
     }
 
@@ -196,8 +211,8 @@ impl Formatter<u64> for UnsignedInt {
         };
 
         let precision = match precision {
-            Some(CanAsterisk::Fixed(x)) => x,
-            None => 0,
+            Some(CanAsterisk::Fixed(x)) => Some(x),
+            None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
 
@@ -257,6 +272,29 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 
         let mut alignment = self.alignment;
 
+        // The formatters below do arithmetic on the decimal exponent (negating it,
+        // scaling by the precision, shifting bignums by it), which would overflow
+        // for a scale outside `i32`. The parser already rejects such magnitudes as
+        // overflow/underflow, so this only guards values built without going
+        // through it; treat them the same way a real float would (as +-inf/0)
+        // rather than erroring.
+        if let ExtendedBigDecimal::BigDecimal(bd) = &abs {
+            if i32::try_from(bd.fractional_digit_count()).is_err() {
+                let overflow = bd.fractional_digit_count().is_negative();
+                let abs = if overflow {
+                    ExtendedBigDecimal::Infinity
+                } else {
+                    ExtendedBigDecimal::zero()
+                };
+                if alignment == NumberAlignment::RightZero {
+                    alignment = NumberAlignment::RightSpace;
+                }
+                let s = format_float_non_finite(&abs, self.case);
+                let sign_indicator = get_sign_indicator(self.positive_sign, negative);
+                return write_output(writer, sign_indicator, s, self.width, alignment);
+            }
+        }
+
         let s = if let ExtendedBigDecimal::BigDecimal(bd) = abs {
             match self.variant {
                 FloatVariant::Decimal => {
@@ -313,6 +351,10 @@ impl Formatter<&ExtendedBigDecimal> for Float {
             None => None,
             Some(CanAsterisk::Asterisk(_)) => return Err(FormatError::WrongSpecType),
         };
+
+        if let Some(precision) = precision {
+            check_precision(precision)?;
+        }
 
         Ok(Self {
             variant,
@@ -618,7 +660,7 @@ fn format_float_hexadecimal(
         // (since 5^-exp10 < 8^-exp10), so we add that, and another bit for
         // rounding.
         let margin =
-            ((max_precision + 1) as i64 * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
+            ((max_precision as i64 + 1) * 4 - frac10.bits() as i64).max(0) + -exp10 * 3 + 1;
 
         // frac10 * 10^exp10 = frac10 * 2^margin * 10^exp10 * 2^-margin =
         // (frac10 * 2^margin * 5^exp10) * 2^exp10 * 2^-margin =
@@ -631,7 +673,7 @@ fn format_float_hexadecimal(
 
     // Emulate x86(-64) behavior, we display 4 binary digits before the decimal point,
     // so the value will always be between 0x8 and 0xf.
-    let wanted_bits = (BEFORE_BITS + max_precision * 4) as u64;
+    let wanted_bits = BEFORE_BITS as u64 + max_precision as u64 * 4;
     let bits = frac2.bits();
 
     exp2 += bits as i64 - wanted_bits as i64;
@@ -661,7 +703,7 @@ fn format_float_hexadecimal(
         digits.make_ascii_uppercase();
     }
     let (first_digit, remaining_digits) = digits.split_at(1);
-    let exponent = exp2 + (4 * max_precision) as i64;
+    let exponent = exp2 + 4 * max_precision as i64;
 
     let mut remaining_digits = remaining_digits.to_string();
     if precision.is_none() {
@@ -773,7 +815,7 @@ mod test {
             UnsignedInt {
                 variant: UnsignedIntVariant::Octal(Prefix::Yes),
                 width: 0,
-                precision: 0,
+                precision: Some(0),
                 alignment: NumberAlignment::Left,
             }
             .fmt(&mut s, x)
@@ -1227,12 +1269,24 @@ mod test {
     }
 
     #[test]
-    #[ignore = "Need issue #7509 to be fixed"]
     fn format_signed_int_precision_zero() {
         let format = Format::<SignedInt, i64>::parse("%.0d").unwrap();
         assert_eq!(fmt(&format, 123i64), "123");
         // From cppreference.com: "If both the converted value and the precision are ​0​ the conversion results in no characters."
         assert_eq!(fmt(&format, 0i64), "");
+        assert_eq!(fmt(&format, -5i64), "-5");
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("%+.0d").unwrap(), 0i64),
+            "+"
+        );
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("% .0d").unwrap(), 0i64),
+            " "
+        );
+        assert_eq!(
+            fmt(&Format::<SignedInt, i64>::parse("X%6.0dX").unwrap(), 0i64),
+            "X      X"
+        );
     }
 
     #[test]
@@ -1251,23 +1305,18 @@ mod test {
         assert_eq!(f("%+6u", 123u64), "   123"); // '+' is ignored for unsigned numbers.
         assert_eq!(f("% u", 123u64), "123"); // ' ' is ignored for unsigned numbers.
         assert_eq!(f("%#x", 0), "0"); // No prefix for 0
-    }
-
-    #[test]
-    #[ignore = "Need issues #7509 and #7510 to be fixed"]
-    fn format_unsigned_int_broken() {
-        // TODO: Merge this back into format_unsigned_int.
-        let f = |fmt_str: &str, n: u64| {
-            let format = Format::<UnsignedInt, u64>::parse(fmt_str).unwrap();
-            fmt(&format, n)
-        };
-
-        // #7509
-        assert_eq!(f("%.0o", 0), "");
-        assert_eq!(f("%#0o", 0), "0"); // Already correct, but probably an accident.
-        assert_eq!(f("%.0x", 0), "");
-        // #7510
+        assert_eq!(f("%u", 0), "0");
         assert_eq!(f("%#06x", 123u64), "0x007b");
+        // A zero value with an explicit precision of zero prints no digits.
+        assert_eq!(f("%.0u", 0), "");
+        assert_eq!(f("%.0o", 0), "");
+        assert_eq!(f("%.0x", 0), "");
+        assert_eq!(f("%#.0x", 0), "");
+        assert_eq!(f("%#.0o", 0), "0"); // `#` still forces a single 0
+        assert_eq!(f("%#0o", 0), "0");
+        assert_eq!(f("X%#6.0oX", 0), "X     0X");
+        assert_eq!(f("%.0u", 123u64), "123");
+        assert_eq!(f("%#.0o", 5), "05");
     }
 
     #[test]

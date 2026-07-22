@@ -22,7 +22,7 @@ The platforms in tier 1 and the platforms that we test in CI are listed below.
 | Operating system | Tested targets           |
 | ---------------- | ------------------------ |
 | **Linux**        | `x86_64-unknown-linux-gnu` <br> `x86_64-unknown-linux-musl` <br> `arm-unknown-linux-gnueabihf` <br> `i686-unknown-linux-gnu` <br> `aarch64-unknown-linux-gnu` |
-| **macOS**        | `x86_64-apple-darwin`    |
+| **macOS**        | `x86_64-apple-darwin` <br> `aarch64-apple-darwin` |
 | **Windows**      | `i686-pc-windows-msvc` <br> `x86_64-pc-windows-gnu` <br> `x86_64-pc-windows-msvc` |
 | **FreeBSD**      | `x86_64-unknown-freebsd` |
 | **OpenBSD**      | `x86_64-unknown-openbsd` |

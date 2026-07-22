@@ -1707,8 +1707,8 @@ mod test_raw_string_parser {
             let mut buffer = [0u8; 4];
             let owl = '🦉'.encode_utf8(&mut buffer);
             owl_invalid_part = owl.bytes().next().unwrap();
-            brace_1 = [b'<'].to_vec();
-            brace_2 = [b'>'].to_vec();
+            brace_1 = b"<".to_vec();
+            brace_2 = b">".to_vec();
         }
         let mut input_ux = brace_1;
         input_ux.push(owl_invalid_part);

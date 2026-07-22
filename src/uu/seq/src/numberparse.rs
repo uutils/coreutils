@@ -373,8 +373,9 @@ mod tests {
 
     #[test]
     fn test_parse_max_exponents() {
-        // Make sure exponents much bigger than i64::MAX cause errors
-        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_ok());
+        // Exponents at or beyond i64::MAX cause errors, matching GNU seq
+        // (e.g. `seq -w 1e9223372036854775807 1` fails on GNU coreutils too).
+        assert!("1e9223372036854775807".parse::<PreciseNumber>().is_err());
         assert!("1e92233720368547758070".parse::<PreciseNumber>().is_err());
     }
 }

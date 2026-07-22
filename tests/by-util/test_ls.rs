@@ -4227,6 +4227,49 @@ fn test_ls_align_unquoted() {
 }
 
 #[test]
+fn test_ls_color_does_not_make_quoted_names_align_as_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir one");
+    at.touch("file one");
+
+    let args = ["-C", "-T0", "-w=80", "--quoting-style=shell-escape-always"];
+
+    let plain = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    let ansi_re = Regex::new(r"\x1b\[[0-9;]*[A-Za-z]").unwrap();
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
+
+    let long_args = ["-l", "--quoting-style=shell-escape-always"];
+    let plain = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
+}
+
+#[test]
 fn test_ls_align_unquoted_multiline() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4883,6 +4926,38 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
+fn test_ls_long_self_referential_dir_lists_contents() {
+    // `ls -l` for a directory referenced via `.` (e.g. run from inside a symlinked
+    // directory) must list its contents, not show a `. -> target` link entry. On
+    // Windows/Redox a `.` in a symlinked dir was reported as the symlink itself
+    // (issues #6467, #7873). A named symlink-to-dir argument must still be a link.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("real");
+    at.touch("real/inside");
+    at.symlink_dir("real", "link");
+
+    // Run from inside the symlinked directory: the implicit `.` is the directory
+    // itself, so its contents must be listed, never shown as a `-> target` link.
+    scene
+        .ucmd()
+        .arg("-l")
+        .current_dir(at.plus("link"))
+        .succeeds()
+        .stdout_contains("inside")
+        .stdout_does_not_contain("-> ");
+
+    // A named symlink-to-dir argument is still shown as a link, not dereferenced.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link ->");
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
@@ -5265,9 +5340,17 @@ fn test_symlink_target_extension_color() {
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
 
-    scene.ucmd().args(&["-T", "3"]).succeeds();
+    for valid in ["3", "0", "0xff"] {
+        scene.ucmd().args(&["-T", valid]).succeeds();
+    }
     scene.ucmd().args(&["--tabsize", "0"]).succeeds();
-    scene.ucmd().args(&["-T", "0xff"]).succeeds();
+    for invalid in ["-3", "a", "3.14"] {
+        scene
+            .ucmd()
+            .arg(format!("--tabsize={invalid}"))
+            .fails()
+            .stderr_is(format!("ls: invalid tab size: '{invalid}'\n"));
+    }
     scene.ucmd().arg("-T").fails();
 }
 
@@ -7516,4 +7599,14 @@ fn test_ls_al_no_capabilities_insufficient_on_wasi() {
         "ls -al stdout leaked a WASI capability error: {}",
         out.stdout_str()
     );
+}
+
+// https://github.com/uutils/coreutils/issues/13280
+// options `--sort`, `--format`, `--time`, and `--blocksize` may be detached
+#[test]
+fn test_long_options_detached() {
+    new_ucmd!().arg("--sort").arg("name").succeeds();
+    new_ucmd!().arg("--format").arg("single-column").succeeds();
+    new_ucmd!().arg("--time").arg("mtime").succeeds();
+    new_ucmd!().arg("--block-size").arg("512").succeeds();
 }

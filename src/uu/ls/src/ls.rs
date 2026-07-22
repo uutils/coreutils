@@ -34,7 +34,7 @@ use thiserror::Error;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
     display::Quotable,
-    error::{UError, UResult, set_exit_code},
+    error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
@@ -68,6 +68,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
 
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    WriteError(std::io::Error),
+
     #[error("{}", match .1.kind() {
 		ErrorKind::NotADirectory => translate!("ls-error-not-directory", "path" => .0.quote()),
         ErrorKind::NotFound => translate!("ls-error-cannot-access-no-such-file", "path" => .0.quote()),
@@ -90,6 +93,9 @@ enum LsError {
     #[error("{}", translate!("ls-error-invalid-block-size", "size" => format!("'{_0}'")))]
     BlockSizeParseError(String),
 
+    #[error("{}", translate!("ls-error-invalid-tab-size", "size" => .0.quote()))]
+    InvalidTabSize(String),
+
     #[error("{}", translate!("ls-error-dired-and-zero-incompatible"))]
     DiredAndZeroAreIncompatible,
 
@@ -104,13 +110,14 @@ impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             Self::InvalidLineWidth(_) => 2,
-            Self::IOError(_) => 1,
+            Self::IOError(_) | Self::WriteError(_) => 1,
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 2,
             Self::DiredAndZeroAreIncompatible => 2,
             Self::AlreadyListedError(_) => 2,
             Self::TimeStyleParseError(_) => 2,
+            Self::InvalidTabSize(_) => 2,
         }
     }
 }
@@ -160,7 +167,6 @@ pub fn uu_app() -> Command {
                 "commas",
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([
                 options::FORMAT,
                 options::format::COLUMNS,
@@ -385,7 +391,6 @@ pub fn uu_app() -> Command {
                 PossibleValue::new("birth").alias("creation"),
             ]))
             .hide_possible_values(true)
-            .require_equals(true)
             .overrides_with_all([options::TIME, options::time::ACCESS, options::time::CHANGE]),
     )
     .arg(
@@ -440,7 +445,6 @@ pub fn uu_app() -> Command {
                 "extension",
                 "width",
             ]))
-            .require_equals(true)
             .overrides_with_all([
                 options::SORT,
                 options::sort::SIZE,
@@ -627,7 +631,6 @@ pub fn uu_app() -> Command {
     .arg(
         Arg::new(options::size::BLOCK_SIZE)
             .long(options::size::BLOCK_SIZE)
-            .require_equals(true)
             .value_name("BLOCK_SIZE")
             .help(translate!("ls-help-block-size"))
             .overrides_with_all([options::size::SI, options::size::HUMAN_READABLE]),
@@ -875,6 +878,10 @@ impl<'a> PathData<'a> {
             Dereference::None => false,
         };
 
+        // `.`, `..`, `/` and trailing `..` denote the directory itself, not a symlink: on
+        // Windows/Redox `ls -l` in a symlinked dir would otherwise print `. -> target` (#6467, #7873).
+        let must_dereference = must_dereference || (command_line && p_buf.file_name().is_none());
+
         // Why prefer to check the DirEntry file_type()?  B/c the call is
         // nearly free compared to a metadata() call on a Path
         let ft: OnceCell<Option<FileType>> = OnceCell::new();
@@ -1119,7 +1126,7 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn flush(&mut self) -> UResult<()> {
-        self.state.out.flush()?;
+        self.state.out.flush().map_err(LsError::WriteError)?;
         Ok(())
     }
 
@@ -1258,6 +1265,7 @@ pub fn list_with_output<O: LsOutput>(
     }
 
     output.finalize(config)?;
+    output.flush()?;
     Ok(())
 }
 
