@@ -2162,10 +2162,6 @@ fn test_count_bytes_with_expanding_block_conv() {
     // 512-byte read, then a partial 488-byte read), independent of what
     // the conversion emits.
     .stderr_contains("1+1 records in");
-    // Chunk-local block conversion turns the 512 + 488 input bytes into
-    // 47 + 45 records of cbs bytes. GNU emits 91 records here because it
-    // converts records across read boundaries (a pre-existing divergence,
-    // see #13434), so this legitimately becomes 91 * 1024 if that is ever
-    // unified.
+    // conv=block currently emits 92 chunk-local records; see #13434.
     assert_eq!(at.read_bytes("output.bin").len(), 92 * 1024);
 }
