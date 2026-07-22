@@ -35,15 +35,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
-        Some(v) => v.cloned().collect(),
-        None => {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-missing-operand"),
-            ));
-        }
-    };
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
+    let fifos: Vec<String> = matches
+        .get_many::<String>(options::FIFO)
+        .unwrap()
+        .cloned()
+        .collect();
 
     for f in fifos {
         // Clear umask around mkfifo so the kernel applies the exact
@@ -128,6 +125,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIFO)
                 .hide(true)
                 .action(ArgAction::Append)
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
 }
