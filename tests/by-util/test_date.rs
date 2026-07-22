@@ -82,6 +82,8 @@ fn test_large_year_default_output_boundary() {
     for (input, expected) in [
         ("9999-01-01", "Fri Jan  1 00:00:00 UTC 9999\n"),
         ("10000-01-01", "Sat Jan  1 00:00:00 UTC 10000\n"),
+        ("10000-01-01 00:00 +1400", "Fri Dec 31 10:00:00 UTC 9999\n"),
+        ("9999-12-31 23:00 -1400", "Sat Jan  1 13:00:00 UTC 10000\n"),
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
