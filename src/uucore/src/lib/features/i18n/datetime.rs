@@ -116,34 +116,34 @@ pub fn localize_format_string(format: &str, date: JiffDate) -> String {
     // Format localized names using ICU DateTimeFormatter
     let locale_prefs = locale.clone().into();
 
-    if fmt.contains("%B") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long()) {
-            fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%B")
+        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::long())
+    {
+        fmt = fmt.replace("%B", &f.format(&iso_date).to_string());
     }
-    if fmt.contains("%b") || fmt.contains("%h") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium()) {
-            // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
-            // which when combined with locale format strings that also add periods after
-            // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
-            // The standard C/POSIX locale via nl_langinfo returns abbreviations
-            // WITHOUT trailing periods, so we strip them here for consistency.
-            let month_abbrev = f.format(&iso_date).to_string();
-            let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
-            fmt = fmt
-                .replace("%b", &month_abbrev)
-                .replace("%h", &month_abbrev);
-        }
+    if (fmt.contains("%b") || fmt.contains("%h"))
+        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::M::medium())
+    {
+        // ICU's medium format may include trailing periods (e.g., "febr." for Hungarian),
+        // which when combined with locale format strings that also add periods after
+        // %b (e.g., "%Y. %b. %d") results in double periods ("febr..").
+        // The standard C/POSIX locale via nl_langinfo returns abbreviations
+        // WITHOUT trailing periods, so we strip them here for consistency.
+        let month_abbrev = f.format(&iso_date).to_string();
+        let month_abbrev = month_abbrev.trim_end_matches('.').to_string();
+        fmt = fmt
+            .replace("%b", &month_abbrev)
+            .replace("%h", &month_abbrev);
     }
-    if fmt.contains("%A") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long()) {
-            fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%A")
+        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::long())
+    {
+        fmt = fmt.replace("%A", &f.format(&iso_date).to_string());
     }
-    if fmt.contains("%a") {
-        if let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short()) {
-            fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
-        }
+    if fmt.contains("%a")
+        && let Ok(f) = DateTimeFormatter::try_new(locale_prefs, fieldsets::E::short())
+    {
+        fmt = fmt.replace("%a", &f.format(&iso_date).to_string());
     }
 
     fmt.replace(PERCENT_PLACEHOLDER, "%%")
