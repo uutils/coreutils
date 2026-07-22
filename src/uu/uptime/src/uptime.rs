@@ -279,7 +279,7 @@ fn print_nusers(nusers: Option<usize>) -> UResult<()> {
 }
 
 fn print_time() -> UResult<()> {
-    write!(stdout(), " {}  ", get_formatted_time())?;
+    write!(stdout(), " {} ", get_formatted_time())?;
     Ok(())
 }
 
@@ -287,7 +287,7 @@ fn print_uptime(boot_time: Option<time_t>) -> UResult<()> {
     let localized_text = translate!("uptime-output-up-text");
     let uptime_message = get_formatted_uptime(boot_time, OutputFormat::HumanReadable)?;
 
-    write!(stdout(), "{localized_text}  {uptime_message},  ")?;
+    write!(stdout(), "{localized_text} {uptime_message},  ")?;
     Ok(())
 }
 
