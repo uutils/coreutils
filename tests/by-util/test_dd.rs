@@ -2143,12 +2143,12 @@ fn test_bs_not_positive() {
     }
 }
 
-/// Regression test for #13434: with `count=N iflag=count_bytes`, a conversion
-/// writing more than N bytes made the per-iteration read-size math underflow.
 #[test]
 fn test_count_bytes_with_expanding_block_conv() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.write("input.txt", &"aaaaaaaaaa\n".repeat(182));
+    let mut input = vec![b'a'; 1000];
+    input.extend([b'Z'; 24]);
+    at.write_bytes("input.txt", &input);
     ucmd.args(&[
         "if=input.txt",
         "of=output.bin",
@@ -2157,11 +2157,8 @@ fn test_count_bytes_with_expanding_block_conv() {
         "count=1000",
         "iflag=count_bytes",
     ])
-    .succeeds()
-    // Exactly 1000 input bytes are read, in two loop iterations (one full
-    // 512-byte read, then a partial 488-byte read), independent of what
-    // the conversion emits.
-    .stderr_contains("1+1 records in");
-    // conv=block currently emits 92 chunk-local records; see #13434.
-    assert_eq!(at.read_bytes("output.bin").len(), 92 * 1024);
+    .succeeds();
+    let output = at.read_bytes("output.bin");
+    assert_eq!(bytecount::count(&output, b'a'), 1000);
+    assert!(!output.contains(&b'Z'));
 }

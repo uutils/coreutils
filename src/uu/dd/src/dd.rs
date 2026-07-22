@@ -1426,11 +1426,9 @@ fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            // The budget is on the *input*: derive it from bytes read, not
-            // written (which can exceed it and underflow), like below_count_limit.
-            let bmax: u128 = bmax.into();
-            let bremain: u128 = bmax.saturating_sub(rstat.bytes_total.into());
-            cmp::min(ideal_bsize as u128, bremain) as usize
+            // `iflag=count_bytes` limits input, so use bytes read.
+            let bremain = bmax.saturating_sub(rstat.bytes_total);
+            cmp::min(ideal_bsize as u64, bremain) as usize
         }
         None => ideal_bsize,
     }
@@ -1670,45 +1668,19 @@ mod tests {
     }
 
     #[test]
-    fn test_calc_loop_bsize_count_bytes_remaining_from_bytes_read() {
+    fn test_calc_loop_bsize_count_bytes() {
         use crate::progress::ReadStat;
         use crate::{Num, calc_loop_bsize};
 
-        let rstat = ReadStat {
-            reads_complete: 1,
-            reads_partial: 0,
-            records_truncated: 0,
-            bytes_total: 512,
-        };
-        // 488 input bytes of the 1000-byte budget remain, so the next read
-        // must be capped to them.
-        assert_eq!(
-            calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
-            488
-        );
-
-        let exhausted = ReadStat {
-            reads_complete: 2,
-            reads_partial: 0,
-            records_truncated: 0,
-            bytes_total: 1000,
-        };
-        assert_eq!(
-            calc_loop_bsize(Some(Num::Bytes(1000)), &exhausted, 512, 512),
-            0
-        );
-
-        // If the accounting ever overshoots the budget, the saturating
-        // subtraction must degrade to a zero-sized read instead of wrapping.
-        let exceeded = ReadStat {
-            reads_complete: 1,
-            reads_partial: 1,
-            records_truncated: 0,
-            bytes_total: 1001,
-        };
-        assert_eq!(
-            calc_loop_bsize(Some(Num::Bytes(1000)), &exceeded, 512, 512),
-            0
-        );
+        for (bytes_read, expected) in [(512, 488), (1000, 0), (1001, 0)] {
+            let rstat = ReadStat {
+                bytes_total: bytes_read,
+                ..ReadStat::default()
+            };
+            assert_eq!(
+                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
+                expected
+            );
+        }
     }
 }
