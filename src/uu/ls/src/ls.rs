@@ -34,7 +34,7 @@ use thiserror::Error;
 use uucore::libc::{S_IXGRP, S_IXOTH, S_IXUSR};
 use uucore::{
     display::Quotable,
-    error::{FromIo, UError, UResult, set_exit_code},
+    error::{UError, UResult, set_exit_code, strip_errno},
     format_usage,
     fs::FileInformation,
     fsext::metadata_get_time,
@@ -67,6 +67,9 @@ enum LsError {
 
     #[error("{}", translate!("ls-error-general-io", "error" => _0))]
     IOError(#[from] std::io::Error),
+
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
+    WriteError(std::io::Error),
 
     #[error("{}", match .1.kind() {
 		ErrorKind::NotADirectory => translate!("ls-error-not-directory", "path" => .0.quote()),
@@ -107,7 +110,7 @@ impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
             Self::InvalidLineWidth(_) => 2,
-            Self::IOError(_) => 1,
+            Self::IOError(_) | Self::WriteError(_) => 1,
             Self::IOErrorContext(_, _, false) => 1,
             Self::IOErrorContext(_, _, true) => 2,
             Self::BlockSizeParseError(_) => 2,
@@ -1123,10 +1126,8 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn flush(&mut self) -> UResult<()> {
-        self.state
-            .out
-            .flush()
-            .map_err_context(|| translate!("common-write-error"))
+        self.state.out.flush().map_err(LsError::WriteError)?;
+        Ok(())
     }
 
     fn finalize(&mut self, config: &Config) -> UResult<()> {
