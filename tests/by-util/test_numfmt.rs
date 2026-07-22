@@ -1659,6 +1659,22 @@ fn test_float_precision_greater_than_16bits() {
 }
 
 #[test]
+fn test_float_precision_greater_than_16bits_without_scaling() {
+    new_ucmd!()
+        .args(&["--format=%.65536f", "1.5"])
+        .succeeds()
+        .stdout_is("2\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits_with_suffix() {
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.65536f", "1000000"])
+        .succeeds()
+        .stdout_is("1M\n");
+}
+
+#[test]
 fn test_format_precision_too_large_on_zero() {
     new_ucmd!()
         .args(&["--format=%.40f", "0"])
