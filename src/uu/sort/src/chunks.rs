@@ -370,14 +370,12 @@ fn read_to_buffer<T: Read>(
             Ok(0) => {
                 if read_target.is_empty() {
                     // chunk is full
-                    if let Some(max_buffer_size) = max_buffer_size {
-                        if max_buffer_size > buffer.len() {
-                            // we can grow the buffer
-                            let prev_len = buffer.len();
-                            buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
-                            read_target = &mut buffer[prev_len..];
-                            continue;
-                        }
+                    if max_buffer_size.is_some_and(|max_buf_size| max_buf_size > buffer.len()) {
+                        // we can grow the buffer
+                        let prev_len = buffer.len();
+                        buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
+                        read_target = &mut buffer[prev_len..];
+                        continue;
                     }
 
                     let search_start = newline_search_offset;
