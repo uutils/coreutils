@@ -768,8 +768,9 @@ impl<'a> Line<'a> {
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point
-                        while let Some(b'-' | b'0' | b'.') =
-                            self.line[initial_selection.start..selection.start].last()
+                        while self.line[initial_selection.start..selection.start]
+                            .last()
+                            .is_some_and(|c| b"-0.".contains(c))
                         {
                             selection.start -= 1;
                         }
@@ -918,15 +919,9 @@ fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool)
     }
 
     let next = line.get(idx + 1).copied();
-    match next {
-        Some(c) if c.is_ascii_digit() => true,
-        Some(b'K' | b'k' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R' | b'Q')
-            if allow_unit_after_blank =>
-        {
-            true
-        }
-        _ => false,
-    }
+    next.is_some_and(|c| {
+        c.is_ascii_digit() || (allow_unit_after_blank && b"kKMGTPEZYRQ".contains(&c))
+    })
 }
 
 /// Split between separators. These separators are not included in fields.
