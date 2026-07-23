@@ -35,15 +35,10 @@ mod units;
 
 // Returns `true` if the input is in scientific notation
 fn is_scientific(input: &[u8]) -> bool {
-    if let Some(pos) = input.iter().position(|&b| b == b'E' || b == b'e') {
-        if pos < input.len() - 1 {
-            if input[pos + 1].is_ascii_digit() {
-                return true;
-            }
-        }
-    }
-
-    false
+    input
+        .iter()
+        .position(|b| b"Ee".contains(b))
+        .is_some_and(|pos| input.get(pos + 1).is_some_and(u8::is_ascii_digit))
 }
 
 /// Format a single line and write it, handling `--invalid` error modes.
@@ -195,18 +190,16 @@ fn parse_unit_size(s: &str) -> Result<usize> {
 
     // Reject all-zero numeric parts like "0" or "00K".
     let all_zero = !number.is_empty() && number.bytes().all(|b| b == b'0');
-    if !all_zero {
-        if let Some(multiplier) = parse_unit_size_suffix(suffix) {
-            if number.is_empty() {
-                return Ok(multiplier);
-            }
-            if let Some(size) = number
-                .parse::<usize>()
-                .ok()
-                .and_then(|n| n.checked_mul(multiplier))
-            {
-                return Ok(size);
-            }
+    if !all_zero && let Some(multiplier) = parse_unit_size_suffix(suffix) {
+        if number.is_empty() {
+            return Ok(multiplier);
+        }
+        if let Some(size) = number
+            .parse::<usize>()
+            .ok()
+            .and_then(|n| n.checked_mul(multiplier))
+        {
+            return Ok(size);
         }
     }
 
