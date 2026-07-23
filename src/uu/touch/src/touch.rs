@@ -784,16 +784,16 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
-    if s.bytes().next() == Some(b'@') {
-        if let Ok(ts) = &s[1..].parse::<i64>() {
-            return Ok(FileTime::from_unix_time(*ts, 0));
-        }
+    if s.bytes().next() == Some(b'@')
+        && let Ok(ts) = &s[1..].parse::<i64>()
+    {
+        return Ok(FileTime::from_unix_time(*ts, 0));
     }
 
-    if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s) {
-        if let Some(zoned) = parsed.into_zoned() {
-            return Ok(timestamp_to_filetime(zoned.timestamp()));
-        }
+    if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
+        && let Some(zoned) = parsed.into_zoned()
+    {
+        return Ok(timestamp_to_filetime(zoned.timestamp()));
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
