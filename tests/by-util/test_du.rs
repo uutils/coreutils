@@ -1155,6 +1155,231 @@ fn birth_supported() -> bool {
     m.created().is_ok()
 }
 
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_directory() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/old");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/old"))
+        .succeeds();
+
+    at.touch("d/new");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/new"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("d/old")
+        .succeeds();
+
+    result.stdout_only("0\t2020-01-01 00:00\td/old\n");
+
+    let result = ts.ucmd().env("TZ", "UTC").arg("--time").arg("d").succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(
+        stdout.contains("2023-01-01 00:00"),
+        "wrong time in: {stdout}"
+    );
+    assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("-a")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/new\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td\\new\n"), "{stdout}");
+    }
+    assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_directory_nested() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir_all("d/sub");
+    at.touch("d/old");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/old"))
+        .succeeds();
+
+    at.touch("d/sub/new");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/sub/new"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d/sub"))
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    // The root directory should show the max time from its subtree
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("-a")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    #[cfg(not(windows))]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td/old\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub/new\n"), "{stdout}");
+        assert!(stdout.contains("2023-01-01 00:00\td/sub\n"), "{stdout}");
+    }
+    #[cfg(windows)]
+    {
+        assert!(stdout.contains("2020-01-01 00:00\td\\old\n"), "{stdout}");
+        assert!(
+            stdout.contains("2023-01-01 00:00\td\\sub\\new\n"),
+            "{stdout}"
+        );
+        assert!(stdout.contains("2023-01-01 00:00\td\\sub\n"), "{stdout}");
+    }
+    assert!(stdout.contains("2023-01-01 00:00\td\n"), "{stdout}");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_atime() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.touch("f");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-a")
+        .arg("-t")
+        .arg("202201010000")
+        .arg(at.plus("f"))
+        .succeeds();
+
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time=atime")
+        .arg("f")
+        .succeeds();
+    result.stdout_only("0\t2022-01-01 00:00\tf\n");
+}
+
+#[cfg(feature = "touch")]
+#[test]
+fn test_du_time_unaffected_by_exclude() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.mkdir("d");
+    at.touch("d/keep");
+    at.touch("d/ignore");
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202001010000")
+        .arg(at.plus("d/keep"))
+        .succeeds();
+
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("202301010000")
+        .arg(at.plus("d/ignore"))
+        .succeeds();
+
+    // Backdate dir mtime to 2019-01-01 so the aggregated max comes from a child
+    ts.ccmd("touch")
+        .env("TZ", "UTC")
+        .arg("-m")
+        .arg("-t")
+        .arg("201901010000")
+        .arg(at.plus("d"))
+        .succeeds();
+
+    // Exclude "ignore" so the reported time for "d" should reflect only "keep"'s mtime
+    let result = ts
+        .ucmd()
+        .env("TZ", "UTC")
+        .arg("--time")
+        .arg("--exclude=ignore")
+        .arg("d")
+        .succeeds();
+    let stdout = result.stdout_str();
+
+    assert!(
+        stdout.contains("2020-01-01 00:00"),
+        "wrong time in: {stdout}"
+    );
+    assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
+}
+
 #[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
