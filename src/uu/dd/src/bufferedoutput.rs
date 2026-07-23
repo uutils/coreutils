@@ -70,17 +70,10 @@ impl<'a> BufferedOutput<'a> {
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
         let obs = self.inner.settings.obs;
 
-        // Fast path: with no partial block pending, the complete blocks can
-        // go straight to the inner writer, instead of being copied into the
-        // internal buffer only to be written and cleared again. This is the
-        // common case: whenever the incoming length is a multiple of `obs`
-        // -- as it is for the copy loop's usual full-sized reads -- nothing
-        // is left pending for the next call.
+        // Avoid copying complete blocks through the internal buffer.
         if self.buf.is_empty() {
             let complete = buf.len() - buf.len() % obs;
             if complete == 0 {
-                // Not even one complete block: buffer the whole thing and
-                // write zero blocks.
                 self.buf.extend_from_slice(buf);
                 return Ok(WriteStat::default());
             }
