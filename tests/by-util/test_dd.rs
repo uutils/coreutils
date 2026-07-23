@@ -2189,3 +2189,23 @@ fn test_bs_not_positive() {
         }
     }
 }
+
+#[test]
+fn test_count_bytes_with_expanding_block_conv() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut input = vec![b'a'; 1000];
+    input.extend([b'Z'; 24]);
+    at.write_bytes("input.txt", &input);
+    ucmd.args(&[
+        "if=input.txt",
+        "of=output.bin",
+        "conv=block",
+        "cbs=1024",
+        "count=1000",
+        "iflag=count_bytes",
+    ])
+    .succeeds();
+    let output = at.read_bytes("output.bin");
+    assert_eq!(bytecount::count(&output, b'a'), 1000);
+    assert!(!output.contains(&b'Z'));
+}
