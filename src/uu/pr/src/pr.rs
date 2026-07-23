@@ -86,23 +86,16 @@ struct OutputOptions {
     expand_tabs: Option<ExpandTabsOptions>,
 }
 
-/// One line of an input file, annotated with file, page, and line number.
+/// One line of an input file, annotated with file and line number.
 #[derive(Default, Clone)]
 struct FileLine {
     file_id: usize,
-    page_number: usize,
     line_number: usize,
     line_content: Vec<u8>,
 }
 
 impl FileLine {
-    fn from_buf(
-        file_id: usize,
-        page_number: usize,
-        line_number: usize,
-        buf: &[u8],
-        options: &OutputOptions,
-    ) -> Self {
+    fn from_buf(file_id: usize, line_number: usize, buf: &[u8], options: &OutputOptions) -> Self {
         let line_content = if let Some(expand_tabs) = &options.expand_tabs {
             let mut result =
                 Vec::with_capacity(buf.len() + buf.len() / 20 * expand_tabs.width as usize);
@@ -116,7 +109,6 @@ impl FileLine {
 
         Self {
             file_id,
-            page_number,
             line_number,
             line_content,
         }
@@ -985,12 +977,12 @@ fn open_readers(path: &str) -> Result<Box<dyn BufRead>, PrError> {
     if path == "-" {
         Ok(Box::new(stdin().lock()))
     } else {
-        File::open(path).map(|f| Box::new(BufReader::new(f)) as Box<dyn BufRead>).map_err(|err| {
-            PrError::ReadError {
+        File::open(path)
+            .map(|f| Box::new(BufReader::new(f)) as Box<dyn BufRead>)
+            .map_err(|err| PrError::ReadError {
                 path: path.to_string(),
                 msg: strip_errno(&err),
-            }
-        })
+            })
     }
 }
 
@@ -1061,13 +1053,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                 None => {
                     // EOF: trailing data
                     if !line_content.is_empty() {
-                        page.push(FileLine::from_buf(
-                            0,
-                            page_num,
-                            line_num,
-                            &line_content,
-                            options,
-                        ));
+                        page.push(FileLine::from_buf(0, line_num, &line_content, options));
                     }
                     if !page.is_empty()
                         && start_page <= page_num + 1
@@ -1080,17 +1066,9 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                 }
                 Some(FF) => {
                     if !(prev_sep == Some(NL) && line_content.is_empty()) {
-                        page.push(FileLine::from_buf(
-                            0,
-                            page_num,
-                            line_num,
-                            &line_content,
-                            options,
-                        ));
+                        page.push(FileLine::from_buf(0, line_num, &line_content, options));
                     }
-                    if start_page <= page_num + 1
-                        && end_page.is_none_or(|e| page_num < e)
-                    {
+                    if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
                         let page_number = page_num + 1;
                         print_page(&page, options, page_number)?;
                     }
@@ -1105,19 +1083,11 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                 _ => {
                     // NL
                     if !(prev_sep == Some(FF) && line_content.is_empty()) {
-                        page.push(FileLine::from_buf(
-                            0,
-                            page_num,
-                            line_num,
-                            &line_content,
-                            options,
-                        ));
+                        page.push(FileLine::from_buf(0, line_num, &line_content, options));
                         line_num += 1;
                     }
                     if page.len() >= lines_needed_per_page {
-                        if start_page <= page_num + 1
-                            && end_page.is_none_or(|e| page_num < e)
-                        {
+                        if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
                             let page_number = page_num + 1;
                             print_page(&page, options, page_number)?;
                         }
@@ -1153,29 +1123,18 @@ fn read_chunk(reader: &mut dyn BufRead) -> std::io::Result<(Vec<u8>, Option<u8>)
         if available.is_empty() {
             return Ok((buf, None));
         }
-        match memchr::memchr2(FF, NL, available) {
-            Some(pos) => {
-                // Found a separator: take everything before it, consume the
-                // separator byte from the reader, and return.
-                buf.extend_from_slice(&available[..pos]);
-                let sep = available[pos];
-                reader.consume(pos + 1);
-                return Ok((buf, Some(sep)));
-            }
-            None => {
-                // No separator in the reader's buffer: consume it all and
-                // either read more (below 256KB) or force-split.
-                buf.extend_from_slice(available);
-                let len = available.len();
-                reader.consume(len);
-                if buf.len() >= MAX_CHUNK_SIZE {
-                    // Safety limit: if we've accumulated 256KB without finding
-                    // any separator, insert an artificial newline. This prevents
-                    // unbounded memory growth on inputs without newlines or
-                    // form feeds (e.g. /dev/zero, /dev/urandom).
-                    return Ok((buf, Some(NL)));
-                }
-            }
+        if let Some(pos) = memchr::memchr2(FF, NL, available) {
+            buf.extend_from_slice(&available[..pos]);
+            let sep = available[pos];
+            reader.consume(pos + 1);
+            return Ok((buf, Some(sep)));
+        }
+
+        buf.extend_from_slice(available);
+        let len = available.len();
+        reader.consume(len);
+        if buf.len() >= MAX_CHUNK_SIZE {
+            return Ok((buf, Some(NL)));
         }
     }
 }
@@ -1197,6 +1156,7 @@ fn read_chunk(reader: &mut dyn BufRead) -> std::io::Result<(Vec<u8>, Option<u8>)
 /// State variables (`prev_sep`, `line_num`, `page_num`) are updated in place
 /// so the caller can continue reading the next page from where this one left
 /// off.
+#[allow(clippy::too_many_arguments)]
 fn read_one_page(
     reader: &mut dyn BufRead,
     options: &OutputOptions,
@@ -1217,7 +1177,10 @@ fn read_one_page(
             None => {
                 if track_content && !line_content.is_empty() {
                     page.push(FileLine::from_buf(
-                        file_id, *page_num, *line_num, &line_content, options,
+                        file_id,
+                        *line_num,
+                        &line_content,
+                        options,
                     ));
                 }
                 if page.is_empty() {
@@ -1228,7 +1191,10 @@ fn read_one_page(
             Some(ch) if ch == FF => {
                 if track_content && !(*prev_sep == Some(NL) && line_content.is_empty()) {
                     page.push(FileLine::from_buf(
-                        file_id, *page_num, *line_num, &line_content, options,
+                        file_id,
+                        *line_num,
+                        &line_content,
+                        options,
                     ));
                 }
                 let result = Some(page);
@@ -1240,7 +1206,10 @@ fn read_one_page(
                 let is_data_line = !(*prev_sep == Some(FF) && line_content.is_empty());
                 if track_content && is_data_line {
                     page.push(FileLine::from_buf(
-                        file_id, *page_num, *line_num, &line_content, options,
+                        file_id,
+                        *line_num,
+                        &line_content,
+                        options,
                     ));
                 }
                 if is_data_line {
@@ -1273,12 +1242,6 @@ fn read_one_page(
 /// This keeps memory proportional to one merged page rather than the total
 /// size of all input files.
 fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
-    let lines_needed_per_page = lines_to_read_for_page(options);
-    let start_page = options.start_page;
-    let end_page = options.end_page;
-
-    // Per-file state for streaming: reader position, current page number, and
-    // line counter. `done` is set to true when the file is fully consumed.
     struct FileState {
         reader: Box<dyn BufRead>,
         file_id: usize,
@@ -1287,6 +1250,10 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         page_num: usize,
         done: bool,
     }
+
+    let lines_needed_per_page = lines_to_read_for_page(options);
+    let start_page = options.start_page;
+    let end_page = options.end_page;
 
     // Open all input files and initialize their streaming state.
     let mut files: Vec<FileState> = Vec::new();
@@ -1321,7 +1288,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
 
         // Inner loop over files: advance each file to the current output
         // page, then read its contribution if it has one.
-        for file in files.iter_mut() {
+        for file in &mut files {
             if file.done {
                 continue;
             }
@@ -1332,7 +1299,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
             // objects). This happens when a file has fewer lines per page and
             // ran ahead of the output page counter.
             while file.page_num + 1 < output_page {
-                match read_one_page(
+                if read_one_page(
                     &mut file.reader,
                     options,
                     file.file_id,
@@ -1341,12 +1308,11 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
                     &mut file.page_num,
                     lines_needed_per_page,
                     false,
-                )? {
-                    None => {
-                        file.done = true;
-                        break;
-                    }
-                    Some(_) => {}
+                )?
+                .is_none()
+                {
+                    file.done = true;
+                    break;
                 }
             }
 
@@ -1422,6 +1388,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
 /// Write one page of merge-mode output, using pre-allocated column-count and
 /// column-start buffers to avoid per-page Vec allocations. Each cell is written
 /// directly to `out` without intermediate String allocations.
+#[allow(clippy::naive_bytecount)]
 fn write_merge_page(
     lines: &[FileLine],
     options: &OutputOptions,
@@ -1441,7 +1408,7 @@ fn write_merge_page(
 
     col_counts.clear();
     col_counts.resize(columns, 0);
-    for line in lines.iter() {
+    for line in lines {
         if line.file_id < columns {
             col_counts[line.file_id] += 1;
         }
@@ -1522,8 +1489,7 @@ fn write_truncated_bytes(
                 .char_indices()
                 .take(max_chars)
                 .last()
-                .map(|(i, c)| i + c.len_utf8())
-                .unwrap_or(0);
+                .map_or(0, |(i, c)| i + c.len_utf8());
             out.write_all(&content[..end])
         }
         Err(_) => out.write_all(&content[..content.len().min(max_chars)]),
@@ -1662,12 +1628,9 @@ fn write_columns(
     for row in table {
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
-            let line_to_print = match cell {
-                None => {
-                    not_found_break = true;
-                    break;
-                }
-                Some(file_line) => file_line,
+            let Some(line_to_print) = cell else {
+                not_found_break = true;
+                break;
             };
 
             write_offset_spaces(out, options.offset_spaces)?;
