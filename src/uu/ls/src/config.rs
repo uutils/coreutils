@@ -601,18 +601,16 @@ fn extract_quoting_style(
 fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => None,
             "file-type" => Some(IndicatorStyle::FileType),
             "classify" => Some(IndicatorStyle::Classify),
             "slash" => Some(IndicatorStyle::Slash),
-            &_ => None,
+            "none" | &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => None,
             "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
             "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
-            &_ => None,
+            "never" | "no" | "none" | &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
         Some(IndicatorStyle::Slash)

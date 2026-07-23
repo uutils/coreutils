@@ -138,9 +138,8 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
                 "-f" => path(&f, &PathCondition::Regular),
                 "-g" => path(&f, &PathCondition::GroupIdFlag),
                 "-G" => path(&f, &PathCondition::GroupOwns),
-                "-h" => path(&f, &PathCondition::SymLink),
+                "-h" | "-L" => path(&f, &PathCondition::SymLink),
                 "-k" => path(&f, &PathCondition::Sticky),
-                "-L" => path(&f, &PathCondition::SymLink),
                 "-N" => path(&f, &PathCondition::ExistsModifiedLastRead),
                 "-O" => path(&f, &PathCondition::UserOwns),
                 "-p" => path(&f, &PathCondition::Fifo),
@@ -324,27 +323,19 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     };
 
     match condition {
-        PathCondition::BlockSpecial => false,
-        PathCondition::CharacterSpecial => false,
         PathCondition::Directory => stat.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => unimplemented!(),
+        PathCondition::ExistsModifiedLastRead
+        | PathCondition::GroupOwns
+        | PathCondition::UserOwns => unimplemented!(),
         PathCondition::Regular => stat.is_file(),
-        PathCondition::GroupIdFlag => false,
-        PathCondition::GroupOwns => unimplemented!(),
-        PathCondition::SymLink => false,
-        PathCondition::Sticky => false,
-        PathCondition::UserOwns => unimplemented!(),
-        PathCondition::Fifo => false,
-        PathCondition::Readable => true,
-        PathCondition::Socket => false,
         PathCondition::NonEmpty => stat.len() > 0,
-        PathCondition::UserIdFlag => false,
         PathCondition::Writable => !stat.permissions().readonly(),
         PathCondition::Executable => std::path::Path::new(path)
             .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
+        _ => false,
     }
 }
 

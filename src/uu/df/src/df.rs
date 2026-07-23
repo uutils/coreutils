@@ -172,8 +172,9 @@ impl Options {
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
-                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
-                ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
+                ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
+                    OptionsError::InvalidBlockSize(s)
+                }
             })?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)

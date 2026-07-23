@@ -352,7 +352,6 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(f.to_string())),
                 "direct" => linux_only!(f, i.direct = true),
                 "directory" => linux_only!(f, i.directory = true),
                 "dsync" => linux_only!(f, i.dsync = true),
@@ -362,9 +361,9 @@ impl Parser {
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
                 "nofollow" => linux_only!(f, i.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" | "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Input-only flags
                 "fullblock" => i.fullblock = true,
@@ -394,9 +393,9 @@ impl Parser {
                 "noatime" => linux_only!(f, o.noatime = true),
                 "noctty" => linux_only!(f, o.noctty = true),
                 "nofollow" => linux_only!(f, o.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Output-only flags
                 "append" => o.append = true,

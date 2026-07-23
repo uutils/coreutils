@@ -44,12 +44,12 @@ impl NumberType {
     /// The number of chunks for this number type.
     pub fn num_chunks(&self) -> u64 {
         match self {
-            Self::Bytes(n) => *n,
-            Self::KthBytes(_, n) => *n,
-            Self::Lines(n) => *n,
-            Self::KthLines(_, n) => *n,
-            Self::RoundRobin(n) => *n,
-            Self::KthRoundRobin(_, n) => *n,
+            Self::Bytes(n)
+            | Self::KthBytes(_, n)
+            | Self::Lines(n)
+            | Self::KthLines(_, n)
+            | Self::RoundRobin(n)
+            | Self::KthRoundRobin(_, n) => *n,
         }
     }
 }

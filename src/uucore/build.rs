@@ -22,6 +22,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file)?;
 
     // Generate optimized lookup function instead of HashMap
+    writeln!(embedded_file, "#[expect(clippy::match_same_arms)]")?;
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"

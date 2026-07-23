@@ -282,6 +282,7 @@ fn is_space_padded_specifier(specifier: &str) -> bool {
 /// Returns the default width for a specifier.
 /// This is used when a flag like `_` is used without an explicit width.
 fn get_default_width(specifier: &str) -> usize {
+    #[allow(clippy::match_same_arms)] // needs comment
     match specifier.chars().last() {
         // Day of month: 2 digits (01-31)
         Some('d') | Some('e') => 2,

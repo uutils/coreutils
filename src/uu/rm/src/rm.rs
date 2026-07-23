@@ -999,6 +999,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         is_writable_metadata(metadata),
         options.interactive,
     ) {
+        #[expect(clippy::match_same_arms)] // needs comment
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true, // Don't prompt when interactive is never
         (_, false, false, _) => prompt_yes!(
