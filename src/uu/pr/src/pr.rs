@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::translate;
@@ -190,6 +190,9 @@ impl From<Utf8Error> for PrError {
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
+
+    #[error("pr: {path}: {msg}")]
+    ReadError { path: String, msg: String },
 }
 
 pub fn uu_app() -> Command {
@@ -977,14 +980,19 @@ fn build_options(
 /// Read the entire contents of the given path into memory.
 ///
 /// If `path` is `"-"`, then read from stdin.
-fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
+fn read_to_end(path: &str) -> Result<Vec<u8>, PrError> {
     if path == "-" {
         let mut f = stdin();
         let mut buf = vec![];
         f.read_to_end(&mut buf)?;
         Ok(buf)
     } else {
-        std::fs::read(path)
+        // Include the file name and strip the raw "(os error N)" suffix so the
+        // message matches GNU pr, e.g. "pr: qwe: No such file or directory".
+        std::fs::read(path).map_err(|err| PrError::ReadError {
+            path: path.to_string(),
+            msg: strip_errno(&err),
+        })
     }
 }
 
