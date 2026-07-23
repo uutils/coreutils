@@ -157,10 +157,10 @@ impl Options {
             .get_many::<OsString>(OPT_EXCLUDE_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
 
-        if let (Some(include), Some(exclude)) = (&include, &exclude) {
-            if let Some(types) = Self::get_intersected_types(include, exclude) {
-                return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
-            }
+        if let (Some(include), Some(exclude)) = (&include, &exclude)
+            && let Some(types) = Self::get_intersected_types(include, exclude)
+        {
+            return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
         }
 
         Ok(Self {
@@ -292,14 +292,15 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
             // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
             // the current working directory, which is extremely slow in deeply
             // nested directories (O(n) syscalls where n is the directory depth).
-            if dev_path.is_absolute() && dev_path.is_symlink() {
-                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+            if dev_path.is_absolute()
+                && dev_path.is_symlink()
+                && let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
                     dev_path,
                     uucore::fs::MissingHandling::Existing,
                     uucore::fs::ResolveMode::Logical,
-                ) {
-                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
-                }
+                )
+            {
+                mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
             }
 
             mounts.push(mi);
