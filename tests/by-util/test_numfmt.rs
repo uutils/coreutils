@@ -439,6 +439,12 @@ fn test_field_with_multibyte_whitespace_separator() {
         .args(&["--field", "2", "1　2"])
         .succeeds()
         .stdout_only("1 2\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2"])
+        .pipe_in("1K\u{3000}2K\n")
+        .succeeds()
+        .stdout_only("1K 2000\n");
 }
 
 #[test]
@@ -1650,6 +1656,22 @@ fn test_float_precision_greater_than_16bits() {
         .args(&["--to=iec", "--format=%.65536f", "1"])
         .succeeds()
         .stdout_is("1\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits_without_scaling() {
+    new_ucmd!()
+        .args(&["--format=%.65536f", "1.5"])
+        .succeeds()
+        .stdout_is("2\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits_with_suffix() {
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.65536f", "1000000"])
+        .succeeds()
+        .stdout_is("1M\n");
 }
 
 #[test]

@@ -1229,7 +1229,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     };
     let bsize = match i.settings.count {
         Some(Num::Blocks(count)) if count.checked_mul(i.settings.ibs as u64).is_none() => bsize,
-        _ => calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize),
+        _ => calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize),
     };
     let mut storage = AlignedBuffer::try_new(bsize, alignment)?;
     let buf = storage.as_mut_slice();
@@ -1247,7 +1247,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
+        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
         let (rstat_update, data) = read_helper(&mut i, buf, &mut conv_buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
@@ -1450,13 +1450,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
 /// a `count=N` if present.
-fn calc_loop_bsize(
-    count: Option<Num>,
-    rstat: &ReadStat,
-    wstat: &WriteStat,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1464,9 +1458,9 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = bmax.into();
-            let bremain: u128 = bmax - wstat.bytes_total;
-            cmp::min(ideal_bsize as u128, bremain) as usize
+            // `iflag=count_bytes` limits input, so use bytes read.
+            let bremain = bmax.saturating_sub(rstat.bytes_total);
+            cmp::min(ideal_bsize as u64, bremain) as usize
         }
         None => ideal_bsize,
     }
@@ -1703,5 +1697,22 @@ mod tests {
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
+    }
+
+    #[test]
+    fn test_calc_loop_bsize_count_bytes() {
+        use crate::progress::ReadStat;
+        use crate::{Num, calc_loop_bsize};
+
+        for (bytes_read, expected) in [(512, 488), (1000, 0), (1001, 0)] {
+            let rstat = ReadStat {
+                bytes_total: bytes_read,
+                ..ReadStat::default()
+            };
+            assert_eq!(
+                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
+                expected
+            );
+        }
     }
 }
