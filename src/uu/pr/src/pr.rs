@@ -977,11 +977,11 @@ fn build_options(
     })
 }
 
-/// Open a file (or stdin) for reading.
+/// Open files (or stdin) for reading.
 ///
 /// If `path` is `"-"`, then read from stdin. The returned `BufRead` allows
 /// streaming one page at a time to keep memory bounded on large inputs.
-fn read_to_end(path: &str) -> Result<Box<dyn BufRead>, PrError> {
+fn open_readers(path: &str) -> Result<Box<dyn BufRead>, PrError> {
     if path == "-" {
         Ok(Box::new(stdin().lock()))
     } else {
@@ -1021,7 +1021,7 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
 /// time, prints it immediately, and discards it. Never holds more than one
 /// page in memory, which prevents OOM on large or infinite inputs.
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
-    let mut reader = read_to_end(path)?;
+    let mut reader = open_readers(path)?;
 
     let start_page = options.start_page;
     let end_page = options.end_page;
@@ -1291,7 +1291,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
     // Open all input files and initialize their streaming state.
     let mut files: Vec<FileState> = Vec::new();
     for (file_id, path) in paths.iter().enumerate() {
-        let reader = read_to_end(path)?;
+        let reader = open_readers(path)?;
         files.push(FileState {
             reader,
             file_id,
