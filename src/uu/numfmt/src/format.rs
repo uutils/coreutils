@@ -418,10 +418,8 @@ fn transform_from(
     })?;
     let had_no_suffix = suffix.is_none();
 
-    if had_no_suffix {
-        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
-            return Ok(scaled);
-        }
+    if had_no_suffix && let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+        return Ok(scaled);
     }
 
     let i = i.to_f64() * (opts.from_unit as f64);
