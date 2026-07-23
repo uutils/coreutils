@@ -352,11 +352,10 @@ mod test {
             g.into_iter()
                 .map(rustix::fs::Gid::as_raw)
                 .collect::<Vec<_>>()
-        }) {
-            if let Some(last) = groups.pop() {
-                groups.insert(0, last);
-                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-            }
+        }) && let Some(last) = groups.pop()
+        {
+            groups.insert(0, last);
+            assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
     }
 }

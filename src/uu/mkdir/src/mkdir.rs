@@ -321,12 +321,12 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
 
             // Apply SELinux context if requested
             #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
-                if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
-                {
-                    let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(1, e.to_string()));
-                }
+            if config.set_security_context
+                && uucore::selinux::is_selinux_enabled()
+                && let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
+            {
+                let _ = std::fs::remove_dir(path);
+                return Err(USimpleError::new(1, e.to_string()));
             }
 
             // Apply SMACK context if requested
