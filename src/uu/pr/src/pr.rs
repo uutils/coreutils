@@ -165,7 +165,7 @@ impl Default for NumberingMode {
 impl From<std::io::Error> for PrError {
     fn from(err: std::io::Error) -> Self {
         Self::EncounteredErrors {
-            msg: err.to_string(),
+            msg: strip_errno(&err),
         }
     }
 }
