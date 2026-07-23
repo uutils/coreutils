@@ -1932,18 +1932,13 @@ pub(crate) fn copy_attributes(
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
-        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
-            if let Some(context) = context {
-                if let Err(e) = context.set_for_path(dest, false, false) {
-                    return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-                    ));
-                }
-            }
-        } else {
-            return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.quote()),
-            ));
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
+            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
+        })?;
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
+					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
+				))?;
         }
         Ok(())
     })?;
@@ -2207,12 +2202,12 @@ fn delete_dest_if_needed_and_allowed(
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     // Windows requires clearing readonly attribute before deletion when using --force
     #[cfg(windows)]
-    if options.force() {
-        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
-            #[allow(clippy::permissions_set_readonly_false)]
-            perms.set_readonly(false);
-            let _ = fs::set_permissions(path, perms);
-        }
+    if options.force()
+        && let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions())
+    {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        let _ = fs::set_permissions(path, perms);
     }
 
     match fs::remove_file(path) {

@@ -105,29 +105,28 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
     // Apply SELinux context if requested
     #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-    if config.set_security_context {
-        if let Err(e) = uucore::selinux::set_selinux_security_context(
+    if config.set_security_context
+        && let Err(e) = uucore::selinux::set_selinux_security_context(
             std::path::Path::new(file_name),
             config.context.as_ref(),
-        ) {
-            // if it fails, delete the file
-            let _ = std::fs::remove_file(file_name);
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
+        )
+    {
+        // if it fails, delete the file
+        let _ = std::fs::remove_file(file_name);
+        let _ = writeln!(io::stderr(), "mknod: {e}");
+        return 1;
     }
 
     // Apply SMACK context if requested
     #[cfg(all(feature = "smack", target_os = "linux"))]
-    if config.set_security_context {
-        if let Err(e) =
+    if config.set_security_context
+        && let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
             })
-        {
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
+    {
+        let _ = writeln!(io::stderr(), "mknod: {e}");
+        return 1;
     }
 
     errno

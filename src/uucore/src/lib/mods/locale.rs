@@ -93,14 +93,13 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
-        #[expect(clippy::collapsible_if)]
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        if let Some(ref fallback) = self.fallback_bundle
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
 
         // Return the key ID if not found anywhere
@@ -332,10 +331,10 @@ fn create_wasi_bundle_from_embedded(
     bundle.set_use_isolating(false);
 
     let mut try_add = |key: &str| {
-        if let Some(content) = get_embedded_locale(key) {
-            if let Ok(resource) = FluentResource::try_new(content.to_string()) {
-                bundle.add_resource_overriding(Box::leak(Box::new(resource)));
-            }
+        if let Some(content) = get_embedded_locale(key)
+            && let Ok(resource) = FluentResource::try_new(content.to_string())
+        {
+            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
         }
     };
 
