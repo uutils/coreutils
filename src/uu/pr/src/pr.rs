@@ -190,8 +190,6 @@ impl From<Utf8Error> for PrError {
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
-
-    // New variant that correctly formats the file path error like GNU pr
     #[error("pr: {path}: {msg}")]
     Path { path: String, msg: String },
 }
