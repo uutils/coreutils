@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fffffffffffffffc
+// spell-checker:ignore fffffffffffffffc bigdecimal unpadded
 use uutests::new_ucmd;
 
 #[test]
