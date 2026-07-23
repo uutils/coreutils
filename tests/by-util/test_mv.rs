@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder
 
 use filetime::FileTime;
 use rstest::rstest;
@@ -3264,4 +3264,153 @@ fn test_mv_cross_device_preserves_ownership_recursive() {
         other_gid,
         "nested file gid should be preserved after cross-device move"
     );
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_file_and_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("leaf", "payload");
+    at.mkdir("branch");
+
+    ucmd.arg("-T")
+        .arg("--exchange")
+        .arg("leaf")
+        .arg("branch")
+        .succeeds()
+        .no_output();
+
+    // After the swap the names trade places.
+    assert!(at.dir_exists("leaf"));
+    assert!(at.file_exists("branch"));
+    assert_eq!(at.read("branch"), "payload");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "1");
+    at.write("second", "2");
+
+    ucmd.arg("--exchange")
+        .arg("-v")
+        .arg("first")
+        .arg("second")
+        .succeeds()
+        .stdout_contains("exchanged");
+
+    assert_eq!(at.read("first"), "2");
+    assert_eq!(at.read("second"), "1");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_wrong_operand_count() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("only", "x");
+
+    // A single operand is rejected (clap itself requires at least 2 <files> values).
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .fails()
+        .code_is(1)
+        .stderr_contains("requires at least 2 values");
+
+    // Three or more operands are rejected when the last one isn't a directory.
+    scene.fixtures.write("two", "y");
+    scene.fixtures.write("three", "z");
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .arg("two")
+        .arg("three")
+        .fails()
+        .code_is(1)
+        .stderr_contains("target directory")
+        .stderr_contains("Not a directory");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_multiple_operands_into_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "src-a");
+    at.write("b", "src-b");
+    at.write("c", "src-c");
+    at.mkdir("myfolder");
+    at.write("myfolder/a", "dst-a");
+    at.write("myfolder/b", "dst-b");
+    at.write("myfolder/c", "dst-c");
+
+    ucmd.arg("--exchange")
+        .arg("-v")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .arg("myfolder/")
+        .succeeds()
+        .stdout_contains("exchanged 'a' <-> 'myfolder/a'")
+        .stdout_contains("exchanged 'b' <-> 'myfolder/b'")
+        .stdout_contains("exchanged 'c' <-> 'myfolder/c'");
+
+    assert_eq!(at.read("a"), "dst-a");
+    assert_eq!(at.read("b"), "dst-b");
+    assert_eq!(at.read("c"), "dst-c");
+    assert_eq!(at.read("myfolder/a"), "src-a");
+    assert_eq!(at.read("myfolder/b"), "src-b");
+    assert_eq!(at.read("myfolder/c"), "src-c");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("only", "data");
+
+    ucmd.arg("--exchange")
+        .arg("only")
+        .arg("only")
+        .fails()
+        .code_is(1)
+        .stderr_contains("are the same file");
+
+    assert_eq!(at.read("only"), "data");
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[test]
+fn test_mv_exchange_not_supported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("left", "L");
+    at.write("right", "R");
+
+    ucmd.arg("--exchange")
+        .arg("left")
+        .arg("right")
+        .fails()
+        .code_is(1)
+        .stderr_contains("not supported");
+
+    assert_eq!(at.read("left"), "L");
+    assert_eq!(at.read("right"), "R");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_missing_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("present", "data");
+
+    ucmd.arg("--exchange")
+        .arg("present")
+        .arg("absent")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot move")
+        .stderr_contains("present")
+        .stderr_contains("absent");
 }
