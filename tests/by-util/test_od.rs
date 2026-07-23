@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat
+// spell-checker:ignore abcdefghijklmnopqrstuvwxyz Anone fdbb littl bfloat mksocket
 
 #[cfg(unix)]
 use std::io::Read;
@@ -91,6 +91,20 @@ fn test_two_files() {
 #[test]
 fn test_non_existing_file() {
     new_ucmd!().arg("non_existing_file").fails();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_socket_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let socket = "socket";
+    at.mksocket(socket);
+    let error = std::fs::File::open(at.plus(socket)).unwrap_err();
+
+    ucmd.arg(socket).fails().stderr_only(format!(
+        "od: {socket}: {}\n",
+        uucore::error::strip_errno(&error)
+    ));
 }
 
 // Test that od reads from stdin instead of a file

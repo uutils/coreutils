@@ -116,13 +116,11 @@ impl MultifileReader<'_> {
                         Err(e) => {
                             // If any file can't be opened,
                             // print an error at the time that the file is needed,
-                            // then move to the next file
-                            let error_msg = match e.kind() {
-                                #[cfg(target_os = "windows")]
-                                io::ErrorKind::NotFound => "No such file or directory",
-                                _ => &strip_errno(&e),
-                            };
-                            show_error!("{}: {error_msg}", fname.maybe_quote().external(true),);
+                            // then move to the next file.
+                            // This matches the behavior of the original `od`
+                            // Format error without OS error code to match GNU od
+                            let error_msg = uucore::error::strip_errno(&e);
+                            show_error!("{}: {error_msg}", fname.maybe_quote().external(true));
                             self.any_err = true;
                         }
                     }
