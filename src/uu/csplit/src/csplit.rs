@@ -7,6 +7,7 @@
 
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::collections::VecDeque;
 use std::ffi::OsString;
 use std::io::{self, BufReader, ErrorKind};
 use std::{
@@ -533,7 +534,7 @@ where
     I: Iterator<Item = (usize, UResult<String>)>,
 {
     iter: I,
-    buffer: Vec<<I as Iterator>::Item>,
+    buffer: VecDeque<<I as Iterator>::Item>,
     /// the number of elements the buffer may hold
     size: usize,
     /// flag to indicate content off the buffer should be returned instead of off the wrapped
@@ -548,7 +549,7 @@ where
     fn new(iter: I) -> Self {
         Self {
             iter,
-            buffer: Vec::new(),
+            buffer: VecDeque::new(),
             rewind: false,
             size: 1,
         }
@@ -587,14 +588,14 @@ where
     /// option.
     fn add_line_to_buffer(&mut self, ln: usize, line: String) -> Option<String> {
         if self.rewind {
-            self.buffer.insert(0, (ln, Ok(line)));
+            self.buffer.push_front((ln, Ok(line)));
             None
         } else if self.buffer.len() >= self.size {
-            let (_, head_line) = self.buffer.remove(0);
-            self.buffer.push((ln, Ok(line)));
+            let (_, head_line) = self.buffer.pop_front().unwrap();
+            self.buffer.push_back((ln, Ok(line)));
             Some(head_line.unwrap())
         } else {
-            self.buffer.push((ln, Ok(line)));
+            self.buffer.push_back((ln, Ok(line)));
             None
         }
     }
@@ -614,7 +615,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         if self.rewind {
             if !self.buffer.is_empty() {
-                return Some(self.buffer.remove(0));
+                return Some(self.buffer.pop_front().unwrap());
             }
             self.rewind = false;
         }
