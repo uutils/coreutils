@@ -37,6 +37,8 @@ mv-error-dangling-symlink = impossible de déterminer le type de lien symbolique
 mv-error-no-symlink-support = votre système d'exploitation ne prend pas en charge les liens symboliques
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
+mv-error-exchange-two-operands = --exchange nécessite exactement deux opérandes
+mv-error-exchange-not-supported = --exchange n'est pas pris en charge sur cette plateforme
 
 # Messages d'aide
 mv-help-force = ne pas demander avant d'écraser
@@ -49,10 +51,12 @@ mv-help-verbose = expliquer ce qui est fait
 mv-help-progress = Afficher une barre de progression.
   Note : cette fonctionnalité n'est pas prise en charge par GNU coreutils.
 mv-help-debug = expliquer comment un fichier est copié. Implique -v
+mv-help-exchange = échanger la source et la destination (les permuter de façon atomique)
 
 # Messages verbeux
 mv-verbose-renamed = renommé {$from} -> {$to}
 mv-verbose-renamed-with-backup = renommé {$from} -> {$to} (sauvegarde : {$backup})
+mv-verbose-exchanged = échangé {$from} <-> {$to}
 
 # Messages de débogage
 mv-debug-skipped = ignoré {$target}
