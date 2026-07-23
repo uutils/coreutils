@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
+use std::time::SystemTime;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
@@ -84,9 +85,7 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
-    // Avoid full-path stats unless `--time` needs them.
-    #[cfg(all(unix, not(target_os = "redox")))]
-    report_time: bool,
+    time: Option<MetadataTimeField>,
 }
 
 struct StatPrinter {
@@ -130,6 +129,7 @@ struct Stat {
     inodes: u64,
     inode: Option<FileInfo>,
     metadata: Metadata,
+    latest_time: Option<SystemTime>,
 }
 
 impl Stat {
@@ -158,6 +158,9 @@ impl Stat {
 
         let file_info = get_file_info(path, &metadata);
         let blocks = get_blocks(path, &metadata);
+        let latest_time = options
+            .time
+            .and_then(|time| metadata_get_time(&metadata, time));
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -166,12 +169,17 @@ impl Stat {
             inodes: 1,
             inode: file_info,
             metadata,
+            latest_time,
         })
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
     #[cfg(all(unix, not(target_os = "redox")))]
-    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
+    fn new_from_dirfd(
+        dir_fd: &DirFd,
+        full_path: &Path,
+        time: Option<MetadataTimeField>,
+    ) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -188,6 +196,7 @@ impl Stat {
         // This is still needed for compatibility but should work since we're dealing with
         // the root path which should be accessible
         let std_metadata = fs::symlink_metadata(full_path)?;
+        let latest_time = time.and_then(|time| metadata_get_time(&std_metadata, time));
 
         Ok(Self {
             path: full_path.to_path_buf(),
@@ -200,6 +209,7 @@ impl Stat {
             inodes: 1,
             inode: file_info_option,
             metadata: std_metadata,
+            latest_time,
         })
     }
 }
@@ -305,6 +315,19 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+fn time_from_raw_stat(
+    entry_stat: &uucore::safe_traversal::Metadata,
+    time: MetadataTimeField,
+) -> Option<SystemTime> {
+    match time {
+        MetadataTimeField::Modification => entry_stat.modified(),
+        MetadataTimeField::Access => entry_stat.accessed(),
+        MetadataTimeField::Change => entry_stat.changed(),
+        MetadataTimeField::Birth => None,
+    }
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
 // This is done for TOCTOU safety
 fn safe_du(
@@ -327,7 +350,7 @@ fn safe_du(
             // For subdirectories the `metadata` field is a cheap placeholder (the
             // parent directory's metadata). It is only consulted by `--time`, so we
             // only pay for a real stat of this entry when time reporting is asked for.
-            if options.report_time
+            if options.time.is_some()
                 && parent_fd.is_some()
                 && let Ok(md) = fs::symlink_metadata(&s.path)
             {
@@ -339,7 +362,7 @@ fn safe_du(
             // Only the root path can reach this branch (subdirectories always pass a
             // valid stat). Try using our DirFd method for the root directory.
             match DirFd::open(path, SymlinkBehavior::Follow) {
-                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
+                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
                     Ok(s) => s,
                     Err(e) => {
                         let error = e.map_err_context(
@@ -443,6 +466,11 @@ fn safe_du(
             dev_id: entry_stat.st_dev as u64,
         });
 
+        let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
+        let latest_time = options
+            .time
+            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
+
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
         let this_stat = if is_dir {
@@ -457,6 +485,7 @@ fn safe_du(
                 // We need a fake metadata - create one from symlink_metadata of parent
                 // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         } else {
             // For files
@@ -469,6 +498,7 @@ fn safe_du(
                 inodes: 1,
                 inode: file_info,
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         };
 
@@ -521,6 +551,11 @@ fn safe_du(
                 my_stat.size += this_stat.size;
                 my_stat.blocks += this_stat.blocks;
                 my_stat.inodes += this_stat.inodes;
+                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, None) => a,
+                    (None, b) => b,
+                }
             }
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
@@ -530,6 +565,11 @@ fn safe_du(
             my_stat.size += this_stat.size;
             my_stat.blocks += this_stat.blocks;
             my_stat.inodes += 1;
+            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, None) => a,
+                (None, b) => b,
+            };
             if options.all {
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
@@ -678,6 +718,12 @@ fn du_regular(
                                     my_stat.size += this_stat.size;
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
+                                    my_stat.latest_time =
+                                        match (my_stat.latest_time, this_stat.latest_time) {
+                                            (Some(a), Some(b)) => Some(a.max(b)),
+                                            (a, None) => a,
+                                            (None, b) => b,
+                                        };
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
@@ -687,6 +733,12 @@ fn du_regular(
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+                                my_stat.latest_time =
+                                    match (my_stat.latest_time, this_stat.latest_time) {
+                                        (Some(a), Some(b)) => Some(a.max(b)),
+                                        (a, None) => a,
+                                        (None, b) => b,
+                                    };
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -856,8 +908,8 @@ impl StatPrinter {
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
         write!(stdout(), "{}\t", self.convert_size(size))?;
 
-        if let Some(md_time) = &self.time {
-            if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
+        if self.time.is_some() {
+            if let Some(time) = stat.latest_time {
                 format_system_time(
                     &mut stdout(),
                     time,
@@ -1049,8 +1101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
-        #[cfg(all(unix, not(target_os = "redox")))]
-        report_time: time.is_some(),
+        time,
     };
 
     let time_format = if time.is_some() {
