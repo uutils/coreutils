@@ -158,10 +158,10 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     let mut search_paths: Vec<PathBuf> = Vec::with_capacity(2);
 
     // First, try to get the directory where stdbuf is running from
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            search_paths.push(exe_dir.to_path_buf());
-        }
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        search_paths.push(exe_dir.to_path_buf());
     }
 
     // Add the compile-time directory as fallback
