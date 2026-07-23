@@ -430,14 +430,13 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option {
-        if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-                arguments.insert(pos + 2, could_be_file);
-            }
-        }
+    if let Some((pos, _value)) = num_option
+        && let Some(num_val_opt) = args.get(pos + 1)
+        && !num_regex.is_match(num_val_opt)
+    {
+        let could_be_file = arguments.remove(pos + 1);
+        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+        arguments.insert(pos + 2, could_be_file);
     }
 
     // To ensure not to accidentally delete the next argument after a short flag for -e we insert
@@ -446,10 +445,10 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| e_regex.is_match(x.trim()));
-    if let Some((pos, value)) = expand_tabs_option {
-        if value.trim().len() <= 2 {
-            arguments[pos] = "-e\t8".to_string();
-        }
+    if let Some((pos, value)) = expand_tabs_option
+        && value.trim().len() <= 2
+    {
+        arguments[pos] = "-e\t8".to_string();
     }
 
     // Remove only whole-token legacy operands before clap parsing.
@@ -482,16 +481,16 @@ fn parse_column_page_operands(args: &[String]) -> ColumnPageOperands {
         if arg == "--" {
             break;
         }
-        if operands.column.is_none() {
-            if let Some(digits) = as_column_operand(arg) {
-                operands.column = Some(digits.to_string());
-                continue;
-            }
+        if operands.column.is_none()
+            && let Some(digits) = as_column_operand(arg)
+        {
+            operands.column = Some(digits.to_string());
+            continue;
         }
-        if operands.page.is_none() {
-            if let Some(spec) = as_page_operand(arg) {
-                operands.page = Some(spec.to_string());
-            }
+        if operands.page.is_none()
+            && let Some(spec) = as_page_operand(arg)
+        {
+            operands.page = Some(spec.to_string());
         }
     }
     operands
@@ -788,12 +787,10 @@ fn build_options(
         None => end_page_in_plus_option,
     };
 
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrors {
-                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-            });
-        }
+    if let Some(end_page) = end_page.filter(|end| start_page > *end) {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
+        });
     }
 
     let default_lines_per_page = if form_feed_used {
