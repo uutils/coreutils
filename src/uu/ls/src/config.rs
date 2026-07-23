@@ -726,13 +726,12 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
@@ -926,20 +925,18 @@ impl Config {
             locale_quoting = None;
         }
 
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
+        if needs_color && let Err(err) = validate_ls_colors_env() {
+            if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "prefix" => prefix.quote()
+                    )
+                );
             }
+            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            needs_color = false;
         }
 
         let color = if needs_color {

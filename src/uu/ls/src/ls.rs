@@ -889,11 +889,9 @@ impl<'a> PathData<'a> {
         let security_context: OnceCell<Box<str>> = OnceCell::new();
 
         let de: RefCell<Option<DirEntry>> = if let Some(de) = dir_entry {
-            if must_dereference {
-                if let Ok(md_pb) = p_buf.metadata() {
-                    ft.get_or_init(|| Some(md_pb.file_type()));
-                    md.get_or_init(|| Some(md_pb));
-                }
+            if must_dereference && let Ok(md_pb) = p_buf.metadata() {
+                ft.get_or_init(|| Some(md_pb.file_type()));
+                md.get_or_init(|| Some(md_pb));
             }
 
             if let Ok(ft_de) = de.file_type() {
@@ -921,10 +919,10 @@ impl<'a> PathData<'a> {
     fn metadata(&self) -> Option<&Metadata> {
         self.md
             .get_or_init(|| {
-                if !self.must_dereference {
-                    if let Some(dir_entry) = RefCell::take(&self.de) {
-                        return dir_entry.metadata().ok();
-                    }
+                if !self.must_dereference
+                    && let Some(dir_entry) = RefCell::take(&self.de)
+                {
+                    return dir_entry.metadata().ok();
                 }
 
                 match get_metadata_with_deref_opt(self.path(), self.must_dereference) {
@@ -937,10 +935,11 @@ impl<'a> PathData<'a> {
                         // but GNU will not throw an error until a bad fd "dir"
                         // is entered, here we match that GNU behavior, by handing
                         // back the non-dereferenced metadata upon an EBADF
-                        if self.must_dereference && errno == 9i32 {
-                            if let Ok(file) = self.path().read_link() {
-                                return file.symlink_metadata().ok();
-                            }
+                        if self.must_dereference
+                            && errno == 9i32
+                            && let Ok(file) = self.path().read_link()
+                        {
+                            return file.symlink_metadata().ok();
                         }
                         show!(LsError::IOErrorContext(
                             self.path().to_path_buf(),
@@ -1138,11 +1137,14 @@ impl LsOutput for TextOutput<'_> {
     }
 
     fn initialize(&mut self, _config: &Config) -> UResult<()> {
-        if let Some(style_manager) = self.state.style_manager.as_mut() {
-            if style_manager.get_normal_style().is_some() {
-                let to_write = style_manager.reset(true);
-                write!(self.state.out, "{to_write}")?;
-            }
+        if let Some(style_manager) = self
+            .state
+            .style_manager
+            .as_mut()
+            .filter(|s| s.get_normal_style().is_some())
+        {
+            let to_write = style_manager.reset(true);
+            write!(self.state.out, "{to_write}")?;
         }
         Ok(())
     }
@@ -1605,16 +1607,14 @@ fn get_security_context<'a>(
     // If we must dereference, ensure that the symlink is actually valid even if the system
     // does not support SELinux.
     // Conforms to the GNU coreutils where a dangling symlink results in exit code 1.
-    if must_dereference {
-        if let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
-            // The Path couldn't be dereferenced, so return early and set exit code 1
-            // to indicate a minor error
-            // Only show error when context display is requested to avoid duplicate messages
-            if config.context {
-                show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
-            }
-            return Cow::Borrowed(SUBSTITUTE_STRING);
+    if must_dereference && let Err(err) = get_metadata_with_deref_opt(path, must_dereference) {
+        // The Path couldn't be dereferenced, so return early and set exit code 1
+        // to indicate a minor error
+        // Only show error when context display is requested to avoid duplicate messages
+        if config.context {
+            show!(LsError::IOErrorContext(path.to_path_buf(), err, false));
         }
+        return Cow::Borrowed(SUBSTITUTE_STRING);
     }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
