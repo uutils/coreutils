@@ -318,13 +318,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             let remove_target = || {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!(
-                            "{}",
-                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                        );
-                    }
+                if target_dir.is_file()
+                    && let Err(e) = fs::remove_file(target_dir)
+                {
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
                 }
                 #[cfg(windows)]
                 if target_dir.is_dir() {
@@ -393,12 +393,10 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     if let (Ok(src_abs), Some(dst_parent)) = (
         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
         dst.parent(),
-    ) {
-        if let Ok(dst_abs) =
-            canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical)
-        {
-            return make_path_relative_to(src_abs, dst_abs).into();
-        }
+    ) && let Ok(dst_abs) =
+        canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical)
+    {
+        return make_path_relative_to(src_abs, dst_abs).into();
     }
     src.into()
 }
