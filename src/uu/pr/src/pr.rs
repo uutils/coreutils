@@ -361,6 +361,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
+                .default_value(FILE_STDIN)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -382,14 +383,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
     let matches = uucore::clap_localization::handle_clap_result(command, opt_args)?;
 
-    let mut files = matches
+    #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
+    let files = matches
         .get_many::<String>(options::FILES)
         .map(|v| v.map(String::as_str).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .clone();
-    if files.is_empty() {
-        files.insert(0, FILE_STDIN);
-    }
+        .unwrap();
 
     let file_groups: Vec<_> = if matches.get_flag(options::MERGE) {
         vec![files]
@@ -409,21 +407,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         };
 
-        let cmd_result = if let Ok(group) = file_group.iter().exactly_one() {
-            pr(group, &options)
-        } else {
-            mpr(&file_group, &options)
-        };
+        let cmd_result = file_group
+            .iter()
+            .exactly_one()
+            .map_or_else(|_| mpr(&file_group, &options), |group| pr(group, &options));
 
-        let status = match cmd_result {
-            Err(error) => {
-                print_error(&matches, &error);
-                1
-            }
-            _ => 0,
-        };
-        if status != 0 {
-            return Err(status.into());
+        if let Err(e) = cmd_result {
+            print_error(&matches, &e);
+            return Err(1.into());
         }
     }
     Ok(())

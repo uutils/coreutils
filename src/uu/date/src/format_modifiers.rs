@@ -330,10 +330,13 @@ fn strip_default_padding(value: &str) -> String {
         if stripped.is_empty() {
             return "0".to_string();
         }
-        if let Some(first_char) = stripped.chars().next() {
-            if first_char.is_ascii_digit() {
-                return stripped.to_string();
-            }
+        if stripped
+            .chars()
+            .next()
+            .as_ref()
+            .is_some_and(char::is_ascii_digit)
+        {
+            return stripped.to_string();
         }
     }
     if value.starts_with(' ') {
@@ -460,13 +463,16 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     // GNU behavior: + only adds sign if:
     // 1. An explicit width is provided, OR
     // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
-    if force_sign && !result.starts_with('+') && !result.starts_with('-') {
-        if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-            let default_w = get_default_width(specifier);
-            // Add sign only if explicit width provided OR result exceeds default width
-            if width.is_some() || (default_w > 0 && result.len() > default_w) {
-                result.insert(0, '+');
-            }
+    if force_sign
+        && result
+            .chars()
+            .next()
+            .is_some_and(|c| !matches!(c, '+' | '-') && c.is_ascii_digit())
+    {
+        let default_w = get_default_width(specifier);
+        // Add sign only if explicit width provided OR result exceeds default width
+        if width.is_some() || (default_w > 0 && result.len() > default_w) {
+            result.insert(0, '+');
         }
     }
 
@@ -491,10 +497,11 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N') {
-        if effective_width <= get_default_width(specifier) && effective_width != 0 {
-            result.truncate(effective_width);
-        }
+    } else if specifier.ends_with('N')
+        && effective_width <= get_default_width(specifier)
+        && effective_width != 0
+    {
+        result.truncate(effective_width);
     }
 
     Ok(result)

@@ -432,6 +432,22 @@ fn test_format_selected_field() {
 }
 
 #[test]
+fn test_field_with_multibyte_whitespace_separator() {
+    // A multibyte Unicode whitespace separator (U+3000) before a selected field
+    // is normalized to a single space rather than sliced mid-character.
+    new_ucmd!()
+        .args(&["--field", "2", "1　2"])
+        .succeeds()
+        .stdout_only("1 2\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2"])
+        .pipe_in("1K\u{3000}2K\n")
+        .succeeds()
+        .stdout_only("1K 2000\n");
+}
+
+#[test]
 fn test_format_selected_fields() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
@@ -878,7 +894,13 @@ fn test_to_unit() {
 #[test]
 fn test_invalid_unit_size() {
     let commands = vec!["from", "to"];
-    let invalid_sizes = vec!["A", "0", "18446744073709551616"];
+    let invalid_sizes = vec![
+        "A",
+        "0",
+        "18446744073709551616",
+        "18446744073709551615K",
+        "18014398509481984Ki",
+    ];
 
     for command in commands {
         for invalid_size in &invalid_sizes {
