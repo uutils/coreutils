@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fffffffffffffffc bigdecimal unpadded
+// spell-checker:ignore fffffffffffffffc bigdecimal
 use uutests::new_ucmd;
 
 #[test]
@@ -1530,9 +1530,7 @@ fn test_large_width_format() {
 
 #[test]
 fn large_width_pads_instead_of_aborting() {
-    // A dynamic width above u16::MAX makes std::fmt panic with "Formatting
-    // argument out of range", which the release profile turns into SIGABRT.
-    // 65535 always worked, so 65536 is the interesting boundary.
+    // std::fmt panics past a width of u16::MAX, so 65536 is the boundary.
     let cases = [
         ("%65536d", "1", " ".repeat(65535) + "1"),
         ("%70000d", "1", " ".repeat(69999) + "1"),
@@ -1572,9 +1570,7 @@ fn large_precision_pads_instead_of_aborting() {
 
 #[test]
 fn precision_above_1000_keeps_fractional_zeros() {
-    // bigdecimal's Display stops zero-padding an integer past
-    // FMT_MAX_INTEGER_PADDING (1000) and returns the digits unpadded, so this
-    // used to print "1" with no fractional part at all.
+    // bigdecimal stops zero-padding past 1000 digits, so this printed "1".
     new_ucmd!()
         .args(&["%.1000f", "1"])
         .succeeds()
@@ -1585,8 +1581,7 @@ fn precision_above_1000_keeps_fractional_zeros() {
         .succeeds()
         .stdout_only(format!("100.{}", "0".repeat(5000)));
 
-    // A value with a fractional part took a different bigdecimal branch and
-    // was already correct; keep it that way.
+    // A fractional part takes another branch and was already correct.
     new_ucmd!()
         .args(&["%.1000f", "1.5"])
         .succeeds()
@@ -1595,8 +1590,7 @@ fn precision_above_1000_keeps_fractional_zeros() {
 
 #[test]
 fn large_integer_magnitude_stays_decimal() {
-    // A large integer magnitude hits the same bigdecimal padding cap and used
-    // to print in exponential form (`1e+2000`), which `%f` must not do.
+    // Same cap, but a large magnitude used to print as 1e+2000.
     new_ucmd!()
         .args(&["%.0f", "1e2000"])
         .succeeds()
