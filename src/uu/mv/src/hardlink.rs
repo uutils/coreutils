@@ -181,15 +181,15 @@ impl HardlinkGroupScanner {
         self.source_files = files.to_vec();
 
         for file in files {
-            if let Err(e) = self.scan_single_path(file) {
-                if options.verbose {
-                    // Only show warnings for verbose mode
-                    let _ = writeln!(
-                        io::stderr(),
-                        "warning: failed to scan {}: {e}",
-                        file.quote()
-                    );
-                }
+            if let Err(e) = self.scan_single_path(file)
+                && options.verbose
+            {
+                // Only show warnings for verbose mode
+                let _ = writeln!(
+                    io::stderr(),
+                    "warning: failed to scan {}: {e}",
+                    file.quote()
+                );
                 // For non-verbose mode, silently continue for missing files
                 // This provides graceful degradation - we'll lose hardlink info for this file
                 // but can still preserve hardlinks for other files
