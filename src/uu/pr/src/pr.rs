@@ -10,8 +10,8 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use itertools::Itertools;
 use regex::Regex;
 use std::ffi::OsStr;
-use std::fs::metadata;
-use std::io::{Read, Write, stderr, stdin, stdout};
+use std::fs::{File, metadata};
+use std::io::{BufRead, BufReader, BufWriter, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
@@ -977,21 +977,19 @@ fn build_options(
     })
 }
 
-/// Read the entire contents of the given path into memory.
+/// Open a file (or stdin) for reading.
 ///
-/// If `path` is `"-"`, then read from stdin.
-fn read_to_end(path: &str) -> Result<Vec<u8>, PrError> {
+/// If `path` is `"-"`, then read from stdin. The returned `BufRead` allows
+/// streaming one page at a time to keep memory bounded on large inputs.
+fn read_to_end(path: &str) -> Result<Box<dyn BufRead>, PrError> {
     if path == "-" {
-        let mut f = stdin();
-        let mut buf = vec![];
-        f.read_to_end(&mut buf)?;
-        Ok(buf)
+        Ok(Box::new(stdin().lock()))
     } else {
-        // Include the file name and strip the raw "(os error N)" suffix so the
-        // message matches GNU pr, e.g. "pr: qwe: No such file or directory".
-        std::fs::read(path).map_err(|err| PrError::ReadError {
-            path: path.to_string(),
-            msg: strip_errno(&err),
+        File::open(path).map(|f| Box::new(BufReader::new(f)) as Box<dyn BufRead>).map_err(|err| {
+            PrError::ReadError {
+                path: path.to_string(),
+                msg: strip_errno(&err),
+            }
         })
     }
 }
@@ -1017,214 +1015,519 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
     }
 }
 
+/// Format a single file for printing (`pr` without `-m`).
+///
+/// Streams the input: reads chunks via `read_chunk`, builds one page at a
+/// time, prints it immediately, and discards it. Never holds more than one
+/// page in memory, which prevents OOM on large or infinite inputs.
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
-    // Read the entire contents of the file into a buffer.
-    //
-    // TODO Read incrementally.
-    let buf = read_to_end(path)?;
+    let mut reader = read_to_end(path)?;
 
-    let pages = get_pages(options, 0, &buf);
-
-    // Split the text into pages, and then print each line in each page.
-    for page_with_page_number in pages {
-        let page_number = page_with_page_number.0 + 1;
-        let page = page_with_page_number.1;
-        print_page(&page, options, page_number)?;
-    }
-
-    Ok(0)
-}
-
-/// Group lines of a file into pages.
-///
-/// Returns a list of the form `(page_num, lines)`.
-///
-fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
-
-    // Keep a running total of the number of lines read, starting with
-    // 0 or another specified number.
     let mut line_num = get_start_line_number(options);
-
-    // We will collect each page into a list of pages, along with
-    // its page number.
-    let mut pages: Vec<(usize, Vec<FileLine>)> = vec![];
-
-    // We will build each page iteratively, since one page may
-    // contain multiple lines and may be interrupted by either a
-    // form feed or by reaching a line limit.
-    let mut page = vec![];
     let mut page_num = 0;
+    let mut prev_sep: Option<u8> = None;
 
-    // Remember the index of the end of the last line to use as the
-    // beginning of the next line.
-    let mut prev = 0;
-
-    // Search for either the form feed character `\f` or the newline
-    // character `\n`. The newline character marks the end of a line,
-    // and a page comprises several lines. A form feed character marks
-    // the end of a page regardless of how many lines have been read.
-    for i in memchr::memchr2_iter(FF, NL, buf) {
-        if buf[i] == FF {
-            // Treat everything up to (but not including) the form feed
-            // character as the last line of the page.
-            if i > 0 && i == prev && buf[i - 1] == NL {
-                // If the file has the pattern `\n\f`, don't treat the
-                // `\f` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
-                page.push(file_line);
+    loop {
+        // Skip pages before start_page without allocating FileLine objects.
+        // This avoids wasting memory when piping infinite output through
+        // `pr --start-page=N --end-page=M`.
+        if page_num + 1 < start_page {
+            match read_one_page(
+                &mut reader,
+                options,
+                0,
+                &mut prev_sep,
+                &mut line_num,
+                &mut page_num,
+                lines_needed_per_page,
+                false,
+            )? {
+                None => return Ok(0),
+                Some(_) => continue,
             }
+        }
 
-            // Remember where the last line ended.
-            prev = i + 1;
+        let mut page = vec![];
 
-            // The page is finished, so we add it to the list of
-            // pages and clear the `page` buffer for the next
-            // iteration.
-            //
-            // TODO Optimization opportunity: don't bother pushing
-            // lines and pages if we aren't going to display it.
-            if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
-            }
-            page_num += 1;
-            page.clear();
-        } else {
-            // Add everything up to (but not including) the newline
-            // character as one line of the page.
-            if i > 0 && i == prev && buf[i - 1] == FF {
-                // If the file has the pattern `\f\n`, don't treat the
-                // `\n` as its own line; instead ignore the empty line.
-            } else {
-                let file_line =
-                    FileLine::from_buf(file_id, page_num, line_num, &buf[prev..i], options);
-                page.push(file_line);
-                line_num += 1;
-            }
+        // Read chunks from the file and accumulate lines until a page
+        // boundary (form feed or lines_needed_per_page), then print.
+        loop {
+            let (line_content, sep) = read_chunk(&mut reader)?;
 
-            // Remember where the last line ended.
-            prev = i + 1;
-
-            // If the page is finished, add it to the list of pages
-            // and clear the `page` buffer for the next iteration.
-            if page.len() >= lines_needed_per_page {
-                if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+            match sep {
+                None => {
+                    // EOF: trailing data
+                    if !line_content.is_empty() {
+                        page.push(FileLine::from_buf(
+                            0,
+                            page_num,
+                            line_num,
+                            &line_content,
+                            options,
+                        ));
+                    }
+                    if !page.is_empty()
+                        && start_page <= page_num + 1
+                        && end_page.is_none_or(|e| page_num < e)
+                    {
+                        let page_number = page_num + 1;
+                        print_page(&page, options, page_number)?;
+                    }
+                    return Ok(0);
                 }
-                page_num += 1;
-                page.clear();
+                Some(FF) => {
+                    if !(prev_sep == Some(NL) && line_content.is_empty()) {
+                        page.push(FileLine::from_buf(
+                            0,
+                            page_num,
+                            line_num,
+                            &line_content,
+                            options,
+                        ));
+                    }
+                    if start_page <= page_num + 1
+                        && end_page.is_none_or(|e| page_num < e)
+                    {
+                        let page_number = page_num + 1;
+                        print_page(&page, options, page_number)?;
+                    }
+                    page_num += 1;
+                    page.clear();
+                    if end_page.is_some_and(|e| page_num >= e) {
+                        return Ok(0);
+                    }
+                    prev_sep = Some(FF);
+                    break;
+                }
+                _ => {
+                    // NL
+                    if !(prev_sep == Some(FF) && line_content.is_empty()) {
+                        page.push(FileLine::from_buf(
+                            0,
+                            page_num,
+                            line_num,
+                            &line_content,
+                            options,
+                        ));
+                        line_num += 1;
+                    }
+                    if page.len() >= lines_needed_per_page {
+                        if start_page <= page_num + 1
+                            && end_page.is_none_or(|e| page_num < e)
+                        {
+                            let page_number = page_num + 1;
+                            print_page(&page, options, page_number)?;
+                        }
+                        page_num += 1;
+                        page.clear();
+                        if end_page.is_some_and(|e| page_num >= e) {
+                            return Ok(0);
+                        }
+                        break;
+                    }
+                    prev_sep = Some(NL);
+                }
             }
         }
     }
-
-    // Consider all trailing bytes as the last line.
-    if prev < buf.len() {
-        let file_line = FileLine::from_buf(file_id, page_num, line_num, &buf[prev..], options);
-        page.push(file_line);
-    }
-
-    // Consider all trailing lines as the last page.
-    if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
-    }
-
-    pages
 }
 
-/// Key used to group lines together according to their file and page number.
-fn group_key(num_files: usize, line: &FileLine) -> usize {
-    (line.page_number + 1) * num_files + line.file_id
-}
-
-/// Group each line by its file and page number.
+/// Maximum size of a single chunk read from input.
 ///
-/// The input list of `lines` must be already sorted according to the
-/// `group_key`.
-fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLine>)> {
-    let mut result: Vec<(usize, Vec<FileLine>)> = vec![];
-    let mut current_key: Option<usize> = None;
-    let mut current_group: Vec<FileLine> = vec![];
+/// This prevents unbounded memory accumulation when the input has no
+/// newline or form-feed characters (e.g. `/dev/zero`, `/dev/urandom`).
+const MAX_CHUNK_SIZE: usize = 256 * 1024;
 
-    for file_line in lines {
-        match current_key {
+/// Read the next chunk of data up to (but not including) a FF or NL separator.
+///
+/// Returns the data before the separator and the separator byte that ended it,
+/// or `None` for EOF. If no separator is found within `MAX_CHUNK_SIZE` bytes,
+/// the data is returned with an implicit NL separator to keep memory bounded.
+fn read_chunk(reader: &mut dyn BufRead) -> std::io::Result<(Vec<u8>, Option<u8>)> {
+    let mut buf = Vec::new();
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok((buf, None));
+        }
+        match memchr::memchr2(FF, NL, available) {
+            Some(pos) => {
+                // Found a separator: take everything before it, consume the
+                // separator byte from the reader, and return.
+                buf.extend_from_slice(&available[..pos]);
+                let sep = available[pos];
+                reader.consume(pos + 1);
+                return Ok((buf, Some(sep)));
+            }
             None => {
-                current_key = Some(group_key(num_files, &file_line));
-                current_group.push(file_line);
-            }
-            Some(key) if group_key(num_files, &file_line) == key => {
-                current_group.push(file_line);
-            }
-            Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
-                current_key = Some(group_key(num_files, &file_line));
-                current_group.push(file_line);
+                // No separator in the reader's buffer: consume it all and
+                // either read more (below 256KB) or force-split.
+                buf.extend_from_slice(available);
+                let len = available.len();
+                reader.consume(len);
+                if buf.len() >= MAX_CHUNK_SIZE {
+                    // Safety limit: if we've accumulated 256KB without finding
+                    // any separator, insert an artificial newline. This prevents
+                    // unbounded memory growth on inputs without newlines or
+                    // form feeds (e.g. /dev/zero, /dev/urandom).
+                    return Ok((buf, Some(NL)));
+                }
             }
         }
     }
-    if let Some(k) = current_key {
-        result.push((k, current_group));
-    }
-    result
 }
 
-/// Group each line by its file and page number.
+/// Read one page from a BufReader.
 ///
-/// Each group can then be merged into columns of a single page.
-fn get_file_line_groups(
+/// Call this function repeatedly to stream pages one at a time instead of
+/// accumulating all pages into memory at once. Returns `Ok(Some(lines))` when
+/// a page boundary is reached, or `Ok(None)` at EOF.
+///
+/// When `track_content` is `false`, lines are skipped without allocation
+/// (only counters advance). This is used to efficiently advance past pages
+/// that fall outside the `start_page`..`end_page` range.
+///
+/// A page boundary is triggered by either:
+///   - A form feed (`\f`) character — acts as an explicit page break
+///   - Reaching `lines_needed_per_page` lines — fills a page to its capacity
+///
+/// State variables (`prev_sep`, `line_num`, `page_num`) are updated in place
+/// so the caller can continue reading the next page from where this one left
+/// off.
+fn read_one_page(
+    reader: &mut dyn BufRead,
     options: &OutputOptions,
-    paths: &[&str],
-) -> Result<Vec<(usize, Vec<FileLine>)>, PrError> {
-    let num_files = paths.len();
-    let mut all_lines = vec![];
-    for (file_id, path) in paths.iter().enumerate() {
-        // Read the entire contents of the file into a buffer.
-        //
-        // TODO Read incrementally.
-        let buf = read_to_end(path)?;
+    file_id: usize,
+    prev_sep: &mut Option<u8>,
+    line_num: &mut usize,
+    page_num: &mut usize,
+    lines_needed_per_page: usize,
+    track_content: bool,
+) -> Result<Option<Vec<FileLine>>, PrError> {
+    let mut page = vec![];
+    let mut page_lines_needed = lines_needed_per_page;
 
-        // Split the text into pages and collect each line for
-        // subsequent grouping.
-        for (_, mut page) in get_pages(options, file_id, &buf) {
-            all_lines.append(&mut page);
+    loop {
+        let (line_content, sep) = read_chunk(reader)?;
+
+        match sep {
+            None => {
+                if track_content && !line_content.is_empty() {
+                    page.push(FileLine::from_buf(
+                        file_id, *page_num, *line_num, &line_content, options,
+                    ));
+                }
+                if page.is_empty() {
+                    return Ok(None);
+                }
+                return Ok(Some(page));
+            }
+            Some(ch) if ch == FF => {
+                if track_content && !(*prev_sep == Some(NL) && line_content.is_empty()) {
+                    page.push(FileLine::from_buf(
+                        file_id, *page_num, *line_num, &line_content, options,
+                    ));
+                }
+                let result = Some(page);
+                *page_num += 1;
+                *prev_sep = Some(FF);
+                return Ok(result);
+            }
+            _ => {
+                let is_data_line = !(*prev_sep == Some(FF) && line_content.is_empty());
+                if track_content && is_data_line {
+                    page.push(FileLine::from_buf(
+                        file_id, *page_num, *line_num, &line_content, options,
+                    ));
+                }
+                if is_data_line {
+                    *line_num += 1;
+                }
+                if is_data_line {
+                    page_lines_needed = page_lines_needed.saturating_sub(1);
+                }
+                if page_lines_needed == 0 {
+                    let result = Some(page);
+                    *page_num += 1;
+                    *prev_sep = Some(NL);
+                    return Ok(result);
+                }
+                *prev_sep = Some(NL);
+            }
         }
     }
-    // Sort each line by group number and then by line number.
-    all_lines.sort_by_key(|l| (group_key(num_files, l), l.line_number));
-
-    Ok(group_lines(num_files, all_lines))
 }
 
+/// Merge-print multiple files side by side in columns (`pr -m`).
+///
+/// Instead of reading all files completely before merging, this streams one
+/// page at a time from each file. For each output page number (1-based):
+///   1. Advance each file past any pages before this output page
+///   2. Read the matching page from each file that has one
+///   3. Merge the lines into columns and print
+///   4. Discard the page and continue
+///
+/// This keeps memory proportional to one merged page rather than the total
+/// size of all input files.
 fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
-    let file_line_groups = get_file_line_groups(options, paths)?;
+    let lines_needed_per_page = lines_to_read_for_page(options);
+    let start_page = options.start_page;
+    let end_page = options.end_page;
 
-    if file_line_groups.is_empty() {
-        return Ok(0);
+    // Per-file state for streaming: reader position, current page number, and
+    // line counter. `done` is set to true when the file is fully consumed.
+    struct FileState {
+        reader: Box<dyn BufRead>,
+        file_id: usize,
+        prev_sep: Option<u8>,
+        line_num: usize,
+        page_num: usize,
+        done: bool,
     }
 
-    let start_page = options.start_page;
-    let mut lines = Vec::new();
-    let mut page_counter = start_page;
+    // Open all input files and initialize their streaming state.
+    let mut files: Vec<FileState> = Vec::new();
+    for (file_id, path) in paths.iter().enumerate() {
+        let reader = read_to_end(path)?;
+        files.push(FileState {
+            reader,
+            file_id,
+            prev_sep: None,
+            line_num: get_start_line_number(options),
+            page_num: 0,
+            done: false,
+        });
+    }
 
-    for (_key, file_line_group) in file_line_groups {
-        for file_line in file_line_group {
-            let new_page_number = file_line.page_number + 1;
-            if page_counter != new_page_number {
-                print_page(&lines, options, page_counter)?;
-                lines = Vec::new();
-                page_counter = new_page_number;
+    let columns = options.merge_files_print.unwrap_or(1);
+    let mut col_counts = Vec::with_capacity(columns);
+    let mut col_starts = Vec::with_capacity(columns);
+
+    let mut any_active = true;
+    let mut output_page = 1;
+    let mut lines = Vec::new();
+
+    let page_separator = options.page_separator_char.as_bytes();
+    let print_header = options.display_header_and_trailer;
+
+    // Outer loop: iterate through output pages. At each iteration we collect
+    // lines from all files that have a page for the current output page.
+    while any_active {
+        any_active = false;
+        lines.clear();
+
+        // Inner loop over files: advance each file to the current output
+        // page, then read its contribution if it has one.
+        for file in files.iter_mut() {
+            if file.done {
+                continue;
             }
-            lines.push(file_line);
+            any_active = true;
+
+            // Advance the file past any pages numbered lower than the current
+            // output page (read and discard without allocating FileLine
+            // objects). This happens when a file has fewer lines per page and
+            // ran ahead of the output page counter.
+            while file.page_num + 1 < output_page {
+                match read_one_page(
+                    &mut file.reader,
+                    options,
+                    file.file_id,
+                    &mut file.prev_sep,
+                    &mut file.line_num,
+                    &mut file.page_num,
+                    lines_needed_per_page,
+                    false,
+                )? {
+                    None => {
+                        file.done = true;
+                        break;
+                    }
+                    Some(_) => {}
+                }
+            }
+
+            if file.done {
+                continue;
+            }
+
+            // Read the page that matches the current output page number.
+            // Track content (allocate FileLines) only when this page falls
+            // within the printable range; otherwise just advance counters.
+            if file.page_num + 1 == output_page {
+                let track = output_page >= start_page;
+                match read_one_page(
+                    &mut file.reader,
+                    options,
+                    file.file_id,
+                    &mut file.prev_sep,
+                    &mut file.line_num,
+                    &mut file.page_num,
+                    lines_needed_per_page,
+                    track,
+                )? {
+                    None => {
+                        file.done = true;
+                    }
+                    Some(page_lines) => {
+                        lines.extend(page_lines);
+                    }
+                }
+            }
+        }
+
+        // Only print if this page falls within the user's page range.
+        // Lines are already in file_id order (files are iterated in order)
+        // and line_number order (each page appends lines in sequence).
+        if !lines.is_empty()
+            && output_page >= start_page
+            && end_page.is_none_or(|e| output_page <= e)
+        {
+            let out = stdout();
+            let mut out = BufWriter::new(out.lock());
+
+            if print_header {
+                for x in header_content(options, output_page) {
+                    out.write_all(x.as_bytes())?;
+                    out.write_all(b"\n")?;
+                }
+            }
+
+            write_merge_page(&lines, options, &mut out, &mut col_counts, &mut col_starts)?;
+
+            if print_header {
+                let trailer = trailer_content(options);
+                for (index, x) in trailer.iter().enumerate() {
+                    out.write_all(x.as_bytes())?;
+                    if index + 1 != trailer.len() {
+                        out.write_all(b"\n")?;
+                    }
+                }
+            }
+            out.write_all(page_separator)?;
+        }
+
+        output_page += 1;
+        if end_page.is_some_and(|e| output_page > e) {
+            break;
         }
     }
-
-    print_page(&lines, options, page_counter)?;
 
     Ok(0)
+}
+
+/// Write one page of merge-mode output, using pre-allocated column-count and
+/// column-start buffers to avoid per-page Vec allocations. Each cell is written
+/// directly to `out` without intermediate String allocations.
+fn write_merge_page(
+    lines: &[FileLine],
+    options: &OutputOptions,
+    out: &mut impl Write,
+    col_counts: &mut Vec<usize>,
+    col_starts: &mut Vec<usize>,
+) -> Result<(), std::io::Error> {
+    let columns = options.merge_files_print.unwrap_or(1);
+    let line_separator = options.content_line_separator.as_bytes();
+    let line_width = options.line_width;
+
+    let content_lines_per_page = if options.double_space {
+        options.content_lines_per_page / 2
+    } else {
+        options.content_lines_per_page
+    };
+
+    col_counts.clear();
+    col_counts.resize(columns, 0);
+    for line in lines.iter() {
+        if line.file_id < columns {
+            col_counts[line.file_id] += 1;
+        }
+    }
+
+    col_starts.clear();
+    col_starts.resize(columns, 0);
+    for j in 1..columns {
+        col_starts[j] = col_starts[j - 1] + col_counts[j - 1];
+    }
+
+    let blank_line = FileLine::default();
+    let min_width = line_width.map(|lw| (lw - (columns - 1)) / columns);
+
+    for i in 0..content_lines_per_page {
+        for j in 0..columns {
+            let cell = if i < col_counts[j] {
+                Some(&lines[col_starts[j] + i])
+            } else {
+                None
+            };
+            let line_to_print = cell.unwrap_or(&blank_line);
+
+            write_offset_spaces(out, options.offset_spaces)?;
+
+            let formatted_number = get_formatted_line_number(options, line_to_print.line_number, j);
+            out.write_all(formatted_number.as_bytes())?;
+
+            let content = &line_to_print.line_content;
+            if let Some(mw) = min_width {
+                let fn_tabs = formatted_number.bytes().filter(|&b| b == b'\t').count();
+                let fn_width = formatted_number.len() + fn_tabs * 7;
+                if fn_width < mw {
+                    let content_max = mw - fn_width;
+                    let content_tabs = content.iter().filter(|&&b| b == b'\t').count();
+                    let content_width = content.len() + content_tabs * 7;
+                    if content_width <= content_max {
+                        out.write_all(content)?;
+                        let padding = content_max - content_width;
+                        if padding > 0 {
+                            write_offset_spaces(out, padding)?;
+                        }
+                    } else {
+                        write_truncated_bytes(out, content, content_max)?;
+                    }
+                }
+            } else {
+                out.write_all(content)?;
+            }
+
+            if (j + 1) != columns && !options.join_lines {
+                out.write_all(options.col_sep_for_printing.as_bytes())?;
+            }
+        }
+        out.write_all(line_separator)?;
+    }
+
+    Ok(())
+}
+
+/// Write up to `max_chars` Unicode characters from `content` to `out` without
+/// allocating (fast path for ASCII). Falls back to char-boundary iteration for
+/// multi-byte UTF-8.
+fn write_truncated_bytes(
+    out: &mut impl Write,
+    content: &[u8],
+    max_chars: usize,
+) -> Result<(), std::io::Error> {
+    if content.len() <= max_chars {
+        return out.write_all(content);
+    }
+    if content.iter().all(|&b| b.is_ascii()) {
+        return out.write_all(&content[..max_chars]);
+    }
+    match std::str::from_utf8(content) {
+        Ok(s) => {
+            let end = s
+                .char_indices()
+                .take(max_chars)
+                .last()
+                .map(|(i, c)| i + c.len_utf8())
+                .unwrap_or(0);
+            out.write_all(&content[..end])
+        }
+        Err(_) => out.write_all(&content[..content.len().min(max_chars)]),
+    }
 }
 
 fn print_page(
@@ -1239,7 +1542,7 @@ fn print_page(
     let trailer_content = trailer_content(options);
 
     let out = stdout();
-    let mut out = out.lock();
+    let mut out = BufWriter::new(out.lock());
 
     for x in header {
         out.write_all(x.as_bytes())?;
@@ -1255,7 +1558,6 @@ fn print_page(
         }
     }
     out.write_all(page_separator)?;
-    out.flush()?;
     Ok(())
 }
 
@@ -1267,25 +1569,6 @@ fn to_table_across(
 ) -> Vec<Vec<Option<&FileLine>>> {
     (0..content_lines_per_page)
         .map(|i| (0..columns).map(|j| lines.get(i * columns + j)).collect())
-        .collect()
-}
-
-/// Group the lines of the input files in columns, one column per file.
-fn to_table_merged(
-    content_lines_per_page: usize,
-    columns: usize,
-    filled_lines: Vec<Option<&FileLine>>,
-) -> Vec<Vec<Option<&FileLine>>> {
-    (0..content_lines_per_page)
-        .map(|i| {
-            (0..columns)
-                .map(|j| {
-                    *filled_lines
-                        .get(content_lines_per_page * j + i)
-                        .unwrap_or(&None)
-                })
-                .collect()
-        })
         .collect()
 }
 
@@ -1365,46 +1648,21 @@ fn write_columns(
         .as_ref()
         .is_some_and(|i| i.across_mode);
 
-    let mut filled_lines: Vec<Option<&FileLine>> = Vec::new();
-    if options.merge_files_print.is_some() {
-        let mut offset = 0;
-        for col in 0..columns {
-            let mut inserted = 0;
-            for line in &lines[offset..] {
-                if line.file_id != col {
-                    break;
-                }
-                filled_lines.push(Some(line));
-                inserted += 1;
-            }
-            offset += inserted;
-
-            for _i in inserted..content_lines_per_page {
-                filled_lines.push(None);
-            }
-        }
-    }
-
     // Group the flat list of lines into a 2-dimensional table of
     // cells, where each row will be printed as a single line in the
     // output.
-    let merge = options.merge_files_print.is_some();
-    let table = if !merge && (lines.len() < (content_lines_per_page * columns)) {
+    let table = if lines.len() < (content_lines_per_page * columns) {
         to_table_short_file(content_lines_per_page, columns, lines)
     } else if across_mode {
         to_table_across(content_lines_per_page, columns, lines)
-    } else if merge {
-        to_table_merged(content_lines_per_page, columns, filled_lines)
     } else {
         to_table(content_lines_per_page, columns, lines)
     };
 
-    let blank_line = FileLine::default();
     for row in table {
         let indexes = row.len();
         for (i, cell) in row.iter().enumerate() {
             let line_to_print = match cell {
-                None if options.merge_files_print.is_some() => &blank_line,
                 None => {
                     not_found_break = true;
                     break;
