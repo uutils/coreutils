@@ -327,10 +327,11 @@ fn safe_du(
             // For subdirectories the `metadata` field is a cheap placeholder (the
             // parent directory's metadata). It is only consulted by `--time`, so we
             // only pay for a real stat of this entry when time reporting is asked for.
-            if options.report_time && parent_fd.is_some() {
-                if let Ok(md) = fs::symlink_metadata(&s.path) {
-                    s.metadata = md;
-                }
+            if options.report_time
+                && parent_fd.is_some()
+                && let Ok(md) = fs::symlink_metadata(&s.path)
+            {
+                s.metadata = md;
             }
             s
         }
@@ -496,12 +497,11 @@ fn safe_du(
 
         // Process directories recursively
         if is_dir {
-            if options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
-                    if this_inode.dev_id != my_inode.dev_id {
-                        continue;
-                    }
-                }
+            if options.one_file_system
+                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
+                && this_inode.dev_id != my_inode.dev_id
+            {
+                continue;
             }
 
             // Reuse the stat we already computed for this entry instead of
@@ -618,13 +618,11 @@ fn du_regular(
                             if is_symlink
                                 && options.dereference == Deref::All
                                 && this_stat.metadata.is_dir()
+                                && let Some(inode) = this_stat.inode
+                                && ancestors.contains(&inode)
                             {
-                                if let Some(inode) = this_stat.inode {
-                                    if ancestors.contains(&inode) {
-                                        // This symlink points to an ancestor directory - skip to avoid cycle
-                                        continue 'file_loop;
-                                    }
-                                }
+                                // This symlink points to an ancestor directory - skip to avoid cycle
+                                continue 'file_loop;
                             }
 
                             // We have an exclude list
@@ -658,14 +656,12 @@ fn du_regular(
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
+                                if options.one_file_system
+                                    && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
+                                    && this_inode.dev_id != my_inode.dev_id
+                                {
+                                    continue;
                                 }
 
                                 let this_stat = du_regular(
@@ -1126,13 +1122,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
-        if let Ok(stat) = stat.as_ref() {
-            if let Some(inode) = stat.inode {
-                if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                    continue 'loop_file;
-                }
-                seen_inodes.insert(inode);
+        if let Ok(stat) = stat.as_ref()
+            && let Some(inode) = stat.inode
+        {
+            if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                continue 'loop_file;
             }
+            seen_inodes.insert(inode);
         }
 
         if use_safe_traversal {
@@ -1155,11 +1151,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     Err(e) => {
                         // Check if this is our "already handled" error
-                        if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
-                            if simple_error.code() == 0 {
-                                // Error already handled, continue to next file
-                                continue 'loop_file;
-                            }
+                        if let mpsc::SendError(Err(simple_error)) = e.as_ref()
+                            && simple_error.code() == 0
+                        {
+                            // Error already handled, continue to next file
+                            continue 'loop_file;
                         }
                         return Err(USimpleError::new(1, e.to_string()));
                     }
