@@ -511,14 +511,18 @@ impl MDWriter<'_, '_> {
 
     /// # Errors
     /// Returns an error if the writer fails.
-    /// # Panics
-    /// Panics if the version is not found.
     fn version(&mut self) -> io::Result<()> {
-        writeln!(
-            self.w,
-            "<div class=\"version\">v{}</div>",
-            self.command.render_version().split_once(' ').unwrap().1
-        )
+        let full_version_string = self.command.render_version();
+
+        // clap renders the version as "<name> (uutils coreutils) <version>",
+        // e.g. "b2sum (uutils coreutils) 0.3.0". Keep only the version number,
+        // which is the last whitespace-separated token.
+        let version_only = full_version_string
+            .split_whitespace()
+            .last()
+            .unwrap_or(&full_version_string);
+
+        writeln!(self.w, "<div class=\"version\">v{version_only}</div>")
     }
 
     /// # Errors
