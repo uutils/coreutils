@@ -167,34 +167,6 @@ impl Num {
     }
 }
 
-/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
-///
-/// This is more efficient than `io::copy` with `BufReader` because it reads
-/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
-/// Returns the total number of bytes actually read.
-fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::new();
-    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
-    let mut total = 0u64;
-    let mut remaining = n;
-    while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64);
-        buf.clear();
-        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
-            Ok(0) => break, // EOF
-            Ok(bytes_read) => {
-                total += bytes_read as u64;
-                remaining -= bytes_read as u64;
-            }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(total)
-}
-
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -235,7 +207,7 @@ impl Source {
         match self {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
-                let m = read_and_discard(stdin, n, ibs)?;
+                let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
                     show_error!(
                         "{}",
@@ -274,7 +246,7 @@ impl Source {
                     // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
                     // so fall back to reading and discarding bytes using ibs-sized buffer
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
-                        let m = read_and_discard(f, n, ibs)?;
+                        let m = uucore::io::read_and_discard(f, n, ibs)?;
                         if m < n {
                             show_error!(
                                 "{}",
@@ -295,7 +267,7 @@ impl Source {
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => read_and_discard(f, n, ibs),
+            Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
         }
     }
 
@@ -675,7 +647,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                read_and_discard(f, n, obs)
+                uucore::io::read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),

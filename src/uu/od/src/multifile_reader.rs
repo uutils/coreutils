@@ -6,9 +6,15 @@
 
 use std::fs::File;
 use std::io;
+#[cfg(unix)]
+use std::io::{Seek, SeekFrom};
 
 use uucore::display::Quotable;
 use uucore::show_error;
+use uucore::translate;
+
+/// Buffer size used when skipping bytes by reading and discarding them.
+const SKIP_BUFFER_SIZE: usize = 16 * 1024;
 
 pub enum InputSource<'a> {
     FileName(&'a str),
@@ -17,10 +23,27 @@ pub enum InputSource<'a> {
     Stream(Box<dyn io::Read>),
 }
 
+/// The file currently being read. A real `File` is kept as a concrete handle so
+/// that `skip` can `fstat`/`seek` it; anything else (stdin, an in-memory stream)
+/// can only be advanced by reading.
+enum CurrentReader {
+    File(File),
+    Other(Box<dyn io::Read>),
+}
+
+impl io::Read for CurrentReader {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::File(f) => f.read(buf),
+            Self::Other(r) => r.read(buf),
+        }
+    }
+}
+
 // MultifileReader - concatenate all our input, file or stdin.
 pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
-    curr_file: Option<Box<dyn io::Read>>,
+    curr_file: Option<CurrentReader>,
     any_err: bool,
     file_name: Option<&'a str>,
 }
@@ -59,7 +82,7 @@ impl MultifileReader<'_> {
                     #[cfg(any(unix, target_os = "wasi"))]
                     {
                         let stdin = uucore::io::RawReader(rustix::stdio::stdin());
-                        self.curr_file = Some(Box::new(stdin));
+                        self.curr_file = Some(CurrentReader::Other(Box::new(stdin)));
                     }
 
                     // For non-unix platforms we don't have GNU compatibility requirements, so
@@ -69,7 +92,7 @@ impl MultifileReader<'_> {
                     #[cfg(not(any(unix, target_os = "wasi")))]
                     {
                         let stdin = io::stdin();
-                        self.curr_file = Some(Box::new(stdin));
+                        self.curr_file = Some(CurrentReader::Other(Box::new(stdin)));
                     }
                     break;
                 }
@@ -79,7 +102,7 @@ impl MultifileReader<'_> {
                             self.file_name = Some(fname);
                             // No need to wrap `f` in a BufReader - buffered reading is taken care
                             // of elsewhere.
-                            self.curr_file = Some(Box::new(f));
+                            self.curr_file = Some(CurrentReader::File(f));
                             break;
                         }
                         Err(e) => {
@@ -99,11 +122,85 @@ impl MultifileReader<'_> {
                     }
                 }
                 InputSource::Stream(s) => {
-                    self.curr_file = Some(s);
+                    self.curr_file = Some(CurrentReader::Other(s));
                     break;
                 }
             }
         }
+    }
+
+    /// Skip `n_skip` bytes from the start of the combined input.
+    ///
+    /// A real file is positioned by `seek` whenever that is safe: a regular
+    /// file large enough that its reported size is trustworthy, or any seekable
+    /// special file (e.g. `/dev/null`, which can be skipped past its empty end).
+    /// Everything else - proc/sys files that report a bogus size, pipes, stdin -
+    /// is advanced by reading and discarding. Skipping past the end of the whole
+    /// input is an error, matching GNU `od`.
+    pub fn skip(&mut self, mut n_skip: u64) -> io::Result<()> {
+        while n_skip > 0 {
+            let Some(curr) = self.curr_file.as_mut() else {
+                break;
+            };
+            n_skip = skip_in_file(curr, n_skip)?;
+            if n_skip == 0 {
+                break;
+            }
+            // Current file is exhausted; continue skipping in the next one.
+            self.next_file();
+        }
+
+        if n_skip > 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                translate!("od-error-skip-past-end"),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Skip up to `n_skip` bytes within a single file. Returns the number of bytes
+/// that still need to be skipped (0 if the skip landed inside this file, or
+/// the remainder if the file ended first).
+fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
+    #[cfg(unix)]
+    if let CurrentReader::File(f) = curr {
+        if let Ok(meta) = f.metadata() {
+            let size = meta.len();
+            let blksize = uucore::fs::sane_blksize::sane_blksize_from_metadata(&meta);
+
+            // A regular file larger than a block reports a reliable size, so we
+            // can either drop the whole file or seek within it. Small or
+            // proc-like files lie about their size and fall through to reading.
+            if meta.is_file() && blksize < size {
+                if size < n_skip {
+                    return Ok(n_skip - size);
+                }
+                if seek_forward(f, n_skip)? {
+                    return Ok(0);
+                }
+            } else if !meta.is_file() {
+                // Seekable special files (character/block devices) can be
+                // skipped past their end without error.
+                if seek_forward(f, n_skip).unwrap_or(false) {
+                    return Ok(0);
+                }
+            }
+        }
+    }
+    let read = uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?;
+    Ok(n_skip - read)
+}
+
+/// Seek `f` forward by `n` bytes. Returns `Ok(true)` if the seek happened, or
+/// `Ok(false)` if `n` is too large to express as a seek offset (the caller
+/// should fall back to reading and discarding).
+#[cfg(unix)]
+fn seek_forward(f: &mut File, n: u64) -> io::Result<bool> {
+    match i64::try_from(n) {
+        Ok(off) => f.seek(SeekFrom::Current(off)).map(|_| true),
+        Err(_) => Ok(false),
     }
 }
 
