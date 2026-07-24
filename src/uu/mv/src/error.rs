@@ -26,6 +26,8 @@ pub enum MvError {
     TargetNotADirectory(String),
     #[error("{}", translate!("mv-error-failed-access-not-directory", "path" => .0.clone()))]
     FailedToAccessNotADirectory(String),
+    #[error("{}", translate!("mv-error-cannot-move-not-directory", "source" => .0.clone(), "target" => .1.clone()))]
+    CannotMoveNotADirectory(String, String),
 }
 
 impl UError for MvError {}
