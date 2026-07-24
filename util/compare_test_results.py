@@ -239,8 +239,7 @@ def main():
 
     if args.output and output_lines:
         with open(args.output, "w") as f:
-            for line in output_lines:
-                f.write(f"{line}\n")
+            f.writelines(f"{line}\n" for line in output_lines)
 
     # Return exit code based on whether we found regressions
     return 1 if real_regressions else 0
