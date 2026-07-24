@@ -47,6 +47,69 @@ fn test_to_upper() {
 }
 
 #[test]
+fn test_ascii_range_translate_alignment_boundaries() {
+    let mut cases = vec![
+        Vec::new(),
+        b"a".to_vec(),
+        (0..31).map(|i| b'a' + (i % 26) as u8).collect(),
+        (0..32).map(|i| b'a' + (i % 26) as u8).collect(),
+        (0..33).map(|i| b'a' + (i % 26) as u8).collect(),
+        b"zZ!\xc3\xa9a".to_vec(),
+    ];
+    cases.push((0u8..=255).collect());
+
+    #[cfg(unix)]
+    let gnu_tr = ["tr", "gtr"].into_iter().find(|candidate| {
+        std::process::Command::new(candidate)
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| {
+                output.status.success()
+                    && String::from_utf8_lossy(&output.stdout).contains("(GNU coreutils)")
+            })
+    });
+
+    for input in cases {
+        let expected: Vec<u8> = input
+            .iter()
+            .map(|&byte| {
+                if byte.is_ascii_lowercase() {
+                    byte.to_ascii_uppercase()
+                } else {
+                    byte
+                }
+            })
+            .collect();
+
+        new_ucmd!()
+            .args(&["a-z", "A-Z"])
+            .pipe_in(input.clone())
+            .succeeds()
+            .stdout_is_bytes(&expected)
+            .no_stderr();
+
+        #[cfg(unix)]
+        if let Some(gnu_tr) = gnu_tr {
+            use std::io::Write as _;
+
+            let mut child = std::process::Command::new(gnu_tr)
+                .args(["a-z", "A-Z"])
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            child.stdin.as_mut().unwrap().write_all(&input).unwrap();
+            let output = child.wait_with_output().unwrap();
+
+            assert!(output.status.success());
+            assert_eq!(output.stdout, expected);
+            assert!(output.stderr.is_empty());
+        }
+    }
+}
+
+#[test]
 fn test_small_set2() {
     new_ucmd!()
         .args(&["0-9", "X"])
