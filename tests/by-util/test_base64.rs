@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore unpadded, QUJD
+// spell-checker:ignore unpadded, QUJD, baddecode
 
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
@@ -155,7 +155,8 @@ fn test_garbage() {
         .arg("-d")
         .pipe_in(input)
         .fails()
-        .stderr_only("base64: error: invalid input\n");
+        .stdout_is("hello, world!")
+        .stderr_is("base64: error: invalid input\n");
 }
 
 #[test]
@@ -169,6 +170,78 @@ fn test_ignore_garbage() {
             .succeeds()
             .stdout_only("hello, world!");
     }
+}
+
+#[test]
+fn test_ignore_garbage_decodes_prefix_before_final_error() {
+    // https://github.com/uutils/coreutils/issues/12923
+    // With --ignore-garbage, GNU skips the '.' and keeps decoding the rest of
+    // the stream, only erroring once it hits the truncated trailing quantum.
+    let input = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJjMjQ5MmF";
+    new_ucmd!()
+        .arg("-di")
+        .pipe_in(input)
+        .fails()
+        .stdout_is("{\"alg\":\"RS256\",\"typ\":\"JWT\"}{\"jti\":\"c2492a")
+        .stderr_is("base64: error: invalid input\n");
+}
+
+#[test]
+fn test_decode_trailing_remainder_canonical() {
+    // A trailing 2-character group whose unused padding bits are already
+    // zero decodes cleanly, with no error, even without explicit '=' padding.
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("aQ")
+        .succeeds()
+        .stdout_only("i");
+}
+
+#[test]
+fn test_decode_trailing_remainder_non_canonical() {
+    // A trailing 2-character group whose unused padding bits are non-zero
+    // still decodes (GNU doesn't discard the byte it managed to produce),
+    // but is reported as invalid input.
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("XY")
+        .fails()
+        .stdout_is("]")
+        .stderr_is("base64: error: invalid input\n");
+}
+
+#[test]
+fn test_decode_explicit_padding_non_canonical() {
+    // Same leniency as the trailing-remainder case, but for a quantum that's
+    // already a full 4 characters with an explicit '=' (from GNU's own
+    // basenc/base64.pl: baddecode6/baddecode7).
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("SB==")
+        .fails()
+        .stdout_is("H")
+        .stderr_is("base64: error: invalid input\n");
+
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("SGVsbG9=")
+        .fails()
+        .stdout_is("Hello")
+        .stderr_is("base64: error: invalid input\n");
+}
+
+#[test]
+fn test_decode_insufficient_padding_recovers_preceding_data() {
+    // A trailing '=' without enough characters left to complete the padded
+    // quantum (e.g. "NA=" would need to be "NA==") isn't a valid quantum at
+    // all, but GNU still recovers whatever precedes it by decoding that much
+    // as an unpadded remainder (from GNU's own basenc/base64.pl: baddecode8).
+    new_ucmd!()
+        .arg("-d")
+        .pipe_in("MTIzNA=")
+        .fails()
+        .stdout_is("1234")
+        .stderr_is("base64: error: invalid input\n");
 }
 
 #[test]

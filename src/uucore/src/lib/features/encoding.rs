@@ -42,6 +42,18 @@ impl Base64SimdWrapper {
         }
     }
 
+    // fallback for when a quantum has non-zero padding bits: GNU still decodes
+    // it, just flags the input as invalid afterward
+    fn decode_with_forgiving(input: &[u8], output: &mut Vec<u8>) -> Result<(), ()> {
+        match base64_simd::forgiving_decode_to_vec(input) {
+            Ok(decoded_bytes) => {
+                output.extend_from_slice(&decoded_bytes);
+                Ok(())
+            }
+            Err(_) => Err(()),
+        }
+    }
+
     pub fn new(
         use_padding: bool,
         valid_decoding_multiple: usize,
@@ -67,65 +79,64 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
     }
 
     fn decode_into_vec(&self, input: &[u8], output: &mut Vec<u8>) -> UResult<()> {
-        let original_len = output.len();
+        if !self.use_padding {
+            return Self::decode_with_no_pad(input, output)
+                .map_err(|_| USimpleError::new(1, "error: invalid input"));
+        }
 
-        let decode_result = if self.use_padding {
-            // GNU coreutils keeps decoding even when '=' appears before the true end
-            // of the stream (e.g. concatenated padded chunks). Mirror that logic
-            // by splitting at each '='-containing quantum, decoding those 4-byte
-            // groups with the padded variant, then letting the remainder fall back
-            // to whichever alphabet fits.
-            let mut start = 0usize;
-            while start < input.len() {
-                let remaining = &input[start..];
+        // GNU keeps decoding past a '=' if more data follows (concatenated
+        // padded chunks), so split at each '=' and decode those 4-byte groups
+        // one at a time, falling back to whichever alphabet fits for the tail.
+        // if a quantum's padding bits turn out non-zero, decode it leniently
+        // anyway instead of dropping it, but stop right there either way -
+        // GNU never continues past a bad quantum.
+        let mut start = 0usize;
+        while start < input.len() {
+            let remaining = &input[start..];
 
-                if remaining.is_empty() {
-                    break;
-                }
-
-                if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
-                    let blocks = (eq_rel_idx / 4) + 1;
-                    let segment_len = blocks * 4;
-
-                    if segment_len > remaining.len() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    if Self::decode_with_standard(&remaining[..segment_len], output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    start += segment_len;
-                } else {
-                    // If there are no more '=' bytes the tail might still be padded
-                    // (len % 4 == 0) or purposely unpadded (GNU --ignore-garbage or
-                    // concatenated streams), so select the matching alphabet.
-                    let decoder = if remaining.len().is_multiple_of(4) {
-                        Self::decode_with_standard
-                    } else {
-                        Self::decode_with_no_pad
-                    };
-
-                    if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
-                    break;
-                }
+            if remaining.is_empty() {
+                break;
             }
 
-            Ok(())
-        } else {
-            Self::decode_with_no_pad(input, output)
-                .map_err(|_| USimpleError::new(1, "error: invalid input"))
-        };
+            if let Some(eq_rel_idx) = remaining.iter().position(|&b| b == b'=') {
+                let blocks = (eq_rel_idx / 4) + 1;
+                let segment_len = blocks * 4;
 
-        if let Err(err) = decode_result {
-            output.truncate(original_len);
-            Err(err)
-        } else {
-            Ok(())
+                if segment_len > remaining.len() {
+                    // not enough left to finish this padded quantum, e.g. "NA="
+                    // would need to be "NA==". GNU still recovers whatever came
+                    // before the '=' by decoding it unpadded
+                    let _ = Self::decode_with_forgiving(&remaining[..eq_rel_idx], output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                let segment = &remaining[..segment_len];
+                if Self::decode_with_standard(segment, output).is_err() {
+                    let _ = Self::decode_with_forgiving(segment, output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                start += segment_len;
+            } else {
+                // no more '=' left, so this tail is either still padded (len % 4
+                // == 0) or genuinely unpadded (--ignore-garbage, concatenated
+                // streams) - pick whichever decoder matches
+                let strict_decoder = if remaining.len().is_multiple_of(4) {
+                    Self::decode_with_standard
+                } else {
+                    Self::decode_with_no_pad
+                };
+
+                if strict_decoder(remaining, output).is_err() {
+                    let _ = Self::decode_with_forgiving(remaining, output);
+                    return Err(USimpleError::new(1, "error: invalid input"));
+                }
+
+                break;
+            }
         }
+
+        Ok(())
     }
 
     fn encode_to_vec_deque(&self, input: &[u8], output: &mut VecDeque<u8>) -> UResult<()> {
