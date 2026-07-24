@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) somegroup nlink tabsize dired subdired dtype colorterm stringly
-// spell-checker:ignore nohash strtime clocale
+// spell-checker:ignore nohash strtime clocale inode
 
 use clap::{
     Arg, ArgAction, Command,
@@ -1252,10 +1252,8 @@ pub fn list_with_output<O: LsOutput>(
         }
 
         let mut listed_ancestors = FxHashSet::default();
-        listed_ancestors.insert(FileInformation::from_path(
-            path_data.path(),
-            path_data.must_dereference,
-        )?);
+        let inode = FileInformation::from_path(path_data.path(), path_data.must_dereference)?;
+        listed_ancestors.insert(inode.clone());
         enter_directory(
             path_data,
             read_dir,
@@ -1264,6 +1262,8 @@ pub fn list_with_output<O: LsOutput>(
             output,
             &mut entries,
         )?;
+        listed_ancestors.remove(&inode);
+        debug_assert!(listed_ancestors.is_empty());
     }
 
     output.finalize(config)?;
@@ -1384,6 +1384,7 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
+        inode: FileInformation,
     }
 
     let mut stack = Vec::new();
@@ -1391,6 +1392,7 @@ fn enter_directory<O: LsOutput>(
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
+        inode: FileInformation::from_path(path_data.path(), path_data.must_dereference)?,
     });
     let mut initial_read_dir = Some(read_dir);
 
@@ -1440,33 +1442,30 @@ fn enter_directory<O: LsOutput>(
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
 
-                match fs::read_dir(&child_path) {
-                    Err(err) => {
+                if let Err(err) = fs::read_dir(&child_path) {
+                    output.flush()?;
+                    show!(LsError::IOErrorContext(
+                        child_path.clone(),
+                        err,
+                        child_command_line,
+                    ));
+                } else {
+                    let inode = FileInformation::from_path(&child_path, child_must_dereference)?;
+                    if listed_ancestors.insert(inode.clone()) {
+                        stack.push(StackEntry {
+                            path: child_path,
+                            command_line: child_command_line,
+                            is_first: false,
+                            inode,
+                        });
+                    } else {
                         output.flush()?;
-                        show!(LsError::IOErrorContext(
-                            child_path.clone(),
-                            err,
-                            child_command_line,
-                        ));
-                    }
-                    Ok(_) => {
-                        if listed_ancestors.insert(FileInformation::from_path(
-                            &child_path,
-                            child_must_dereference,
-                        )?) {
-                            stack.push(StackEntry {
-                                path: child_path,
-                                command_line: child_command_line,
-                                is_first: false,
-                            });
-                        } else {
-                            output.flush()?;
-                            show!(LsError::AlreadyListedError(child_path));
-                        }
+                        show!(LsError::AlreadyListedError(child_path));
                     }
                 }
             }
         }
+        listed_ancestors.remove(&entry.inode);
     }
 
     Ok(())
