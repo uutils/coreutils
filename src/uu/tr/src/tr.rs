@@ -97,6 +97,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let stdin = stdin();
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let _ = rustix::fs::fadvise(&stdin, 0, None, rustix::fs::Advice::Sequential);
     let mut locked_stdin = stdin.lock();
     let mut locked_stdout = stdout().lock();
 

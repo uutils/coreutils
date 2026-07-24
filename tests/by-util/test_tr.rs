@@ -5,9 +5,14 @@
 // spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
+#[cfg(target_os = "linux")]
+use uutests::util::get_tests_binary;
 
 #[cfg(unix)]
 use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+
+#[cfg(target_os = "linux")]
+use std::process::Command;
 
 #[test]
 fn test_invalid_arg() {
@@ -1626,6 +1631,32 @@ fn test_octal_escape_ambiguous_followed_by_non_utf8() {
         .pipe_in([b'(', b'1', 0xff, b')'])
         .succeeds()
         .stderr_contains("warning: invalid utf8 sequence");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: strace cannot trace WebAssembly")]
+fn test_sequential_fadvise() {
+    let (at, _ucmd) = at_and_ucmd!();
+    at.write("input", "abc");
+
+    let trace_file = at.plus_as_string("strace.out");
+    let result = Command::new("strace")
+        .args(["-o", &trace_file, "-e", "fadvise64,fadvise64_64"])
+        .arg(get_tests_binary())
+        .args(["tr", "a", "b"])
+        .stdin(std::fs::File::open(at.plus("input")).unwrap())
+        .output();
+
+    if result.is_err() {
+        return; // strace not available
+    }
+
+    let trace = at.read("strace.out");
+    assert!(
+        trace.contains("POSIX_FADV_SEQUENTIAL"), // spell-checker:disable-line
+        "Expected sequential fadvise: {trace}"
+    );
 }
 
 #[cfg(target_os = "linux")]

@@ -26,9 +26,11 @@ uucore = { workspace = true, features = ["fs", "signals"] }
 fluent = { workspace = true }
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true, features = ["stdio", "fs"] }
+
 [dev-dependencies]
 divan = { workspace = true }
-rustix = { workspace = true, features = ["stdio", "fs"] }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
