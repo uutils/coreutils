@@ -2934,6 +2934,20 @@ fn test_install_proc_self_mem_as_dst() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_install_dev_null_to_dev_full_permission() {
+    // GNU reports cannot remove '/dev/full': Permission denied for char devices
+    // that refuse unlink, not "invalid target ... No such file" (issue #9934).
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .arg("/dev/null")
+        .arg("/dev/full")
+        .fails()
+        .stderr_is("install: cannot remove '/dev/full': Permission denied\n");
+}
+
+#[test]
 fn test_install_backup_nil_same_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
