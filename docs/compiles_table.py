@@ -105,14 +105,14 @@ class Target(str):
                 f"--target={self}",
             ]
 
-        res = subprocess.run(args, capture_output=True)
+        res = subprocess.run(args, capture_output=True, check=False)
         return res.returncode
 
     # Validate that the dependencies for running this target are met
     def is_installed(self):
         # check IOS sdk is installed, raise exception otherwise
         if "ios" in self:
-            res = subprocess.run(["which", "xcrun"], capture_output=True)
+            res = subprocess.run(["which", "xcrun"], capture_output=True, check=False)
             if len(res.stdout) == 0:
                 raise Exception(
                     "Error: IOS sdk does not seem to be installed. Please do that manually"
@@ -120,7 +120,7 @@ class Target(str):
         if not self.requires_nightly():
             # check std toolchains are installed
             toolchains = subprocess.run(
-                ["rustup", "target", "list"], capture_output=True
+                ["rustup", "target", "list"], capture_output=True, check=False
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
@@ -130,7 +130,9 @@ class Target(str):
         else:
             # check nightly toolchains are installed
             toolchains = subprocess.run(
-                ["rustup", "+nightly", "target", "list"], capture_output=True
+                ["rustup", "+nightly", "target", "list"],
+                capture_output=True,
+                check=False,
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
@@ -143,7 +145,7 @@ class Target(str):
 def install_targets():
     cmd = ["rustup", "target", "add"] + TARGETS
     print(" ".join(cmd))
-    ret = subprocess.run(cmd)
+    ret = subprocess.run(cmd, check=False)
     assert ret.returncode == 0
 
 
