@@ -70,6 +70,9 @@ pub enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
+    #[error("{}", translate!("ln-error-missing-operand"))]
+    MissingOperand,
+
     #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
     ExtraOperand(OsString, String),
 
@@ -271,6 +274,10 @@ pub fn uu_app() -> Command {
 ///
 /// This is made public to allow other apps to use `ln` as a library.
 pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
+    if files.is_empty() {
+        return Err(LnError::MissingOperand);
+    }
+
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -299,7 +306,6 @@ pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
             uucore::execution_phrase().to_string(),
         ));
     }
-    assert!(!files.is_empty());
 
     link(&files[0], &files[1], settings)
 }
@@ -522,4 +528,68 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
 #[cfg(target_os = "wasi")]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use assert_matches::assert_matches;
+    use std::ffi::OsString;
+
+    #[test]
+    fn test_exec_missing_operand() {
+        let settings: Settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: false,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&[], &settings);
+        assert_matches!(result, Err(LnError::MissingOperand));
+    }
+
+    #[test]
+    fn test_exec_missing_destination() {
+        let settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: true,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&["a".into()], &settings);
+        assert_matches!(result, Err(LnError::MissingDestination(path)) if *path == *"a");
+    }
+
+    #[test]
+    fn test_exec_extra_operand() {
+        let settings = Settings {
+            overwrite: OverwriteMode::NoClobber,
+            backup: BackupMode::None,
+            suffix: OsString::from(""),
+            symbolic: false,
+            relative: false,
+            logical: false,
+            target_dir: None,
+            no_target_dir: true,
+            no_dereference: false,
+            verbose: false,
+        };
+
+        let result = exec(&["a".into(), "b".into(), "c".into()], &settings);
+        assert_matches!(result, Err(LnError::ExtraOperand(operand, _)) if operand == "c");
+    }
 }
