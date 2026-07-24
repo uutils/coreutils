@@ -645,8 +645,15 @@ macro_rules! translate {
             let mut args = fluent::FluentArgs::new();
             $(
                 let value_str = $value.to_string();
-                if let Ok(num_val) = value_str.parse::<i64>() {
-                    args.set($key, num_val);
+                if let Ok(int_val) = value_str.parse::<i128>() {
+                    // Fluent stores and formats numbers as f64. Integers up to 2^53
+                    // are exact in both storage and display; larger ones would be
+                    // rounded, so render them from the exact string instead.
+                    if int_val.unsigned_abs() <= (1u128 << 53) {
+                        args.set($key, int_val as f64);
+                    } else {
+                        args.set($key, value_str);
+                    }
                 } else if let Ok(float_val) = value_str.parse::<f64>() {
                     args.set($key, float_val);
                 } else {

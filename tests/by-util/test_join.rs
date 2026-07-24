@@ -597,3 +597,16 @@ fn test_locale_collation() {
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
 }
+
+#[test]
+fn incompatible_fields_large_field_number() {
+    new_ucmd!()
+        .args(&["-j", "9007199254740993", "-1", "5", "a", "b"])
+        .fails_with_code(1)
+        .stderr_is("join: incompatible join fields 9007199254740993, 5\n");
+
+    new_ucmd!()
+        .args(&["-j", "99999999999999999999999", "-1", "5", "a", "b"])
+        .fails_with_code(1)
+        .stderr_is("join: incompatible join fields 18446744073709551615, 5\n");
+}
