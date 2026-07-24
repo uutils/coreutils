@@ -1023,3 +1023,21 @@ fn test_unreadable_file_prints_no_header() {
         .stdout_does_not_contain("==> unreadable <==")
         .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_continue_after_reading_error() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    if !ts.fixtures.file_exists("/dev/video0") {
+        println!("test skipped: /dev/video0 does not exist");
+        return;
+    }
+
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["/dev/video0", "f"])
+        .fails()
+        .stdout_contains("==> f <==\nhello");
+}
