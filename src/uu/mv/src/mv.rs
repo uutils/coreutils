@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
-// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable callees
+// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC WRONLY CREAT
 
 mod error;
 #[cfg(unix)]
@@ -407,14 +407,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                 #[cfg(not(unix))]
                 let hardlink_params = (None, None);
 
-                rename(
+                consume_already_reported(rename(
                     source,
                     target,
                     opts,
                     None,
                     hardlink_params.0,
                     hardlink_params.1,
-                )
+                ))
                 .map_err_context(|| {
                     translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
                 })
@@ -449,14 +449,14 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         #[cfg(not(unix))]
         let hardlink_params = (None, None);
 
-        rename(
+        consume_already_reported(rename(
             source,
             target,
             opts,
             None,
             hardlink_params.0,
             hardlink_params.1,
-        )
+        ))
         .map_err(|e| USimpleError::new(1, format!("{e}")))
     }
 }
@@ -658,26 +658,22 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         #[cfg(not(unix))]
         let hardlink_params = (None, None);
 
-        match rename(
+        if let Err(e) = consume_already_reported(rename(
             sourcepath,
             &targetpath,
             options,
             display_manager.as_ref(),
             hardlink_params.0,
             hardlink_params.1,
-        ) {
-            Err(e) if e.to_string().is_empty() => set_exit_code(1),
-            Err(e) => {
-                let e = e.map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
-                });
-                if let Some(ref pb) = display_manager {
-                    pb.suspend(|| show!(e));
-                } else {
-                    show!(e);
-                }
+        )) {
+            let e = e.map_err_context(|| {
+                translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
+            });
+            if let Some(ref pb) = display_manager {
+                pb.suspend(|| show!(e));
+            } else {
+                show!(e);
             }
-            Ok(()) => (),
         }
         if let Some(ref pb) = count_progress {
             pb.inc(1);
@@ -685,6 +681,20 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         moved_destinations.insert(targetpath.clone());
     }
     Ok(())
+}
+
+/// `rename()` (and its callees like `prompt_overwrite`) signals
+/// "error already reported, just propagate the failure exit code" by
+/// returning an io::Error whose message is empty. Convert that sentinel into
+/// `Ok(())` after bumping the exit code so callers don't double-print.
+fn consume_already_reported(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(e) if e.to_string().is_empty() => {
+            set_exit_code(1);
+            Ok(())
+        }
+        other => other,
+    }
 }
 
 fn rename(
@@ -750,7 +760,19 @@ fn rename(
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
+                // GNU's mv reports "cannot overwrite 'TARGET': Directory not
+                // empty" for this case, *not* "cannot move SRC to TARGET: ...".
+                // Print it here and return an empty error so the caller takes
+                // the silent-failure path that just sets the exit code.
+                show!(USimpleError::new(
+                    1,
+                    format!(
+                        "{}: {}",
+                        translate!("mv-error-cannot-overwrite", "target" => to.quote()),
+                        translate!("mv-error-directory-not-empty"),
+                    ),
+                ));
+                return Err(io::Error::other(""));
             }
         }
     }
@@ -1266,15 +1288,36 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
-    // Remove existing target file if it exists
-    if to.is_symlink() {
-        fs::remove_file(to).map_err(|err| {
-            let inter_device_msg = translate!("mv-error-inter-device-move-failed", "from" => from.quote(), "to" => to.quote(), "err" => err);
-            io::Error::new(err.kind(), inter_device_msg)
-        })?;
-    } else if to.exists() {
-        // For non-symlinks, just remove the file without special error handling
-        fs::remove_file(to)?;
+    // GNU mv removes any pre-existing destination before performing a
+    // cross-device copy, so that the operation fails the same way a same-
+    // device `rename()` would fail when the destination directory forbids
+    // removing entries (see copy.c's "inter-device move failed ... unable
+    // to remove target"). Skip this when `to` doesn't exist (ENOENT is not
+    // an error here, matching GNU).
+    //
+    // This does not reopen the symlink-attack TOCTOU window that issue
+    // #10015 removed: the subsequent open of `to` (both here for symlink
+    // destinations and via `create_dest_restrictive` below) is done with
+    // `O_NOFOLLOW`, so an attacker who recreates `to` as a symlink between
+    // this unlink and that open gets `ELOOP` instead of a followed write.
+    if to.exists() || to.is_symlink() {
+        if let Err(err) = fs::remove_file(to) {
+            // GNU reports this as its own diagnostic ("inter-device move
+            // failed: ... unable to remove target: ..."), not wrapped in
+            // the generic "cannot move SRC to DEST: " context. Print it
+            // directly and signal "already reported" via the empty-message
+            // sentinel so the caller doesn't add that context too.
+            show!(USimpleError::new(
+                1,
+                translate!(
+                    "mv-error-inter-device-move-failed",
+                    "from" => from.quote(),
+                    "to" => to.quote(),
+                    "err" => uucore::error::strip_errno(&err),
+                ),
+            ));
+            return Err(io::Error::other(""));
+        }
     }
 
     // Check if this file is part of a hardlink group and if so, create a hardlink instead of copying
