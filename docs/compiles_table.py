@@ -148,8 +148,7 @@ def install_targets():
 
 
 def get_all_bins():
-    bins = map(lambda x: x.name, BINS_PATH.iterdir())
-    return sorted(list(bins))
+    return sorted(path.name for path in BINS_PATH.iterdir())
 
 
 def get_targets(selection):
@@ -180,7 +179,7 @@ def test_all_targets(targets, bins):
 
 def save_csv(file, table):
     targets = get_targets(table.keys())  # preserve order in CSV
-    bins = list(list(table.values())[0].keys())
+    bins = list(next(iter(table.values())).keys())
     with open(file, "w") as csvfile:
         header = ["target"] + bins
         writer = csv.DictWriter(csvfile, fieldnames=header)
@@ -227,8 +226,8 @@ def render_md(fd, table, headings: str, row_headings: Target):
 
     # add some 'hard' padding to specific columns
     lens = [
-        max(map(lambda x: len(x.os), row_headings)) + 2,
-        max(map(lambda x: len(x.arch), row_headings)) + 2,
+        max(len(target.os) for target in row_headings) + 2,
+        max(len(target.arch) for target in row_headings) + 2,
     ]
     header = Target.get_heading()
     header[0] = ("{:#^%d}" % lens[0]).format(header[0])
@@ -236,11 +235,11 @@ def render_md(fd, table, headings: str, row_headings: Target):
 
     header += headings
     print_row(header)
-    lines = list(map(lambda x: "-" * len(x), header))
+    lines = ["-" * len(column) for column in header]
     print_row(lines)
 
     for t in row_headings:
-        row = list(map(lambda b: cell_render(t, b), headings))
+        row = [cell_render(t, b) for b in headings]
         row = t.get_row_heading() + row
         print_row(row)
 
