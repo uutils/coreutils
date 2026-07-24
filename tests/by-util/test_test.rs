@@ -255,11 +255,21 @@ fn test_some_int_compares() {
 }
 
 #[test]
-#[ignore = "fixme: evaluation error (code 1); GNU returns 0"]
 fn test_values_greater_than_i64_allowed() {
     new_ucmd!()
         .args(&["9223372036854775808", "-gt", "0"])
         .succeeds();
+}
+
+#[test]
+fn test_arbitrary_precision_integers() {
+    // GNU `test` compares integers with arbitrary precision, accepting values
+    // that do not fit in 128 bits.
+    let huge = "16267277278126277227728782172782882627278282882172762677623672762783782";
+    new_ucmd!().args(&[huge, "-eq", huge]).succeeds();
+    new_ucmd!().args(&["1", "-eq", huge]).fails_with_code(1);
+    new_ucmd!().args(&["1", "-lt", huge]).succeeds();
+    new_ucmd!().args(&[huge, "-gt", "1"]).succeeds();
 }
 
 #[test]
