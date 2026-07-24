@@ -224,16 +224,10 @@ impl Parser {
             .collect();
 
         match peek3.as_slice() {
-            // case 1: lparen is a literal when followed by nothing
-            [] => {
-                self.literal(Symbol::LParen.into_literal())?;
-                Ok(())
-            }
-
-            // case 2: error if end of stream is `( <any_token>`
+            // error if end of stream is `( <any_token>`
             [symbol] => Err(ParseError::MissingArgument(format!("{symbol}"))),
 
-            // case 3: `( uop <any_token> )` → parenthesized unary operation;
+            // `( uop <any_token> )` → parenthesized unary operation;
             //         this case ensures we don’t get confused by `( -f ) )`
             //         or `( -f ( )`, for example
             [Symbol::UnaryOp(_), _, Symbol::Literal(s)] if s == ")" => {
@@ -243,7 +237,7 @@ impl Parser {
                 Ok(())
             }
 
-            // case 4: binary comparison of literal lparen, e.g. `( != )`
+            // binary comparison of literal lparen, e.g. `( != )`
             [Symbol::Op(_), Symbol::Literal(s)] | [Symbol::Op(_), Symbol::Literal(s), _]
                 if s == ")" =>
             {
@@ -251,7 +245,7 @@ impl Parser {
                 Ok(())
             }
 
-            // case 5: after handling the prior cases, any single token inside
+            // after handling the prior cases, any single token inside
             //         parentheses is a literal, e.g. `( -f )`
             [_, Symbol::Literal(s)] | [_, Symbol::Literal(s), _] if s == ")" => {
                 let symbol = self.next_token();
@@ -260,18 +254,18 @@ impl Parser {
                 Ok(())
             }
 
-            // case 6: two binary ops in a row, treat the first op as a literal
+            // two binary ops in a row, treat the first op as a literal
             [Symbol::Op(_), Symbol::Op(_), _] => {
                 let symbol = self.next_token();
                 self.literal(symbol)?;
                 self.expect(")")?;
                 Ok(())
             }
-
-            // case 7: if earlier cases didn’t match, `( op <any_token>…`
+            // lparen is a literal when followed by nothing, or
+            // if earlier cases didn’t match, `( op <any_token>…`
             //         indicates binary comparison of literal lparen with
             //         anything _except_ ")" (case 4)
-            [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
+            [] | [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
                 self.literal(Symbol::LParen.into_literal())?;
                 Ok(())
             }

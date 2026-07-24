@@ -1158,7 +1158,7 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         "evenp" | "parity" => {
             flags = vec!["parenb", "-parodd", "cs7"];
         }
-        "-evenp" | "-parity" => {
+        "-evenp" | "-parity" | "-oddp" => {
             flags = vec!["-parenb", "cs8"];
         }
         "litout" => {
@@ -1175,9 +1175,6 @@ fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
         }
         "oddp" => {
             flags = vec!["parenb", "parodd", "cs7"];
-        }
-        "-oddp" => {
-            flags = vec!["-parenb", "cs8"];
         }
         "pass8" => {
             flags = vec!["-parenb", "-istrip", "cs8"];

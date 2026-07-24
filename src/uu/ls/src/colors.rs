@@ -673,10 +673,6 @@ fn parse_funky_string(
                     state = State::Hex(0);
                     idx += 1;
                 }
-                b'a' | b'b' | b'e' | b'f' | b'n' | b'r' | b't' | b'v' | b'?' | b'_' => {
-                    state = State::Ground;
-                    idx += 1;
-                }
                 _ => {
                     state = State::Ground;
                     idx += 1;

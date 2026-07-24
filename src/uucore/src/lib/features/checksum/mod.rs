@@ -419,17 +419,14 @@ impl SizedAlgoKind {
 
     pub fn bitlen(&self) -> usize {
         match self {
-            Self::Sysv => 512,
+            Self::Sysv | Self::Sm3 => 512,
             Self::Bsd => 1024,
             Self::Crc => 256,
             Self::Crc32b => 32,
             Self::Md5 => 128,
-            Self::Sm3 => 512,
             Self::Sha1 => 160,
-            Self::Sha2(len) => len.as_usize(),
-            Self::Sha3(len) => len.as_usize(),
-            Self::Blake2b(len) => len.as_bits(),
-            Self::Blake3(len) => len.as_bits(),
+            Self::Sha2(len) | Self::Sha3(len) => len.as_usize(),
+            Self::Blake2b(len) | Self::Blake3(len) => len.as_bits(),
             Self::Shake128(len) => len.map_or(Shake128::DEFAULT_BIT_SIZE, HashLength::as_bits),
             Self::Shake256(len) => len.map_or(Shake256::DEFAULT_BIT_SIZE, HashLength::as_bits),
         }

@@ -24,8 +24,7 @@ impl ProcessChecker {
             return true;
         };
         match test_kill_process(pid) {
-            Ok(()) => false,
-            Err(rustix::io::Errno::PERM) => false,
+            Ok(()) | Err(rustix::io::Errno::PERM) => false,
             Err(_) => true,
         }
     }

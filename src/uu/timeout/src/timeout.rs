@@ -408,7 +408,6 @@ fn timeout(
     let process = &mut cmd_builder.spawn().map_err(|err| {
         let status_code = match err.kind() {
             ErrorKind::NotFound => ExitStatus::CommandNotFound.into(),
-            ErrorKind::PermissionDenied => ExitStatus::CannotInvoke.into(),
             _ => ExitStatus::CannotInvoke.into(),
         };
         USimpleError::new(

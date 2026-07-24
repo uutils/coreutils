@@ -130,9 +130,7 @@ where
     fn extract(self) -> T {
         match self {
             Self::NotNumeric => T::zero(),
-            Self::PartialMatch(v, _) => v,
-            Self::Overflow(v) => v,
-            Self::Underflow(v) => v,
+            Self::PartialMatch(v, _) | Self::Overflow(v) | Self::Underflow(v) => v,
         }
     }
 

@@ -693,9 +693,8 @@ impl Dest {
                 // truncate failure (e.g. ENOSPC, read-only fs) means silent data
                 // loss, so the error must surface there.
                 match f.set_len(pos) {
-                    Ok(()) => Ok(()),
                     Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
-                    Err(_) => Ok(()),
+                    Ok(()) | Err(_) => Ok(()),
                 }
             }
             _ => Ok(()),
@@ -1281,17 +1280,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         if check_and_reset_sigusr1() {
             alarm.manual_trigger();
         }
-        match alarm.get_trigger() {
-            ALARM_TRIGGER_NONE => {}
-            t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
-                let tp = match t {
-                    ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
-                    _ => ProgUpdateType::Signal,
-                };
-                let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
-                prog_tx.send(prog_update).unwrap_or(());
-            }
-            _ => {}
+        if let t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) = alarm.get_trigger() {
+            let tp = match t {
+                ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
+                _ => ProgUpdateType::Signal,
+            };
+            let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
+            prog_tx.send(prog_update).unwrap_or(());
         }
     }
 

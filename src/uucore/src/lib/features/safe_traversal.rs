@@ -100,10 +100,10 @@ impl From<SafeTraversalError> for io::Error {
                 io::ErrorKind::InvalidInput,
                 translate!("safe-traversal-error-path-contains-null"),
             ),
-            SafeTraversalError::OpenFailed { source, .. } => source,
-            SafeTraversalError::StatFailed { source, .. } => source,
-            SafeTraversalError::ReadDirFailed { source, .. } => source,
-            SafeTraversalError::UnlinkFailed { source, .. } => source,
+            SafeTraversalError::OpenFailed { source, .. }
+            | SafeTraversalError::StatFailed { source, .. }
+            | SafeTraversalError::ReadDirFailed { source, .. }
+            | SafeTraversalError::UnlinkFailed { source, .. } => source,
         }
     }
 }
