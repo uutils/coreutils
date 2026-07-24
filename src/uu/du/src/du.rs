@@ -631,7 +631,7 @@ fn du_regular(
                                 // if we have 'du foo' but search to exclude 'foo/bar'
                                 // we need the full path
                                 if pattern.matches(&this_stat.path.to_string_lossy())
-                                    || pattern.matches(&entry.file_name().into_string().unwrap())
+                                    || pattern.matches(&entry.file_name().to_string_lossy())
                                 {
                                     // if the directory is ignored, leave early
                                     if options.verbose {
