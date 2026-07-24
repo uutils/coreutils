@@ -75,6 +75,7 @@ jobs:
           - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
+          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip2 }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
