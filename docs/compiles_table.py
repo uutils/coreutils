@@ -216,8 +216,8 @@ def merge_tables(old, new):
 
 
 def render_md(fd, table, headings: str, row_headings: Target):
-    def print_row(lst, lens=[]):
-        lens = lens + [0] * (len(lst) - len(lens))
+    def print_row(lst, lens=None):
+        lens = (lens or []) + [0] * (len(lst) - len(lens or []))
         for e, lmd in zip(lst, lens):
             fmt = "|{}" if lmd == 0 else "|{:>%s}" % len(header[0])
             fd.write(fmt.format(e))
