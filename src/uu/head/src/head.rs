@@ -17,7 +17,7 @@ use std::os::fd::AsFd;
 use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
-use uucore::display::{Quotable, print_verbatim};
+use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
 use uucore::show;
@@ -461,7 +461,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file).unwrap();
+                    stdout.write_all_os(file.as_ref())?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }

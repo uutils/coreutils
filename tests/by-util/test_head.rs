@@ -897,6 +897,23 @@ fn test_all_but_last_lines() {
         .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_verbose_header_write_error() {
+    // Before the fix, the filename in the "==> name <==" header was written
+    // with print_verbatim().unwrap(), which panicked on a write error.
+    // With -v, head always prints the header; any write failure must be
+    // reported gracefully rather than causing an abort (#13264).
+    use std::fs::OpenOptions;
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+    new_ucmd!()
+        .arg("-v")
+        .pipe_in("")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}
+
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[test]
 fn test_write_to_dev_full() {
