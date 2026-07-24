@@ -38,6 +38,8 @@ enum ChmodError {
     PreserveRoot(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
+    #[error("{}", translate!("chmod-error-read-only-file-system", "file" => _0.quote()))]
+    ReadOnlyFileSystem(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
     NewPermissions(PathBuf, String, String),
     #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
@@ -685,14 +687,20 @@ impl Chmoder {
         let (new_mode, _) = self.calculate_new_mode(current_mode, file_path.is_dir())?;
 
         // Use safe traversal to change the mode
-        if let Err(_e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
+        if let Err(e) = dir_fd.chmod_at(entry_name, new_mode, symlink_behavior) {
             if self.verbose {
                 println!(
                     "failed to change mode of {} to {new_mode:o}",
                     file_path.quote(),
                 );
             }
-            return Err(ChmodError::PermissionDenied(file_path.into()).into());
+            let err = if e.kind() == std::io::ErrorKind::ReadOnlyFilesystem {
+                ChmodError::ReadOnlyFileSystem(file_path.into())
+            } else {
+                ChmodError::PermissionDenied(file_path.into())
+            };
+
+            return Err(err.into());
         }
 
         // Report the change using the helper method
