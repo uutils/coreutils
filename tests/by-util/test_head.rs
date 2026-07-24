@@ -919,6 +919,22 @@ fn test_write_to_dev_full() {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[test]
+fn test_verbose_header_long_name_write_error_no_panic() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let long_name = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .args(&["-v", &long_name])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_contains("head: No space left on device");
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
