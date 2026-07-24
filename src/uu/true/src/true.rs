@@ -38,7 +38,8 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
 pub fn uu_app() -> Command {
     Command::new("true")
         .version(crate_version!())
-        .help_template(uucore::localized_help_template("true"))
+        // GH #10279: GNU `true --help` puts `Usage:` on the first line.
+        .help_template(uucore::localized_help_template_usage_first("true"))
         .about(translate!("true-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
