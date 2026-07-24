@@ -546,7 +546,6 @@ fn safe_du(
 // Only used on non-Linux platforms
 // Regular traversal using std::fs
 // Used on non-Linux platforms and as fallback for symlinks on Linux
-#[allow(clippy::cognitive_complexity)]
 fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
@@ -988,7 +987,6 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
 }
 
 #[uucore::main]
-#[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 

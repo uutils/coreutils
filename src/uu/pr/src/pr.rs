@@ -555,7 +555,6 @@ fn get_date_format(matches: &ArgMatches) -> String {
     .to_string()
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn build_options(
     matches: &ArgMatches,
     paths: &[&str],
@@ -1339,7 +1338,6 @@ fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> Result<(), std::io
     Ok(())
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn write_columns(
     lines: &[FileLine],
     options: &OutputOptions,

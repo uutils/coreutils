@@ -683,7 +683,6 @@ fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
 }
 
 impl Config {
-    #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
         let context = options.get_flag(options::CONTEXT);
         let (mut format, opt) = extract_format(options);

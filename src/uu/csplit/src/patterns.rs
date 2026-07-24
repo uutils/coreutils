@@ -209,7 +209,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn up_to_match_pattern() {
         let input = [
             "/test1.*end$/",
@@ -268,7 +267,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn skip_to_match_pattern() {
         let input = [
             "%test1.*end$%",
