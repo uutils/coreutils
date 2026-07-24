@@ -52,6 +52,10 @@ TARGETS = [
 ]
 
 
+class MissingToolchainError(Exception):
+    """A toolchain or SDK needed to check a target is not installed."""
+
+
 class Target(str):
     def __new__(cls, content):
         obj = super().__new__(cls, content)
@@ -114,7 +118,7 @@ class Target(str):
         if "ios" in self:
             res = subprocess.run(["which", "xcrun"], capture_output=True, check=False)
             if len(res.stdout) == 0:
-                raise Exception(
+                raise MissingToolchainError(
                     "Error: IOS sdk does not seem to be installed. Please do that manually"
                 )
         if not self.requires_nightly():
@@ -124,7 +128,7 @@ class Target(str):
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(
+                raise MissingToolchainError(
                     f"Error: the {self} target is not installed. Please do that manually"
                 )
         else:
@@ -136,7 +140,7 @@ class Target(str):
             )
             toolchains = toolchains.stdout.decode("utf-8").split("\n")
             if "installed" not in next(filter(lambda x: self in x, toolchains)):
-                raise Exception(
+                raise MissingToolchainError(
                     f"Error: the {self} nightly target is not installed. Please do that manually"
                 )
         return True
