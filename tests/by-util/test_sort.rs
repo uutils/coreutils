@@ -304,6 +304,16 @@ fn test_numeric_with_trailing_invalid_chars() {
 }
 
 #[test]
+fn test_numeric_with_trailing_chars_and_same_number() {
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-n")
+        .pipe_in("1 x\n1 ./b\n1 a\n")
+        .succeeds()
+        .stdout_is("1 a\n1 ./b\n1 x\n");
+}
+
+#[test]
 fn test_numeric_sort_rejects_leading_plus_sign() {
     // GNU sort -n does not treat '+' as a number sign; lines sort lexicographically.
     new_ucmd!()
