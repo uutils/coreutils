@@ -4171,6 +4171,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "itoa",
+ "memchr",
  "rand 0.10.2",
  "rand_chacha 0.10.0",
  "rustc-hash",
