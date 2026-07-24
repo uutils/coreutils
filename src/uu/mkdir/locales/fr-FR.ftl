@@ -15,5 +15,8 @@ mkdir-error-file-exists = { $path } : Le fichier existe
 mkdir-error-failed-to-create-tree = échec de la création de l'arborescence complète
 mkdir-error-cannot-set-permissions = impossible de définir les permissions { $path }
 
+# Messages d'avertissement
+mkdir-warning-context-requires-selinux-smack = --context est ignoré ; cela nécessite un noyau avec SELinux/SMACK activé
+
 # Sortie détaillée
 mkdir-verbose-created-directory = { $util_name } : répertoire créé { $path }
