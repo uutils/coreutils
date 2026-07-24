@@ -748,6 +748,48 @@ fn test_skip_beyond_file_seekable_stdin() {
     }
 }
 
+/// Test that skipping beyond the end of a named input file prints a warning.
+#[test]
+fn test_skip_beyond_named_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "abcd");
+    ucmd.args(&["if=in", "bs=1", "skip=5", "count=0", "status=noxfer"])
+        .succeeds()
+        .no_stdout()
+        .stderr_contains(
+            "'in': cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+        );
+}
+
+/// Test that skipping in an empty named input file does not print a warning.
+#[test]
+fn test_skip_in_empty_named_file_no_warning() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "");
+    ucmd.args(&["if=in", "bs=1", "skip=1", "count=0", "status=noxfer"])
+        .succeeds()
+        .no_stdout()
+        .stderr_is("0+0 records in\n0+0 records out\n");
+}
+
+/// Test that skipping in an empty seekable stdin does not print a warning.
+#[test]
+#[cfg(unix)]
+fn test_skip_in_empty_seekable_stdin_no_warning() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "");
+    let stdin = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true),
+        at.plus("in").as_path(),
+    )
+    .unwrap();
+    ucmd.args(&["bs=1", "skip=1", "count=0", "status=noxfer"])
+        .set_stdin(Stdio::from(stdin))
+        .succeeds()
+        .no_stdout()
+        .stderr_is("0+0 records in\n0+0 records out\n");
+}
+
 #[test]
 fn test_seek_do_not_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
