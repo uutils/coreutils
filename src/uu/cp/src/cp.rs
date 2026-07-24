@@ -2241,31 +2241,15 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
 /// assert_eq!(actual, expected);
 /// ```
 fn aligned_ancestors<'a>(source: &'a Path, dest: &'a Path) -> Vec<(&'a Path, &'a Path)> {
-    // Collect the ancestors of each. For example, if `source` is
-    // "a/b/c", then the ancestors are "a/b/c", "a/b", "a/", and "".
-    let source_ancestors: Vec<&Path> = source.ancestors().collect();
-    let dest_ancestors: Vec<&Path> = dest.ancestors().collect();
-
-    // For this particular application, we don't care about the null
-    // path "" and we don't care about the full path (e.g. "a/b/c"),
-    // so we exclude those.
-    let n = source_ancestors.len();
-    let source_ancestors = &source_ancestors[1..n - 1];
-
-    // Get the matching number of elements from the ancestors of the
-    // destination path (for example, get "d/a" and "d/a/b").
-    let k = source_ancestors.len();
-    let dest_ancestors = &dest_ancestors[1..=k];
-
-    // Now we have two slices of the same length, so we zip them.
-    let mut result = vec![];
-    for (x, y) in source_ancestors
-        .iter()
-        .rev()
-        .zip(dest_ancestors.iter().rev())
-    {
-        result.push((*x, *y));
-    }
+    // Assuming dest.ancestors().len() >= source.ancestors().len(), so zip is bounded by source's depth.
+    // skip(1) drops the full paths; pop() drops source's root ancestor.
+    let mut result: Vec<_> = source
+        .ancestors()
+        .skip(1)
+        .zip(dest.ancestors().skip(1))
+        .collect();
+    result.pop();
+    result.reverse();
     result
 }
 
@@ -3041,6 +3025,25 @@ mod tests {
             (Path::new("a"), Path::new("d/a")),
             (Path::new("a/b"), Path::new("d/a/b")),
         ];
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_aligned_ancestors_empty_source() {
+        let actual = aligned_ancestors(Path::new(""), Path::new("dest"));
+        assert!(actual.is_empty());
+    }
+
+    #[test]
+    fn test_aligned_ancestors_single_component_source() {
+        let actual = aligned_ancestors(Path::new("a"), Path::new("d/a"));
+        assert!(actual.is_empty());
+    }
+
+    #[test]
+    fn test_aligned_ancestors_two_component_source() {
+        let actual = aligned_ancestors(Path::new("a/b"), Path::new("d/a/b"));
+        let expected = vec![(Path::new("a"), Path::new("d/a"))];
         assert_eq!(actual, expected);
     }
     #[test]

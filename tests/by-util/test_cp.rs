@@ -1590,6 +1590,23 @@ fn test_cp_parents_dest_not_directory() {
 }
 
 #[test]
+fn test_cp_parents_empty_source_does_not_panic() {
+    // Regression: --parents with an empty source path previously caused a panic
+    // in aligned_ancestors due to slice indexing [1..0] (start > end).
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dest");
+    ucmd.arg("--parents")
+        .arg("")
+        .arg("dest")
+        .fails()
+        .stderr_only(if cfg!(not(target_os = "windows")) {
+            "cp: cannot stat '': No such file or directory\n"
+        } else {
+            "cp: The system cannot find the path specified. (os error 3)\n"
+        });
+}
+
+#[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_cp_parents_with_permissions_copy_file() {
     let (at, mut ucmd) = at_and_ucmd!();
