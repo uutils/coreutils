@@ -4579,6 +4579,7 @@ dependencies = [
  "jiff",
  "jiff-icu",
  "libc",
+ "libloading",
  "md-5",
  "memchr",
  "nix",

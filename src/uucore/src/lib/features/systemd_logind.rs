@@ -9,8 +9,9 @@
 //!
 //! This module provides systemd-logind based implementation for reading
 //! login records as an alternative to traditional utmp/utmpx files.
-//! When the systemd-logind feature is enabled and systemd is available,
-//! this will be used instead of traditional utmp files.
+//! On Linux, this is used when the traditional utmp file is unavailable or
+//! empty. If systemd-logind is unavailable, callers fall back to the traditional
+//! implementation.
 
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
@@ -18,26 +19,81 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::error::{UResult, USimpleError};
 
-/// FFI bindings for libsystemd login and D-Bus functions
+/// Dynamically loaded FFI bindings for libsystemd login functions.
 mod ffi {
+    use libloading::Library;
     use std::ffi::c_char;
     use std::os::raw::{c_int, c_uint};
+    use std::path::Path;
 
-    #[link(name = "systemd")]
-    unsafe extern "C" {
-        pub fn sd_get_sessions(sessions: *mut *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_uid(session: *const c_char, uid: *mut c_uint) -> c_int;
-        pub fn sd_session_get_start_time(session: *const c_char, usec: *mut u64) -> c_int;
-        pub fn sd_session_get_tty(session: *const c_char, tty: *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_remote_host(
-            session: *const c_char,
-            remote_host: *mut *mut c_char,
-        ) -> c_int;
-        pub fn sd_session_get_display(session: *const c_char, display: *mut *mut c_char) -> c_int;
-        pub fn sd_session_get_type(session: *const c_char, session_type: *mut *mut c_char)
-        -> c_int;
-        pub fn sd_session_get_seat(session: *const c_char, seat: *mut *mut c_char) -> c_int;
+    type SdGetSessions = unsafe extern "C" fn(*mut *mut *mut c_char) -> c_int;
+    type SdSessionGetUid = unsafe extern "C" fn(*const c_char, *mut c_uint) -> c_int;
+    type SdSessionGetStartTime = unsafe extern "C" fn(*const c_char, *mut u64) -> c_int;
+    type SdSessionGetString = unsafe extern "C" fn(*const c_char, *mut *mut c_char) -> c_int;
 
+    pub(super) struct SystemdLoginApi {
+        // The library must remain loaded while any of these function pointers are used.
+        _library: Library,
+        pub(super) sd_get_sessions: SdGetSessions,
+        pub(super) sd_session_get_uid: SdSessionGetUid,
+        pub(super) sd_session_get_start_time: SdSessionGetStartTime,
+        pub(super) sd_session_get_tty: SdSessionGetString,
+        pub(super) sd_session_get_remote_host: SdSessionGetString,
+        pub(super) sd_session_get_display: SdSessionGetString,
+        pub(super) sd_session_get_type: SdSessionGetString,
+        pub(super) sd_session_get_seat: SdSessionGetString,
+    }
+
+    impl SystemdLoginApi {
+        pub(super) fn load() -> Result<Self, Box<dyn std::error::Error>> {
+            Self::load_from("libsystemd.so.0")
+        }
+
+        fn load_from(path: impl AsRef<Path>) -> Result<Self, Box<dyn std::error::Error>> {
+            // SAFETY: The loaded symbols use the signatures declared by libsystemd's
+            // stable public API. The Library is retained in Self for at least as long
+            // as the copied function pointers can be called.
+            unsafe {
+                let library = Library::new(path.as_ref())?;
+                let sd_get_sessions = *library.get::<SdGetSessions>(b"sd_get_sessions\0")?;
+                let sd_session_get_uid =
+                    *library.get::<SdSessionGetUid>(b"sd_session_get_uid\0")?;
+                let sd_session_get_start_time =
+                    *library.get::<SdSessionGetStartTime>(b"sd_session_get_start_time\0")?;
+                let sd_session_get_tty =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_tty\0")?;
+                let sd_session_get_remote_host =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_remote_host\0")?;
+                let sd_session_get_display =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_display\0")?;
+                let sd_session_get_type =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_type\0")?;
+                let sd_session_get_seat =
+                    *library.get::<SdSessionGetString>(b"sd_session_get_seat\0")?;
+
+                Ok(Self {
+                    _library: library,
+                    sd_get_sessions,
+                    sd_session_get_uid,
+                    sd_session_get_start_time,
+                    sd_session_get_tty,
+                    sd_session_get_remote_host,
+                    sd_session_get_display,
+                    sd_session_get_type,
+                    sd_session_get_seat,
+                })
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::SystemdLoginApi;
+
+        #[test]
+        fn missing_library_is_reported() {
+            assert!(SystemdLoginApi::load_from("libsystemd-uutils-does-not-exist.so").is_err());
+        }
     }
 }
 
@@ -46,13 +102,15 @@ mod login {
     use super::ffi;
     use std::ffi::{CStr, CString};
     use std::ptr;
-    use std::time::SystemTime;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// Get all active sessions
-    pub fn get_sessions() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    pub fn get_sessions(
+        api: &ffi::SystemdLoginApi,
+    ) -> Result<Vec<String>, Box<dyn std::error::Error>> {
         let mut sessions_ptr: *mut *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_get_sessions(&raw mut sessions_ptr) };
+        let result = unsafe { (api.sd_get_sessions)(&raw mut sessions_ptr) };
 
         if result < 0 {
             return Err(format!("sd_get_sessions failed: {result}").into());
@@ -81,11 +139,14 @@ mod login {
     }
 
     /// Get UID for a session
-    pub fn get_session_uid(session_id: &str) -> Result<u32, Box<dyn std::error::Error>> {
+    pub fn get_session_uid(
+        api: &ffi::SystemdLoginApi,
+        session_id: &str,
+    ) -> Result<u32, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut uid: std::os::raw::c_uint = 0;
 
-        let result = unsafe { ffi::sd_session_get_uid(session_cstring.as_ptr(), &raw mut uid) };
+        let result = unsafe { (api.sd_session_get_uid)(session_cstring.as_ptr(), &raw mut uid) };
 
         if result < 0 {
             return Err(
@@ -97,12 +158,15 @@ mod login {
     }
 
     /// Get start time for a session (in microseconds since Unix epoch)
-    pub fn get_session_start_time(session_id: &str) -> Result<u64, Box<dyn std::error::Error>> {
+    pub fn get_session_start_time(
+        api: &ffi::SystemdLoginApi,
+        session_id: &str,
+    ) -> Result<u64, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut usec: u64 = 0;
 
         let result =
-            unsafe { ffi::sd_session_get_start_time(session_cstring.as_ptr(), &raw mut usec) };
+            unsafe { (api.sd_session_get_start_time)(session_cstring.as_ptr(), &raw mut usec) };
 
         if result < 0 {
             return Err(format!(
@@ -115,11 +179,15 @@ mod login {
     }
 
     /// Get TTY for a session
-    pub fn get_session_tty(session_id: &str) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    pub fn get_session_tty(
+        api: &ffi::SystemdLoginApi,
+        session_id: &str,
+    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut tty_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result = unsafe { ffi::sd_session_get_tty(session_cstring.as_ptr(), &raw mut tty_ptr) };
+        let result =
+            unsafe { (api.sd_session_get_tty)(session_cstring.as_ptr(), &raw mut tty_ptr) };
 
         if result < 0 {
             return Err(
@@ -141,13 +209,15 @@ mod login {
 
     /// Get remote host for a session
     pub fn get_session_remote_host(
+        api: &ffi::SystemdLoginApi,
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut host_ptr: *mut libc::c_char = ptr::null_mut();
 
-        let result =
-            unsafe { ffi::sd_session_get_remote_host(session_cstring.as_ptr(), &raw mut host_ptr) };
+        let result = unsafe {
+            (api.sd_session_get_remote_host)(session_cstring.as_ptr(), &raw mut host_ptr)
+        };
 
         if result < 0 {
             return Err(format!(
@@ -170,13 +240,14 @@ mod login {
 
     /// Get display for a session
     pub fn get_session_display(
+        api: &ffi::SystemdLoginApi,
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut display_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_display(session_cstring.as_ptr(), &raw mut display_ptr) };
+            unsafe { (api.sd_session_get_display)(session_cstring.as_ptr(), &raw mut display_ptr) };
 
         if result < 0 {
             return Err(format!(
@@ -199,13 +270,14 @@ mod login {
 
     /// Get type for a session
     pub fn get_session_type(
+        api: &ffi::SystemdLoginApi,
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut type_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_type(session_cstring.as_ptr(), &raw mut type_ptr) };
+            unsafe { (api.sd_session_get_type)(session_cstring.as_ptr(), &raw mut type_ptr) };
 
         if result < 0 {
             return Err(
@@ -227,13 +299,14 @@ mod login {
 
     /// Get seat for a session
     pub fn get_session_seat(
+        api: &ffi::SystemdLoginApi,
         session_id: &str,
     ) -> Result<Option<String>, Box<dyn std::error::Error>> {
         let session_cstring = CString::new(session_id)?;
         let mut seat_ptr: *mut libc::c_char = ptr::null_mut();
 
         let result =
-            unsafe { ffi::sd_session_get_seat(session_cstring.as_ptr(), &raw mut seat_ptr) };
+            unsafe { (api.sd_session_get_seat)(session_cstring.as_ptr(), &raw mut seat_ptr) };
 
         if result < 0 {
             return Err(
@@ -253,25 +326,20 @@ mod login {
         Ok(Some(seat_string))
     }
 
-    /// Get system boot time using systemd random-seed file fallback
-    ///
-    /// TODO: This replicates GNU coreutils' fallback behavior for compatibility.
-    /// GNU coreutils uses the mtime of /var/lib/systemd/random-seed as a heuristic for boot time
-    /// when utmp is unavailable, rather than querying systemd's authoritative KernelTimestamp.
-    /// This creates inconsistency: `uptime -s` shows the actual kernel boot time
-    /// while `who -b` shows ~1 minute later when systemd services start.
-    ///
-    /// Ideally, both should use the same source (KernelTimestamp) for semantic consistency.
-    /// Consider proposing to GNU coreutils to use systemd's KernelTimestamp property instead.
+    pub(super) fn boot_time_from_proc_stat(contents: &str) -> Option<SystemTime> {
+        contents.lines().find_map(|line| {
+            line.strip_prefix("btime ")
+                .and_then(|seconds| seconds.parse::<u64>().ok())
+                .map(|seconds| UNIX_EPOCH + std::time::Duration::from_secs(seconds))
+        })
+    }
+
+    /// Get the system boot time using the kernel's `/proc/stat` value.
     pub fn get_boot_time() -> Result<SystemTime, Box<dyn std::error::Error>> {
-        use std::fs;
-
-        let metadata = fs::metadata("/var/lib/systemd/random-seed")
-            .map_err(|e| format!("Failed to read /var/lib/systemd/random-seed: {e}"))?;
-
-        metadata
-            .modified()
-            .map_err(|e| format!("Failed to get modification time: {e}").into())
+        let proc_stat = std::fs::read_to_string("/proc/stat")
+            .map_err(|e| format!("Failed to read /proc/stat: {e}"))?;
+        boot_time_from_proc_stat(&proc_stat)
+            .ok_or_else(|| "Failed to find btime in /proc/stat".into())
     }
 }
 
@@ -323,6 +391,8 @@ impl SystemdLoginRecord {
 /// Read login records from systemd-logind using safe wrapper functions
 /// This matches the approach used by GNU coreutils read_utmp_from_systemd()
 pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
+    let api = ffi::SystemdLoginApi::load()
+        .map_err(|e| USimpleError::new(1, format!("Failed to load libsystemd: {e}")))?;
     let mut records = Vec::new();
 
     // Add boot time record first
@@ -342,7 +412,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     }
 
     // Get all active sessions using safe wrapper
-    let mut sessions = login::get_sessions()
+    let mut sessions = login::get_sessions(&api)
         .map_err(|e| USimpleError::new(1, format!("Failed to get systemd sessions: {e}")))?;
 
     // Sort sessions consistently for reproducible output (reverse for TTY sessions first)
@@ -352,7 +422,7 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
     // Iterate through all sessions
     for session_id in sessions {
         // Get session UID using safe wrapper
-        let Ok(uid) = login::get_session_uid(&session_id) else {
+        let Ok(uid) = login::get_session_uid(&api, &session_id) else {
             continue;
         };
 
@@ -391,18 +461,19 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         };
 
         // Get start time using safe wrapper, fallback to epoch if unavailable
-        let start_time = login::get_session_start_time(&session_id).map_or(UNIX_EPOCH, |usec| {
-            UNIX_EPOCH + std::time::Duration::from_micros(usec)
-        });
+        let start_time = login::get_session_start_time(&api, &session_id)
+            .map_or(UNIX_EPOCH, |usec| {
+                UNIX_EPOCH + std::time::Duration::from_micros(usec)
+            });
 
         // Get TTY using safe wrapper
-        let mut tty = login::get_session_tty(&session_id)
+        let mut tty = login::get_session_tty(&api, &session_id)
             .ok()
             .flatten()
             .unwrap_or_default();
 
         // Get seat using safe wrapper
-        let mut seat = login::get_session_seat(&session_id)
+        let mut seat = login::get_session_seat(&api, &session_id)
             .ok()
             .flatten()
             .unwrap_or_default();
@@ -416,19 +487,19 @@ pub fn read_login_records() -> UResult<Vec<SystemdLoginRecord>> {
         }
 
         // Get remote host using safe wrapper
-        let remote_host = login::get_session_remote_host(&session_id)
+        let remote_host = login::get_session_remote_host(&api, &session_id)
             .ok()
             .flatten()
             .unwrap_or_default();
 
         // Get display using safe wrapper (for GUI sessions)
-        let display = login::get_session_display(&session_id)
+        let display = login::get_session_display(&api, &session_id)
             .ok()
             .flatten()
             .unwrap_or_default();
 
         // Get session type using safe wrapper (currently unused but available)
-        let _session_type = login::get_session_type(&session_id)
+        let _session_type = login::get_session_type(&api, &session_id)
             .ok()
             .flatten()
             .unwrap_or_default();
@@ -659,6 +730,19 @@ impl Iterator for SystemdUtmpxIter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_boot_time_from_proc_stat() {
+        let boot_time = login::boot_time_from_proc_stat(
+            "cpu  1 2 3 4 5 6 7 8 9 10\nbtime 1234567890\nprocesses 42\n",
+        );
+
+        assert_eq!(
+            boot_time,
+            Some(UNIX_EPOCH + std::time::Duration::from_secs(1_234_567_890))
+        );
+        assert!(login::boot_time_from_proc_stat("cpu 1 2 3\n").is_none());
+    }
 
     #[test]
     fn test_empty_iterator() {
