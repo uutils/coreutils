@@ -37,6 +37,8 @@ mv-error-dangling-symlink = can't determine symlink type, since it is dangling
 mv-error-no-symlink-support = your operating system does not support symlinks
 mv-error-permission-denied = Permission denied
 mv-error-inter-device-move-failed = inter-device move failed: {$from} to {$to}; unable to remove target: {$err}
+mv-error-exchange-two-operands = --exchange requires exactly two operands
+mv-error-exchange-not-supported = --exchange is not supported on this platform
 
 # Help messages
 mv-help-force = do not prompt before overwriting
@@ -49,12 +51,14 @@ mv-help-verbose = explain what is being done
 mv-help-progress = Display a progress bar.
   Note: this feature is not supported by GNU coreutils.
 mv-help-debug = explain how a file is copied. Implies -v
+mv-help-exchange = exchange source and destination (atomically swap them)
 mv-help-selinux = set SELinux security context of destination file to default type
 mv-help-context = like -Z, or if CTX is specified then set the SELinux security context to CTX
 
 # Verbose messages
 mv-verbose-renamed = renamed {$from} -> {$to}
 mv-verbose-renamed-with-backup = renamed {$from} -> {$to} (backup: {$backup})
+mv-verbose-exchanged = exchanged {$from} <-> {$to}
 
 # Debug messages
 mv-debug-skipped = skipped {$target}

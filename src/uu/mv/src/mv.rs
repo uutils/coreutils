@@ -106,6 +106,9 @@ pub struct Options {
 
     /// `-Z, --context`
     pub context: Option<String>,
+
+    /// `--exchange` atomically exchange source and destination
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -122,6 +125,7 @@ impl Default for Options {
             progress_bar: false,
             debug: false,
             context: None,
+            exchange: false,
         }
     }
 }
@@ -152,6 +156,7 @@ static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
 static OPT_CONTEXT: &str = "context";
 static OPT_SELINUX: &str = "selinux";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -220,6 +225,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
         context,
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -331,6 +337,12 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_DEBUG)
                 .long(OPT_DEBUG)
                 .help(translate!("mv-help-debug"))
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(translate!("mv-help-exchange"))
                 .action(ArgAction::SetTrue),
         )
 }
@@ -562,6 +574,16 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
+    if opts.exchange {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        return exchange_paths(&paths, opts);
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        return Err(USimpleError::new(
+            1,
+            translate!("mv-error-exchange-not-supported"),
+        ));
+    }
+
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
@@ -570,6 +592,63 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
         2 => handle_two_paths(&paths[0], &paths[1], opts),
         _ => handle_multiple_paths(&paths, opts),
     }
+}
+
+/// Atomically exchange two paths with `--exchange` (renameat2 `RENAME_EXCHANGE`).
+///
+/// With more than two operands, the last operand must be a directory, and
+/// each of the other operands is exchanged with the file of the same name
+/// inside that directory (matching GNU `mv --exchange a b c dir/`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+    match paths {
+        [] | [_] => Err(UUsageError::new(
+            1,
+            translate!("mv-error-exchange-two-operands"),
+        )),
+        [from, to] => exchange_two_paths(from, to, opts),
+        [sources @ .., target_dir] => {
+            if !target_dir.is_dir() {
+                return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into());
+            }
+            for source in sources {
+                let name = source
+                    .file_name()
+                    .ok_or_else(|| MvError::NoSuchFile(source.quote().to_string()))?;
+                exchange_two_paths(source, &target_dir.join(name), opts)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Atomically exchange the two given paths (renameat2 `RENAME_EXCHANGE`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_two_paths(from: &Path, to: &Path, opts: &Options) -> UResult<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    let canonicalize_or_absolute = |p: &Path| {
+        canonicalize(absolute(p)?, MissingHandling::Normal, ResolveMode::Logical)
+            .or_else(|_| absolute(p))
+    };
+    if canonicalize_or_absolute(from)?.eq(&canonicalize_or_absolute(to)?)
+        || are_hardlinks_to_same_file(from, to)
+    {
+        return Err(MvError::SameFile(from.quote().to_string(), to.quote().to_string()).into());
+    }
+
+    renameat_with(CWD, from, CWD, to, RenameFlags::EXCHANGE)
+        .map_err(io::Error::from)
+        .map_err_context(
+            || translate!("mv-error-cannot-move", "source" => from.quote(), "target" => to.quote()),
+        )?;
+    if opts.verbose {
+        println!(
+            "{}",
+            translate!("mv-verbose-exchanged", "from" => from.quote(), "to" => to.quote())
+        );
+    }
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
