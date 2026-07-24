@@ -1625,47 +1625,38 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
-#[allow(clippy::if_not_else)]
-fn file_mode_for_interactive_overwrite(
-    #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
-) -> Option<(String, String)> {
-    // Retain outer braces to ensure only one branch is included
-    {
-        #[cfg(unix)]
-        {
-            use libc::{S_IWUSR, mode_t};
-            use std::os::unix::prelude::MetadataExt;
+#[cfg(unix)]
+fn file_mode_for_interactive_overwrite(path: &Path) -> Option<(String, String)> {
+    use libc::{S_IWUSR, mode_t};
+    use std::os::unix::prelude::MetadataExt;
 
-            match path.metadata() {
-                Ok(me) => {
-                    // Cast is necessary on some platforms
-                    #[allow(clippy::unnecessary_cast)]
-                    let mode: mode_t = me.mode() as mode_t;
+    match path.metadata() {
+        Ok(me) => {
+            // Cast is necessary on some platforms
+            #[allow(clippy::unnecessary_cast)]
+            let mode: mode_t = me.mode() as mode_t;
 
-                    // It looks like this extra information is added to the prompt iff the file's user write bit is 0
-                    //  write permission, owner
-                    if uucore::has!(mode, S_IWUSR) {
-                        None
-                    } else {
-                        // Discard leading digits
-                        let mode_without_leading_digits = mode & 0o7777;
+            // It looks like this extra information is added to the prompt iff the file's user write bit is 0
+            //  write permission, owner
+            if !uucore::has!(mode, S_IWUSR) {
+                // Discard leading digits
+                let mode_without_leading_digits = mode & 0o7777;
 
-                        Some((
-                            format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode as u32, false),
-                        ))
-                    }
-                }
-                // TODO: How should failure to read the metadata be handled? Ignoring for now.
-                Err(_) => None,
+                return Some((
+                    format!("{mode_without_leading_digits:04o}"),
+                    uucore::fs::display_permissions_unix(mode as u32, false),
+                ));
             }
-        }
-
-        #[cfg(not(unix))]
-        {
             None
         }
+        // TODO: How should failure to read the metadata be handled? Ignoring for now.
+        Err(_) => None,
     }
+}
+
+#[cfg(not(unix))]
+fn file_mode_for_interactive_overwrite(_: &Path) -> Option<(String, String)> {
+    None
 }
 
 impl OverwriteMode {
