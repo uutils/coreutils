@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore fstatat openat dirfd
+// spell-checker:ignore CLOEXEC Deduper dedupe deduper dirfd FIEMAP fiemap fstatat openat reflinks
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::{Pattern, PatternError};
@@ -14,6 +14,8 @@ use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
@@ -23,27 +25,33 @@ use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
 use thiserror::Error;
+#[cfg(windows)]
+use windows_sys::Win32::{
+    Foundation::HANDLE,
+    Storage::FileSystem::{
+        FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
+        FileStandardInfo, GetFileInformationByHandleEx,
+    },
+};
+
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::fsext::{MetadataTimeField, metadata_get_time};
 use uucore::line_ending::LineEnding;
-#[cfg(all(unix, not(target_os = "redox")))]
-use uucore::safe_traversal::{DirFd, SymlinkBehavior};
-use uucore::translate;
-
 use uucore::parser::parse_block_size;
 use uucore::parser::parse_glob;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+#[cfg(all(unix, not(target_os = "redox")))]
+use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
+use uucore::translate;
 use uucore::{format_usage, show, show_error, show_warning};
-#[cfg(windows)]
-use windows_sys::Win32::Foundation::HANDLE;
-#[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{
-    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
-    FileStandardInfo, GetFileInformationByHandleEx,
-};
+
+#[cfg(target_os = "linux")]
+mod reflink;
+#[cfg(target_os = "linux")]
+use crate::reflink::ReflinkDeduper;
 
 mod options {
     pub const HELP: &str = "help";
@@ -73,8 +81,11 @@ mod options {
     pub const EXCLUDE_FROM: &str = "exclude-from";
     pub const FILES0_FROM: &str = "files0-from";
     pub const VERBOSE: &str = "verbose";
+    pub const DEDUPE_REFLINKS: &str = "dedupe-reflinks";
     pub const FILE: &str = "FILE";
 }
+
+const POSIX_BLOCK_SIZE: u64 = 512;
 
 struct TraversalOptions {
     all: bool,
@@ -82,6 +93,7 @@ struct TraversalOptions {
     one_file_system: bool,
     dereference: Deref,
     count_links: bool,
+    dedupe_reflinks: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
     // Avoid full-path stats unless `--time` needs them.
@@ -123,6 +135,54 @@ struct FileInfo {
     dev_id: u64,
 }
 
+struct TraversalState {
+    seen_inodes: HashSet<FileInfo>,
+    #[cfg(target_os = "linux")]
+    reflinks: Option<ReflinkDeduper>,
+}
+
+impl TraversalState {
+    fn new(dedupe_reflinks: bool) -> Self {
+        #[cfg(not(target_os = "linux"))]
+        let _ = dedupe_reflinks;
+        Self {
+            seen_inodes: HashSet::default(),
+            #[cfg(target_os = "linux")]
+            reflinks: dedupe_reflinks.then(ReflinkDeduper::default),
+        }
+    }
+
+    fn has_seen_inode(&self, inode: &FileInfo) -> bool {
+        self.seen_inodes.contains(inode)
+    }
+
+    fn record_inode(&mut self, inode: FileInfo) {
+        self.seen_inodes.insert(inode);
+    }
+
+    #[cfg(target_os = "linux")]
+    fn adjust_reflink_blocks(
+        &mut self,
+        file: &File,
+        expected: FileInfo,
+        blocks: u64,
+    ) -> std::io::Result<u64> {
+        let metadata = file.metadata()?;
+        if !metadata.is_file()
+            || metadata.dev() != expected.dev_id
+            || u128::from(metadata.ino()) != expected.file_id
+        {
+            return Err(std::io::Error::other(
+                "file changed while collecting reflink extents",
+            ));
+        }
+
+        self.reflinks.as_mut().map_or(Ok(blocks), |deduper| {
+            deduper.adjust(file, expected.dev_id, blocks)
+        })
+    }
+}
+
 struct Stat {
     path: PathBuf,
     size: u64,
@@ -130,6 +190,53 @@ struct Stat {
     inodes: u64,
     inode: Option<FileInfo>,
     metadata: Metadata,
+}
+
+#[cfg(target_os = "linux")]
+fn open_reflink_file(path: &Path, follow_symlinks: bool) -> std::io::Result<File> {
+    let mut flags = libc::O_NONBLOCK | libc::O_CLOEXEC;
+    if !follow_symlinks {
+        flags |= libc::O_NOFOLLOW;
+    }
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(flags)
+        .open(path)
+}
+
+#[cfg(target_os = "linux")]
+fn adjust_reflink_blocks_with_open<F>(
+    state: &mut TraversalState,
+    expected: FileInfo,
+    blocks: u64,
+    open: F,
+) -> std::io::Result<u64>
+where
+    F: FnOnce() -> std::io::Result<File>,
+{
+    let file = open()?;
+    state.adjust_reflink_blocks(&file, expected, blocks)
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
+fn already_reported_error() -> Box<mpsc::SendError<UResult<StatPrintInfo>>> {
+    Box::new(mpsc::SendError(Err(USimpleError::new(
+        0,
+        "Error already handled",
+    ))))
+}
+
+#[cfg(target_os = "linux")]
+fn report_access_error(
+    print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
+    path: &Path,
+    error: std::io::Error,
+) -> Result<(), Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
+    print_tx
+        .send(Err(error.map_err_context(
+            || translate!("du-error-cannot-access", "path" => path.quote()),
+        )))
+        .map_err(Box::new)
 }
 
 impl Stat {
@@ -177,9 +284,10 @@ impl Stat {
 
         // Create file info from the safe metadata
         let file_info = safe_metadata.file_info();
+        #[allow(clippy::unnecessary_cast)]
         let file_info_option = Some(FileInfo {
             file_id: file_info.inode() as u128,
-            dev_id: file_info.device(),
+            dev_id: file_info.device() as u64,
         });
 
         let blocks = safe_metadata.blocks();
@@ -311,7 +419,7 @@ fn safe_du(
     path: &Path,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    state: &mut TraversalState,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
@@ -348,10 +456,7 @@ fn safe_du(
                         if let Err(send_error) = print_tx.send(Err(error)) {
                             return Err(Box::new(send_error));
                         }
-                        return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                            0,
-                            "Error already handled",
-                        )))));
+                        return Err(already_reported_error());
                     }
                 },
                 Err(e) => {
@@ -361,15 +466,38 @@ fn safe_du(
                     if let Err(send_error) = print_tx.send(Err(error)) {
                         return Err(Box::new(send_error));
                     }
-                    return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                        0,
-                        "Error already handled",
-                    )))));
+                    return Err(already_reported_error());
                 }
             }
         }
     };
     if !my_stat.metadata.is_dir() {
+        #[cfg(target_os = "linux")]
+        if options.dedupe_reflinks && my_stat.metadata.is_file() {
+            let Some(inode) = my_stat.inode else {
+                report_access_error(
+                    print_tx,
+                    &my_stat.path,
+                    std::io::Error::other("could not determine file identity"),
+                )?;
+                return Err(already_reported_error());
+            };
+            let follow_symlinks = match &options.dereference {
+                Deref::All => true,
+                Deref::Args(paths) => paths.contains(&my_stat.path),
+                Deref::None => false,
+            };
+            let result = adjust_reflink_blocks_with_open(state, inode, my_stat.blocks, || {
+                open_reflink_file(&my_stat.path, follow_symlinks)
+            });
+            match result {
+                Ok(blocks) => my_stat.blocks = blocks,
+                Err(error) => {
+                    report_access_error(print_tx, &my_stat.path, error)?;
+                    return Err(already_reported_error());
+                }
+            }
+        }
         return Ok(my_stat);
     }
 
@@ -393,7 +521,7 @@ fn safe_du(
     };
 
     // Read directory entries
-    let entries = match dir_fd.read_dir() {
+    let mut entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) => {
             print_tx.send(Err(e.map_err_context(
@@ -402,11 +530,16 @@ fn safe_du(
             return Ok(my_stat);
         }
     };
+    if options.dedupe_reflinks {
+        entries.sort();
+    }
 
     'file_loop: for entry_name in entries {
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
+        #[cfg(target_os = "linux")]
+        const S_IFREG: u32 = 0o100_000;
 
         // First get the lstat (without following symlinks) to check if it's a symlink
         let lstat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
@@ -435,6 +568,9 @@ fn safe_du(
 
         #[allow(clippy::unnecessary_cast)]
         let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
+        #[cfg(target_os = "linux")]
+        #[allow(clippy::unnecessary_cast)]
+        let is_regular = (lstat.st_mode as u32 & S_IFMT) == S_IFREG;
         let entry_stat = lstat;
 
         #[allow(clippy::unnecessary_cast)]
@@ -471,6 +607,8 @@ fn safe_du(
                 metadata: my_stat.metadata.clone(),
             }
         };
+        #[cfg(target_os = "linux")]
+        let mut this_stat = this_stat;
 
         // Check excludes
         for pattern in &options.excludes {
@@ -489,10 +627,35 @@ fn safe_du(
 
         // Handle inodes
         if let Some(inode) = this_stat.inode {
-            if seen_inodes.contains(&inode) && !options.count_links {
+            if state.has_seen_inode(&inode) && !options.count_links {
                 continue;
             }
-            seen_inodes.insert(inode);
+        }
+
+        #[cfg(target_os = "linux")]
+        if options.dedupe_reflinks && is_regular {
+            let Some(inode) = this_stat.inode else {
+                report_access_error(
+                    print_tx,
+                    &this_stat.path,
+                    std::io::Error::other("could not determine file identity"),
+                )?;
+                continue;
+            };
+            let result = adjust_reflink_blocks_with_open(state, inode, this_stat.blocks, || {
+                dir_fd.open_file_read_at(&entry_name, SymlinkBehavior::NoFollow)
+            });
+            match result {
+                Ok(blocks) => this_stat.blocks = blocks,
+                Err(error) => {
+                    report_access_error(print_tx, &this_stat.path, error)?;
+                    continue;
+                }
+            }
+        }
+
+        if let Some(inode) = this_stat.inode {
+            state.record_inode(inode);
         }
 
         // Process directories recursively
@@ -511,7 +674,7 @@ fn safe_du(
                 &sub_path,
                 options,
                 depth + 1,
-                seen_inodes,
+                state,
                 print_tx,
                 Some(&dir_fd),
                 Some(Ok(this_stat)),
@@ -551,7 +714,7 @@ fn du_regular(
     mut my_stat: Stat,
     options: &TraversalOptions,
     depth: usize,
-    seen_inodes: &mut HashSet<FileInfo>,
+    state: &mut TraversalState,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     ancestors: Option<&mut HashSet<FileInfo>>,
     symlink_depth: Option<usize>,
@@ -562,6 +725,31 @@ fn du_regular(
     let mut default_ancestors = HashSet::default();
     let ancestors = ancestors.unwrap_or(&mut default_ancestors);
     let symlink_depth = symlink_depth.unwrap_or(0);
+
+    if !my_stat.metadata.is_dir() {
+        #[cfg(target_os = "linux")]
+        if options.dedupe_reflinks && my_stat.metadata.is_file() {
+            let Some(inode) = my_stat.inode else {
+                report_access_error(
+                    print_tx,
+                    &my_stat.path,
+                    std::io::Error::other("could not determine file identity"),
+                )?;
+                return Err(already_reported_error());
+            };
+            let result = adjust_reflink_blocks_with_open(state, inode, my_stat.blocks, || {
+                open_reflink_file(&my_stat.path, true)
+            });
+            match result {
+                Ok(blocks) => my_stat.blocks = blocks,
+                Err(error) => {
+                    report_access_error(print_tx, &my_stat.path, error)?;
+                    return Err(already_reported_error());
+                }
+            }
+        }
+        return Ok(my_stat);
+    }
 
     // Add current directory to ancestors if it's a directory
     let my_inode = if my_stat.metadata.is_dir() {
@@ -584,7 +772,12 @@ fn du_regular(
             }
         };
 
-        'file_loop: for f in read {
+        let mut entries = read.collect::<Vec<_>>();
+        if options.dedupe_reflinks {
+            entries.sort_by_key(|entry| entry.as_ref().ok().map(DirEntry::file_name));
+        }
+
+        'file_loop: for f in entries {
             match f {
                 Ok(entry) => {
                     let entry_path = entry.path();
@@ -614,6 +807,8 @@ fn du_regular(
 
                     match Stat::new(&entry_path, Some(&entry), options) {
                         Ok(this_stat) => {
+                            #[cfg(target_os = "linux")]
+                            let mut this_stat = this_stat;
                             // Check if symlink with -L points to an ancestor (cycle detection)
                             if is_symlink
                                 && options.dereference == Deref::All
@@ -647,15 +842,16 @@ fn du_regular(
 
                             if let Some(inode) = this_stat.inode {
                                 // Check if the inode has been seen before and if we should skip it
-                                if seen_inodes.contains(&inode) && !options.count_links {
+                                if state.has_seen_inode(&inode) && !options.count_links {
                                     // Skip further processing for this inode
                                     continue;
                                 }
-                                // Mark this inode as seen
-                                seen_inodes.insert(inode);
                             }
 
                             if this_stat.metadata.is_dir() {
+                                if let Some(inode) = this_stat.inode {
+                                    state.record_inode(inode);
+                                }
                                 if options.one_file_system
                                     && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
@@ -668,7 +864,7 @@ fn du_regular(
                                     this_stat,
                                     options,
                                     depth + 1,
-                                    seen_inodes,
+                                    state,
                                     print_tx,
                                     Some(ancestors),
                                     Some(current_symlink_depth),
@@ -684,9 +880,41 @@ fn du_regular(
                                     depth: depth + 1,
                                 }))?;
                             } else {
+                                #[cfg(target_os = "linux")]
+                                if options.dedupe_reflinks && this_stat.metadata.is_file() {
+                                    let Some(inode) = this_stat.inode else {
+                                        report_access_error(
+                                            print_tx,
+                                            &this_stat.path,
+                                            std::io::Error::other(
+                                                "could not determine file identity",
+                                            ),
+                                        )?;
+                                        continue;
+                                    };
+                                    let result = adjust_reflink_blocks_with_open(
+                                        state,
+                                        inode,
+                                        this_stat.blocks,
+                                        || open_reflink_file(&this_stat.path, true),
+                                    );
+                                    match result {
+                                        Ok(blocks) => this_stat.blocks = blocks,
+                                        Err(error) => {
+                                            report_access_error(print_tx, &this_stat.path, error)?;
+                                            continue;
+                                        }
+                                    }
+                                }
+
+                                if let Some(inode) = this_stat.inode {
+                                    state.record_inode(inode);
+                                }
+
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -782,9 +1010,10 @@ impl StatPrinter {
         } else if self.apparent_size {
             stat.size
         } else {
-            // The st_blocks field indicates the number of blocks allocated to the file, 512-byte units.
+            // The st_blocks field indicates the number of blocks allocated to the file,
+            // in POSIX_BLOCK_SIZE-byte units.
             // See: http://linux.die.net/man/2/stat
-            stat.blocks * 512
+            stat.blocks * POSIX_BLOCK_SIZE
         }
     }
 
@@ -992,6 +1221,14 @@ fn parse_size_format(matches: &ArgMatches) -> UResult<SizeFormat> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    #[cfg(not(target_os = "linux"))]
+    if matches.get_flag(options::DEDUPE_REFLINKS) {
+        return Err(USimpleError::new(
+            1,
+            translate!("du-error-dedupe-reflinks-not-supported"),
+        ));
+    }
+
     let summarize = matches.get_flag(options::SUMMARIZE);
 
     let count_links = matches.get_flag(options::COUNT_LINKS);
@@ -1034,6 +1271,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let size_format = parse_size_format(&matches)?;
 
+    let inodes = matches.get_flag(options::INODES);
+    let apparent_size =
+        matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES);
+
     let traversal_options = TraversalOptions {
         all: matches.get_flag(options::ALL),
         separate_dirs: matches.get_flag(options::SEPARATE_DIRS),
@@ -1047,6 +1288,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Deref::None
         },
         count_links,
+        dedupe_reflinks: matches.get_flag(options::DEDUPE_REFLINKS),
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
         #[cfg(all(unix, not(target_os = "redox")))]
@@ -1064,7 +1306,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         size_format,
         summarize,
         total: matches.get_flag(options::TOTAL),
-        inodes: matches.get_flag(options::INODES),
+        inodes,
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
@@ -1073,16 +1315,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 })
             })
             .transpose()?,
-        apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
+        apparent_size,
         time,
         time_format,
         line_ending: LineEnding::from_zero_flag(matches.get_flag(options::NULL)),
         total_text: translate!("du-total"),
     };
 
-    if stat_printer.inodes
-        && (matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES))
-    {
+    if inodes && apparent_size {
         show_warning!(
             "{}",
             translate!("du-warning-apparent-size-ineffective-with-inodes")
@@ -1094,7 +1334,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let printing_thread = thread::spawn(move || stat_printer.print_stats(&rx));
 
     // Check existence of path provided in argument
-    let mut seen_inodes: HashSet<FileInfo> = HashSet::default();
+    let mut state = TraversalState::new(traversal_options.dedupe_reflinks);
 
     'loop_file: for path in files {
         // Skip if we don't want to ignore anything
@@ -1122,13 +1362,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
-        if let Ok(stat) = stat.as_ref()
-            && let Some(inode) = stat.inode
-        {
-            if !traversal_options.count_links && seen_inodes.contains(&inode) {
+        let root_inode = stat.as_ref().ok().and_then(|stat| stat.inode);
+        let defer_root_inode = traversal_options.dedupe_reflinks
+            && stat.as_ref().is_ok_and(|stat| stat.metadata.is_file());
+        if let Some(inode) = root_inode {
+            if !traversal_options.count_links && state.has_seen_inode(&inode) {
                 continue 'loop_file;
             }
-            seen_inodes.insert(inode);
+            if !defer_root_inode {
+                state.record_inode(inode);
+            }
         }
 
         if use_safe_traversal {
@@ -1139,12 +1382,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     &path,
                     &traversal_options,
                     0,
-                    &mut seen_inodes,
+                    &mut state,
                     &print_tx,
                     None,
                     Some(stat),
                 ) {
                     Ok(stat) => {
+                        if defer_root_inode && let Some(inode) = root_inode {
+                            state.record_inode(inode);
+                        }
                         print_tx
                             .send(Ok(StatPrintInfo { stat, depth: 0 }))
                             .map_err(|e| USimpleError::new(1, e.to_string()))?;
@@ -1164,20 +1410,32 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         } else {
             // Use regular traversal (non-Linux or when -L is used)
             if let Ok(stat) = stat {
-                let stat = du_regular(
+                match du_regular(
                     stat,
                     &traversal_options,
                     0,
-                    &mut seen_inodes,
+                    &mut state,
                     &print_tx,
                     None,
                     None,
-                )
-                .map_err(|e| USimpleError::new(1, e.to_string()))?;
-
-                print_tx
-                    .send(Ok(StatPrintInfo { stat, depth: 0 }))
-                    .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                ) {
+                    Ok(stat) => {
+                        if defer_root_inode && let Some(inode) = root_inode {
+                            state.record_inode(inode);
+                        }
+                        print_tx
+                            .send(Ok(StatPrintInfo { stat, depth: 0 }))
+                            .map_err(|e| USimpleError::new(1, e.to_string()))?;
+                    }
+                    Err(e) => {
+                        if let mpsc::SendError(Err(simple_error)) = e.as_ref()
+                            && simple_error.code() == 0
+                        {
+                            continue 'loop_file;
+                        }
+                        return Err(USimpleError::new(1, e.to_string()));
+                    }
+                }
             } else {
                 #[cfg(unix)]
                 let error_msg = translate!("du-error-cannot-access", "path" => path.quote());
@@ -1435,6 +1693,19 @@ pub fn uu_app() -> Command {
                 .overrides_with(options::VERBOSE),
         )
         .arg(
+            Arg::new(options::DEDUPE_REFLINKS)
+                .long(options::DEDUPE_REFLINKS)
+                .help(translate!("du-help-dedupe-reflinks"))
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all([
+                    options::APPARENT_SIZE,
+                    options::BYTES,
+                    options::INODES,
+                    options::COUNT_LINKS,
+                ])
+                .overrides_with(options::DEDUPE_REFLINKS),
+        )
+        .arg(
             Arg::new(options::EXCLUDE)
                 .long(options::EXCLUDE)
                 .value_name("PATTERN")
@@ -1552,5 +1823,45 @@ mod test_du {
         for it in &test_data {
             assert!(matches!(read_block_size(it.as_deref()), Ok(1024)));
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reflink_open_failure_is_propagated() {
+        let mut state = TraversalState::new(true);
+        let expected = FileInfo {
+            file_id: 1,
+            dev_id: 1,
+        };
+
+        let result = adjust_reflink_blocks_with_open(&mut state, expected, 8, || {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "denied",
+            ))
+        });
+
+        assert_eq!(
+            result.unwrap_err().kind(),
+            std::io::ErrorKind::PermissionDenied
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reflink_opened_file_identity_must_match_stat() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path().join("file");
+        fs::write(&path, "data").unwrap();
+        let file = File::open(path).unwrap();
+        let mut state = TraversalState::new(true);
+        let wrong_identity = FileInfo {
+            file_id: 0,
+            dev_id: 0,
+        };
+
+        let result = adjust_reflink_blocks_with_open(&mut state, wrong_identity, 8, || Ok(file));
+
+        assert_eq!(result.unwrap_err().kind(), std::io::ErrorKind::Other);
     }
 }

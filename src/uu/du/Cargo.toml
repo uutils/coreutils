@@ -37,6 +37,9 @@ fluent = { workspace = true }
 [target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
