@@ -623,6 +623,193 @@ fn test_emoji_delim() {
         .stdout_only("🌹\n");
 }
 
+// 你 (U+4F60) encodes as the two bytes 0xC4 0xE3 in GB18030.
+#[cfg(target_os = "linux")]
+const GB18030_NI: &[u8] = b"\xC4\xE3";
+// 好 (U+597D) encodes as the two bytes 0xBA 0xC3 in GB18030.
+#[cfg(target_os = "linux")]
+const GB18030_HAO: &[u8] = b"\xBA\xC3";
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_gb18030_multibyte_delimiter() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    // Use a 2-byte GB18030 character as the field delimiter.
+    let delim = OsString::from_vec(GB18030_NI.to_vec());
+
+    // Drop the middle field: "a<delim>b<delim>c" keeping fields 1 and 3.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f1,3", "--output-delimiter=-"])
+        .pipe_in(&b"a\xC4\xE3b\xC4\xE3c\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"a-c\n");
+
+    // Leading empty fields: two delimiters then a trailing field, all selected.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f1-3", "--output-delimiter=|"])
+        .pipe_in(&b"\xC4\xE3\xC4\xE3z\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"||z\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_gb18030_complement_multibyte_delimiter() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let delim = OsString::from_vec(GB18030_NI.to_vec());
+
+    // --complement of field 2 keeps the surrounding fields and the delimiters.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .arg("-d")
+        .arg(&delim)
+        .args(&["--complement", "-f2"])
+        .pipe_in(&b"a\xC4\xE3b\xC4\xE3c\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"a\xC4\xE3c\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_gb18030_single_byte_delimiter_is_accepted() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    // 0xFE never starts a GB18030 character, yet any single byte is still a
+    // legal delimiter.
+    let delim = OsString::from_vec(vec![0xFE]);
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .arg("-d")
+        .arg(&delim)
+        .args(&["-f2,3", "--output-delimiter=-"])
+        .pipe_in(&b"p\xFEq\xFEr\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"q-r\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: LC_ALL is not propagated to the guest")]
+fn test_gb18030_character_mode() {
+    // Input: the 2-byte character 好 followed by the ASCII byte 'y'.
+    let mut input = GB18030_HAO.to_vec();
+    input.extend_from_slice(b"y\n");
+
+    // Character 1 is the whole multibyte character.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-c1"])
+        .pipe_in(&input[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xBA\xC3\n");
+    // Character 2 is the trailing ASCII byte.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-c2"])
+        .pipe_in(&input[..])
+        .succeeds()
+        .stdout_only_bytes(b"y\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: LC_ALL is not propagated to the guest")]
+fn test_gb18030_byte_mode_no_split() {
+    // With -n a multibyte character is never split: it is printed only when the
+    // selected byte range reaches its final byte.
+    let mut input = GB18030_HAO.to_vec();
+    input.extend_from_slice(b"y\n");
+
+    // Byte 1 falls in the middle of 好, so nothing is emitted for it.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-b1", "-n"])
+        .pipe_in(&input[..])
+        .succeeds()
+        .stdout_only_bytes(b"\n");
+    // Byte 2 completes 好, so the full character is emitted.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-b2", "-n"])
+        .pipe_in(&input[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xBA\xC3\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: LC_ALL is not propagated to the guest")]
+fn test_gb18030_byte_mode_no_split_output_delimiter() {
+    // A -n range that selects no complete character must not emit an output
+    // delimiter: byte 1 (mid-character) yields nothing, so no leading delimiter
+    // precedes the 'z' selected by byte 3.
+    let mut input = GB18030_HAO.to_vec();
+    input.extend_from_slice(b"z\n");
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-b1,3", "-n", "--output-delimiter=|"])
+        .pipe_in(&input[..])
+        .succeeds()
+        .stdout_only_bytes(b"z\n");
+
+    // Two ranges that both select nothing produce an empty line, not a stray
+    // delimiter.
+    let mut two = GB18030_HAO.to_vec();
+    two.extend_from_slice(GB18030_HAO);
+    two.push(b'\n');
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-b1,3", "-n", "--output-delimiter=|"])
+        .pipe_in(&two[..])
+        .succeeds()
+        .stdout_only_bytes(b"\n");
+
+    // The delimiter is still emitted between two ranges that each select a full
+    // character.
+    new_ucmd!()
+        .env("LC_ALL", "zh_CN.gb18030")
+        .args(&["-b2,4", "-n", "--output-delimiter=|"])
+        .pipe_in(&two[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xBA\xC3|\xBA\xC3\n");
+}
+
+// In the C/POSIX locale there are no multibyte characters: every byte is its own
+// unit, so `-c` and `-b -n` must select individual bytes and never decode a
+// UTF-8 sequence. The bytes 0xC3 0xB1 spell ñ in UTF-8, but under LC_ALL=C they
+// are two unrelated bytes.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_c_locale_is_byte_wise() {
+    // `-c2` selects the single second byte, not a decoded two-byte character.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-c2"])
+        .pipe_in(&b"A\xC3\xB1Z\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xC3\n");
+
+    // `-b2 -n` also selects one byte: there is no multibyte character to keep
+    // whole, so `-n` is a no-op.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-b2", "-n"])
+        .pipe_in(&b"A\xC3\xB1Z\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xC3\n");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_failed_write_is_reported() {

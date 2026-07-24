@@ -10,6 +10,8 @@
 use std::sync::OnceLock;
 
 enum MbEncoding {
+    /// C/POSIX: no multibyte characters, every byte is one unit.
+    SingleByte,
     Utf8,
     Gb18030,
     EucJp,
@@ -34,8 +36,12 @@ fn get_encoding() -> &'static MbEncoding {
             .iter()
             .find_map(|&k| std::env::var(k).ok().filter(|v| !v.is_empty()));
         let s = match val.as_deref() {
-            Some(s) if s != "C" && s != "POSIX" => s,
-            _ => return MbEncoding::Utf8,
+            // Explicit C/POSIX locale: single-byte, no multibyte decoding.
+            Some("C" | "POSIX") => return MbEncoding::SingleByte,
+            Some(s) => s,
+            // No locale set: keep UTF-8 as the default so behavior is
+            // deterministic regardless of the environment.
+            None => return MbEncoding::Utf8,
         };
         if let Some(enc) = s.split('.').nth(1) {
             let enc = enc.split('@').next().unwrap_or(enc);
@@ -52,13 +58,25 @@ fn get_encoding() -> &'static MbEncoding {
 }
 
 /// Byte length of the first character in `bytes` under the current locale encoding.
+///
+/// The ASCII fast path is kept small and `#[inline]` so callers looping over a
+/// buffer (e.g. `cut -c`) pay only a byte comparison per ASCII byte, even in
+/// build profiles without cross-crate LTO. The multi-byte dispatch is outlined.
+#[inline]
 pub fn mb_char_len(bytes: &[u8]) -> usize {
     debug_assert!(!bytes.is_empty());
     let b0 = bytes[0];
     if b0 <= 0x7F {
         return 1;
     }
+    mb_char_len_multibyte(bytes, b0)
+}
+
+/// Cold slow path of [`mb_char_len`] for bytes that start a multi-byte sequence.
+#[cold]
+fn mb_char_len_multibyte(bytes: &[u8], b0: u8) -> usize {
     match get_encoding() {
+        MbEncoding::SingleByte => 1,
         MbEncoding::Utf8 => utf8_len(bytes, b0),
         MbEncoding::Gb18030 => gb18030_len(bytes, b0),
         MbEncoding::EucJp => eucjp_len(bytes, b0),
