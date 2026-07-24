@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile
+// spell-checker:ignore rootlink dotdot rootfile deleteme keepme topfile NOFILE EMFILE
+// spell-checker:ignore ENFILE dups CLOEXEC setrlimit RDONLY GETFD SETFD rlim rlimit
 #![allow(clippy::stable_sort_primitive)]
 
 use std::process::Stdio;
@@ -1188,6 +1189,110 @@ fn test_rm_recursive_long_path_safe_traversal() {
 
     // Verify the directory is completely removed
     assert!(!at.dir_exists("rm_deep"));
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_rm_recursive_deep_tree_low_nofile() {
+    // Regression for #7995: recursive rm used to keep one DirFd open per nesting
+    // level (plus a readdir dup), so deep chains under a tight NOFILE failed with
+    // EMFILE / residual "Directory not empty". GNU rm keeps directory FD use O(1)
+    // in depth; the walk must close the parent under pressure and restore via
+    // openat(child, ".."), not retain an ancestor chain.
+    use rlimit::Resource;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // Depth 80 exhausts NOFILE=32 if each level keeps its parent open, while
+    // remaining cheap to create. The dual-mode walk must remove the whole tree
+    // with no stderr.
+    let depth = 80;
+    let mut deep_path = String::from("rm_emfile_deep");
+    at.mkdir(&deep_path);
+    for _ in 0..depth {
+        deep_path = format!("{deep_path}/x");
+        at.mkdir(&deep_path);
+    }
+    at.write(&format!("{deep_path}/leaf"), "data");
+
+    // Soft NOFILE well below `depth` (stdio + helpers still fit).
+    ts.ucmd()
+        .arg("-rf")
+        .arg("rm_emfile_deep")
+        .limit(Resource::NOFILE, 32, 32)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists("rm_emfile_deep"));
+}
+
+/// Boundary for dual-mode headroom: parent must be closed before `read_dir`
+/// dups the child FD when free slots are scarce (inherited descriptors).
+///
+/// Opens extra non-CLOEXEC FDs in the child via `pre_exec` so they survive into
+/// `rm` under a tight NOFILE limit. Opens best-effort: cargo test parents may
+/// already own many FDs, so a hard open quota would EMFILE before `rm` starts.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_rm_recursive_low_nofile_with_inherited_fds() {
+    use std::ffi::CString;
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    let depth = 40;
+    let mut deep_path = String::from("rm_inherit_deep");
+    at.mkdir(&deep_path);
+    for _ in 0..depth {
+        deep_path = format!("{deep_path}/x");
+        at.mkdir(&deep_path);
+    }
+    at.write(&format!("{deep_path}/leaf"), "data");
+
+    // Soft NOFILE well below depth; open as many sticky FDs as the limit allows.
+    let extra_fds = 24usize;
+    let mut cmd = Command::new(&ts.bin_path);
+    cmd.args(["rm", "-rf", "rm_inherit_deep"])
+        .current_dir(&at.subdir);
+    // SAFETY: pre_exec runs in the forked child before exec; only async-signal-safe
+    // ops are used (open/fcntl/setrlimit).
+    unsafe {
+        cmd.pre_exec(move || {
+            let rl = libc::rlimit {
+                rlim_cur: 48,
+                rlim_max: 48,
+            };
+            if libc::setrlimit(libc::RLIMIT_NOFILE, std::ptr::from_ref(&rl)) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            let path = CString::new("/dev/null").unwrap();
+            for _ in 0..extra_fds {
+                let fd = libc::open(path.as_ptr(), libc::O_RDONLY);
+                if fd < 0 {
+                    // Already under pressure from inherited descriptors; continue.
+                    break;
+                }
+                let flags = libc::fcntl(fd, libc::F_GETFD);
+                if flags >= 0 {
+                    libc::fcntl(fd, libc::F_SETFD, flags & !libc::FD_CLOEXEC);
+                }
+            }
+            Ok(())
+        });
+    }
+    let out = cmd.output().expect("run inherit pre_exec rm");
+    assert!(
+        out.status.success(),
+        "rm failed status={:?} stdout={} stderr={}",
+        out.status.code(),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    assert!(!at.dir_exists("rm_inherit_deep"));
 }
 
 #[cfg(all(not(windows), feature = "chmod"))]

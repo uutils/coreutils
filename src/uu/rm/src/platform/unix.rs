@@ -5,7 +5,8 @@
 
 // Unix-specific implementations for the rm utility
 
-// spell-checker:ignore fstatat unlinkat statx behaviour
+// spell-checker:ignore fstatat unlinkat statx behaviour NOFILE PATH_MAX
+// spell-checker:ignore EMFILE ENFILE basenames dups rlim getrlimit RLIM dirfd
 
 use indicatif::ProgressBar;
 use std::ffi::OsStr;
@@ -180,11 +181,28 @@ fn handle_error_with_force(e: std::io::Error, path: &Path, options: &Options) ->
         return true;
     }
 
+    // Resource exhaustion during traversal is a real failure even with -f.
+    // Swallowing it leaves the tree intact and the outer path probe can report
+    // a misleading "Directory not empty" instead of the actual EMFILE/ENFILE.
+    if is_fd_resource_error(&e) {
+        let e = e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+        show_error!("{e}");
+        return true;
+    }
+
     if !options.force {
         let e = e.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
         show_error!("{e}");
     }
     !options.force
+}
+
+/// EMFILE / ENFILE (and equivalent raw errno) must not be force-swallowed.
+fn is_fd_resource_error(e: &std::io::Error) -> bool {
+    matches!(
+        e.raw_os_error(),
+        Some(code) if code == libc::EMFILE || code == libc::ENFILE
+    )
 }
 
 /// Helper to handle permission denied errors
@@ -335,7 +353,8 @@ pub fn safe_remove_dir_recursive(
     };
 
     // Entries of the root directory have the root itself as their parent.
-    let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev, root_dev);
+    // Move the already-open FD into the walk so we do not reopen the path.
+    let error = safe_remove_dir_recursive_impl(path, dir_fd, options, root_dev);
 
     // After processing all children, remove the directory itself
     if error {
@@ -371,16 +390,136 @@ pub fn safe_remove_dir_recursive(
     }
 }
 
+/// One directory on the removal stack.
+///
+/// Hold parent FDs while free NOFILE slots remain. Under FD pressure, close the
+/// parent before deeper work and restore it with `openat(child, "..")`.
+struct DirWalkFrame {
+    /// Display / prompt / error path only — never used to reopen intermediate dirs.
+    path: std::path::PathBuf,
+    /// Live FD while this frame is the active reader / held ancestor.
+    /// `None` after close-under-pressure until restored from a child.
+    dir_fd: Option<DirFd>,
+    /// Identity from `fstat` after open; restore must match these.
+    dir_dev: u64,
+    dir_ino: u64,
+    /// Remaining basenames (snapshot from `read_dir`); pop processes in reverse.
+    pending: Vec<std::ffi::OsString>,
+    error: bool,
+    mode: libc::mode_t,
+    name_in_parent: std::ffi::OsString,
+}
+
+/// Slots needed for `read_dir` after a child directory is already open
+/// (`DirFd::read_dir` dups the child FD).
+const RESERVE_READDIR_SLOTS: usize = 1;
+
+/// Soft `RLIMIT_NOFILE` for the current process, if available.
+fn soft_nofile_limit() -> Option<usize> {
+    let mut rlim = libc::rlimit {
+        rlim_cur: 0,
+        rlim_max: 0,
+    };
+    // SAFETY: getrlimit with a valid rlimit pointer is well-defined.
+    let rc = unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &raw mut rlim) };
+    if rc != 0 {
+        return None;
+    }
+    if rlim.rlim_cur == libc::RLIM_INFINITY {
+        return Some(usize::MAX / 4);
+    }
+    usize::try_from(rlim.rlim_cur).ok()
+}
+
+/// Best-effort count of open FDs (Linux `/proc/self/fd`, else `/dev/fd`).
+fn current_open_fd_count() -> Option<usize> {
+    fn count_dir(path: &str) -> Option<usize> {
+        let entries = fs::read_dir(path).ok()?;
+        let mut count = 0usize;
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            if name.to_string_lossy().parse::<usize>().is_ok() {
+                count = count.saturating_add(1);
+            }
+        }
+        Some(count)
+    }
+    count_dir("/proc/self/fd").or_else(|| count_dir("/dev/fd"))
+}
+
+/// Whether to close the parent before the next FD-consuming step.
+///
+/// Call this **after** `open_subdir` has succeeded and **before** `read_dir`
+/// (which dups the child). `walk_open` must already count the newly opened child.
+///
+/// `ambient_non_walk` is the number of open FDs that are **not** walk-owned
+/// directory FDs, sampled once after the root dir FD is open
+/// (`current_open_fd_count() - 1`). Estimated open count is then
+/// `ambient_non_walk + walk_open` without re-reading `/proc` on every step.
+/// Inherited descriptors are therefore part of the budget (not a fixed baseline).
+fn should_close_parent(
+    soft: Option<usize>,
+    walk_open: usize,
+    ambient_non_walk: Option<usize>,
+) -> bool {
+    let Some(soft) = soft else {
+        // No rlimit: prefer hold (speed).
+        return false;
+    };
+    if soft == 0 {
+        return true;
+    }
+    // Huge soft limits: keep parents open.
+    if soft > 1_000_000 {
+        return false;
+    }
+
+    match ambient_non_walk {
+        Some(ambient) => {
+            let estimated_open = ambient.saturating_add(walk_open);
+            soft.saturating_sub(estimated_open) < RESERVE_READDIR_SLOTS
+        }
+        // No live FD table: close once walk dirs alone leave no readdir slot.
+        None => walk_open.saturating_add(RESERVE_READDIR_SLOTS) > soft,
+    }
+}
+
+/// Restore the parent directory FD via `openat(child, "..")` and confirm identity.
+///
+/// Closing the parent under pressure leaves a window where that directory can be
+/// renamed/moved. After reopening through the child, `fstat` must match the
+/// device + inode recorded when the parent was first opened. No path reopen.
+fn restore_parent_dirfd(
+    child: &DirFd,
+    expected_dev: u64,
+    expected_ino: u64,
+) -> std::io::Result<DirFd> {
+    let parent_fd = child.open_subdir(OsStr::new(".."), SymlinkBehavior::NoFollow)?;
+    let st = parent_fd.fstat()?;
+    #[allow(clippy::unnecessary_cast)]
+    let got_dev = st.st_dev as u64;
+    #[allow(clippy::unnecessary_cast)]
+    let got_ino = st.st_ino as u64;
+    if got_dev != expected_dev || got_ino != expected_ino {
+        return Err(std::io::Error::other("directory changed while removing"));
+    }
+    Ok(parent_fd)
+}
+
+/// Iterative recursive remove with dual FD modes.
+///
+/// Hold ancestor directory FDs while free NOFILE slots remain. The parent must
+/// stay open to `openat` the child; after the child is open, close the parent
+/// under pressure before `read_dir` (which dups the child FD). Restore closed
+/// parents with `openat(child, "..")` plus a device/inode check.
 #[cfg(not(target_os = "redox"))]
-pub fn safe_remove_dir_recursive_impl(
+pub(crate) fn safe_remove_dir_recursive_impl(
     path: &Path,
-    dir_fd: &DirFd,
+    root_fd: DirFd,
     options: &Options,
     root_dev: u64,
-    parent_dev: u64,
 ) -> bool {
-    // Read directory entries using safe traversal
-    let entries = match dir_fd.read_dir() {
+    let root_entries = match root_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
             if !options.force {
@@ -393,26 +532,133 @@ pub fn safe_remove_dir_recursive_impl(
         }
     };
 
-    let mut error = false;
+    let root_stat = match root_fd.fstat() {
+        Ok(st) => st,
+        Err(e) => {
+            return handle_error_with_force(e, path, options);
+        }
+    };
+    #[allow(clippy::unnecessary_cast)]
+    let root_frame_dev = root_stat.st_dev as u64;
+    #[allow(clippy::unnecessary_cast)]
+    let root_frame_ino = root_stat.st_ino as u64;
 
-    // Process each entry
-    for entry_name in entries {
-        let entry_path = path.join(&entry_name);
+    let mut root_pending = root_entries;
+    root_pending.reverse();
 
-        // Get metadata for the entry using fstatat
-        let entry_stat = match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
-            Ok(stat) => stat,
-            Err(e) => {
-                error |= handle_error_with_force(e, &entry_path, options);
+    // Cache once: getrlimit is cheap; ambient FD sample once (inherited + stdio +
+    // caller-held FDs). Walk-owned dirs are tracked via walk_open.
+    let soft_nofile = soft_nofile_limit();
+    // Live directory FDs owned by this walk (stack frames with dir_fd = Some).
+    let mut walk_open = 1usize;
+    // FDs open now that are not this walk's root (root is already counted in walk_open).
+    let ambient_non_walk = current_open_fd_count().map(|n| n.saturating_sub(walk_open));
+
+    let mut stack = vec![DirWalkFrame {
+        path: path.to_path_buf(),
+        dir_fd: Some(root_fd),
+        dir_dev: root_frame_dev,
+        dir_ino: root_frame_ino,
+        pending: root_pending,
+        error: false,
+        mode: 0,
+        name_in_parent: std::ffi::OsString::new(),
+    }];
+
+    while !stack.is_empty() {
+        let frame_idx = stack.len() - 1;
+
+        if stack[frame_idx].pending.is_empty() {
+            let frame = stack.pop().unwrap();
+            let child_error = frame.error;
+            let child_path = frame.path;
+            let child_mode = frame.mode;
+            let child_name = frame.name_in_parent;
+            let child_had_fd = frame.dir_fd.is_some();
+            let child_fd = frame.dir_fd;
+            if child_had_fd {
+                walk_open = walk_open.saturating_sub(1);
+            }
+
+            if stack.is_empty() {
+                // Subtree contents done; outer safe_remove_dir_recursive unlinks the root.
+                return child_error;
+            }
+
+            let parent_idx = stack.len() - 1;
+
+            // Restore parent only if it was closed under FD pressure.
+            if stack[parent_idx].dir_fd.is_none() {
+                let expected_dev = stack[parent_idx].dir_dev;
+                let expected_ino = stack[parent_idx].dir_ino;
+                if let Some(fd) = child_fd.as_ref() {
+                    match restore_parent_dirfd(fd, expected_dev, expected_ino) {
+                        Ok(parent_fd) => {
+                            stack[parent_idx].dir_fd = Some(parent_fd);
+                            walk_open = walk_open.saturating_add(1);
+                        }
+                        Err(e) => {
+                            stack[parent_idx].error |=
+                                handle_error_with_force(e, &stack[parent_idx].path, options);
+                            // Fail closed for remaining siblings: no path reopen.
+                            stack[parent_idx].pending.clear();
+                            continue;
+                        }
+                    }
+                } else {
+                    stack[parent_idx].error = true;
+                    stack[parent_idx].pending.clear();
+                    continue;
+                }
+            }
+            drop(child_fd);
+
+            if child_error {
+                stack[parent_idx].error = true;
+            } else if options.interactive == InteractiveMode::Always
+                && !prompt_dir_with_mode(&child_path, child_mode, options)
+            {
                 continue;
+            } else if let Some(parent_fd) = stack[parent_idx].dir_fd.as_ref() {
+                stack[parent_idx].error |=
+                    handle_unlink(parent_fd, child_name.as_ref(), &child_path, true, options);
+            } else {
+                stack[parent_idx].error = true;
+            }
+            continue;
+        }
+
+        let Some(entry_name) = stack[frame_idx].pending.pop() else {
+            continue;
+        };
+        let entry_path = stack[frame_idx].path.join(&entry_name);
+
+        // If parent FD is missing with work left, prior restore failed — fail closed.
+        if stack[frame_idx].dir_fd.is_none() {
+            stack[frame_idx].error = true;
+            stack[frame_idx].pending.clear();
+            continue;
+        }
+
+        let parent_dev_for_child = stack[frame_idx].dir_dev;
+        let entry_stat = {
+            let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() else {
+                stack[frame_idx].error = true;
+                stack[frame_idx].pending.clear();
+                continue;
+            };
+            match dir_fd.stat_at(&entry_name, SymlinkBehavior::NoFollow) {
+                Ok(stat) => stat,
+                Err(e) => {
+                    stack[frame_idx].error |= handle_error_with_force(e, &entry_path, options);
+                    continue;
+                }
             }
         };
 
-        // Check if it's a directory
         let is_dir = ((entry_stat.st_mode as libc::mode_t) & libc::S_IFMT) == libc::S_IFDIR;
 
         if is_dir {
-            // st_dev's type varies by platform (i32 on macOS, u64 on Linux).
             #[allow(clippy::unnecessary_cast)]
             let entry_dev = entry_stat.st_dev as u64;
 
@@ -421,20 +667,16 @@ pub fn safe_remove_dir_recursive_impl(
                     "{}",
                     translate!("rm-error-skipping-different-device", "file" => entry_path.quote())
                 );
-                error = true;
+                stack[frame_idx].error = true;
                 continue;
             }
 
-            // --preserve-root=all compares against the immediate parent rather
-            // than the tree root, so a mount nested anywhere in the tree is
-            // caught even when --one-file-system is not in effect.
-            if options.preserve_root_all && entry_dev != parent_dev {
+            if options.preserve_root_all && entry_dev != parent_dev_for_child {
                 show_preserve_root_all_skip(&entry_path);
-                error = true;
+                stack[frame_idx].error = true;
                 continue;
             }
 
-            // Ask user if they want to descend into this directory
             if options.interactive == InteractiveMode::Always
                 && !is_dir_empty(&entry_path)
                 && !prompt_descend(&entry_path)
@@ -442,71 +684,144 @@ pub fn safe_remove_dir_recursive_impl(
                 continue;
             }
 
-            // Recursively remove subdirectory using safe traversal. rm never
-            // follows symlinks during recursion, so open with NoFollow: if an
-            // attacker swaps this just-stat'd directory for a symlink before the
-            // open, O_NOFOLLOW makes openat fail instead of descending off-tree
-            // and deleting unrelated files.
-            let child_dir_fd = match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
-                Ok(fd) => fd,
-                Err(e) => {
-                    // If we can't open the subdirectory for safe traversal,
-                    // try to handle it as best we can with safe operations
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        error |= handle_permission_denied(
-                            dir_fd,
-                            entry_name.as_ref(),
-                            &entry_path,
-                            options,
-                        );
-                    } else {
-                        error |= handle_error_with_force(e, &entry_path, options);
+            let child_dir_fd = {
+                let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() else {
+                    stack[frame_idx].error = true;
+                    stack[frame_idx].pending.clear();
+                    continue;
+                };
+                match dir_fd.open_subdir(&entry_name, SymlinkBehavior::NoFollow) {
+                    Ok(fd) => fd,
+                    Err(e) => {
+                        if e.kind() == std::io::ErrorKind::PermissionDenied {
+                            stack[frame_idx].error |= handle_permission_denied(
+                                dir_fd,
+                                entry_name.as_ref(),
+                                &entry_path,
+                                options,
+                            );
+                        } else {
+                            stack[frame_idx].error |=
+                                handle_error_with_force(e, &entry_path, options);
+                        }
+                        continue;
                     }
+                }
+            };
+
+            // Identity of the FD we hold — never pre-open stat_at alone.
+            let child_stat = match child_dir_fd.fstat() {
+                Ok(st) => st,
+                Err(e) => {
+                    drop(child_dir_fd);
+                    stack[frame_idx].error |= handle_error_with_force(e, &entry_path, options);
+                    continue;
+                }
+            };
+            #[allow(clippy::unnecessary_cast)]
+            let child_dev = child_stat.st_dev as u64;
+            #[allow(clippy::unnecessary_cast)]
+            let child_ino = child_stat.st_ino as u64;
+
+            // Child is open. Close parent under pressure before read_dir, which dups the
+            // child FD and would otherwise spend the reserved slot.
+            // walk_open is ancestors only; +1 for this child.
+            walk_open = walk_open.saturating_add(1);
+            if should_close_parent(soft_nofile, walk_open, ambient_non_walk) {
+                if stack[frame_idx].dir_fd.take().is_some() {
+                    walk_open = walk_open.saturating_sub(1);
+                }
+            }
+
+            let child_entries = match child_dir_fd.read_dir() {
+                Ok(entries) => entries,
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !options.force {
+                        show_permission_denied_error(&entry_path);
+                    }
+                    drop(child_dir_fd);
+                    walk_open = walk_open.saturating_sub(1);
+                    stack[frame_idx].error |= !options.force;
+                    continue;
+                }
+                Err(e) => {
+                    drop(child_dir_fd);
+                    walk_open = walk_open.saturating_sub(1);
+                    stack[frame_idx].error |= handle_error_with_force(e, &entry_path, options);
                     continue;
                 }
             };
 
-            let child_error = safe_remove_dir_recursive_impl(
-                &entry_path,
-                &child_dir_fd,
-                options,
-                root_dev,
-                entry_dev,
-            );
-            error |= child_error;
+            let mut child_pending = child_entries;
+            child_pending.reverse();
 
-            // Ask user permission if needed for this subdirectory
-            if !child_error
-                && options.interactive == InteractiveMode::Always
-                && !prompt_dir_with_mode(&entry_path, entry_stat.st_mode as libc::mode_t, options)
-            {
-                continue;
-            }
-
-            // Remove the now-empty subdirectory using safe unlinkat
-            if !child_error {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, true, options);
-            }
-        } else {
-            // Remove file - check if user wants to remove it first
-            if prompt_file_with_stat(&entry_path, &entry_stat, options) {
-                error |= handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+            stack.push(DirWalkFrame {
+                path: entry_path,
+                dir_fd: Some(child_dir_fd),
+                dir_dev: child_dev,
+                dir_ino: child_ino,
+                pending: child_pending,
+                error: false,
+                mode: entry_stat.st_mode as libc::mode_t,
+                name_in_parent: entry_name,
+            });
+            // walk_open already includes this child from the pre-read_dir step.
+        } else if prompt_file_with_stat(&entry_path, &entry_stat, options) {
+            if let Some(dir_fd) = stack[frame_idx].dir_fd.as_ref() {
+                stack[frame_idx].error |=
+                    handle_unlink(dir_fd, entry_name.as_ref(), &entry_path, false, options);
+            } else {
+                stack[frame_idx].error = true;
             }
         }
     }
 
-    error
+    false
 }
 
 #[cfg(target_os = "redox")]
-pub fn safe_remove_dir_recursive_impl(
+pub(crate) fn safe_remove_dir_recursive_impl(
     _path: &Path,
-    _dir_fd: &DirFd,
+    _root_fd: DirFd,
     _options: &Options,
     _root_dev: u64,
-    _parent_dev: u64,
 ) -> bool {
     // safe_traversal stat_at is not supported on Redox
     // This shouldn't be called on Redox, but provide a stub for compilation
     true // Return error
+}
+
+#[cfg(all(test, any(target_os = "linux", target_os = "android")))]
+mod restore_identity_tests {
+    use super::restore_parent_dirfd;
+    use std::ffi::OsStr;
+    use std::fs;
+    use tempfile::tempdir;
+    use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+
+    #[test]
+    fn restore_parent_rejects_identity_mismatch() {
+        let dir = tempdir().unwrap();
+        let parent = dir.path().join("parent");
+        let child = parent.join("child");
+        fs::create_dir_all(&child).unwrap();
+
+        let parent_fd = DirFd::open(&parent, SymlinkBehavior::NoFollow).unwrap();
+        let child_fd = parent_fd
+            .open_subdir(OsStr::new("child"), SymlinkBehavior::NoFollow)
+            .unwrap();
+        let st = parent_fd.fstat().unwrap();
+        let wrong_ino = (st.st_ino as u64).wrapping_add(1);
+        let wrong_dev = (st.st_dev as u64).wrapping_add(1);
+
+        let Err(err_ino) = restore_parent_dirfd(&child_fd, st.st_dev as u64, wrong_ino) else {
+            panic!("expected inode mismatch");
+        };
+        assert_eq!(err_ino.to_string(), "directory changed while removing");
+
+        let Err(err_dev) = restore_parent_dirfd(&child_fd, wrong_dev, st.st_ino as u64) else {
+            panic!("expected device mismatch");
+        };
+        assert_eq!(err_dev.to_string(), "directory changed while removing");
+    }
 }
