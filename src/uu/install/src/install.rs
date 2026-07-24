@@ -777,7 +777,12 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        // An existing target that isn't a directory (regular file, device
+        // node, FIFO, socket, ...) should still go through the normal
+        // copy/overwrite path so the real removal failure is reported,
+        // instead of falling through to InvalidTarget's hardcoded
+        // "No such file or directory" (issue #9934).
+        if target.is_file() || is_new_file_path(&target) || (target.exists() && !target.is_dir()) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
