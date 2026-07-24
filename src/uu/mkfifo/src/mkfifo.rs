@@ -7,7 +7,7 @@ use clap::{Arg, ArgAction, Command, value_parser};
 use rustix::fs::Mode;
 use rustix::process::umask;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -52,10 +52,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         let mkfifo_result = create_fifo(f.as_str(), mode);
         umask(prev_umask);
 
-        if mkfifo_result.is_err() {
+        if let Err(e) = mkfifo_result {
             show!(USimpleError::new(
                 1,
-                translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
+                translate!(
+                    "mkfifo-error-cannot-create-fifo",
+                    "path" => f.quote(),
+                    "error" => strip_errno(&e)
+                ),
             ));
         } else {
             // Apply SELinux context if requested
@@ -134,19 +138,24 @@ pub fn uu_app() -> Command {
 // libc's path-based `mkfifo` there. Both rely on the caller having cleared
 // the umask so the requested mode is applied atomically (see issue #10020).
 #[cfg(not(target_vendor = "apple"))]
-fn create_fifo(path: &str, mode: u32) -> Result<(), ()> {
+fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
     use rustix::fs::{CWD, mkfifoat};
-    mkfifoat(CWD, path, Mode::from_bits_truncate(mode)).map_err(|_| ())
+    mkfifoat(CWD, path, Mode::from_bits_truncate(mode)).map_err(std::io::Error::from)
 }
 
 #[cfg(target_vendor = "apple")]
-fn create_fifo(path: &str, mode: u32) -> Result<(), ()> {
+fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
     use std::ffi::CString;
-    let c_path = CString::new(path).map_err(|_| ())?;
+    let c_path =
+        CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     // SAFETY: `c_path` is a valid NUL-terminated C string and `mode` is a
     // standard mode_t bit pattern.
     let rc = unsafe { libc::mkfifo(c_path.as_ptr(), mode as libc::mode_t) };
-    if rc == 0 { Ok(()) } else { Err(()) }
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
