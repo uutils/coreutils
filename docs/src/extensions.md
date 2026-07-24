@@ -31,6 +31,24 @@ Our `coreutils` calls utility by `coreutils utility-name` and has `--list` to ru
 Our `coreutils` is called as `utility-name` if its binary name ends with `utility-name` to support prefixed names.
 Longer name is prioritized e.g. `sum` with the prefix `ck` is called as `cksum`.
 
+## `base32/base64/basenc`
+
+Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
+
+## `cp`
+
+`cp` can display a progress bar when the `-g`/`--progress` flag is set.
+
+## `cut`
+
+`cut` can separate fields by whitespace (Space and Tab) with `-w` flag. This
+feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).
+
+## `du`
+
+`du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
+also provides a `-v`/`--verbose` flag.
+
 ## `env`
 
 GNU `env` allows the empty string to be used as an environment variable name.
@@ -41,17 +59,35 @@ assignment.
 parse `.env` files and set variables accordingly. This feature is adopted from `dotenv` style
 packages.
 
-## `cp`
+## `expand`
 
-`cp` can display a progress bar when the `-g`/`--progress` flag is set.
+`expand` offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
 
-## `mv`
+## `fmt`
 
-`mv` can display a progress bar when the `-g`/`--progress` flag is set.
+`fmt` has additional flags for prefixes: `-P`/`--skip-prefix`, `-x`/`--exact-prefix`, and
+`-X`/`--exact-skip-prefix`. With `-m`/`--preserve-headers`, an attempt is made to detect and preserve
+mail headers in the input. `-q`/`--quick` breaks lines more quickly. And `-T`/`--tab-width` defines the
+number of spaces representing a tab when determining the line length.
 
-## `rm`
+## `id`
 
-`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+`id` has three additional flags:
+* `-P` displays the id as a password file entry
+* `-p` makes the output human-readable
+* `-A` displays the process audit user ID
+
+## `install`
+
+`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
+
+## `ls`
+
+GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
+third way: `--long`.
+
+GNU `ls --sort=VALUE` only supports special non-default sort orders.
+We support `--sort=name`, which makes it possible to override an earlier value.
 
 ## `more`
 
@@ -60,17 +96,9 @@ coreutils. We do not aim for full compatibility with the `more` utility from
 `util-linux`. Features from more modern pagers (like `less` and `bat`) are
 therefore welcomed.
 
-## `cut`
+## `mv`
 
-`cut` can separate fields by whitespace (Space and Tab) with `-w` flag. This
-feature is adopted from [FreeBSD](https://www.freebsd.org/cgi/man.cgi?cut).
-
-## `fmt`
-
-`fmt` has additional flags for prefixes: `-P`/`--skip-prefix`, `-x`/`--exact-prefix`, and
-`-X`/`--exact-skip-prefix`. With `-m`/`--preserve-headers`, an attempt is made to detect and preserve
-mail headers in the input. `-q`/`--quick` breaks lines more quickly. And `-T`/`--tab-width` defines the
-number of spaces representing a tab when determining the line length.
+`mv` can display a progress bar when the `-g`/`--progress` flag is set.
 
 ## `printf`
 
@@ -137,6 +165,10 @@ printf "%.32a\n" 0.1
 ***Note: The architecture-specific behavior on non-x86(-64) platforms may change in
 the future.***
 
+## `rm`
+
+`rm` can display a progress bar when the `-g`/`--progress` flag is set.
+
 ## `seq`
 
 Unlike GNU coreutils, `seq` always uses arbitrary precision decimal numbers, no
@@ -161,36 +193,6 @@ double floating point numbers.
 Extremely large or small values can still overflow or underflow to infinity or zero,
 see note in `seq`.
 
-## `ls`
-
-GNU `ls` provides two ways to use a long listing format: `-l` and `--format=long`. We support a
-third way: `--long`.
-
-GNU `ls --sort=VALUE` only supports special non-default sort orders.
-We support `--sort=name`, which makes it possible to override an earlier value.
-
-## `du`
-
-`du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
-also provides a `-v`/`--verbose` flag.
-
-## `id`
-
-`id` has three additional flags:
-* `-P` displays the id as a password file entry
-* `-p` makes the output human-readable
-* `-A` displays the process audit user ID
-
-## `uptime`
-
-Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
- * `-s`/`--since` to show since when the system is up
- * `-p`/`--pretty` to display uptime in a pretty-printed format
-
-## `base32/base64/basenc`
-
-Just like on macOS, `base32/base64/basenc` provides `-D` to decode data.
-
 ## `unexpand`
 
 GNU `unexpand` provides `--first-only` to convert only leading sequences of blanks. We support a
@@ -198,10 +200,8 @@ second way: `-f` like busybox.
 
 With `-U`/`--no-utf8`, you can interpret input files as 8-bit ASCII rather than UTF-8.
 
-## `expand`
+## `uptime`
 
-`expand` also offers the `-U`/`--no-utf8` option to interpret input files as 8-bit ASCII instead of UTF-8.
-
-## `install`
-
-`install` offers FreeBSD's `-U` unprivileged option to not change the owner, the group, or the file flags of the destination.
+Similar to the proc-ps implementation and unlike GNU/Coreutils, `uptime` provides:
+ * `-s`/`--since` to show since when the system is up
+ * `-p`/`--pretty` to display uptime in a pretty-printed format
