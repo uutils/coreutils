@@ -55,18 +55,14 @@ def identify_test_changes(current_flat, reference_flat):
     # Find regressions (tests that were passing but now failing)
     regressions = []
     for test_path, status in current_flat.items():
-        if status in ("FAIL", "ERROR"):
-            if test_path in reference_flat:
-                if reference_flat[test_path] == "PASS":
-                    regressions.append(test_path)
+        if status in ("FAIL", "ERROR") and test_path in reference_flat and reference_flat[test_path] == "PASS":
+            regressions.append(test_path)
 
     # Find fixes (tests that were failing but now passing)
     fixes = []
     for test_path, status in reference_flat.items():
-        if status in ("FAIL", "ERROR"):
-            if test_path in current_flat:
-                if current_flat[test_path] == "PASS":
-                    fixes.append(test_path)
+        if status in ("FAIL", "ERROR") and test_path in current_flat and current_flat[test_path] == "PASS":
+            fixes.append(test_path)
 
     # Find newly skipped tests (were passing, now skipped)
     newly_skipped = []
@@ -239,8 +235,7 @@ def main():
 
     if args.output and output_lines:
         with open(args.output, "w") as f:
-            for line in output_lines:
-                f.write(f"{line}\n")
+            f.writelines(f"{line}\n" for line in output_lines)
 
     # Return exit code based on whether we found regressions
     return 1 if real_regressions else 0
