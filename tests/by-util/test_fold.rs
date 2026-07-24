@@ -1057,3 +1057,94 @@ fn test_width_zero() {
         .fails_with_code(1)
         .stderr_is("fold: illegal width value\n");
 }
+
+// punctuation mode tests
+
+#[test]
+fn test_punctuation_fold_at_sentence_end() {
+    new_ucmd!()
+        .args(&["-p", "-w", "20"])
+        .pipe_in("Hello world. This is a test.")
+        .succeeds()
+        .stdout_is("Hello world.\n This is a test.");
+}
+
+#[test]
+fn test_punctuation_fold_at_clause() {
+    new_ucmd!()
+        .args(&["-p", "-w", "20"])
+        .pipe_in("one two three four, five six")
+        .succeeds()
+        .stdout_is("one two three four,\n five six");
+}
+
+#[test]
+fn test_punctuation_fold_falls_back_to_space() {
+    new_ucmd!()
+        .args(&["-p", "-w", "10"])
+        .pipe_in("hello world today")
+        .succeeds()
+        .stdout_is("hello \nworld \ntoday");
+}
+
+#[test]
+fn test_punctuation_fold_hard_cut() {
+    new_ucmd!()
+        .args(&["-p", "-w", "5"])
+        .pipe_in("abcdefghij")
+        .succeeds()
+        .stdout_is("abcde\nfghij");
+}
+
+#[test]
+fn test_punctuation_fold_preserves_newlines() {
+    new_ucmd!()
+        .args(&["-p", "-w", "40"])
+        .pipe_in("Short line.\n\nAnother short line.\n")
+        .succeeds()
+        .stdout_is("Short line.\n\nAnother short line.\n");
+}
+
+#[test]
+fn test_punctuation_fold_exclamation_and_question() {
+    new_ucmd!()
+        .args(&["-p", "-w", "15"])
+        .pipe_in("Really? Yes! OK.")
+        .succeeds()
+        .stdout_is("Really? Yes!\n OK.");
+}
+
+#[test]
+fn test_punctuation_fold_with_bytes_mode() {
+    new_ucmd!()
+        .args(&["-p", "-b", "-w", "12"])
+        .pipe_in("Hello world. Bye.")
+        .succeeds()
+        .stdout_is("Hello world.\n Bye.");
+}
+
+#[test]
+fn test_punctuation_fold_non_alnum_fallback() {
+    new_ucmd!()
+        .args(&["-p", "-w", "8"])
+        .pipe_in("foo-bar-baz")
+        .succeeds()
+        .stdout_is("foo-bar-\nbaz");
+}
+
+#[test]
+fn test_punctuation_conflicts_with_spaces() {
+    new_ucmd!()
+        .args(&["-p", "-s"])
+        .pipe_in("test")
+        .fails_with_code(1);
+}
+
+#[test]
+fn test_punctuation_short_line_no_fold() {
+    new_ucmd!()
+        .args(&["-p", "-w", "80"])
+        .pipe_in("Hello, world!")
+        .succeeds()
+        .stdout_is("Hello, world!");
+}
