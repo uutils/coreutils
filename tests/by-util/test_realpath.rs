@@ -473,6 +473,32 @@ fn test_realpath_trailing_slash() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_realpath_trailing_slash_unreadable_directory() {
+    // A trailing slash only asserts that the operand is a directory, which is
+    // a stat-level check needing search permission on the parent, not read
+    // permission on the directory itself.
+    // https://github.com/uutils/coreutils/issues/13151
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.set_mode("dir", 0o100);
+
+    scene
+        .ucmd()
+        .arg("dir/")
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+    scene
+        .ucmd()
+        .args(&["-e", "dir/"])
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+
+    at.set_mode("dir", 0o700);
+}
+
+#[test]
 fn test_realpath_empty() {
     new_ucmd!().fails_with_code(1);
 }
