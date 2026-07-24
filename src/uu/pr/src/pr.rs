@@ -855,6 +855,21 @@ fn build_options(
         });
     }
 
+    // GNU pr stores the width in a C `int`, so reject anything above `i32::MAX`.
+    if column_width > i32::MAX as usize {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!(
+                "pr-error-page-width-too-large",
+                "flag" => "-w",
+                "value" => matches
+                    .get_one::<String>(options::COLUMN_WIDTH)
+                    .map(String::as_str)
+                    .unwrap_or_default()
+                    .quote()
+            ),
+        });
+    }
+
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
@@ -867,6 +882,21 @@ fn build_options(
     if page_width == Some(0) {
         return Err(PrError::EncounteredErrors {
             msg: "invalid --page-width argument '0'".to_string(),
+        });
+    }
+
+    // GNU pr stores the page width in a C `int`, so reject anything above `i32::MAX`.
+    if page_width.is_some_and(|w| w > i32::MAX as usize) {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!(
+                "pr-error-page-width-too-large",
+                "flag" => "-W",
+                "value" => matches
+                    .get_one::<String>(options::PAGE_WIDTH)
+                    .map(String::as_str)
+                    .unwrap_or_default()
+                    .quote()
+            ),
         });
     }
 
@@ -1235,16 +1265,12 @@ fn print_page(
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
-    let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
     let out = stdout();
     let mut out = out.lock();
 
-    for x in header {
-        out.write_all(x.as_bytes())?;
-        out.write_all(line_separator)?;
-    }
+    write_header(&mut out, options, page, line_separator)?;
 
     write_columns(lines, options, &mut out)?;
 
@@ -1487,11 +1513,15 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
     }
 }
 
-/// Returns a five line header content if displaying header is not disabled by
-/// using `NO_HEADER_TRAILER_OPTION` option.
-fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
+/// Writes the five line page header to `out` (unless disabled by `NO_HEADER_TRAILER_OPTION`), streaming the centering padding to avoid the `{:width$}` formatter's `u16` panic and huge allocations.
+fn write_header(
+    out: &mut impl Write,
+    options: &OutputOptions,
+    page: usize,
+    line_separator: &[u8],
+) -> Result<(), std::io::Error> {
     if !options.display_header_and_trailer {
-        return Vec::new();
+        return Ok(());
     }
 
     // The header should be formatted with proper spacing:
@@ -1509,28 +1539,31 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
     let filename_len = filename.chars().count();
     let page_len = page_part.chars().count();
 
-    let header_line = if date_len + filename_len + page_len + 2 < total_width {
-        // The filename should be centered between the date and page parts
+    // Two blank lines precede the header line.
+    out.write_all(line_separator)?;
+    out.write_all(line_separator)?;
+
+    if date_len + filename_len + page_len + 2 < total_width {
+        // The filename should be centered between the date and page parts.
         let space_for_filename = total_width - date_len - page_len;
         let padding_before_filename = (space_for_filename - filename_len) / 2;
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-        format!(
-            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
-            "", ""
-        )
+        out.write_all(date_part.as_bytes())?;
+        write_offset_spaces(out, padding_before_filename)?;
+        out.write_all(filename.as_bytes())?;
+        write_offset_spaces(out, padding_after_filename)?;
+        out.write_all(page_part.as_bytes())?;
     } else {
-        // If content is too long, just use single spaces
-        format!("{date_part} {filename} {page_part}")
-    };
+        // If content is too long, just use single spaces.
+        write!(out, "{date_part} {filename} {page_part}")?;
+    }
+    out.write_all(line_separator)?;
 
-    vec![
-        String::new(),
-        String::new(),
-        header_line,
-        String::new(),
-        String::new(),
-    ]
+    // Two blank lines follow the header line.
+    out.write_all(line_separator)?;
+    out.write_all(line_separator)?;
+    Ok(())
 }
 
 /// Returns five empty lines as trailer content if displaying trailer
