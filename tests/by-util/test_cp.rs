@@ -1244,6 +1244,27 @@ fn test_cp_backup_existing() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_backup_existing_target_is_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~"));
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .timeout(Duration::from_secs(10))
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.is_fifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
 
