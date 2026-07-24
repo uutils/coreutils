@@ -13,8 +13,10 @@ from os import environ
 REPO_DEFAULT_BRANCH = environ.get("REPO_DEFAULT_BRANCH", "main")
 ONLY_INTERMITTENT = environ.get("ONLY_INTERMITTENT", "false")
 
-NEW = json.load(open("gnu-result.json"))
-OLD = json.load(open("main-gnu-result.json"))
+with open("gnu-result.json", "r") as file:
+    NEW = json.load(file)
+with open("main-gnu-result.json", "r") as file:
+    OLD = json.load(file)
 
 # Extract the specific results from the dicts
 last = OLD[list(OLD.keys())[0]]
