@@ -93,10 +93,6 @@ pub enum CpError {
     #[error("{}", translate!("cp-error-option-not-implemented", "option" => 0))]
     NotImplemented(String),
 
-    /// Invalid arguments to backup
-    #[error(transparent)]
-    Backup(#[from] BackupError),
-
     #[error("{}", translate!("cp-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 }
@@ -113,21 +109,6 @@ impl From<String> for CpError {
         Self::Error(s)
     }
 }
-
-#[derive(Debug)]
-pub struct BackupError(String);
-
-impl Display for BackupError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            translate!("cp-error-backup-format", "error" => self.0.clone(), "exec" => uucore::execution_phrase())
-        )
-    }
-}
-
-impl std::error::Error for BackupError {}
 
 impl UError for CpError {
     fn code(&self) -> i32 {
@@ -1068,8 +1049,7 @@ impl Options {
         let copy_mode = CopyMode::from_matches(matches);
 
         let backup_mode =
-            backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)
-                .map_err(|e| CpError::Backup(BackupError(format!("{e}"))))?;
+            backup_control::determine_backup_mode(matches).map_err(|e| e.to_string())?;
         let update_mode = update_control::determine_update_mode(matches);
 
         if backup_mode != BackupMode::None
