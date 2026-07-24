@@ -68,6 +68,20 @@ impl<'a> BufferedOutput<'a> {
     /// block. The returned [`WriteStat`] object will include the
     /// number of blocks written during execution of this function.
     pub(crate) fn write_blocks(&mut self, buf: &[u8]) -> std::io::Result<WriteStat> {
+        let obs = self.inner.settings.obs;
+
+        // Avoid copying complete blocks through the internal buffer.
+        if self.buf.is_empty() {
+            let complete = buf.len() - buf.len() % obs;
+            if complete == 0 {
+                self.buf.extend_from_slice(buf);
+                return Ok(WriteStat::default());
+            }
+            let wstat = self.inner.write_blocks(&buf[..complete])?;
+            self.buf.extend_from_slice(&buf[complete..]);
+            return Ok(wstat);
+        }
+
         // Split the incoming buffer into two parts: the bytes to write
         // and the bytes to buffer for next time.
         //
@@ -82,7 +96,7 @@ impl<'a> BufferedOutput<'a> {
             self.buf.extend_from_slice(buf);
             return Ok(WriteStat::default());
         }
-        let rem = n % self.inner.settings.obs;
+        let rem = n % obs;
         let i = buf.len().saturating_sub(rem);
         let (to_write, to_buffer) = buf.split_at(i);
 
