@@ -370,7 +370,23 @@ impl Chmoder {
 
         for filename in files {
             let file = Path::new(filename);
-            if !file.exists() {
+            // `Path::exists()` swallows IO errors and returns false for things
+            // like "the containing directory has mode 000 so I can't stat the
+            // child", which makes us report "No such file or directory" when
+            // GNU chmod reports "Permission denied". Use `try_exists()` and
+            // surface the permission error if there is one.
+            let exists = match file.try_exists() {
+                Ok(b) => b,
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !self.quiet {
+                        show!(ChmodError::PermissionDenied(filename.into()));
+                    }
+                    set_exit_code(1);
+                    continue;
+                }
+                Err(_) => true, // Some other IO error, fall through and let the chmod call surface it.
+            };
+            if !exists {
                 if file.is_symlink() {
                     if !self.dereference && !self.recursive {
                         // The file is a symlink and we should not follow it
