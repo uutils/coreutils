@@ -224,12 +224,6 @@ impl Parser {
             .collect();
 
         match peek3.as_slice() {
-            // case 1: lparen is a literal when followed by nothing
-            [] => {
-                self.literal(Symbol::LParen.into_literal())?;
-                Ok(())
-            }
-
             // case 2: error if end of stream is `( <any_token>`
             [symbol] => Err(ParseError::MissingArgument(format!("{symbol}"))),
 
@@ -268,10 +262,11 @@ impl Parser {
                 Ok(())
             }
 
+            // case 1: lparen is a literal when followed by nothing
             // case 7: if earlier cases didn’t match, `( op <any_token>…`
             //         indicates binary comparison of literal lparen with
             //         anything _except_ ")" (case 4)
-            [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
+            [] | [Symbol::Op(_), _] | [Symbol::Op(_), _, _] => {
                 self.literal(Symbol::LParen.into_literal())?;
                 Ok(())
             }
