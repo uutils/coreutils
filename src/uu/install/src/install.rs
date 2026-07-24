@@ -578,17 +578,23 @@ fn is_new_file_path(path: &Path) -> bool {
 /// Test if the path is an existing directory or ends with a trailing separator.
 ///
 /// Returns true, if one of the conditions above is met; else false.
-///
 #[cfg(unix)]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let separator = MAIN_SEPARATOR as u8;
-    path.as_os_str().as_bytes().last() == Some(&separator) || path.is_dir()
+    let separator = MAIN_SEPARATOR as u8; // is ascii. OK to use as_encoded_bytes
+    path.as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .is_some_and(|s| s == &separator)
+        || path.is_dir()
 }
 
 #[cfg(not(unix))]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+    path.as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .is_some_and(|s| b"/\\".contains(s))
+        || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
