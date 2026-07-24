@@ -194,6 +194,7 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
 /// * `"owner:group"`,
 /// * `"owner"`,
 /// * `":group"`,
+/// * `"owner:"`,
 ///
 /// and the owner or group can be specified either as an ID or a
 /// name. The `sep` argument specifies which character to use as a
@@ -230,7 +231,13 @@ fn parse_spec(spec: &str, sep: char) -> UResult<(Option<u32>, Option<u32>)> {
         ));
     }
 
-    Ok((uid, gid))
+    if gid.is_none() && !user.is_empty() && spec.ends_with(':') {
+        // we have input of the form user: and should change the group to the users login group as
+        // per GNU
+        Ok((uid, Some(entries::usr2gid(user)?)))
+    } else {
+        Ok((uid, gid))
+    }
 }
 
 #[cfg(test)]
