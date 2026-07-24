@@ -568,10 +568,16 @@ fn open_or_create_subdir(parent_fd: &DirFd, name: &OsStr, mode: u32) -> io::Resu
                 )),
             }
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {
-            parent_fd.mkdir_at(name, mode)?;
-            parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
-        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => match parent_fd.mkdir_at(name, mode) {
+            Ok(()) => parent_fd.open_subdir(name, SymlinkBehavior::NoFollow),
+            // Another process created `name` between the stat and the mkdir
+            // (issue #12355). Open what it created; O_NOFOLLOW keeps a symlink
+            // that raced into the name from being followed.
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                parent_fd.open_subdir(name, SymlinkBehavior::NoFollow)
+            }
+            Err(e) => Err(e),
+        },
         Err(e) => Err(e),
     }
 }
