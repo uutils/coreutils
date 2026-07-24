@@ -1759,3 +1759,23 @@ fn test_columns_env_wrapping() {
         );
     }
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_to_dev_full() {
+    // stty must report write errors like GNU instead of panicking.
+    for args in [&[][..], &["--all"][..], &["--save"][..], &["size"][..]] {
+        let (path, _controller, _replica) = pty_path();
+        let dev_full = std::fs::OpenOptions::new()
+            .write(true)
+            .open("/dev/full")
+            .expect("/dev/full must exists on Linux");
+
+        new_ucmd!()
+            .args(&["--file", &path])
+            .args(args)
+            .set_stdout(dev_full)
+            .fails_with_code(1)
+            .stderr_only("stty: write error: No space left on device\n");
+    }
+}
