@@ -174,6 +174,7 @@ We support `--sort=name`, which makes it possible to override an earlier value.
 `du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
 also provides a `-v`/`--verbose` flag.
 
+<!-- spell-checker:ignore FIEMAP reflinks -->
 On Linux, `--dedupe-reflinks` uses FIEMAP to count identical shared physical
 extents only once. The first file encountered owns each extent. Directory
 entries are processed in lexical order for deterministic results, while command

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore dedupe dirfd fiemap fstatat openat reflinks
+// spell-checker:ignore CLOEXEC Deduper dedupe deduper dirfd FIEMAP fiemap fstatat openat reflinks
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::{Pattern, PatternError};
@@ -218,6 +218,7 @@ where
     state.adjust_reflink_blocks(&file, expected, blocks)
 }
 
+#[cfg(all(unix, not(target_os = "redox")))]
 fn already_reported_error() -> Box<mpsc::SendError<UResult<StatPrintInfo>>> {
     Box::new(mpsc::SendError(Err(USimpleError::new(
         0,
@@ -225,6 +226,7 @@ fn already_reported_error() -> Box<mpsc::SendError<UResult<StatPrintInfo>>> {
     ))))
 }
 
+#[cfg(target_os = "linux")]
 fn report_access_error(
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     path: &Path,
@@ -536,6 +538,7 @@ fn safe_du(
         const S_IFMT: u32 = 0o170_000;
         const S_IFDIR: u32 = 0o040_000;
         const S_IFLNK: u32 = 0o120_000;
+        #[cfg(target_os = "linux")]
         const S_IFREG: u32 = 0o100_000;
 
         // First get the lstat (without following symlinks) to check if it's a symlink
@@ -565,6 +568,7 @@ fn safe_du(
 
         #[allow(clippy::unnecessary_cast)]
         let is_dir = (lstat.st_mode as u32 & S_IFMT) == S_IFDIR;
+        #[cfg(target_os = "linux")]
         #[allow(clippy::unnecessary_cast)]
         let is_regular = (lstat.st_mode as u32 & S_IFMT) == S_IFREG;
         let entry_stat = lstat;
@@ -577,7 +581,7 @@ fn safe_du(
 
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
-        let mut this_stat = if is_dir {
+        let this_stat = if is_dir {
             // For directories, recurse using safe_du
             Stat {
                 path: path.join(&entry_name),
@@ -603,6 +607,8 @@ fn safe_du(
                 metadata: my_stat.metadata.clone(),
             }
         };
+        #[cfg(target_os = "linux")]
+        let mut this_stat = this_stat;
 
         // Check excludes
         for pattern in &options.excludes {
@@ -800,7 +806,9 @@ fn du_regular(
                     }
 
                     match Stat::new(&entry_path, Some(&entry), options) {
-                        Ok(mut this_stat) => {
+                        Ok(this_stat) => {
+                            #[cfg(target_os = "linux")]
+                            let mut this_stat = this_stat;
                             // Check if symlink with -L points to an ancestor (cycle detection)
                             if is_symlink
                                 && options.dereference == Deref::All
