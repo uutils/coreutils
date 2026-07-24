@@ -2,13 +2,12 @@
 # This script lists the GNU failing tests by size
 # Just like with util/run-gnu-test.sh, we expect the gnu sources
 # to be in ../
-import urllib.request
-
-import urllib
-import os
 import glob
 import json
+import os
 import sys
+import urllib
+import urllib.request
 
 base = "../gnu/tests/"
 
