@@ -174,6 +174,17 @@ We support `--sort=name`, which makes it possible to override an earlier value.
 `du` allows `birth` and `creation` as values for the `--time` argument to show the creation time. It
 also provides a `-v`/`--verbose` flag.
 
+On Linux, `--dedupe-reflinks` uses FIEMAP to count identical shared physical
+extents only once. The first file encountered owns each extent. Directory
+entries are processed in lexical order for deterministic results, while command
+line operands retain their given order. Only exact extent matches are
+deduplicated; partially overlapping CoW extents remain counted separately.
+FIEMAP adds one or more system calls per regular file, so this mode can be
+significantly slower. It conflicts with `--apparent-size`, `--bytes`, `--inodes`,
+and `--count-links`. If a regular file cannot be opened or queried, `du` reports
+the error, omits that file from the totals, continues traversal, and exits
+nonzero.
+
 ## `id`
 
 `id` has three additional flags:

@@ -451,6 +451,31 @@ impl DirFd {
         Ok(fs::File::from(fd))
     }
 
+    /// Open a file for reading relative to this directory.
+    ///
+    /// `O_NONBLOCK` prevents special files such as FIFOs from hanging the
+    /// traversal. Callers must inspect the opened descriptor and reject any
+    /// file type or identity they did not expect.
+    pub fn open_file_read_at(
+        &self,
+        name: &OsStr,
+        symlink_behavior: SymlinkBehavior,
+    ) -> io::Result<fs::File> {
+        let name_cstr =
+            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
+        let mut flags = OFlag::O_RDONLY | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
+        if !symlink_behavior.should_follow() {
+            flags |= OFlag::O_NOFOLLOW;
+        }
+
+        let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, Mode::empty())
+            .map_err(|error| SafeTraversalError::OpenFailed {
+                path: name.into(),
+                source: io::Error::from_raw_os_error(error as i32),
+            })?;
+        Ok(fs::File::from(fd))
+    }
+
     /// Create a DirFd from an existing file descriptor (takes ownership)
     pub fn from_raw_fd(fd: RawFd) -> io::Result<Self> {
         if fd < 0 {
@@ -1260,6 +1285,37 @@ mod tests {
 
         let content = fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "new");
+    }
+
+    #[test]
+    fn test_open_file_read_at_symlink_behavior() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("target"), "content").unwrap();
+        symlink("target", temp_dir.path().join("link")).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd
+            .open_file_read_at(OsStr::new("link"), SymlinkBehavior::Follow)
+            .unwrap();
+        assert!(file.metadata().unwrap().is_file());
+
+        let error = dir_fd
+            .open_file_read_at(OsStr::new("link"), SymlinkBehavior::NoFollow)
+            .unwrap_err();
+        assert_eq!(error.raw_os_error(), Some(libc::ELOOP));
+    }
+
+    #[test]
+    fn test_open_file_read_at_does_not_block_on_fifo() {
+        let temp_dir = TempDir::new().unwrap();
+        let fifo = temp_dir.path().join("fifo");
+        nix::unistd::mkfifo(&fifo, Mode::from_bits_truncate(0o600)).unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd
+            .open_file_read_at(OsStr::new("fifo"), SymlinkBehavior::NoFollow)
+            .unwrap();
+        assert!(!file.metadata().unwrap().is_file());
     }
 
     #[test]

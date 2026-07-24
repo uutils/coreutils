@@ -38,6 +38,7 @@ du-help-si = like -h, but use powers of 1000 not 1024
 du-help-one-file-system = skip directories on different file systems
 du-help-threshold = exclude entries smaller than SIZE if positive, or entries greater than SIZE if negative
 du-help-verbose = verbose mode (option not present in GNU/Coreutils)
+du-help-dedupe-reflinks = count storage shared via reflinks (CoW copies) only once (Linux only; requires FIEMAP). Adds significant overhead.
 du-help-exclude = exclude files that match PATTERN
 du-help-exclude-from = exclude files that match any pattern in FILE
 du-help-files0-from = summarize device usage of the NUL-terminated file names specified in file F; if F is -, then read names from standard input
@@ -56,6 +57,7 @@ du-error-invalid-time-style = invalid argument { $style } for 'time style'
   Try '{ $help }' for more information.
 du-error-invalid-time-arg = 'birth' and 'creation' arguments for --time are not supported on this platform.
 du-error-invalid-glob = Invalid exclude syntax: { $error }
+du-error-dedupe-reflinks-not-supported = --dedupe-reflinks is only supported on Linux
 du-error-cannot-read-directory = cannot read directory { $path }
 du-error-cannot-access = cannot access { $path }
 du-error-read-error-is-directory = { $file }: read error: Is a directory

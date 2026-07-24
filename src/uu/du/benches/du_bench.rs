@@ -4,6 +4,10 @@
 // file that was distributed with this source code.
 
 use divan::{Bencher, black_box};
+#[cfg(target_os = "linux")]
+use std::fs;
+#[cfg(target_os = "linux")]
+use std::process::{Command, Stdio};
 use tempfile::TempDir;
 use uu_du::uumain;
 use uucore::benchmark::{fs_tree, run_util_function};
@@ -126,6 +130,72 @@ fn du_max_depth_balanced_tree(
     let temp_dir = TempDir::new().unwrap();
     fs_tree::create_balanced_tree(temp_dir.path(), depth, dirs_per_level, files_per_dir);
     bench_du_with_args(bencher, &temp_dir, &["--max-depth=2"]);
+}
+
+/// Benchmark du --dedupe-reflinks on wide tree.
+/// Measures FIEMAP per-file overhead (files in fs_tree are not reflinked,
+/// so this is the worst-case syscall cost with zero dedup payoff).
+#[cfg(target_os = "linux")]
+#[divan::bench(args = [(5000, 500)])]
+fn du_dedupe_reflinks_wide_tree(bencher: Bencher, (total_files, total_dirs): (usize, usize)) {
+    bencher
+        .with_inputs(|| {
+            let temp_dir = TempDir::new().unwrap();
+            fs_tree::create_wide_tree(temp_dir.path(), total_files, total_dirs);
+            temp_dir
+        })
+        .bench_values(|temp_dir| {
+            let temp_path_str = temp_dir.path().to_str().unwrap();
+            let args = vec![temp_path_str, "--dedupe-reflinks"];
+            black_box(run_util_function(uumain, &args));
+        });
+}
+
+/// Benchmark populated deduplication state using real reflink clones.
+///
+/// Fixture creation is intentionally outside the timed closure. Filesystems
+/// without reflink support do not produce a benchmark sample.
+#[cfg(target_os = "linux")]
+#[divan::bench]
+fn du_dedupe_reflink_clones(bencher: Bencher) {
+    const CLONE_COUNT: usize = 256;
+    const FILE_SIZE: usize = 1024 * 1024;
+
+    let temp_dir = TempDir::new().unwrap();
+    let source = temp_dir.path().join("source");
+    let mut data = vec![0_u8; FILE_SIZE];
+    let mut random_state = 0x4d59_5df4_d0f3_3173_u64;
+    for byte in &mut data {
+        random_state ^= random_state << 13;
+        random_state ^= random_state >> 7;
+        random_state ^= random_state << 17;
+        *byte = random_state as u8;
+    }
+    fs::write(&source, data).unwrap();
+    fs::File::open(&source).unwrap().sync_all().unwrap();
+
+    for index in 0..CLONE_COUNT {
+        let destination = temp_dir.path().join(format!("clone-{index:04}"));
+        let status = Command::new("cp")
+            .arg("--reflink=always")
+            .arg(&source)
+            .arg(destination)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        if !status.is_ok_and(|status| status.success()) {
+            eprintln!("skipping du_dedupe_reflink_clones: reflinks are unsupported");
+            return;
+        }
+    }
+
+    let temp_path = temp_dir.path().to_str().unwrap();
+    if run_util_function(uumain, &["--dedupe-reflinks", temp_path]) != 0 {
+        eprintln!("skipping du_dedupe_reflink_clones: FIEMAP validation failed");
+        return;
+    }
+
+    bench_du_with_args(bencher, &temp_dir, &["--dedupe-reflinks"]);
 }
 
 fn main() {

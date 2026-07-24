@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (paths) atim sublink subwords azerty azeaze xcwww azeaz amaz azea qzerty tazerty tsublink testfile1 testfile2 filelist fpath testdir testfile
-// spell-checker:ignore selfref ELOOP smallfile
+// spell-checker:ignore selfref ELOOP smallfile fiemap dedupe reflinks
 
 #[cfg(not(windows))]
 use regex::Regex;
@@ -15,6 +15,12 @@ use uutests::util::TestScenario;
 #[cfg(not(target_os = "windows"))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
+
+#[cfg(target_os = "linux")]
+use {
+    rand::rngs::StdRng,
+    rand::{RngExt as _, SeedableRng},
+};
 
 #[cfg(not(target_os = "openbsd"))]
 const SUB_DIR: &str = "subdir/deeper";
@@ -618,6 +624,134 @@ fn du_hard_link(s: &str) {
     } else {
         assert_eq!(s, "16\tsubdir/links\n");
     }
+}
+
+#[cfg(target_os = "linux")]
+fn find_du_size(output: &str, file: &str) -> Option<usize> {
+    let prefixed = format!("./{file}");
+    for line in output.lines() {
+        let mut parts = line.split_whitespace();
+        let size = parts.next()?;
+        let path = parts.next()?;
+        if path == file || path == prefixed {
+            return size.parse().ok();
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_du_reflink_dedup() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    let file1 = "reflink_src";
+    let file2 = "reflink_dst";
+
+    let file_size = 256 * 1024;
+    let mut data = vec![0_u8; file_size];
+    let mut rng = StdRng::seed_from_u64(0x5eed);
+    rng.fill(&mut data[..]);
+    at.write_bytes(file1, &data);
+    std::fs::File::open(at.plus(file1))
+        .unwrap()
+        .sync_all()
+        .unwrap();
+
+    let cp_result = ts
+        .ccmd("cp")
+        .arg("--reflink=always")
+        .arg(file1)
+        .arg(file2)
+        .run();
+
+    if !cp_result.succeeded() {
+        eprintln!("skipping test_du_reflink_dedup: reflinks are unsupported");
+        return;
+    }
+
+    std::fs::File::open(at.plus(file2))
+        .unwrap()
+        .sync_all()
+        .unwrap();
+    let result = ts
+        .ucmd()
+        .arg("--all")
+        .arg("--block-size=1")
+        .arg("--dedupe-reflinks")
+        .succeeds();
+    let size1 = find_du_size(result.stdout_str(), file1).unwrap();
+    let size2 = find_du_size(result.stdout_str(), file2).unwrap();
+    // Directory entries are lexical: reflink_dst owns the extent even though
+    // reflink_src was created first.
+    assert_eq!(size1, 0);
+    assert!(size2 >= file_size);
+
+    // Without the flag, both should report the full size.
+    let result = ts.ucmd().arg("--all").arg("--block-size=1").succeeds();
+    let size1 = find_du_size(result.stdout_str(), file1).unwrap();
+    let size2 = find_du_size(result.stdout_str(), file2).unwrap();
+    assert!(size1 >= file_size);
+    assert!(size2 >= file_size);
+
+    // Explicit operands retain command-line order.
+    let result = ts
+        .ucmd()
+        .arg("--block-size=1")
+        .arg("--dedupe-reflinks")
+        .arg(file1)
+        .arg(file2)
+        .succeeds();
+    assert!(find_du_size(result.stdout_str(), file1).unwrap() >= file_size);
+    assert_eq!(find_du_size(result.stdout_str(), file2), Some(0));
+
+    // -H follows a command-line symlink and verifies the opened target.
+    at.symlink_file(file1, "reflink_link");
+    let result = ts
+        .ucmd()
+        .arg("-H")
+        .arg("--block-size=1")
+        .arg("--dedupe-reflinks")
+        .arg("reflink_link")
+        .arg(file2)
+        .succeeds();
+    assert!(find_du_size(result.stdout_str(), "reflink_link").unwrap() >= file_size);
+    assert_eq!(find_du_size(result.stdout_str(), file2), Some(0));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_du_dedupe_reflinks_conflicting_options() {
+    for option in ["--bytes", "--apparent-size", "--inodes", "--count-links"] {
+        new_ucmd!()
+            .arg("--dedupe-reflinks")
+            .arg(option)
+            .fails()
+            .stderr_contains("cannot be used with");
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn test_du_dedupe_reflinks_rejected_off_linux() {
+    new_ucmd!()
+        .arg("--dedupe-reflinks")
+        .fails_with_code(1)
+        .stderr_contains("--dedupe-reflinks is only supported on Linux");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_du_dedupe_reflinks_ignores_non_regular_files() {
+    let ts = TestScenario::new(util_name!());
+    let fifo = ts.fixtures.plus("fifo");
+    nix::unistd::mkfifo(&fifo, nix::sys::stat::Mode::from_bits_truncate(0o600)).unwrap();
+
+    ts.ucmd()
+        .arg("--dedupe-reflinks")
+        .arg("fifo")
+        .succeeds()
+        .stdout_contains("fifo");
 }
 
 #[test]
