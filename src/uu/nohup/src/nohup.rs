@@ -52,7 +52,7 @@ enum NohupError {
 
 impl UError for NohupError {
     fn code(&self) -> i32 {
-        #[allow(clippy::match_wildcard_for_single_variants)]
+        #[allow(clippy::match_wildcard_for_single_variants)] // needed for some platforms
         match self {
             Self::OpenFailed(code, _) | Self::OpenFailed2(code, _, _, _) => *code,
             _ => 2,

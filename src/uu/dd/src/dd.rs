@@ -307,7 +307,6 @@ impl Source {
     /// then this function returns an error.
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     fn discard_cache(&self, offset: u64, len: u64) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f) => {
                 use rustix::fs::{Advice::DontNeed, fadvise};
@@ -684,7 +683,6 @@ impl Dest {
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
         match self {
             Self::File(f, _) => {
                 let pos = f.stream_position()?;
