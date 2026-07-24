@@ -19,8 +19,8 @@ with open("main-gnu-result.json", "r") as file:
     OLD = json.load(file)
 
 # Extract the specific results from the dicts
-last = OLD[list(OLD.keys())[0]]
-current = NEW[list(NEW.keys())[0]]
+last = OLD[next(iter(OLD.keys()))]
+current = NEW[next(iter(NEW.keys()))]
 
 
 pass_d = int(current["pass"]) - int(last["pass"])
