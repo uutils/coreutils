@@ -7028,6 +7028,44 @@ fn test_acl_display_symlink() {
     assert!(iter.all(|i| i == first));
 }
 
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_acl_display_symlink_without_dereference() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let dir_name = "dir";
+    let link_name = "link";
+    at.mkdir(dir_name);
+
+    match Command::new("setfacl")
+        .args(["-d", "-m", "u:bin:rwx", &at.plus_as_string(dir_name)])
+        .status()
+        .map(|status| status.code())
+    {
+        Ok(Some(0)) => {}
+        Ok(_) => {
+            println!("test skipped: setfacl failed");
+            return;
+        }
+        Err(e) => {
+            println!("test skipped: setfacl failed with {e}");
+            return;
+        }
+    }
+
+    at.symlink_dir(dir_name, link_name);
+
+    scene
+        .ucmd()
+        .arg("-ld")
+        .arg(link_name)
+        .succeeds()
+        .stdout_does_not_contain("+");
+}
+
 #[test]
 fn ls_emoji_alignment() {
     let scene = TestScenario::new(util_name!());

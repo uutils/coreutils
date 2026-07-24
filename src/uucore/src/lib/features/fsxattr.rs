@@ -154,16 +154,28 @@ pub fn apply_xattrs<P: AsRef<Path>>(
 /// # Arguments
 ///
 /// * `file` - A reference to the path of the file.
+/// * `dereference` - Whether to inspect the target of a symlink instead of the link itself.
 ///
 /// # Returns
 ///
 /// `true` if the file has extended attributes (indicating an ACL), `false` otherwise.
-pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_acl_with_deref<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|acl| {
+    let attrs = if dereference {
+        xattr::list_deref(file)
+    } else {
+        xattr::list(file)
+    };
+
+    attrs.is_ok_and(|acl| {
         // if we have extra attributes, we have an acl
         acl.count() > 0
     })
+}
+
+/// Checks if a file has an Access Control List (ACL) based on its extended attributes.
+pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
+    has_acl_with_deref(file, true)
 }
 
 /// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
@@ -171,19 +183,31 @@ pub fn has_acl<P: AsRef<Path>>(file: P) -> bool {
 /// # Arguments
 ///
 /// * `file` - A reference to the path of the file.
+/// * `dereference` - Whether to inspect the target of a symlink instead of the link itself.
 ///
 /// # Returns
 ///
 /// `true` if the file has an extended attribute named "security.capability", `false` otherwise.
-pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
+pub fn has_security_cap_acl_with_deref<P: AsRef<Path>>(file: P, dereference: bool) -> bool {
     // don't use exacl here, it is doing more getxattr call then needed
-    xattr::list_deref(file).is_ok_and(|mut acl| {
+    let attrs = if dereference {
+        xattr::list_deref(file)
+    } else {
+        xattr::list(file)
+    };
+
+    attrs.is_ok_and(|mut acl| {
         #[cfg(unix)]
         return acl.contains(OsStr::from_bytes(b"security.capability"));
 
         #[cfg(not(unix))]
         return false;
     })
+}
+
+/// Checks if a file has an Access Control List (ACL) named "security.capability" based on its extended attributes.
+pub fn has_security_cap_acl<P: AsRef<Path>>(file: P) -> bool {
+    has_security_cap_acl_with_deref(file, true)
 }
 
 /// Returns the permissions bits of a file or directory which has Access Control List (ACL) entries based on its
