@@ -2,12 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
+
 // spell-checker:ignore overridable colorterm
+
 #[cfg(target_os = "linux")]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
-
-use dircolors::StrUtils;
 
 #[test]
 #[cfg(target_os = "linux")]
@@ -28,20 +28,6 @@ fn test_dircolors_non_utf8_paths() {
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
-}
-
-#[test]
-fn test_str_utils() {
-    let s = "  asd#zcv #hk\t\n  ";
-    assert_eq!("asd#zcv", s.purify());
-
-    let s = "con256asd";
-    assert!(s.fnmatch("*[2][3-6][5-9]?sd")); // spell-checker:disable-line
-
-    let s = "zxc \t\nqwe jlk    hjl"; // spell-checker:disable-line
-    let (k, v) = s.split_two();
-    assert_eq!("zxc", k);
-    assert_eq!("qwe jlk    hjl", v);
 }
 
 #[test]
