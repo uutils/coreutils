@@ -100,13 +100,16 @@ pub use crate::features::perms;
     any(feature = "pipes", feature = "buf-copy")
 ))]
 pub use crate::features::pipes;
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(any(unix, windows), feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(
+    any(windows, all(unix, not(target_os = "fuchsia"))),
+    feature = "signals"
+))]
 pub use crate::features::signals;
 #[cfg(all(
     unix,

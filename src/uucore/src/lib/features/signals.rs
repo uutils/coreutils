@@ -392,6 +392,17 @@ pub static ALL_SIGNALS: [&str; 32] = [
     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
 ];
 
+// Windows has no POSIX signals, but utilities that emulate signal delivery
+// (e.g. `timeout`) accept the POSIX names/numbers so cross-platform scripts
+// keep working. The Linux layout is used so that synthesized `128 + n` exit
+// codes (130, 137, 143, ...) match what such scripts expect.
+#[cfg(windows)]
+pub static ALL_SIGNALS: [&str; 32] = [
+    "EXIT", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1", "SEGV",
+    "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP", "TTIN", "TTOU",
+    "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
+];
+
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();

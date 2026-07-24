@@ -20,6 +20,8 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use super::ChildExt;
+
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
     nix::unistd::geteuid().as_raw()
@@ -73,26 +75,6 @@ pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
         Some(Pid::from_raw(pid))
     };
     nix::unistd::getsid(pid).map(Pid::as_raw)
-}
-
-/// Missing methods for Child objects
-pub trait ChildExt {
-    /// Send a signal to a Child process.
-    ///
-    /// Caller beware: if the process already exited then you may accidentally
-    /// send the signal to an unrelated process that recycled the PID.
-    fn send_signal(&mut self, signal: usize) -> io::Result<()>;
-
-    /// Send a signal to a process group.
-    fn send_signal_group(&mut self, signal: usize) -> io::Result<()>;
-
-    /// Wait for a process to finish or return after the specified duration.
-    /// A `timeout` of zero disables the timeout.
-    fn wait_or_timeout(
-        &mut self,
-        timeout: Duration,
-        signaled: Option<&AtomicBool>,
-    ) -> io::Result<Option<ExitStatus>>;
 }
 
 impl ChildExt for Child {
