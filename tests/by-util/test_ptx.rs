@@ -433,3 +433,37 @@ fn test_missing_file_error_contains_filename() {
         .fails()
         .stderr_is("ptx: 'zxc': No such file or directory\n");
 }
+
+#[test]
+fn test_gap_size_above_isize_max_rejected() {
+    // isize::MAX + 1: must fail with a clear error, not panic with overflow (#13184).
+    new_ucmd!()
+        .args(&["-g", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid gap width: '9223372036854775808'");
+}
+
+#[test]
+fn test_gap_size_at_isize_max_accepted() {
+    // isize::MAX itself is the largest value GNU ptx accepts; must not panic.
+    new_ucmd!()
+        .args(&["-g", "9223372036854775807"])
+        .pipe_in("hello world\n")
+        .succeeds();
+}
+
+#[test]
+fn test_line_width_above_isize_max_rejected() {
+    new_ucmd!()
+        .args(&["-w", "9223372036854775808"])
+        .fails()
+        .stderr_contains("invalid line width: '9223372036854775808'");
+}
+
+#[test]
+fn test_line_width_at_isize_max_accepted() {
+    new_ucmd!()
+        .args(&["-w", "9223372036854775807"])
+        .pipe_in("hello world\n")
+        .succeeds();
+}

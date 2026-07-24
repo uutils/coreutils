@@ -246,20 +246,28 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
-        config.line_width = matches
-            .get_one::<String>(options::WIDTH)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        let raw = matches.get_one::<String>(options::WIDTH).expect(err_msg);
+        let width: usize = raw.parse().map_err(PtxError::ParseError)?;
+        if width > isize::MAX as usize {
+            return Err(USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-line-width", "value" => raw.clone()),
+            ));
+        }
+        config.line_width = width;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = matches
-            .get_one::<String>(options::GAP_SIZE)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        let raw = matches.get_one::<String>(options::GAP_SIZE).expect(err_msg);
+        let gap: usize = raw.parse().map_err(PtxError::ParseError)?;
+        if gap > isize::MAX as usize {
+            return Err(USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-gap-size", "value" => raw.clone()),
+            ));
+        }
+        config.gap_size = gap;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
