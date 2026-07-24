@@ -5,6 +5,7 @@
 
 // spell-checker:ignore fname, ftype, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, behaviour, bmax, bremain, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rremain, rsofar, rstat, sigusr, wlen, wstat oconv canonicalized FADV DONTNEED ESPIPE SPIPE bufferedoutput, SETFL
 
+mod aligned_buffer;
 mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
@@ -14,6 +15,7 @@ mod parseargs;
 mod progress;
 
 use crate::bufferedoutput::BufferedOutput;
+use aligned_buffer::AlignedBuffer;
 use blocks::conv_block_unblock_helper;
 use datastructures::{ConversionMode, IConvFlags, IFlags, OConvFlags, OFlags, options};
 use parseargs::Parser;
@@ -55,8 +57,6 @@ use uucore::error::{USimpleError, set_exit_code};
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
 use uucore::show_if_err;
 use uucore::{format_usage, show_error};
-
-const BUF_INIT_BYTE: u8 = 0xDD;
 
 /// Final settings after parsing
 #[derive(Default)]
@@ -513,12 +513,12 @@ impl Input<'_> {
         // TODO: Is there a way to discard filesystem cache on other targets?
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read follows the previous one; a short
-    /// read ends the fill, so the bytes received so far form one partial
-    /// record for the copy loop (as in GNU dd).
-    fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
+    /// Fills `buf` with consecutive input blocks, stopping after a short read.
+    ///
+    /// # Returns
+    ///
+    /// The read statistics and the length of the valid prefix in `buf`.
+    fn fill_consecutive(&mut self, buf: &mut [u8]) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut bytes_total = 0;
@@ -532,30 +532,33 @@ impl Input<'_> {
                 rlen if rlen > 0 => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    // A short read must end this fill: the next read would
-                    // start at the following ibs-aligned chunk, leaving a
-                    // gap of stale bytes inside `buf` that the `truncate`
-                    // below would keep in the output while dropping the
-                    // same number of real trailing bytes (issue #13458).
+                    // A short read ends this fill (issue #13458).
                     break;
                 }
                 _ => break,
             }
         }
-        buf.truncate(bytes_total);
-        Ok(ReadStat {
-            reads_complete,
-            reads_partial,
-            // Records are not truncated when filling.
-            records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
-        })
+        let bytes_total_u64 = bytes_total
+            .try_into()
+            .map_err(|_| io::ErrorKind::InvalidData)?;
+        Ok((
+            ReadStat {
+                reads_complete,
+                reads_partial,
+                // Records are not truncated when filling.
+                records_truncated: 0,
+                bytes_total: bytes_total_u64,
+            },
+            bytes_total,
+        ))
     }
 
-    /// Fills a given buffer.
-    /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read is aligned to multiples of ibs; remaining space is filled with the 'pad' byte.
-    fn fill_blocks(&mut self, buf: &mut Vec<u8>, pad: u8) -> io::Result<ReadStat> {
+    /// Fills `buf` in input-block-size chunks, padding short blocks with `pad`.
+    ///
+    /// # Returns
+    ///
+    /// The read statistics and the length of the valid prefix in `buf`.
+    fn fill_blocks(&mut self, buf: &mut [u8], pad: u8) -> io::Result<(ReadStat, usize)> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
         let mut base_idx = 0;
@@ -570,8 +573,7 @@ impl Input<'_> {
                 rlen if rlen < target_len => {
                     bytes_total += rlen;
                     reads_partial += 1;
-                    let padding = vec![pad; target_len - rlen];
-                    buf.splice(base_idx + rlen..next_blk, padding);
+                    buf[base_idx + rlen..next_blk].fill(pad);
                 }
                 rlen => {
                     bytes_total += rlen;
@@ -582,13 +584,18 @@ impl Input<'_> {
             base_idx += self.settings.ibs;
         }
 
-        buf.truncate(base_idx);
-        Ok(ReadStat {
-            reads_complete,
-            reads_partial,
-            records_truncated: 0,
-            bytes_total: bytes_total.try_into().unwrap(),
-        })
+        let bytes_total_u64 = bytes_total
+            .try_into()
+            .map_err(|_| io::ErrorKind::InvalidData)?;
+        Ok((
+            ReadStat {
+                reads_complete,
+                reads_partial,
+                records_truncated: 0,
+                bytes_total: bytes_total_u64,
+            },
+            cmp::min(base_idx, buf.len()),
+        ))
     }
 }
 
@@ -1215,10 +1222,18 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
-    // Create a common empty buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = Vec::new();
-    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    let alignment = if i.settings.iflags.direct {
+        io_buffer_alignment()
+    } else {
+        1
+    };
+    let bsize = match i.settings.count {
+        Some(Num::Blocks(count)) if count.checked_mul(i.settings.ibs as u64).is_none() => bsize,
+        _ => calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize),
+    };
+    let mut storage = AlignedBuffer::try_new(bsize, alignment)?;
+    let buf = storage.as_mut_slice();
+    let mut conv_buf = Vec::new();
 
     // The main read/write loop.
     //
@@ -1233,7 +1248,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let (rstat_update, data) = read_helper(&mut i, buf, &mut conv_buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
                 i.discard_cache(read_offset, 0);
@@ -1243,7 +1258,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let wstat_update = o.write_blocks(data)?;
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1369,13 +1384,13 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
     if flag == 0 { None } else { Some(flag) }
 }
 
-/// Read from an input (that is, a source of bytes) into the given buffer.
-///
-/// This function also performs any conversions as specified by
-/// `conv=swab` or `conv=block` command-line arguments. This function
-/// mutates the `buf` argument in-place. The returned [`ReadStat`]
-/// indicates how many blocks were read.
-fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<ReadStat> {
+/// Reads into `buf` and applies the requested conversions.
+fn read_helper<'a>(
+    i: &mut Input,
+    buf: &'a mut [u8],
+    conv_scratch: &'a mut Vec<u8>,
+    bsize: usize,
+) -> io::Result<(ReadStat, &'a [u8])> {
     // Local Helper Fns -------------------------------------------------
     fn perform_swab(buf: &mut [u8]) {
         for base in (1..buf.len()).step_by(2) {
@@ -1383,31 +1398,40 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
         }
     }
     // ------------------------------------------------------------------
-    // Read
-    // Resize the buffer to the bsize. Any garbage data in the buffer is overwritten or truncated, so there is no need to fill with BUF_INIT_BYTE first.
-    // resizing buf cause serious performance drop https://github.com/uutils/coreutils/issues/11544
-    buf.resize(bsize, BUF_INIT_BYTE);
+    let scratch = &mut buf[..bsize];
 
-    let mut rstat = match i.settings.iconv.sync {
-        Some(ch) => i.fill_blocks(buf, ch)?,
-        _ => i.fill_consecutive(buf)?,
+    let (mut rstat, data_len) = match i.settings.iconv.sync {
+        Some(ch) => i.fill_blocks(scratch, ch)?,
+        _ => i.fill_consecutive(scratch)?,
     };
-    // Return early if no data
-    if rstat.reads_complete == 0 && rstat.reads_partial == 0 {
-        return Ok(rstat);
+    if rstat.is_empty() {
+        return Ok((rstat, &[]));
     }
 
     // Perform any conv=x[,x...] options
     if i.settings.iconv.swab {
-        perform_swab(buf);
+        perform_swab(&mut scratch[..data_len]);
     }
 
-    match i.settings.iconv.mode {
-        Some(ref mode) => {
-            *buf = conv_block_unblock_helper(buf.clone(), mode, &mut rstat);
-            Ok(rstat)
+    match &i.settings.iconv.mode {
+        Some(mode) => {
+            *conv_scratch = Vec::new();
+            *conv_scratch =
+                conv_block_unblock_helper(scratch[..data_len].to_vec(), mode, &mut rstat);
+            Ok((rstat, conv_scratch.as_slice()))
         }
-        None => Ok(rstat),
+        None => Ok((rstat, &scratch[..data_len])),
+    }
+}
+
+fn io_buffer_alignment() -> usize {
+    #[cfg(unix)]
+    {
+        rustix::param::page_size()
+    }
+    #[cfg(not(unix))]
+    {
+        4096
     }
 }
 
