@@ -34,7 +34,7 @@ for filepath in test_dir.glob("**/*.log"):
             )
             if result:
                 current[path.name] = result.group(1)
-    except Exception as e:
+    except Exception as e:  # ruff: ignore[BLE001]
         print(f"Error processing file {path}: {e}", file=sys.stderr)
 
 print(json.dumps(out, indent=2, sort_keys=True))

@@ -18,7 +18,7 @@ try:
         "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/aggregated-result.json",
         result_json,
     )
-except Exception as e:
+except Exception as e:  # ruff: ignore[BLE001]
     print(f"Failed to download the file: {e}")
     if not os.path.exists(result_json):
         print(f"Local file '{result_json}' not found. Exiting.")
