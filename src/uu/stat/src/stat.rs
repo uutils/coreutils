@@ -822,21 +822,20 @@ impl Stater {
         *i = j;
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
-        if *i + 1 < bound {
-            if let Some(&next_char) = chars.get(*i + 1) {
-                if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
-                {
-                    flag.major = chars[*i] == 'H';
-                    flag.minor = chars[*i] == 'L';
-                    *i += 1;
-                    return Ok(Token::Directive {
-                        flag,
-                        width,
-                        precision,
-                        format: next_char,
-                    });
-                }
-            }
+        if *i + 1 < bound
+            && let Some(&next_char) = chars.get(*i + 1)
+            && (chars[*i] == 'H' || chars[*i] == 'L')
+            && (next_char == 'd' || next_char == 'r')
+        {
+            flag.major = chars[*i] == 'H';
+            flag.minor = chars[*i] == 'L';
+            *i += 1;
+            return Ok(Token::Directive {
+                flag,
+                width,
+                precision,
+                format: next_char,
+            });
         }
 
         Ok(Token::Directive {
@@ -1040,10 +1039,9 @@ impl Stater {
 
     fn exec(&self) -> i32 {
         let mut stdin_is_fifo = false;
-        if cfg!(unix) {
-            if let Ok(md) = fs::metadata("/dev/stdin") {
-                stdin_is_fifo = md.file_type().is_fifo();
-            }
+        #[cfg(unix)]
+        if let Ok(md) = fs::metadata("/dev/stdin") {
+            stdin_is_fifo = md.file_type().is_fifo();
         }
 
         let mut ret = 0;

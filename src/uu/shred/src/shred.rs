@@ -512,35 +512,37 @@ fn create_test_compatible_sequence(
         .seek(SeekFrom::Start(0))
         .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
     let mut buffer = [0u8; 1024];
-    if let Ok(bytes_read) = random_source.borrow_mut().read(&mut buffer) {
-        if bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55) {
-            // This is the test scenario - replicate exact algorithm
-            let test_patterns = vec![
-                0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
-                0x111, 0x000, 0xB6D, 0xEEE, 0x333,
-            ];
+    if random_source
+        .borrow_mut()
+        .read(&mut buffer)
+        .is_ok_and(|bytes_read| bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55))
+    {
+        // This is the test scenario - replicate exact algorithm
+        let test_patterns = vec![
+            0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
+            0x111, 0x000, 0xB6D, 0xEEE, 0x333,
+        ];
 
-            if num_passes >= 3 {
-                let mut sequence = Vec::new();
-                let n_random = (num_passes / 10).max(3);
-                let n_pattern = num_passes - n_random;
+        if num_passes >= 3 {
+            let mut sequence = Vec::new();
+            let n_random = (num_passes / 10).max(3);
+            let n_pattern = num_passes - n_random;
 
-                // Standard algorithm: first random, patterns with middle random(s), final random
-                sequence.push(PassType::Random);
+            // Standard algorithm: first random, patterns with middle random(s), final random
+            sequence.push(PassType::Random);
 
-                let middle_randoms = n_random - 2;
-                let mut pattern_sequence = generate_patterns_with_middle_randoms(
-                    &test_patterns,
-                    n_pattern,
-                    middle_randoms,
-                    num_passes,
-                );
-                sequence.append(&mut pattern_sequence);
+            let middle_randoms = n_random - 2;
+            let mut pattern_sequence = generate_patterns_with_middle_randoms(
+                &test_patterns,
+                n_pattern,
+                middle_randoms,
+                num_passes,
+            );
+            sequence.append(&mut pattern_sequence);
 
-                sequence.push(PassType::Random);
+            sequence.push(PassType::Random);
 
-                return Ok(sequence);
-            }
+            return Ok(sequence);
         }
     }
 

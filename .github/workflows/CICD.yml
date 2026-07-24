@@ -2,9 +2,9 @@ name: CICD
 
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
-# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache utmpdump xargs zstd
+# spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
 
 env:
@@ -772,8 +772,9 @@ jobs:
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
             # selinux and systemd headers needed to build tests
+            # acl: setfacl for coverage profile-trace dir default ACL (umask 0777 tests)
             sudo apt-get -y update
-            sudo apt-get -y install libselinux1-dev libsystemd-dev
+            sudo apt-get -y install libselinux1-dev libsystemd-dev acl
             # pinky is a tool to show logged-in users from utmp, and gecos fields from /etc/passwd.
             # In GitHub Action *nix VMs, no accounts log in, even the "runner" account that runs the commands, and "system boot" entry is missing.
             # The account also has empty gecos fields.

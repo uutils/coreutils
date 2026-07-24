@@ -19,7 +19,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
 use uucore::translate;
@@ -190,6 +190,9 @@ impl From<Utf8Error> for PrError {
 enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
+
+    #[error("pr: {path}: {msg}")]
+    ReadError { path: String, msg: String },
 }
 
 pub fn uu_app() -> Command {
@@ -361,6 +364,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
+                .default_value(FILE_STDIN)
                 .value_hint(clap::ValueHint::FilePath),
         )
         .arg(
@@ -382,14 +386,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
     let matches = uucore::clap_localization::handle_clap_result(command, opt_args)?;
 
-    let mut files = matches
+    #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
+    let files = matches
         .get_many::<String>(options::FILES)
         .map(|v| v.map(String::as_str).collect::<Vec<_>>())
-        .unwrap_or_default()
-        .clone();
-    if files.is_empty() {
-        files.insert(0, FILE_STDIN);
-    }
+        .unwrap();
 
     let file_groups: Vec<_> = if matches.get_flag(options::MERGE) {
         vec![files]
@@ -409,21 +410,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         };
 
-        let cmd_result = if let Ok(group) = file_group.iter().exactly_one() {
-            pr(group, &options)
-        } else {
-            mpr(&file_group, &options)
-        };
+        let cmd_result = file_group
+            .iter()
+            .exactly_one()
+            .map_or_else(|_| mpr(&file_group, &options), |group| pr(group, &options));
 
-        let status = match cmd_result {
-            Err(error) => {
-                print_error(&matches, &error);
-                1
-            }
-            _ => 0,
-        };
-        if status != 0 {
-            return Err(status.into());
+        if let Err(e) = cmd_result {
+            print_error(&matches, &e);
+            return Err(1.into());
         }
     }
     Ok(())
@@ -439,14 +433,13 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| n_regex.is_match(x.trim()));
-    if let Some((pos, _value)) = num_option {
-        if let Some(num_val_opt) = args.get(pos + 1) {
-            if !num_regex.is_match(num_val_opt) {
-                let could_be_file = arguments.remove(pos + 1);
-                arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
-                arguments.insert(pos + 2, could_be_file);
-            }
-        }
+    if let Some((pos, _value)) = num_option
+        && let Some(num_val_opt) = args.get(pos + 1)
+        && !num_regex.is_match(num_val_opt)
+    {
+        let could_be_file = arguments.remove(pos + 1);
+        arguments.insert(pos + 1, format!("{}", NumberingMode::default().width));
+        arguments.insert(pos + 2, could_be_file);
     }
 
     // To ensure not to accidentally delete the next argument after a short flag for -e we insert
@@ -455,10 +448,10 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| e_regex.is_match(x.trim()));
-    if let Some((pos, value)) = expand_tabs_option {
-        if value.trim().len() <= 2 {
-            arguments[pos] = "-e\t8".to_string();
-        }
+    if let Some((pos, value)) = expand_tabs_option
+        && value.trim().len() <= 2
+    {
+        arguments[pos] = "-e\t8".to_string();
     }
 
     // Remove only whole-token legacy operands before clap parsing.
@@ -491,16 +484,16 @@ fn parse_column_page_operands(args: &[String]) -> ColumnPageOperands {
         if arg == "--" {
             break;
         }
-        if operands.column.is_none() {
-            if let Some(digits) = as_column_operand(arg) {
-                operands.column = Some(digits.to_string());
-                continue;
-            }
+        if operands.column.is_none()
+            && let Some(digits) = as_column_operand(arg)
+        {
+            operands.column = Some(digits.to_string());
+            continue;
         }
-        if operands.page.is_none() {
-            if let Some(spec) = as_page_operand(arg) {
-                operands.page = Some(spec.to_string());
-            }
+        if operands.page.is_none()
+            && let Some(spec) = as_page_operand(arg)
+        {
+            operands.page = Some(spec.to_string());
         }
     }
     operands
@@ -797,12 +790,10 @@ fn build_options(
         None => end_page_in_plus_option,
     };
 
-    if let Some(end_page) = end_page {
-        if start_page > end_page {
-            return Err(PrError::EncounteredErrors {
-                msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
-            });
-        }
+    if let Some(end_page) = end_page.filter(|end| start_page > *end) {
+        return Err(PrError::EncounteredErrors {
+            msg: translate!("pr-error-invalid-pages-range", "start" => start_page, "end" => end_page),
+        });
     }
 
     let default_lines_per_page = if form_feed_used {
@@ -989,14 +980,19 @@ fn build_options(
 /// Read the entire contents of the given path into memory.
 ///
 /// If `path` is `"-"`, then read from stdin.
-fn read_to_end(path: &str) -> Result<Vec<u8>, std::io::Error> {
+fn read_to_end(path: &str) -> Result<Vec<u8>, PrError> {
     if path == "-" {
         let mut f = stdin();
         let mut buf = vec![];
         f.read_to_end(&mut buf)?;
         Ok(buf)
     } else {
-        std::fs::read(path)
+        // Include the file name and strip the raw "(os error N)" suffix so the
+        // message matches GNU pr, e.g. "pr: qwe: No such file or directory".
+        std::fs::read(path).map_err(|err| PrError::ReadError {
+            path: path.to_string(),
+            msg: strip_errno(&err),
+        })
     }
 }
 

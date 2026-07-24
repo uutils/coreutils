@@ -46,12 +46,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         raw_separator
     };
-
-    let files: Vec<OsString> = match matches.get_many::<OsString>(options::FILE) {
-        Some(v) => v.cloned().collect(),
-        None => vec![OsString::from("-")],
-    };
-
+    #[allow(clippy::unwrap_used, reason = "default value is set by clap")]
+    let files: Vec<OsString> = matches
+        .get_many::<OsString>(options::FILE)
+        .unwrap()
+        .cloned()
+        .collect();
     tac(&files, before, regex, separator)
 }
 
@@ -88,6 +88,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILE)
                 .hide(true)
                 .action(ArgAction::Append)
+                .default_value("-")
                 .value_parser(clap::value_parser!(OsString))
                 .value_hint(clap::ValueHint::FilePath),
         )
@@ -250,13 +251,14 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
             }
             // Unescape escaped (), |, {} when not inside brackets
             b'\\' if !inside_brackets && !is_escaped => {
-                if let Some(next) = bytes.get(i + 1) {
-                    if matches!(next, b'(' | b')' | b'|' | b'{' | b'}') {
-                        result.push(*next);
-                        last_byte = Some(*next);
-                        i += 2;
-                        continue;
-                    }
+                if let Some(next) = bytes
+                    .get(i + 1)
+                    .filter(|next| matches!(next, b'(' | b')' | b'|' | b'{' | b'}'))
+                {
+                    result.push(*next);
+                    last_byte = Some(*next);
+                    i += 2;
+                    continue;
                 }
 
                 result.push(b'\\');

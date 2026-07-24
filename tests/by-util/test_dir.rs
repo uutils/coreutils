@@ -83,3 +83,17 @@ fn test_version() {
         .no_stderr()
         .stdout_is(format!("dir {}\n", uucore::crate_version!()));
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.touch("file");
+
+    scene
+        .ucmd()
+        .arg("file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("dir: write error: No space left on device\n");
+}

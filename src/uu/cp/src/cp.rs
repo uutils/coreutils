@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore RDONLY futimens utimensat
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -1903,7 +1904,23 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
-        if dest.is_symlink() {
+        // `set_file_times` opens the destination (O_RDONLY) before calling
+        // futimens; opening a FIFO or device with no peer blocks forever, and a
+        // socket cannot be opened at all. For symlinks and these special files
+        // use the path-based, no-follow variant, which sets the times via
+        // utimensat without opening.
+        #[cfg(unix)]
+        let no_open = {
+            let ft = source_metadata.file_type();
+            dest.is_symlink()
+                || ft.is_fifo()
+                || ft.is_socket()
+                || ft.is_char_device()
+                || ft.is_block_device()
+        };
+        #[cfg(not(unix))]
+        let no_open = dest.is_symlink();
+        if no_open {
             filetime::set_symlink_file_times(dest, atime, mtime)?;
         } else {
             filetime::set_file_times(dest, atime, mtime)?;
@@ -1915,18 +1932,13 @@ pub(crate) fn copy_attributes(
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
-        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
-            if let Some(context) = context {
-                if let Err(e) = context.set_for_path(dest, false, false) {
-                    return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-                    ));
-                }
-            }
-        } else {
-            return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.quote()),
-            ));
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
+            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
+        })?;
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
+					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
+				))?;
         }
         Ok(())
     })?;
@@ -2190,12 +2202,12 @@ fn delete_dest_if_needed_and_allowed(
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     // Windows requires clearing readonly attribute before deletion when using --force
     #[cfg(windows)]
-    if options.force() {
-        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
-            #[allow(clippy::permissions_set_readonly_false)]
-            perms.set_readonly(false);
-            let _ = fs::set_permissions(path, perms);
-        }
+    if options.force()
+        && let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions())
+    {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        let _ = fs::set_permissions(path, perms);
     }
 
     match fs::remove_file(path) {
