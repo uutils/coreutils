@@ -54,6 +54,7 @@ who-heading-exit = EXIT
 
 # Error messages
 who-canonicalize-error = failed to canonicalize { $host }
+who-error-write = write error: { $error }
 
 # Platform-specific messages
 who-unsupported-openbsd = unsupported command on OpenBSD

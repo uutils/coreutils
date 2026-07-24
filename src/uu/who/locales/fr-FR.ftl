@@ -53,6 +53,7 @@ who-heading-exit = SORTIE
 
 # Error messages
 who-canonicalize-error = échec de canonicalisation de { $host }
+who-error-write = erreur d'écriture : { $error }
 
 # Platform-specific messages
 who-unsupported-openbsd = commande non prise en charge sur OpenBSD
