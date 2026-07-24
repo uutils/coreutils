@@ -2,13 +2,12 @@
 # This script lists the GNU failing tests by size
 # Just like with util/run-gnu-test.sh, we expect the gnu sources
 # to be in ../
-import urllib.request
-
-import urllib
-import os
 import glob
 import json
+import os
 import sys
+import urllib
+import urllib.request
 
 base = "../gnu/tests/"
 
@@ -19,7 +18,7 @@ try:
         "https://raw.githubusercontent.com/uutils/coreutils-tracking/main/aggregated-result.json",
         result_json,
     )
-except Exception as e:
+except Exception as e:  # ruff: ignore[BLE001]
     print(f"Failed to download the file: {e}")
     if not os.path.exists(result_json):
         print(f"Local file '{result_json}' not found. Exiting.")
@@ -45,18 +44,18 @@ def show_list(list_test):
 
     for f in reversed(tests):
         if contains_require_root(f):
-            print("%s: %s / require_root" % (f, os.stat(f).st_size))
+            print(f"{f}: {os.stat(f).st_size} / require_root")
         else:
-            print("%s: %s" % (f, os.stat(f).st_size))
-    print("")
-    print("%s tests remaining" % len(tests))
+            print(f"{f}: {os.stat(f).st_size}")
+    print()
+    print(f"{len(tests)} tests remaining")
 
 
 def contains_require_root(file_path):
     try:
         with open(file_path, "r") as file:
             return "require_root_" in file.read()
-    except IOError:
+    except OSError:
         return False
 
 
@@ -78,7 +77,7 @@ for d in data:
             try:
                 list_of_files.remove(a)
             except ValueError:
-                print("Could not find test '%s'. Maybe update the GNU repo?" % a)
+                print(f"Could not find test '{a}'. Maybe update the GNU repo?")
                 sys.exit(1)
 
         # if it is SKIP, show it
@@ -94,11 +93,11 @@ for d in data:
 print("===============")
 print("SKIP tests:")
 show_list(skip_tests)
-print("")
+print()
 print("===============")
 print("ERROR tests:")
 show_list(error_tests)
-print("")
+print()
 print("===============")
 print("FAIL tests:")
 show_list(list_of_files)
