@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) runlevel mesg
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 use uucore::translate;
