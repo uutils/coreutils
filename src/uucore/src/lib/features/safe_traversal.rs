@@ -26,7 +26,7 @@ use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
 use nix::libc;
 use nix::sys::stat::{FchmodatFlags, FileStat, Mode, fchmodat, fstatat, mkdirat};
-use nix::unistd::{Gid, Uid, UnlinkatFlags, fchown, fchownat, unlinkat};
+use nix::unistd::{UnlinkatFlags, unlinkat};
 use os_display::Quotable;
 
 use crate::translate;
@@ -258,32 +258,30 @@ impl DirFd {
         gid: Option<u32>,
         symlink_behavior: SymlinkBehavior,
     ) -> io::Result<()> {
-        let name_cstr =
-            CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-
         let flags = if symlink_behavior.should_follow() {
-            nix::fcntl::AtFlags::empty()
+            rustix::fs::AtFlags::empty()
         } else {
-            nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW
         };
 
-        let uid = uid.map(Uid::from_raw);
-        let gid = gid.map(Gid::from_raw);
+        let uid = uid.map(rustix::process::Uid::from_raw);
+        let gid = gid.map(rustix::process::Gid::from_raw);
 
-        fchownat(&self.fd, name_cstr.as_c_str(), uid, gid, flags)
-            .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        Ok(())
+        match rustix::fs::chownat(&self.fd, name, uid, gid, flags) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(io::Error::from_raw_os_error(e.raw_os_error())),
+        }
     }
 
     /// Change ownership of this directory
     pub fn fchown(&self, uid: Option<u32>, gid: Option<u32>) -> io::Result<()> {
-        let uid = uid.map(Uid::from_raw);
-        let gid = gid.map(Gid::from_raw);
+        let uid = uid.map(rustix::process::Uid::from_raw);
+        let gid = gid.map(rustix::process::Gid::from_raw);
 
-        fchown(&self.fd, uid, gid).map_err(|e| io::Error::from_raw_os_error(e as i32))?;
-
-        Ok(())
+        match rustix::fs::fchown(&self.fd, uid, gid) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(io::Error::from_raw_os_error(e.raw_os_error())),
+        }
     }
 
     /// Change mode of a file relative to this directory
