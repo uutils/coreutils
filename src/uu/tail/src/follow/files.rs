@@ -144,7 +144,7 @@ impl FileHandling {
         if chunks.has_data() {
             if self.needs_header(path, verbose) {
                 let display_name = self.get(path).display_name.clone();
-                self.header_printer.print(display_name.as_str());
+                self.header_printer.print(display_name.as_str())?;
             }
 
             let mut writer = BufWriter::new(stdout().lock());
