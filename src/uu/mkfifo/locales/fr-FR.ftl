@@ -11,3 +11,6 @@ mkfifo-error-invalid-mode = mode invalide : { $error }
 mkfifo-error-cannot-create-fifo = impossible de créer le fifo { $path } : Le fichier existe
 mkfifo-error-cannot-set-permissions = impossible de définir les permissions sur { $path } : { $error }
 mkfifo-error-non-file-permission = le mode ne doit spécifier que des bits de permission de fichier
+
+# Messages d'avertissement
+mkfifo-warning-context-not-selinux = --context est ignoré ; cela nécessite un noyau avec SELinux/SMACK activé

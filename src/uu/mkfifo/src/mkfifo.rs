@@ -10,6 +10,8 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
 
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+use uucore::show_warning;
 use uucore::{format_usage, show};
 
 mod options {
@@ -69,8 +71,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     if let Err(e) =
                         uucore::selinux::set_selinux_security_context(Path::new(&f), context)
                     {
-                        let _ = std::fs::remove_file(f);
-                        return Err(USimpleError::new(1, e.to_string()));
+                        if matches!(e, uucore::selinux::SeLinuxError::SELinuxNotEnabled) {
+                            show_warning!("{}", translate!("mkfifo-warning-context-not-selinux"));
+                        } else {
+                            let _ = std::fs::remove_file(f);
+                            return Err(USimpleError::new(1, e.to_string()));
+                        }
                     }
                 }
             }
