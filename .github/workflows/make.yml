@@ -4,7 +4,7 @@ name: make
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox uutils
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR manpages multisize noconfirm runtest testsuite toybox userns uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -82,7 +82,11 @@ jobs:
         mv -t target/ target.cache/release 2>/dev/null || true
     - name: "`make nextest`"
       shell: bash
-      run: make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
+      run: |
+        # some test needs unshare
+        sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+        sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        make nextest PROFILE=ci CARGOFLAGS="--hide-progress-bar"
       env:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
