@@ -5,6 +5,8 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
+#[cfg(all(unix, not(target_os = "android")))]
+use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -838,6 +840,38 @@ fn test_backup_same_file() {
     ucmd.args(&["--backup", "file1", "./file1"])
         .fails()
         .stderr_contains("n: 'file1' and './file1' are the same file");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_backup_existing_hard_linked_under_different_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+
+    ucmd.args(&["--backup", "a", "b"]).succeeds().no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_backup_existing_hard_linked_target_is_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkfifo("b~");
+
+    ucmd.args(&["--backup", "a", "b"])
+        .timeout(Duration::from_secs(10))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(!at.is_fifo("b~"));
 }
 
 #[test]
