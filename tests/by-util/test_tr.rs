@@ -1573,6 +1573,116 @@ fn test_trailing_backslash() {
 }
 
 #[test]
+fn test_trailing_backslash_warning_in_set2() {
+    new_ucmd!()
+        .args(&[".", r"\"])
+        .pipe_in(".")
+        .succeeds()
+        .stderr_is("tr: warning: an unescaped backslash at end of string is not portable\n")
+        .stdout_is("\\");
+}
+
+#[test]
+fn test_trailing_backslash_warning_in_both_sets() {
+    new_ucmd!()
+        .args(&[r"\", r"\"])
+        .pipe_in("\\")
+        .succeeds()
+        .stderr_is(concat!(
+            "tr: warning: an unescaped backslash at end of string is not portable\n",
+            "tr: warning: an unescaped backslash at end of string is not portable\n",
+        ))
+        .stdout_is("\\");
+}
+
+#[test]
+fn test_escaped_trailing_backslash_in_set2_does_not_warn() {
+    new_ucmd!()
+        .args(&[".", r"\\"])
+        .pipe_in(".")
+        .succeeds()
+        .no_stderr()
+        .stdout_is("\\");
+}
+
+#[test]
+fn test_set1_syntax_error_prevents_set2_warning() {
+    new_ucmd!()
+        .args(&["z-a", r"\"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: range-endpoints of 'z-a' are in reverse collating sequence order\n");
+}
+
+#[test]
+fn test_set2_warning_precedes_set1_semantic_error() {
+    new_ucmd!()
+        .args(&["[x*]", r"\"])
+        .pipe_in("")
+        .fails()
+        .stderr_is(concat!(
+            "tr: warning: an unescaped backslash at end of string is not portable\n",
+            "tr: the [c*] repeat construct may not appear in string1\n",
+        ));
+}
+
+#[test]
+fn test_set2_syntax_error_precedes_set1_semantic_error() {
+    new_ucmd!()
+        .args(&["[x*]", "z-a"])
+        .pipe_in("")
+        .fails()
+        .stderr_only("tr: range-endpoints of 'z-a' are in reverse collating sequence order\n");
+}
+
+#[test]
+fn test_set2_trailing_warning_precedes_its_syntax_error() {
+    new_ucmd!()
+        .args(&["x", r"z-a\"])
+        .pipe_in("")
+        .fails()
+        .stderr_is(concat!(
+            "tr: warning: an unescaped backslash at end of string is not portable\n",
+            "tr: range-endpoints of 'z-a' are in reverse collating sequence order\n",
+        ));
+}
+
+#[test]
+fn test_parser_warning_precedes_trailing_backslash_warning() {
+    // Only the relative warning order is relevant to this regression.
+    let result = new_ucmd!()
+        .args(&["-d", r"\501\"])
+        .pipe_in("(1Ł)")
+        .succeeds();
+    result.stdout_is("Ł)");
+
+    let stderr = result.stderr_str();
+    let ambiguous_octal = stderr.find("warning: the ambiguous octal escape").unwrap();
+    let trailing_backslash = stderr
+        .find("warning: an unescaped backslash at end of string is not portable")
+        .unwrap();
+    assert!(ambiguous_octal < trailing_backslash);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_warning_write_failures() {
+    // A warning that cannot be written sets the exit status without discarding
+    // the translated output, for both the trailing-backslash and the parser
+    // warning paths.
+    for (args, input, expected_stdout) in
+        [([".", r"\"], ".", "\\"), (["-d", r"\501"], "(1Ł)", "Ł)")]
+    {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in(input)
+            .set_stderr(std::fs::File::create("/dev/full").unwrap())
+            .fails_with_code(1)
+            .stdout_is(expected_stdout);
+    }
+}
+
+#[test]
 fn test_multibyte_octal_sequence() {
     new_ucmd!()
         .args(&["-d", r"\501"])

@@ -21,10 +21,28 @@ use std::{
     fmt::{Debug, Display},
     io::{BufRead, Write},
 };
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::translate;
 
-use uucore::show_warning;
+/// Write a diagnostic to stderr, recording exit status 1 if the write fails.
+///
+/// Unlike `show_warning!`, this does not discard stderr write errors. The
+/// failure is recorded but not propagated, so translation of stdin continues
+/// and the translated stdout is preserved, as GNU does. A successful
+/// diagnostic leaves the stored status unchanged.
+fn emit_diagnostic(message: impl Display) {
+    let mut stderr = std::io::stderr().lock();
+
+    if writeln!(stderr, "{}: {message}", uucore::util_name()).is_err() {
+        set_exit_code(1);
+    }
+}
+
+/// Whether the raw operand ends in an odd-length run of backslashes, i.e. a
+/// final backslash that is not itself escaped.
+fn has_unescaped_trailing_backslash(input: &[u8]) -> bool {
+    input.iter().rev().take_while(|&&b| b == b'\\').count() % 2 == 1
+}
 
 /// Common trait for operations that can process chunks of data
 pub trait ChunkProcessor {
@@ -217,12 +235,18 @@ impl Sequence {
     ) -> Result<(Vec<u8>, Vec<u8>), BadSequence> {
         let is_char_star = |s: &&Self| -> bool { matches!(s, Self::CharStar(_)) };
 
+        // Both operands are parsed before either is validated, so that warnings
+        // and syntax errors from set2 are reported ahead of a semantic
+        // rejection of a syntactically valid set1, as GNU does. Set1 is still
+        // parsed first, so a syntax error in it prevents set2 from being
+        // parsed at all.
         let set1 = Self::from_str(set1_str)?;
+        let mut set2 = Self::from_str(set2_str)?;
+
         if set1.iter().filter(is_char_star).count() != 0 {
             return Err(BadSequence::CharRepeatInSet1);
         }
 
-        let mut set2 = Self::from_str(set2_str)?;
         if set2.iter().filter(is_char_star).count() > 1 {
             return Err(BadSequence::MultipleCharRepeatInSet2);
         }
@@ -350,7 +374,7 @@ impl Sequence {
 
 impl Sequence {
     pub fn from_str(input: &[u8]) -> Result<Vec<Self>, BadSequence> {
-        many0(alt((
+        let parsed = many0(alt((
             Self::parse_char_range,
             Self::parse_char_star,
             Self::parse_char_repeat,
@@ -363,9 +387,16 @@ impl Sequence {
         )))
         .parse(input)
         .map(|(_, r)| r)
-        .unwrap()
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+        // Warn once per operand, after the whole operand has been scanned, so
+        // that this warning follows any warning emitted while parsing it and
+        // precedes a syntax error found in the same operand.
+        if has_unescaped_trailing_backslash(input) {
+            emit_diagnostic(translate!("tr-warning-unescaped-backslash"));
+        }
+
+        parsed.into_iter().collect::<Result<Vec<_>, _>>()
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
@@ -409,12 +440,11 @@ impl Sequence {
                     if let Ok(origin_octal) = std::str::from_utf8(input) {
                         let actual_octal_tail: &str = std::str::from_utf8(&input[0..2]).unwrap();
                         let outstand_char: char = char::from_u32(input[2] as u32).unwrap();
-                        show_warning!(
-                            "{}",
+                        emit_diagnostic(
                             translate!("tr-warning-ambiguous-octal-escape", "origin_octal" => origin_octal, "actual_octal_tail" => actual_octal_tail, "outstand_char" => outstand_char)
                         );
                     } else {
-                        show_warning!("{}", translate!("tr-warning-invalid-utf8"));
+                        emit_diagnostic(translate!("tr-warning-invalid-utf8"));
                     }
                 }
                 result
