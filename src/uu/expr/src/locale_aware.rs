@@ -87,7 +87,7 @@ fn substr_with_locale(
         UEncoding::Utf8 => {
             // Create a buffer with the heuristic that all the chars are ASCII
             // and are 1-byte long.
-            let mut string = MaybeNonUtf8String::with_capacity(len);
+            let mut string = MaybeNonUtf8String::with_capacity(s.len().min(len));
             let mut buf = [0; 4];
 
             // Iterate on char-bytes, and skip them accordingly.
