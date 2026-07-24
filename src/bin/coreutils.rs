@@ -69,8 +69,7 @@ fn main() {
 
     let util_name = if let Some(&util) = matched_util {
         Some(OsString::from(util))
-    } else if is_coreutils || binary_as_util.ends_with("box") {
-        // todo: Remove support of "*box" from binary
+    } else if is_coreutils {
         uucore::set_utility_is_second_arg();
         args.next()
     } else {
@@ -138,13 +137,7 @@ fn main() {
             }
         }
     } else {
-        // GNU just fails, but busybox tests needs usage
-        // todo: patch the test suite instead
-        if binary_as_util.ends_with("box") {
-            usage(&utils, binary_as_util);
-        } else {
-            let _ = writeln!(io::stderr(), "coreutils: missing argument");
-        }
+        let _ = writeln!(io::stderr(), "coreutils: missing argument");
         process::exit(1);
     }
 }

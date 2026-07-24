@@ -56,7 +56,7 @@ PKG_BUILDDIR  := $(BUILDDIR)/deps
 DOCSDIR       := $(BASEDIR)/docs
 
 BUSYBOX_ROOT := $(BASEDIR)/tmp
-BUSYBOX_VER  := 1.36.1
+BUSYBOX_VER  := 1_37_0
 BUSYBOX_SRC  := $(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER)
 
 TOYBOX_ROOT := $(BASEDIR)/tmp
@@ -170,9 +170,13 @@ toybox-src:
 busybox-src:
 	if [ ! -e "$(BUSYBOX_SRC)" ] ; then \
 		$(INSTALL) -d "$(BUSYBOX_ROOT)" ; \
-		curl -Ls "https://github.com/mirror/busybox/archive/refs/tags/$(subst .,_,$(BUSYBOX_VER)).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		curl -Ls "https://github.com/vda-linux/busybox_mirror/archive/refs/tags/$(BUSYBOX_VER).tar.gz" -o "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
 		tar -C "$(BUSYBOX_ROOT)" -xf "$(BUSYBOX_ROOT)/busybox-$(BUSYBOX_VER).tar.gz" ; \
+		mv "$(BUSYBOX_ROOT)/busybox_mirror-$(BUSYBOX_VER)" "$(BUSYBOX_SRC)" ; \
 	fi ;
+	# Backport fix 83a40bf: prefer --list (needed to remove *box hack, see #13343)
+	# TODO: drop when upstream >1.37.0 has fix
+	sed -i -e 's#"$$bindir/busybox" 2>&1 |#"$$bindir/busybox" --list 2>/dev/null || "$$bindir/busybox" 2>\&1 |#' $(BUSYBOX_SRC)/testsuite/runtest || true
 
 # This is a busybox-specific config file their test suite wants to parse.
 $(BUILDDIR)/.config: $(BASEDIR)/.busybox-config
