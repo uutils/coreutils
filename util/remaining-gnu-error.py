@@ -47,7 +47,7 @@ def show_list(list_test):
             print("%s: %s / require_root" % (f, os.stat(f).st_size))
         else:
             print("%s: %s" % (f, os.stat(f).st_size))
-    print("")
+    print()
     print("%s tests remaining" % len(tests))
 
 
@@ -93,11 +93,11 @@ for d in data:
 print("===============")
 print("SKIP tests:")
 show_list(skip_tests)
-print("")
+print()
 print("===============")
 print("ERROR tests:")
 show_list(error_tests)
-print("")
+print()
 print("===============")
 print("FAIL tests:")
 show_list(list_of_files)
