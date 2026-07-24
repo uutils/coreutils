@@ -44,11 +44,11 @@ def show_list(list_test):
 
     for f in reversed(tests):
         if contains_require_root(f):
-            print("%s: %s / require_root" % (f, os.stat(f).st_size))
+            print(f"{f}: {os.stat(f).st_size} / require_root")
         else:
-            print("%s: %s" % (f, os.stat(f).st_size))
+            print(f"{f}: {os.stat(f).st_size}")
     print()
-    print("%s tests remaining" % len(tests))
+    print(f"{len(tests)} tests remaining")
 
 
 def contains_require_root(file_path):
@@ -77,7 +77,7 @@ for d in data:
             try:
                 list_of_files.remove(a)
             except ValueError:
-                print("Could not find test '%s'. Maybe update the GNU repo?" % a)
+                print(f"Could not find test '{a}'. Maybe update the GNU repo?")
                 sys.exit(1)
 
         # if it is SKIP, show it
