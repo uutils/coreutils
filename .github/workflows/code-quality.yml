@@ -172,7 +172,7 @@ jobs:
     - name: Install/setup prerequisites
       shell: bash
       run: |
-        sudo npm install cspell@10.0.1 -g ;
+        sudo npm install cspell -g ;
     - name: Run `cspell`
       shell: bash
       run: |
@@ -199,13 +199,11 @@ jobs:
       - name: ruff
         uses: astral-sh/ruff-action@v4.1.0
         with:
-          version: "0.15.22"
           src: "./util"
 
       - name: ruff - format
         uses: astral-sh/ruff-action@v4.1.0
         with:
-          version: "0.15.22"
           src: "./util"
           args: format --check
       - name: Run Python unit tests

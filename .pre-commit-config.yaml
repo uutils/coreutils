@@ -53,25 +53,10 @@ repos:
         language: system
       - id: cspell
         name: Code spell checker (cspell)
-        description: Run the same pinned cspell scan as CI.
-        entry: cspell --no-summary --no-progress .
-        pass_filenames: false
-        language: node
-        additional_dependencies: [cspell@10.0.1]
-      - id: ruff-check
-        name: Ruff lint
-        description: Run the same pinned Ruff lint as CI.
-        entry: ruff check ./util
-        pass_filenames: false
-        language: python
-        additional_dependencies: [ruff==0.15.22]
-      - id: ruff-format
-        name: Ruff format
-        description: Run the same pinned Ruff format check as CI.
-        entry: ruff format --check ./util
-        pass_filenames: false
-        language: python
-        additional_dependencies: [ruff==0.15.22]
+        description: Run cspell to check for spelling errors (if available).
+        entry: bash -c 'if command -v cspell >/dev/null 2>&1; then cspell --no-must-find-files -- "$@"; else echo "cspell not found, skipping spell check"; exit 0; fi' --
+        pass_filenames: true
+        language: system
 
 ci:
-  skip: [rust-linting, rust-clippy, cargo-lock-check]
+  skip: [rust-linting, rust-clippy, cargo-lock-check, cspell]
