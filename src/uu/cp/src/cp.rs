@@ -1383,12 +1383,13 @@ fn show_error_if_needed(error: &CpError) {
     match error {
         // When using --no-clobber, we don't want to show
         // an error message
+        #[expect(clippy::match_same_arms)] // needs comment
         CpError::NotAllFilesCopied => {
             // Need to return an error code
         }
         CpError::Skipped(_) => {
             // touch a b && echo "n"|cp -i a b && echo $?
-            // should return an error from GNU 9.2
+            // should return an error
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
@@ -1733,8 +1734,7 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
     }
 
     match uucore::selinux::set_selinux_security_context(path, context) {
-        Ok(()) => Ok(()),
-        Err(uucore::selinux::SeLinuxError::OperationNotSupported) => Ok(()),
+        Ok(()) | Err(uucore::selinux::SeLinuxError::OperationNotSupported) => Ok(()),
         Err(e) => Err(CpError::Error(
             translate!("cp-error-selinux-error", "error" => e),
         )),
