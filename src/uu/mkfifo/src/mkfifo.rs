@@ -146,12 +146,16 @@ fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
 #[cfg(target_vendor = "apple")]
 fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
     use std::ffi::CString;
-    let c_path = CString::new(path)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let c_path =
+        CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     // SAFETY: `c_path` is a valid NUL-terminated C string and `mode` is a
     // standard mode_t bit pattern.
     let rc = unsafe { libc::mkfifo(c_path.as_ptr(), mode as libc::mode_t) };
-    if rc == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
