@@ -3720,6 +3720,7 @@ dependencies = [
  "file_diff",
  "filetime",
  "fluent",
+ "rustix",
  "selinux",
  "thiserror 2.0.19",
  "uucore",
@@ -4337,6 +4338,7 @@ dependencies = [
  "clap",
  "fluent",
  "libc",
+ "rustix",
  "tempfile",
  "thiserror 2.0.19",
  "uucore",
@@ -4533,6 +4535,7 @@ version = "0.9.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "uucore",
  "windows-sys 0.61.2",
 ]
