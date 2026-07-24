@@ -1311,6 +1311,30 @@ fn test_install_backup_short_custom_suffix() {
 }
 
 #[test]
+fn test_install_backup_empty_suffix_defaults_to_tilde() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let file_a = "test_install_backup_empty_suffix_file_a";
+    let file_b = "test_install_backup_empty_suffix_file_b";
+
+    at.touch(file_a);
+    at.touch(file_b);
+    scene
+        .ucmd()
+        .arg("-b")
+        .arg("--suffix=")
+        .arg(file_a)
+        .arg(file_b)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(file_a));
+    assert!(at.file_exists(file_b));
+    assert!(at.file_exists(format!("{file_b}~")));
+}
+
+#[test]
 fn test_install_suffix_without_backup_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

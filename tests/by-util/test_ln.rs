@@ -245,6 +245,25 @@ fn test_symlink_custom_backup_suffix() {
 }
 
 #[test]
+fn test_ln_backup_empty_suffix_defaults_to_tilde() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("a", "a\n");
+    at.write("b", "b2\n");
+
+    scene
+        .ucmd()
+        .args(&["-b", "--suffix=", "a", "b"])
+        .succeeds()
+        .no_stderr();
+
+    // b is now a hard link to a, and the original b was backed up to b~
+    assert_eq!(at.read("b"), "a\n");
+    assert_eq!(at.read("b~"), "b2\n");
+}
+
+#[test]
 fn test_symlink_suffix_without_backup_option() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
