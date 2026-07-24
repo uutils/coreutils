@@ -215,10 +215,7 @@ impl BytesCell {
     fn new(bytes: u64, block_size: &BlockSize) -> Self {
         Self {
             bytes,
-            scaled: {
-                let BlockSize::Bytes(d) = block_size;
-                (bytes as f64 / *d as f64).ceil() as u64
-            },
+            scaled: (bytes as f64 / block_size.as_u64() as f64).ceil() as u64,
         }
     }
 }
@@ -308,14 +305,21 @@ impl<'a> RowFormatter<'a> {
         let size = bytes_column.scaled;
         let s = if let Some(h) = self.options.human_readable {
             let size = if self.is_total_row {
-                let BlockSize::Bytes(d) = self.options.block_size;
+                let d = self.options.block_size.as_u64();
                 d * size
             } else {
                 bytes_column.bytes
             };
             to_magnitude_and_suffix(size.into(), SuffixType::HumanReadable(h), true)
         } else {
-            size.to_string()
+            match &self.options.block_size {
+                // if it has a suffix, append it to the size (but not on the 'total' row)
+                BlockSize::PrefixedBytes(_, suffix) if !self.is_total_row => {
+                    format!("{size}{suffix}")
+                }
+                // else, just print the raw number as before
+                _ => size.to_string(),
+            }
         };
         Cell::from_ascii_string(s)
     }
@@ -327,7 +331,14 @@ impl<'a> RowFormatter<'a> {
         let s = if let Some(h) = self.options.human_readable {
             to_magnitude_and_suffix(size, SuffixType::HumanReadable(h), true)
         } else {
-            size.to_string()
+            match &self.options.block_size {
+                // if it has a suffix, append it to the size (but not on the 'total' row)
+                BlockSize::PrefixedBytes(_, suffix) if !self.is_total_row => {
+                    format!("{size}{suffix}")
+                }
+                // else, just print the raw number as before
+                _ => size.to_string(),
+            }
         };
         Cell::from_ascii_string(s)
     }
