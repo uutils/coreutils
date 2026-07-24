@@ -794,13 +794,18 @@ fn rename(
     Ok(())
 }
 
+/// Check if a file type must be recreated with [`copy_special_file`] rather
+/// than copied by content: fifos, sockets, and device nodes.
 #[cfg(unix)]
-fn is_fifo(filetype: fs::FileType) -> bool {
+fn is_special_file(filetype: fs::FileType) -> bool {
     filetype.is_fifo()
+        || filetype.is_socket()
+        || filetype.is_block_device()
+        || filetype.is_char_device()
 }
 
 #[cfg(not(unix))]
-fn is_fifo(_filetype: fs::FileType) -> bool {
+fn is_special_file(_filetype: fs::FileType) -> bool {
     false
 }
 
@@ -860,8 +865,8 @@ fn rename_with_fallback(
             {
                 rename_dir_fallback(from, to, display_manager, verbose)
             }
-        } else if is_fifo(file_type) {
-            rename_fifo_fallback(from, to)
+        } else if is_special_file(file_type) {
+            rename_special_fallback(from, to, &metadata)
         } else {
             #[cfg(unix)]
             {
@@ -879,15 +884,72 @@ fn rename_with_fallback(
     })
 }
 
-/// Replace the destination with a new pipe with the same name as the source.
+/// Recreate the source special file (fifo, socket, or device node) at `to`,
+/// preserving its ownership and permissions.
 #[cfg(unix)]
-fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
-    if to.try_exists()? {
-        fs::remove_file(to)?;
+fn copy_special_file(from: &Path, metadata: &fs::Metadata, to: &Path) -> io::Result<()> {
+    use nix::sys::stat::{Mode, SFlag, mknod};
+    use std::fs::Permissions;
+    use std::os::unix::fs::MetadataExt;
+
+    let file_type = metadata.file_type();
+    let mode = Mode::from_bits_truncate(metadata.mode() as _);
+    if file_type.is_fifo() {
+        // rustix::fs::mkfifoat is linux only
+        nix::unistd::mkfifo(to, mode)?;
+    } else {
+        let kind = if file_type.is_socket() {
+            SFlag::S_IFSOCK
+        } else if file_type.is_block_device() {
+            SFlag::S_IFBLK
+        } else {
+            SFlag::S_IFCHR
+        };
+        mknod(to, kind, mode, metadata.rdev() as _)?;
     }
-    // rustix::fs::mkfifoat is linux only
-    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-    fs::remove_file(from)
+    // chown before chmod: chown(2) clears setuid/setgid for non-root, and the
+    // explicit chmod undoes the umask applied during creation.
+    let _ = preserve_ownership(from, to);
+    let _ = fs::set_permissions(to, Permissions::from_mode(metadata.mode() & 0o7777));
+    Ok(())
+}
+
+/// Replace the destination with a new special file (fifo, socket, or device
+/// node) with the same name as the source. The node is created under a
+/// temporary name and then renamed over the destination, so that failing to
+/// create it cannot destroy an existing destination.
+#[cfg(unix)]
+fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+
+    let mut urandom = fs::File::open("/dev/urandom")?;
+
+    for _ in 0..32 {
+        let tmp_bytes = random_temp_name(&mut urandom)?;
+        let tmp = parent.join(OsStr::from_bytes(&tmp_bytes));
+
+        match copy_special_file(from, metadata, &tmp) {
+            Ok(()) => {
+                if let Err(e) = fs::rename(&tmp, to) {
+                    let _ = fs::remove_file(&tmp);
+                    return Err(e);
+                }
+                return fs::remove_file(from);
+            }
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique temp name in destination directory",
+    ))
 }
 
 #[cfg(not(unix))]
@@ -895,7 +957,7 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
+fn rename_special_fallback(_from: &Path, _to: &Path, _metadata: &fs::Metadata) -> io::Result<()> {
     Ok(())
 }
 
@@ -928,6 +990,26 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     fs::remove_file(from)
 }
 
+/// Generate a temp file name for atomically replacing a destination entry.
+///
+/// GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+/// drawn from a 62-char alphabet. Modulo bias on a 256→62 mapping is
+/// ~3% per slot — irrelevant for an 8-char unguessability budget. The
+/// name is drawn from `/dev/urandom` so it is unguessable to other
+/// users in the destination directory.
+#[cfg(unix)]
+fn random_temp_name(urandom: &mut impl io::Read) -> io::Result<[u8; 8]> {
+    const ALPHABET: &[u8; 62] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    let mut tmp_bytes = *b"Cu------";
+    let mut raw = [0u8; 6];
+    urandom.read_exact(&mut raw)?;
+    for (slot, byte) in tmp_bytes[2..].iter_mut().zip(raw) {
+        *slot = ALPHABET[(byte as usize) % ALPHABET.len()];
+    }
+    Ok(tmp_bytes)
+}
+
 /// Create a symlink at `to`, atomically replacing any existing entry via
 /// a temp-name + `renameat(2)` so observers never see `to` missing.
 ///
@@ -938,15 +1020,9 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
 /// directory.
 #[cfg(all(unix, not(target_os = "redox")))]
 fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
-    use io::Read;
     use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, symlinkat, unlinkat};
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
-
-    // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
-    // drawn from a 62-char alphabet. Modulo bias on a 256→62 mapping is
-    // ~3% per slot — irrelevant for an 8-char unguessability budget.
-    const ALPHABET: &[u8; 62] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 
     let parent = to
         .parent()
@@ -966,12 +1042,7 @@ fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
     let mut urandom = fs::File::open("/dev/urandom")?;
 
     for _ in 0..32 {
-        let mut tmp_bytes = *b"Cu------";
-        let mut raw = [0u8; 6];
-        urandom.read_exact(&mut raw)?;
-        for (slot, byte) in tmp_bytes[2..].iter_mut().zip(raw) {
-            *slot = ALPHABET[(byte as usize) % ALPHABET.len()];
-        }
+        let tmp_bytes = random_temp_name(&mut urandom)?;
         let tmp = OsStr::from_bytes(&tmp_bytes);
 
         match symlinkat(target, &dir_fd, tmp) {
@@ -1240,21 +1311,22 @@ fn copy_file_with_hardlinks_helper(
         // Copy a symlink file (no-follow).
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
-    } else if is_fifo(from.symlink_metadata()?.file_type()) {
-        // rustix::fs::mkfifoat is linux only
-        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
     } else {
-        // Copy a regular file.
-        fs::copy(from, to)?;
-        // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-        #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-        {
-            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+        let metadata = from.symlink_metadata()?;
+        if is_special_file(metadata.file_type()) {
+            // Recreate a fifo, socket, or device node.
+            copy_special_file(from, &metadata, to)?;
+        } else {
+            // Copy a regular file.
+            fs::copy(from, to)?;
+            // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
+            #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
+            {
+                let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
+            }
+            // Preserve ownership (uid/gid) from the source
+            let _ = preserve_ownership(from, to);
         }
-        // Preserve ownership (uid/gid) from the source
-        let _ = preserve_ownership(from, to);
     }
 
     Ok(())
@@ -1266,6 +1338,12 @@ fn rename_file_fallback(
     #[cfg(unix)] hardlink_tracker: Option<&mut HardlinkTracker>,
     #[cfg(unix)] hardlink_scanner: Option<&HardlinkGroupScanner>,
 ) -> io::Result<()> {
+    // Open the source before touching the destination: a source that cannot
+    // be opened for reading must not cost us an existing destination.
+    #[cfg(unix)]
+    let src_file = uucore::safe_copy::open_source(from, /* nofollow */ true)
+        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
     // Remove existing target file if it exists
     if to.is_symlink() {
         fs::remove_file(to).map_err(|err| {
@@ -1294,16 +1372,14 @@ fn rename_file_fallback(
         }
     }
 
-    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
-    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
-    // step to a different inode.
+    // Src/dst are open with O_NOFOLLOW and the fds are kept alive across
+    // copy, chown, xattr, and chmod so a concurrent path-swap can't redirect
+    // any step to a different inode.
     #[cfg(unix)]
     {
         use std::fs::Permissions;
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
-        use uucore::safe_copy::{create_dest_restrictive, open_source};
-        let src_file = open_source(from, /* nofollow */ true)
-            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        use uucore::safe_copy::create_dest_restrictive;
         let src_mode = src_file
             .metadata()
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
