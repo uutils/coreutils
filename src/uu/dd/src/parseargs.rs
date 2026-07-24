@@ -655,4 +655,19 @@ mod tests {
             assert!(matches!(Parser::parse_n(arg), Ok(Num::Bytes(_))));
         }
     }
+
+    #[test]
+    fn test_skip_seek_block_count_byte_overflow_rejected() {
+        // A skip/seek in blocks is multiplied by the block size (default 512)
+        // before the i64::MAX bound check. 2^55 blocks * 512 == 2^64, which
+        // wrapped past that check to a small value (and panicked in debug).
+        // It must be rejected as too large instead.
+        use crate::parseargs::ParseError;
+        for operand in ["skip=36028797018963968", "seek=36028797018963968"] {
+            assert!(matches!(
+                Parser::new().parse([operand]),
+                Err(ParseError::InvalidNumberWithErrMsg(_, _))
+            ));
+        }
+    }
 }
