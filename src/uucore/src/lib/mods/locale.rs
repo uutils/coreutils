@@ -423,14 +423,74 @@ pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
     get_message_internal(id, Some(ftl_args))
 }
 
-/// Function to detect system locale from environment variables
+/// Resolve the locale string from an environment lookup, applying the
+/// POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` > `LANG`.
+///
+/// The first of those variables that is set AND non-empty wins; a
+/// set-but-empty value is treated as unset. If none qualify, falls back to
+/// [`DEFAULT_LOCALE`]. The winning value is stripped of any `.<encoding>`
+/// suffix (e.g. `fr_FR.UTF-8` -> `fr_FR`), matching the previous `LANG`-only
+/// behavior exactly (no additional normalization is applied).
+///
+/// On top of that, `LANGUAGE` is honored with gettext semantics: it is a
+/// colon-separated priority list of languages that overrides the resolved
+/// locale for message translation, but only when the locale resolved from
+/// `LC_ALL`/`LC_MESSAGES`/`LANG` is not `C`/`POSIX` (gettext ignores
+/// `LANGUAGE` in the C locale). `LANGUAGE` is likewise disabled when none of
+/// `LC_ALL`/`LC_MESSAGES`/`LANG` is set, since an unset locale is the C
+/// locale. A resolved locale of `C`/`POSIX`, and an entry of `C` or `POSIX`
+/// in the list, both mean "no translation" and resolve to
+/// [`DEFAULT_LOCALE`] (English) explicitly. Each `LANGUAGE` entry is trimmed
+/// and stripped of any `.<encoding>` suffix before validation. Only the
+/// first usable entry is taken; there is no per-entry translation-catalog
+/// fallback like gettext's full walk. Deliberate divergence: when every
+/// `LANGUAGE` entry is unusable, we fall back to the resolved locale,
+/// whereas gettext would emit untranslated msgids instead.
+///
+/// `lookup` is injected so the precedence logic is unit-testable without
+/// mutating process-global env vars (which races under parallel test threads).
+fn resolve_locale_string(lookup: impl Fn(&str) -> Option<String>) -> String {
+    let Some(resolved) = ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .into_iter()
+        .find_map(|key| lookup(key).filter(|value| !value.is_empty()))
+    else {
+        return DEFAULT_LOCALE.to_string();
+    };
+    let resolved = resolved.split('.').next().unwrap_or(DEFAULT_LOCALE);
+
+    // gettext semantics: a C/POSIX locale means "no translation" (English
+    // here) and disables LANGUAGE entirely.
+    if resolved == "C" || resolved == "POSIX" {
+        return DEFAULT_LOCALE.to_string();
+    }
+
+    // init_localization resolves a single locale, so take the first usable
+    // LANGUAGE entry rather than walking the list per-catalog like gettext.
+    if let Some(language) = lookup("LANGUAGE").filter(|value| !value.is_empty()) {
+        for entry in language.split(':') {
+            let entry = entry.trim().split('.').next().unwrap_or_default();
+            if entry.is_empty() {
+                continue;
+            }
+            if entry == "C" || entry == "POSIX" {
+                // gettext: "no translation" requested, use English.
+                return DEFAULT_LOCALE.to_string();
+            }
+            if LanguageIdentifier::from_str(entry).is_ok() {
+                return entry.to_string();
+            }
+        }
+    }
+
+    resolved.to_string()
+}
+
+/// Function to detect system locale from environment variables.
+///
+/// Honors the POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` >
+/// `LANG` (see [`resolve_locale_string`]).
 fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = std::env::var("LANG")
-        .unwrap_or_else(|_| DEFAULT_LOCALE.to_string())
-        .split('.')
-        .next()
-        .unwrap_or(DEFAULT_LOCALE)
-        .to_string();
+    let locale_str = resolve_locale_string(|key| std::env::var(key).ok());
     LanguageIdentifier::from_str(&locale_str).map_err(|_| {
         LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
     })
@@ -440,7 +500,8 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 /// Always loads common strings in addition to utility-specific strings.
 ///
 /// This function initializes the localization system based on the system's locale
-/// preferences (via the LANG environment variable) or falls back to English
+/// preferences (via the `LC_ALL` > `LC_MESSAGES` > `LANG` environment variables,
+/// in that precedence order) or falls back to English
 /// if the system locale cannot be determined or the locale file doesn't exist.
 /// English is always loaded as a fallback.
 ///
@@ -1376,6 +1437,207 @@ invalid-syntax = This is { $missing
         })
         .join()
         .unwrap();
+    }
+
+    /// Build an env lookup closure from a fixed list of key/value pairs so the
+    /// precedence logic can be tested without touching process-global env vars.
+    fn env_lookup(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let owned: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        move |key: &str| owned.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_all_wins_over_unset() {
+        // Issue #8922 repro: LC_ALL set, LC_MESSAGES/LANG unset.
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_messages_when_lc_all_unset() {
+        let resolved = resolve_locale_string(env_lookup(&[("LC_MESSAGES", "de_DE.UTF-8")]));
+        assert_eq!(resolved, "de_DE");
+    }
+
+    #[test]
+    fn test_resolve_locale_lang_still_works() {
+        // Regression: LANG alone must keep working.
+        let resolved = resolve_locale_string(env_lookup(&[("LANG", "es_ES.UTF-8")]));
+        assert_eq!(resolved, "es_ES");
+    }
+
+    #[test]
+    fn test_resolve_locale_empty_treated_as_unset() {
+        // Set-but-empty LC_ALL is skipped in favor of a non-empty LANG.
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", ""), ("LANG", "fr_FR")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_all_precedence_over_lang() {
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LANG", "es_ES")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_lc_all_precedence_over_lc_messages() {
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LC_MESSAGES", "de_DE")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_nothing_set_falls_back_to_default() {
+        let resolved = resolve_locale_string(|_| None);
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_wins_over_lc_all() {
+        // gettext: LANGUAGE has priority over LC_ALL for messages when the
+        // resolved locale is not C/POSIX.
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", "de_DE"),
+        ]));
+        assert_eq!(resolved, "de_DE");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_ignored_when_locale_is_c() {
+        // gettext: the C locale disables LANGUAGE entirely AND means "no
+        // translation", so it resolves to English (DEFAULT_LOCALE) explicitly.
+        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "C"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_c_forces_english_despite_lc_all_fr() {
+        // Exact GNU testsuite -mb harness scenario: LANGUAGE=C LANG=C are set
+        // first, then only LC_ALL is overridden to fr_FR.UTF-8. The resolved
+        // locale is fr_FR (not C), so LANGUAGE applies, and a LANGUAGE entry
+        // of C means "no translation": DEFAULT_LOCALE (English) is returned
+        // explicitly, matching GNU.
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LANGUAGE", "C"),
+            ("LANG", "C"),
+            ("LC_ALL", "fr_FR.UTF-8"),
+        ]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_entry_codeset_stripped() {
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "es_ES.UTF-8"),
+            ("LANGUAGE", "fr_FR.UTF-8:de_DE"),
+        ]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_ignored_when_locale_is_posix() {
+        // Like C, a POSIX locale disables LANGUAGE and resolves to English
+        // (DEFAULT_LOCALE) explicitly.
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "POSIX"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_c_with_codeset_disables_language() {
+        // The C/POSIX gate compares the codeset-stripped locale, so C.UTF-8
+        // (the default on Debian and most containers) also disables LANGUAGE,
+        // matching gettext's "C.<encoding>" rule.
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "C.UTF-8"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_invalid_entry_falls_through() {
+        // An unparsable entry must not clobber a later valid one.
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "es_ES"),
+            ("LANGUAGE", "not!valid:fr_FR"),
+        ]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_only_empty_entries_ignored() {
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "::")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_posix_entry_forces_english() {
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", "POSIX"),
+        ]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_entry_whitespace_trimmed() {
+        // " C " must be recognized as C after trimming, not fall through to
+        // the French locale as an unparsable entry.
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", " C "),
+        ]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_c_with_codeset_forces_english() {
+        // The codeset suffix is stripped before the C/POSIX comparison.
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", "C.UTF-8"),
+        ]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_all_invalid_falls_back_to_locale() {
+        // Deliberate divergence from gettext: an entirely unusable LANGUAGE
+        // list falls back to the resolved locale (gettext would emit
+        // untranslated msgids instead).
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", "not!valid"),
+        ]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_list_takes_first_nonempty_entry() {
+        let resolved = resolve_locale_string(env_lookup(&[
+            ("LC_ALL", "es_ES.UTF-8"),
+            ("LANGUAGE", ":fr_FR:de_DE"),
+        ]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_empty_language_ignored() {
+        let resolved =
+            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "")]));
+        assert_eq!(resolved, "fr_FR");
+    }
+
+    #[test]
+    fn test_resolve_locale_language_ignored_when_no_locale_env_set() {
+        // gettext consults LANGUAGE only when a locale is actually set via
+        // LC_ALL/LC_MESSAGES/LANG (an unset locale is C, which disables it).
+        let resolved = resolve_locale_string(env_lookup(&[("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, DEFAULT_LOCALE);
     }
 
     #[test]
