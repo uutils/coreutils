@@ -14,12 +14,11 @@ use uucore::translate;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::ErrorKind;
 use std::iter;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
-#[cfg(unix)]
-use std::fs;
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 
@@ -435,7 +434,22 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         res
     };
-    println_verbatim(res?).map_err_context(|| translate!("mktemp-error-failed-print"))
+
+    let path = res?;
+    let print_result = println_verbatim(&path);
+
+    // If we failed to print the path, clean up the file/directory we just
+    // created (matching GNU). Nothing is created in dry-run mode, so skip it
+    // there. Removal is best-effort: keep reporting the original print error.
+    if print_result.is_err() && !dry_run {
+        let _ = if make_dir {
+            fs::remove_dir(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+    }
+
+    print_result.map_err_context(|| translate!("mktemp-error-failed-print"))
 }
 
 pub fn uu_app() -> Command {
