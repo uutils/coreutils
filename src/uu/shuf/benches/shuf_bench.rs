@@ -9,9 +9,9 @@ use uucore::benchmark::{run_util_function, setup_test_file, text_data};
 
 /// Benchmark shuffling lines from a file
 /// Tests the default mode with a large number of lines
-#[divan::bench(args = [100_000])]
-fn shuf_lines(bencher: Bencher, num_lines: usize) {
-    let data = text_data::generate_by_lines(num_lines, 80);
+#[divan::bench(args = [(100_000, 80), (100_000, 10)])]
+fn shuf_lines(bencher: Bencher, (num_lines, avg_line_length): (usize, usize)) {
+    let data = text_data::generate_by_lines(num_lines, avg_line_length);
     let file_path = setup_test_file(&data);
     let file_path_str = file_path.to_str().unwrap();
 
@@ -33,12 +33,12 @@ fn shuf_input_range(bencher: Bencher, range_size: usize) {
 
 /// Benchmark shuffling with repeat (sampling with replacement)
 /// Tests the -r flag combined with -n to output a specific count
-#[divan::bench(args = [50_000])]
-fn shuf_repeat_sampling(bencher: Bencher, num_lines: usize) {
-    let data = text_data::generate_by_lines(10_000, 80);
+#[divan::bench(args = [(50_000, 80), (50_000, 10)])]
+fn shuf_repeat_sampling(bencher: Bencher, (head_count, avg_line_length): (usize, usize)) {
+    let data = text_data::generate_by_lines(10_000, avg_line_length);
     let file_path = setup_test_file(&data);
     let file_path_str = file_path.to_str().unwrap();
-    let count = format!("{num_lines}");
+    let count = format!("{head_count}");
 
     bencher.bench(|| {
         black_box(run_util_function(
