@@ -29,6 +29,8 @@ use std::ffi::OsStr;
 use std::fmt;
 use std::fs::File;
 use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
+#[cfg(windows)]
+use std::path::PathBuf;
 
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -58,6 +60,15 @@ pub fn println_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
 /// Like `println_verbatim`, without the trailing newline.
 pub fn print_verbatim<S: AsRef<OsStr>>(text: S) -> io::Result<()> {
     io::stdout().write_all_os(text.as_ref())
+}
+
+#[cfg(windows)]
+pub fn strip_windows_verbatim_prefix(path: &str) -> Option<PathBuf> {
+    if let Some(rest) = path.strip_prefix(r"\\?\UNC\") {
+        Some(PathBuf::from(format!(r"\\{rest}")))
+    } else {
+        path.strip_prefix(r"\\?\").map(PathBuf::from)
+    }
 }
 
 /// [`io::Write`], but for OS strings.
@@ -133,4 +144,31 @@ pub fn print_all_env_vars<T: fmt::Display>(line_ending: T) -> io::Result<()> {
         write!(stdout, "{line_ending}")?;
     }
     Ok(())
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::strip_windows_verbatim_prefix;
+    use std::path::PathBuf;
+
+    #[test]
+    fn strip_windows_verbatim_unc_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\UNC\server\share\dir"),
+            Some(PathBuf::from(r"\\server\share\dir"))
+        );
+    }
+
+    #[test]
+    fn strip_windows_verbatim_drive_prefix() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\C:\dir"),
+            Some(PathBuf::from(r"C:\dir"))
+        );
+    }
+
+    #[test]
+    fn strip_windows_verbatim_prefix_ignores_regular_paths() {
+        assert_eq!(strip_windows_verbatim_prefix(r"C:\dir"), None);
+    }
 }
