@@ -291,6 +291,17 @@ impl Params {
                 let prefix = ".".to_string();
 
                 (directory, prefix)
+            } else if prefix_from_template.ends_with("/..") || prefix_from_template == ".." {
+                // `Path::file_name()` returns `None` for a path ending in `..`,
+                // and `Path::parent()` pops the preceding component, so both the
+                // directory and the prefix get mis-computed (e.g. `mktemp /tmp/..XXXXXX`
+                // would return `/tmp/<random>` instead of `/tmp/..<random>`). Strip
+                // the trailing `..` from `prefix_from_template` and use it as the
+                // literal prefix, matching GNU mktemp behavior.
+                let directory = Path::new(&prefix_from_option)
+                    .join(&prefix_from_template[..prefix_from_template.len() - 2]);
+                let prefix = "..".to_string();
+                (directory, prefix)
             } else {
                 let directory = match prefix_path.parent() {
                     None => PathBuf::new(),
