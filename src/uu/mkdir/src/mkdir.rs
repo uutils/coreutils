@@ -75,6 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // " of each created directory to CTX"),
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -85,20 +86,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches) {
-        Ok(mode) => {
-            let config = Config {
-                recursive,
-                mode,
-                verbose,
-                set_security_context: set_security_context || context.is_some(),
-                context,
-            };
-            exec(dirs, &config);
-            Ok(())
-        }
-        Err(f) => Err(USimpleError::new(1, f)),
-    }
+    let config = Config {
+        recursive,
+        mode,
+        verbose,
+        set_security_context: set_security_context || context.is_some(),
+        context,
+    };
+
+    exec(dirs, &config);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
