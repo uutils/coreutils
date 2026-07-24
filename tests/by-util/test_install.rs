@@ -2250,6 +2250,7 @@ fn test_install_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
     let test_string = "Hello, World!\n";
+    let updated_string = "Updated content\n";
 
     ucmd.arg("/dev/fd/0")
         .arg(target)
@@ -2258,6 +2259,14 @@ fn test_install_from_stdin() {
 
     assert!(at.file_exists(target));
     assert_eq!(at.read(target), test_string);
+
+    new_ucmd!()
+        .arg("/dev/fd/0")
+        .arg(at.plus(target))
+        .pipe_in(updated_string)
+        .succeeds();
+
+    assert_eq!(at.read(target), updated_string);
 }
 
 #[test]

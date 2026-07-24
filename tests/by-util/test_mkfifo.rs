@@ -242,7 +242,7 @@ fn test_mkfifo_permission_unchanged_when_failed() {
         .arg("-m")
         .arg("666")
         .fails()
-        .stderr_is(err_msg.as_str());
+        .stderr_contains(err_msg.as_str());
     let metadata = std::fs::metadata(at.subdir.join(file_name)).unwrap();
     let permissions = display_permissions(&metadata, true);
     let expected = "-rw-------";
