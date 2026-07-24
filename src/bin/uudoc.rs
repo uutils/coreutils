@@ -38,6 +38,7 @@ include!(concat!(env!("OUT_DIR"), "/uutils_map.rs"));
 ///
 /// This function:
 /// - Fixes the TH header by uppercasing command names and adding a proper date
+/// - Promotes generated tldr examples to an EXAMPLES section
 /// - Removes trailing whitespace from all lines
 /// - Fixes redundant .br paragraph macros that cause mandoc warnings
 /// - Removes .br before empty lines to avoid "br before sp" warnings
@@ -78,6 +79,11 @@ fn post_process_manpage(manpage: String, date: &str) -> String {
     }
 
     result = fixed_lines.join("\n");
+
+    // clap_mangen puts all after_help text in an EXTRA section. uudoc only uses
+    // after_help for tldr examples when generating manpages, so promote that
+    // plain text heading to a real manpage section.
+    result = result.replace(".SH EXTRA\nExamples\n", ".SH EXAMPLES\n");
 
     // Fix escape sequence issues
     // \\\\0 appears when trying to represent literal \0 string
@@ -677,16 +683,64 @@ fn write_zip_examples(
     }
 }
 
+fn markdown_inline_to_plain_text(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '[' {
+            let mut text = String::new();
+            let mut closed = false;
+            for next in chars.by_ref() {
+                if next == ']' {
+                    closed = true;
+                    break;
+                }
+                text.push(next);
+            }
+
+            if closed && chars.next_if_eq(&'(').is_some() {
+                for next in chars.by_ref() {
+                    if next == ')' {
+                        break;
+                    }
+                }
+                result.push_str(&text);
+            } else {
+                result.push('[');
+                result.push_str(&text);
+                if closed {
+                    result.push(']');
+                }
+            }
+        } else if c == '*' && chars.next_if_eq(&'*').is_some() {
+            continue;
+        } else if c != '`' {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
 /// Format examples using std::fmt::Write
 fn format_examples(content: String, output_markdown: bool) -> Result<String, std::fmt::Error> {
     use std::fmt::Write;
     let mut s = String::new();
-    writeln!(s)?;
-    writeln!(s, "## Examples")?;
+    if output_markdown {
+        writeln!(s)?;
+        writeln!(s, "## Examples")?;
+    } else {
+        writeln!(s, "Examples")?;
+    }
     writeln!(s)?;
     for line in content.lines().skip_while(|l| !l.starts_with('-')) {
         if let Some(l) = line.strip_prefix("- ") {
-            writeln!(s, "{l}")?;
+            if output_markdown {
+                writeln!(s, "{l}")?;
+            } else {
+                writeln!(s, "{}", markdown_inline_to_plain_text(l))?;
+            }
         } else if line.starts_with('`') {
             if output_markdown {
                 writeln!(s, "```shell\n{}\n```", line.trim_matches('`'))?;
@@ -701,9 +755,19 @@ fn format_examples(content: String, output_markdown: bool) -> Result<String, std
         }
     }
     writeln!(s)?;
-    writeln!(s, "> {}", get_message("uudoc-tldr-attribution"))?;
-    writeln!(s, ">")?;
-    writeln!(s, "> {}", get_message("uudoc-tldr-disclaimer"))?;
+    if output_markdown {
+        writeln!(s, "> {}", get_message("uudoc-tldr-attribution"))?;
+        writeln!(s, ">")?;
+        writeln!(s, "> {}", get_message("uudoc-tldr-disclaimer"))?;
+    } else {
+        writeln!(
+            s,
+            "{}",
+            markdown_inline_to_plain_text(&get_message("uudoc-tldr-attribution"))
+        )?;
+        writeln!(s)?;
+        writeln!(s, "{}", get_message("uudoc-tldr-disclaimer"))?;
+    }
     Ok(s)
 }
 
@@ -860,5 +924,30 @@ mod tests {
 
         let result = post_process_manpage(input.to_string(), "2024-01-01");
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_post_process_manpage_promotes_examples_section() {
+        let input = ".TH TEST 1\n.SH EXTRA\nExamples\n.sp\nRun a test\n";
+        let expected = ".TH TEST 1 \"2024-01-01\"\n.SH EXAMPLES\n.sp\nRun a test\n";
+
+        let result = post_process_manpage(input.to_string(), "2024-01-01");
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_format_examples_removes_markdown_for_manpages() {
+        let input =
+            "- Show `test` documentation from [tldr-pages](https://tldr.sh):\n\n`test --help`\n";
+
+        let result = format_examples(input.to_string(), false).unwrap();
+
+        assert!(result.starts_with("Examples\n\n"));
+        assert!(result.contains("Show test documentation from tldr-pages:\n"));
+        assert!(result.contains("test --help\n"));
+        assert!(!result.contains("##"));
+        assert!(!result.contains('`'));
+        assert!(!result.contains("](https://"));
+        assert!(!result.contains("> "));
     }
 }
