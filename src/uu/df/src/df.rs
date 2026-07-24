@@ -303,6 +303,9 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
                 mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
             }
 
+            // Remove any entries previously considered the best for this device
+            mounts.retain(|m| m.dev_id != mi.dev_id);
+
             mounts.push(mi);
         }
     }
