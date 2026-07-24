@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fffffffffffffffc
+// spell-checker:ignore fffffffffffffffc bigdecimal
 use uutests::new_ucmd;
 
 #[test]
@@ -1526,6 +1526,75 @@ fn test_large_width_format() {
             .stderr_contains("write error")
             .stdout_is("");
     }
+}
+
+#[test]
+fn large_width_pads_instead_of_aborting() {
+    // std::fmt panics past a width of u16::MAX, so 65536 is the boundary.
+    let cases = [
+        ("%65536d", "1", " ".repeat(65535) + "1"),
+        ("%70000d", "1", " ".repeat(69999) + "1"),
+        ("%70000s", "x", " ".repeat(69999) + "x"),
+        ("%70000c", "y", " ".repeat(69999) + "y"),
+        ("%-70000d", "1", "1".to_string() + &" ".repeat(69999)),
+        ("%070000d", "1", "0".repeat(69999) + "1"),
+    ];
+
+    for (format, arg, expected) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn large_precision_pads_instead_of_aborting() {
+    let cases = [
+        ("%.70000f", "1", format!("1.{}", "0".repeat(70000))),
+        ("%.70000f", "0", format!("0.{}", "0".repeat(70000))),
+        ("%.70000e", "0", format!("0.{}e+00", "0".repeat(70000))),
+        ("%.70000E", "0", format!("0.{}E+00", "0".repeat(70000))),
+        ("%.70000a", "0", format!("0x0.{}p+0", "0".repeat(70000))),
+        ("%#.70000g", "0", format!("0.{}", "0".repeat(69999))),
+        ("%#.70000G", "0", format!("0.{}", "0".repeat(69999))),
+    ];
+
+    for (format, arg, expected) in cases {
+        new_ucmd!()
+            .args(&[format, arg])
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn precision_above_1000_keeps_fractional_zeros() {
+    // bigdecimal stops zero-padding past 1000 digits, so this printed "1".
+    new_ucmd!()
+        .args(&["%.1000f", "1"])
+        .succeeds()
+        .stdout_only(format!("1.{}", "0".repeat(1000)));
+
+    new_ucmd!()
+        .args(&["%.5000f", "100"])
+        .succeeds()
+        .stdout_only(format!("100.{}", "0".repeat(5000)));
+
+    // A fractional part takes another branch and was already correct.
+    new_ucmd!()
+        .args(&["%.1000f", "1.5"])
+        .succeeds()
+        .stdout_only(format!("1.5{}", "0".repeat(999)));
+}
+
+#[test]
+fn large_integer_magnitude_stays_decimal() {
+    // Same cap, but a large magnitude used to print as 1e+2000.
+    new_ucmd!()
+        .args(&["%.0f", "1e2000"])
+        .succeeds()
+        .stdout_only(format!("1{}", "0".repeat(2000)));
 }
 
 #[test]
