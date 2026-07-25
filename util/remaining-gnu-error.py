@@ -55,7 +55,7 @@ def contains_require_root(file_path):
     try:
         with open(file_path, "r") as file:
             return "require_root_" in file.read()
-    except IOError:
+    except OSError:
         return False
 
 
