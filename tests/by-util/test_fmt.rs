@@ -207,6 +207,12 @@ fn test_fmt_non_existent_file() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_fmt_read_error() {
+    new_ucmd!().arg("/proc/self/mem").fails_with_code(1);
+}
+
+#[test]
 fn test_fmt_invalid_goal() {
     for param in ["-g", "--goal"] {
         new_ucmd!()

@@ -235,7 +235,10 @@ fn process_file(
     let p_stream = ParagraphStream::new(fmt_opts, &mut fp);
     for para_result in p_stream {
         match para_result {
-            Err(s) => {
+            Err(parasplit::ParagraphStreamError::IoError(e)) => {
+                return Err(e).map_err_context(|| translate!("fmt-error-read"));
+            }
+            Err(parasplit::ParagraphStreamError::NoFormatLine(s)) => {
                 ostream
                     .write_all(&s)
                     .map_err_context(|| translate!("fmt-error-failed-to-write-output"))?;
