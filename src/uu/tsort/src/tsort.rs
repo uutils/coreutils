@@ -208,15 +208,15 @@ impl Graph {
     }
 
     fn name(&self) -> String {
-        //SAFETY: the name is interned during graph creation and stored as name_sym.
-        // gives much better performance on lookup.
-        unsafe { self.interner.resolve_unchecked(self.name_sym).to_owned() }
+        self.interner
+            .resolve(self.name_sym)
+            .expect("Name has been interned")
+            .to_owned()
     }
     fn get_node_name(&self, node_sym: Sym) -> &str {
-        //SAFETY: the only way to get a Sym is by manipulating an interned string.
-        // gives much better performance on lookup.
-
-        unsafe { self.interner.resolve_unchecked(node_sym) }
+        self.interner
+            .resolve(node_sym)
+            .expect("Name has been interned")
     }
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
