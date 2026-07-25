@@ -1005,17 +1005,17 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 // Redox's libc appears not to include the following utilities
 
 #[cfg(target_os = "redox")]
-pub fn major(dev: libc::dev_t) -> libc::c_uint {
+pub fn major(dev: libc::dev_t) -> core::ffi::c_uint {
     (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
 }
 
 #[cfg(target_os = "redox")]
-pub fn minor(dev: libc::dev_t) -> libc::c_uint {
+pub fn minor(dev: libc::dev_t) -> core::ffi::c_uint {
     ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
 }
 
 #[cfg(target_os = "redox")]
-pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
+pub fn makedev(maj: core::ffi::c_uint, min: core::ffi::c_uint) -> libc::dev_t {
     let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }
