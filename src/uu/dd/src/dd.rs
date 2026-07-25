@@ -694,8 +694,8 @@ impl Dest {
                 // loss, so the error must surface there.
                 match f.set_len(pos) {
                     Ok(()) => Ok(()),
-                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
-                    Err(_) => Ok(()),
+                    Err(_) if f.metadata().is_ok_and(|m| !m.file_type().is_file()) => Ok(()),
+                    Err(e) => Err(e),
                 }
             }
             _ => Ok(()),
