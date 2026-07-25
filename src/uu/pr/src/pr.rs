@@ -1254,7 +1254,13 @@ fn print_page(
             out.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
+    // The page separator belongs to paginated output; with headers and
+    // trailers omitted the input is reproduced as-is. Under -F/-f the
+    // separator is the form feed that carries an input page break through to
+    // the output, so it is still written.
+    if options.display_header_and_trailer || options.form_feed_used {
+        out.write_all(page_separator)?;
+    }
     out.flush()?;
     Ok(())
 }
@@ -1418,7 +1424,10 @@ fn write_columns(
                     .as_bytes(),
             )?;
         }
-        if not_found_break && feed_line_present {
+        // A form feed already terminates the page, and without headers and
+        // trailers there is no page to fill either: stop at the last content
+        // line instead of padding out to the page length.
+        if not_found_break && (feed_line_present || !options.display_header_and_trailer) {
             break;
         }
         out.write_all(line_separator)?;
