@@ -251,18 +251,14 @@ fn test_with_page_range() {
 
 #[test]
 fn test_omit_header_no_page_fill() {
-    // https://github.com/uutils/coreutils/issues/13029
-    // With headers and trailers omitted there is no page to fill: `-t` writes
-    // the input back out and stops, instead of padding to the page length.
+    // https://github.com/uutils/coreutils/issues/13029: -t must not pad the page.
     new_ucmd!()
         .arg("-t")
         .pipe_in("a\nb\nc\n")
         .succeeds()
         .stdout_only("a\nb\nc\n");
 
-    // Also across a page boundary: 57 lines is one full content page plus one,
-    // so a second page starts. Without headers there is no page separator
-    // either, and the output still matches the input exactly.
+    // Also across a page boundary: 57 lines starts a second page.
     let input = (1..=57)
         .map(|i| i.to_string())
         .collect::<Vec<_>>()
@@ -277,8 +273,7 @@ fn test_omit_header_no_page_fill() {
 
 #[test]
 fn test_short_page_length_no_page_fill() {
-    // A page length below the header plus trailer size omits them, and then the
-    // output is likewise not padded up to that page length.
+    // A page length below the header plus trailer size omits them, so no padding.
     new_ucmd!()
         .args(&["-l", "5"])
         .pipe_in("a\nb\nc\n")
@@ -288,8 +283,7 @@ fn test_short_page_length_no_page_fill() {
 
 #[test]
 fn test_omit_header_short_page_no_page_fill() {
-    // The two conditions together: `-t` with a short page still reproduces the
-    // input rather than padding it out.
+    // Both conditions together: -t with a short page.
     new_ucmd!()
         .args(&["-t", "-l", "5"])
         .pipe_in("a\nb\nc\n")
@@ -299,8 +293,7 @@ fn test_omit_header_short_page_no_page_fill() {
 
 #[test]
 fn test_default_mode_fills_page() {
-    // Control for the tests above: with headers and trailers the page *is*
-    // filled, so three lines of input still produce one full 66-line page.
+    // Control: with headers and trailers the page is still filled to 66 lines.
     let output = new_ucmd!()
         .pipe_in("a\nb\nc\n")
         .succeeds()
@@ -725,10 +718,8 @@ fn test_separator_options_default_values() {
 
 #[test]
 fn test_omit_pagination_option() {
-    // -T/--omit-pagination omits headers/trailers, so like -t it does not pad
-    // the output up to the page length.
-    // TODO: -t should preserve a form feed present in the input; it is
-    // currently dropped, while -T correctly eliminates it.
+    // -T omits headers/trailers, so like -t it does not pad to the page length.
+    // TODO: -t drops an input form feed; -T correctly eliminates it.
     new_ucmd!()
         .args(&["-T"])
         .pipe_in("a\nb\n")
