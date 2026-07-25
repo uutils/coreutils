@@ -49,7 +49,6 @@ Currently defined functions:
     }
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn main() {
     let utils = util_map();
     let mut args = uucore::args_os();

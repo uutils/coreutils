@@ -214,7 +214,6 @@ struct LineBreak<'a> {
     fresh: bool,
 }
 
-#[allow(clippy::cognitive_complexity)]
 fn find_kp_breakpoints<'a, T: Clone + Iterator<Item = &'a WordInfo<'a>>>(
     iter: T,
     args: &BreakArgs<'a>,

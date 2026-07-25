@@ -282,7 +282,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_num_integral_digits() {
         // no decimal, no exponent
         assert_eq!(num_integral_digits("123"), 3);
@@ -323,7 +322,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::cognitive_complexity)]
     fn test_num_fractional_digits() {
         // no decimal, no exponent
         assert_eq!(num_fractional_digits("123"), 0);
