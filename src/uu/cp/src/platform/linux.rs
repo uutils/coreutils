@@ -465,12 +465,8 @@ fn handle_reflink_auto_sparse_always(
             copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
         }
         (false, true, 0) => copy_method = CopyMethod::FSCopy,
-
-        (true, false, 0) => copy_debug.sparse_detection = SparseDebug::SeekHole,
         (true, true, _) => copy_debug.sparse_detection = SparseDebug::SeekHoleZeros,
-
         (true, false, _) => copy_debug.sparse_detection = SparseDebug::SeekHole,
-
         (_, _, _) => (),
     }
     if check_dest_is_fifo(dest) {
