@@ -468,7 +468,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
-        FilterMode::Lines(Signum::MinusZero, _) => {
+        FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
@@ -481,9 +481,6 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
-        }
-        FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -500,7 +497,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
+        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
+        | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
@@ -528,9 +526,6 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
-        }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
         }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
