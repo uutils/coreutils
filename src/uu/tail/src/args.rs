@@ -10,7 +10,7 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
@@ -135,6 +135,7 @@ pub struct Settings {
     pub max_unchanged_stats: u32,
     pub mode: FilterMode,
     pub pid: platform::Pid,
+    pid_specified: bool,
     pub retry: bool,
     pub sleep_sec: Duration,
     pub use_polling: bool,
@@ -153,6 +154,7 @@ impl Default for Settings {
             follow: Option::default(),
             mode: FilterMode::default(),
             pid: Default::default(),
+            pid_specified: false,
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
@@ -265,6 +267,7 @@ impl Settings {
                     }
 
                     settings.pid = pid;
+                    settings.pid_specified = true;
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -300,7 +303,7 @@ impl Settings {
 
     /// Check [`Settings`] for problematic configurations of tail originating from user provided
     /// command line arguments and print appropriate warnings.
-    pub fn check_warnings(&self) {
+    pub fn check_warnings(&self) -> std::io::Result<()> {
         if self.retry {
             if self.follow.is_none() {
                 show_warning!("{}", translate!("tail-warning-retry-ignored"));
@@ -309,10 +312,15 @@ impl Settings {
             }
         }
 
-        if self.pid != 0 {
+        if self.pid_specified {
             if self.follow.is_none() {
-                show_warning!("{}", translate!("tail-warning-pid-ignored"));
-            } else if !platform::supports_pid_checks(self.pid) {
+                writeln!(
+                    std::io::stderr().lock(),
+                    "{}: warning: {}",
+                    uucore::util_name(),
+                    translate!("tail-warning-pid-ignored")
+                )?;
+            } else if self.pid != 0 && !platform::supports_pid_checks(self.pid) {
                 show_warning!("{}", translate!("tail-warning-pid-not-supported"));
             }
         }
@@ -336,6 +344,8 @@ impl Settings {
                 show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));
             }
         }
+
+        Ok(())
     }
 
     /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
