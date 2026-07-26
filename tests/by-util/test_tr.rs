@@ -1670,9 +1670,13 @@ fn test_sequential_fadvise() {
     }
 
     let trace = at.read("strace.out");
+    let advised_stdin = trace.lines().any(|line| {
+        (line.starts_with("fadvise64(0,") || line.starts_with("fadvise64_64(0,"))
+            && line.contains("POSIX_FADV_SEQUENTIAL") // spell-checker:disable-line
+    });
     assert!(
-        trace.contains("POSIX_FADV_SEQUENTIAL"), // spell-checker:disable-line
-        "Expected sequential fadvise: {trace}"
+        advised_stdin,
+        "Expected sequential fadvise on stdin: {trace}"
     );
 }
 
