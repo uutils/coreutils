@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek nofollow
+// spell-checker:ignore reflink ftruncate pwrite fiemap lseek nofollow
 
 use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
 use std::io::Read;
