@@ -265,7 +265,7 @@ fn test_follow_sparse_file_growth_under_memory_limit() {
     let mut child = ucmd
         .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
         .set_stdout(Stdio::null())
-        .args([
+        .args(&[
             "-n0",
             "-f",
             "--use-polling",
