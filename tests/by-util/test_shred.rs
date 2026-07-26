@@ -293,6 +293,18 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
+fn test_random_source_open_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("target");
+
+    ucmd.arg("--random-source=missing")
+        .arg("target")
+        .fails()
+        .stderr_only("shred: missing: No such file or directory\n");
+}
+
+#[test]
 fn test_random_source_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
