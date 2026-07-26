@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) getlogin userlogin
 
 use clap::Command;
-use std::ffi::CStr;
+use core::ffi::CStr;
 use std::io::{Write, stdout};
 use uucore::translate;
 use uucore::{error::UResult, show_error};

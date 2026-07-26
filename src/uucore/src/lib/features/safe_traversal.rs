@@ -324,7 +324,7 @@ impl DirFd {
 
             if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
                 // Syscall number for fchmodat2 on asm-generic architectures.
-                const SYS_FCHMODAT2: libc::c_long = 452;
+                const SYS_FCHMODAT2: core::ffi::c_long = 452;
                 // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
                 // - fd: valid open file descriptor
                 // - name: valid C string pointer (name_cstr lives for the duration)
@@ -393,7 +393,7 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &std::ffi::CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
         use rustix::fs::{Mode, OFlags, chmod, openat};
 
         let fd = openat(
@@ -405,7 +405,7 @@ impl DirFd {
         .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
 
         let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = std::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
+        let proc_cstr = core::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
 
         chmod(proc_cstr, Mode::from_bits_truncate(mode))

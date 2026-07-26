@@ -60,10 +60,10 @@ pub(crate) fn copy_on_write(
         // blessed uses of `transmute()`.
         unsafe {
             let pfn: extern "C" fn(
-                src: *const libc::c_char,
-                dst: *const libc::c_char,
+                src: *const core::ffi::c_char,
+                dst: *const core::ffi::c_char,
                 flags: u32,
-            ) -> libc::c_int = std::mem::transmute(raw_pfn);
+            ) -> core::ffi::c_int = std::mem::transmute(raw_pfn);
             error = pfn(src.as_ptr(), dst.as_ptr(), 0);
             if std::io::Error::last_os_error().kind() == std::io::ErrorKind::AlreadyExists
                 // Only remove the `dest` if the `source` and `dest` are not the same
