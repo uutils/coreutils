@@ -210,13 +210,13 @@ impl Graph {
     fn name(&self) -> String {
         self.interner
             .resolve(self.name_sym)
-            .expect("Name has been interned")
+            .expect("symbol should be interned")
             .to_owned()
     }
     fn get_node_name(&self, node_sym: Sym) -> &str {
         self.interner
             .resolve(node_sym)
-            .expect("Name has been interned")
+            .expect("symbol should be interned")
     }
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
