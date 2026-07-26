@@ -4,5 +4,8 @@ true-about = Returns true, a successful exit status.
   options. In those cases it will try to write the help or version text. Any IO error during this
   operation causes the program to return 1 instead.
 
+true-usage = true [ignored command line arguments]
+  or:  true OPTION
+
 true-help-text = Print help information
 true-version-text = Print version information

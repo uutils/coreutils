@@ -282,19 +282,26 @@ pub fn format_usage(s: &str) -> String {
 ///     .help_template(localized_help_template("myutil"));
 /// ```
 pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
-    use std::io::IsTerminal;
+    localized_help_template_with_colors(util_name, detect_colors_enabled())
+}
 
-    // Determine if colors should be enabled - same logic as configure_localized_command
-    let colors_enabled = if std::env::var("NO_COLOR").is_ok() {
-        false
-    } else if std::env::var("CLICOLOR_FORCE").is_ok() || std::env::var("FORCE_COLOR").is_ok() {
-        true
-    } else {
-        IsTerminal::is_terminal(&std::io::stdout())
-            && std::env::var("TERM").unwrap_or_default() != "dumb"
-    };
+/// Like [`localized_help_template`], but places the localized "Usage:" line
+/// *before* the `--about` text instead of after it.
+///
+/// GNU utilities print the usage synopsis first (e.g. `Usage: false
+/// [ignored command line arguments]`) followed by the description. Most
+/// uutils utilities keep the description first since their usage line is
+/// less informative on its own, but for utilities like `true`/`false` where
+/// the usage line itself communicates useful information, matching GNU's
+/// ordering is clearer.
+pub fn localized_help_template_usage_first(util_name: &str) -> clap::builder::StyledStr {
+    localized_help_template_with_order(util_name, detect_colors_enabled(), true)
+}
 
-    localized_help_template_with_colors(util_name, colors_enabled)
+/// Determine whether colored output should be used, based on the same
+/// environment variables and TTY checks as `configure_localized_command`.
+fn detect_colors_enabled() -> bool {
+    clap_localization::should_use_color_for_stream(&std::io::stdout())
 }
 
 /// Create a localized help template with explicit color control
@@ -302,6 +309,18 @@ pub fn localized_help_template(util_name: &str) -> clap::builder::StyledStr {
 pub fn localized_help_template_with_colors(
     util_name: &str,
     colors_enabled: bool,
+) -> clap::builder::StyledStr {
+    localized_help_template_with_order(util_name, colors_enabled, false)
+}
+
+/// Shared implementation behind [`localized_help_template_with_colors`] and
+/// [`localized_help_template_usage_first`]. When `usage_first` is `true`,
+/// the "Usage:" line is placed before `{about-with-newline}` rather than
+/// after it.
+fn localized_help_template_with_order(
+    util_name: &str,
+    colors_enabled: bool,
+    usage_first: bool,
 ) -> clap::builder::StyledStr {
     use std::fmt::Write;
 
@@ -311,21 +330,30 @@ pub fn localized_help_template_with_colors(
     // Get the localized "Usage" label
     let usage_label = crate::locale::translate!("common-usage");
 
-    // Create a styled template
-    let mut template = clap::builder::StyledStr::new();
-
-    // Add the basic template parts
-    writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
-
-    // Add styled usage header (bold + underline like clap's default)
+    // Build the styled usage header (bold + underline like clap's default)
+    let mut usage_line = String::new();
     if colors_enabled {
         write!(
-            template,
+            usage_line,
             "\x1b[1m\x1b[4m{usage_label}:\x1b[0m {{usage}}\n\n"
         )
         .unwrap();
     } else {
-        write!(template, "{usage_label}: {{usage}}\n\n").unwrap();
+        write!(usage_line, "{usage_label}: {{usage}}\n\n").unwrap();
+    }
+
+    // Create a styled template
+    let mut template = clap::builder::StyledStr::new();
+
+    if usage_first {
+        writeln!(
+            template,
+            "{{before-help}}{usage_line}{{about-with-newline}}"
+        )
+        .unwrap();
+    } else {
+        writeln!(template, "{{before-help}}{{about-with-newline}}").unwrap();
+        write!(template, "{usage_line}").unwrap();
     }
 
     // Add the rest

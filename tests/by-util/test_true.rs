@@ -31,6 +31,21 @@ fn test_help() {
 }
 
 #[test]
+fn test_help_starts_with_usage() {
+    // GNU's `true --help` starts with a "Usage:" line; ensure ours does too.
+    // NO_COLOR avoids ANSI styling so the raw stdout comparison is stable.
+    let result = new_ucmd!()
+        .env("NO_COLOR", "1")
+        .args(&["--help"])
+        .succeeds();
+    assert!(
+        result
+            .stdout_str()
+            .starts_with("Usage: true [ignored command line arguments]")
+    );
+}
+
+#[test]
 fn test_short_options() {
     for option in ["-h", "-V"] {
         new_ucmd!().arg(option).succeeds().no_output();

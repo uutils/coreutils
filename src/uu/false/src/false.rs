@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::io::Write;
-use uucore::{crate_version, translate};
+use uucore::{crate_version, format_usage, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -33,7 +33,8 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
 pub fn uu_app() -> Command {
     Command::new("false")
         .version(crate_version!())
-        .help_template(uucore::localized_help_template("false"))
+        .help_template(uucore::localized_help_template_usage_first("false"))
+        .override_usage(format_usage(&translate!("false-usage")))
         .about(translate!("false-about"))
         // We provide our own help and version options, to ensure maximum compatibility with GNU.
         .disable_help_flag(true)
