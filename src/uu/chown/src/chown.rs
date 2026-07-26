@@ -175,16 +175,17 @@ fn parse_gid(group: &str, spec: &str) -> UResult<Option<u32>> {
     if group.is_empty() {
         return Ok(None);
     }
-    match Group::locate(group) {
-        Ok(g) => Ok(Some(g.gid)),
-        Err(_) => match group.parse() {
-            Ok(gid) => Ok(Some(gid)),
-            Err(_) => Err(USimpleError::new(
-                1,
-                translate!("chown-error-invalid-group", "group" => spec.quote()),
-            )),
-        },
-    }
+    Group::locate(group)
+        .map(|g| g.gid)
+        .or_else(|_| {
+            group.parse().map_err(|_| {
+                USimpleError::new(
+                    1,
+                    translate!("chown-error-invalid-group", "group" => spec.quote()),
+                )
+            })
+        })
+        .map(Some)
 }
 
 /// Parse the owner/group specifier string into a user ID and a group ID.
