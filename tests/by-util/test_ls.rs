@@ -3315,6 +3315,30 @@ mod quoting {
                 .stdout_only(utf_8_ref);
         }
     }
+
+    #[test]
+    fn test_c_dot_utf8_renders_utf8() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename = "é";
+        at.touch(filename);
+
+        // C (no UTF-8): bytes 0xC3 0xA9 replaced with ??
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("??\n");
+
+        // C.UTF-8: multi-byte UTF-8 character rendered literally
+        scene
+            .ucmd()
+            .env("LC_ALL", "C.UTF-8")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("é\n");
+    }
 }
 
 #[test]
