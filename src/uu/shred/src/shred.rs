@@ -264,12 +264,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
-        Some(filepath) => Some(RefCell::new(File::open(filepath).map_err(|_| {
-            USimpleError::new(
-                1,
-                translate!("shred-cannot-open-random-source", "source" => filepath.quote()),
-            )
-        })?)),
+        Some(filepath) => Some(RefCell::new(
+            File::open(filepath).map_err_context(|| filepath.clone())?,
+        )),
         None => None,
     };
 
