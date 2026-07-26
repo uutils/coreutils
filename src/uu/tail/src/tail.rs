@@ -41,7 +41,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    settings.check_warnings();
+    settings.check_warnings()?;
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
