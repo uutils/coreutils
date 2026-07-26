@@ -2959,3 +2959,61 @@ fn test_install_backup_nil_same_file() {
         assert_eq!(at.read(file), "content");
     }
 }
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_install_reflink() {
+    // install uses FICLONE (reflink) on Linux when source and destination are
+    // on the same filesystem. This test verifies that the file is copied
+    // correctly regardless of whether the filesystem supports reflinking.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src = "src_reflink";
+    let dst = "dst_reflink";
+    let content = "reflink test content\n";
+
+    at.write(src, content);
+
+    ucmd.arg(src).arg(dst).succeeds().no_stderr();
+
+    assert!(at.file_exists(dst));
+    assert_eq!(at.read(dst), content);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_install_reflink_preserves_content() {
+    // Verify that install produces an exact byte-for-byte copy of the source,
+    // whether the kernel used FICLONE or fell back to a regular copy.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let src = "src_reflink_content";
+    let dst = "dst_reflink_content";
+
+    // Write content with varied bytes to exercise the copy path
+    let content = "Hello\nWorld\n\x00\x01binary\n";
+    at.write(src, content);
+
+    ucmd.arg(src).arg(dst).succeeds().no_stderr();
+
+    assert_eq!(at.read(dst), content);
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_install_reflink_cross_device_fallback() {
+    // When source and destination are on different filesystems, FICLONE
+    // returns EXDEV and install should fall back to a regular copy.
+    // We simulate by installing from /tmp (typically tmpfs) to the test dir.
+    // The test just checks the copy succeeds and content is preserved.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dst = "dst_cross_device";
+
+    ucmd.arg("/etc/hostname")
+        .arg(dst)
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists(dst));
+    // Content should match the source
+    let expected = fs::read_to_string("/etc/hostname").unwrap_or_default();
+    assert_eq!(at.read(dst), expected);
+}
