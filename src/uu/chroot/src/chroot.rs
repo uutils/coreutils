@@ -302,7 +302,7 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
         target_os = "cygwin",
         target_os = "netbsd"
     ))]
-    let n = gids.len() as libc::c_int;
+    let n = gids.len() as core::ffi::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let n = gids.len() as libc::size_t;
     let err = unsafe { setgroups(n, gids.as_ptr()) };

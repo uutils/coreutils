@@ -6,7 +6,8 @@
 // spell-checker:ignore (ToDO) gethostid
 
 use clap::Command;
-use libc::{c_long, gethostid};
+use core::ffi::c_long;
+use libc::gethostid;
 use std::io::{Write, stdout};
 use uucore::{error::UResult, format_usage};
 

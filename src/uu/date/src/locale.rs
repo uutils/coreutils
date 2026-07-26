@@ -19,7 +19,7 @@ macro_rules! cfg_langinfo {
 }
 
 cfg_langinfo! {
-    use std::ffi::CStr;
+    use core::ffi::CStr;
     use std::sync::OnceLock;
 
     #[cfg(test)]

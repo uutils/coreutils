@@ -15,8 +15,9 @@ use clap::{Arg, ArgAction, Command};
 use selinux::{OpaqueSecurityContext, SecurityClass, SecurityContext};
 use uucore::format_usage;
 
+use core::ffi::CStr;
 use std::borrow::Cow;
-use std::ffi::{CStr, CString, OsStr, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::io;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;

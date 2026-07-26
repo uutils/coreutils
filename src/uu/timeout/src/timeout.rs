@@ -181,7 +181,7 @@ pub fn uu_app() -> Command {
 
 /// Install SIGCHLD handler to ensure waiting for child works even if parent ignored SIGCHLD.
 fn install_sigchld() {
-    extern "C" fn chld(_: libc::c_int) {}
+    extern "C" fn chld(_: core::ffi::c_int) {}
     let _ = install_signal_handler(Signal::as_raw(Signal::CHILD), chld);
 }
 
@@ -296,7 +296,7 @@ fn wait_or_kill_process(
 }
 
 #[cfg(unix)]
-fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
+fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int {
     // This is needed because timeout is expected to preserve the exit
     // status of its child. It is not the case that utilities have a
     // single simple exit code, that's an illusion some shells
@@ -317,7 +317,7 @@ fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
 }
 
 #[cfg(not(unix))]
-fn preserve_signal_info(signal: libc::c_int) -> libc::c_int {
+fn preserve_signal_info(signal: core::ffi::c_int) -> core::ffi::c_int {
     // Do nothing
     signal
 }

@@ -276,23 +276,23 @@ mod timer {
         #[cfg(not(target_os = "redox"))]
         pub(super) use libc::{SIGEV_SIGNAL, sigevent};
 
-        pub(super) type timer_t = *mut libc::c_void;
+        pub(super) type timer_t = *mut core::ffi::c_void;
 
         unsafe extern "C" {
             pub(super) fn timer_settime(
                 timerid: timer_t,
-                flags: libc::c_int,
+                flags: core::ffi::c_int,
                 new_value: *const itimerspec,
                 old_value: *mut itimerspec,
-            ) -> libc::c_int;
+            ) -> core::ffi::c_int;
 
             pub(super) fn timer_create(
                 clockid: libc::clockid_t,
                 sevp: *mut sigevent,
                 timerid: *mut timer_t,
-            ) -> libc::c_int;
+            ) -> core::ffi::c_int;
 
-            pub(super) fn timer_delete(timerid: timer_t) -> libc::c_int;
+            pub(super) fn timer_delete(timerid: timer_t) -> core::ffi::c_int;
         }
 
         #[repr(C)]
@@ -303,20 +303,20 @@ mod timer {
         }
 
         #[cfg(target_os = "redox")]
-        pub(super) const SIGEV_SIGNAL: libc::c_int = 0;
+        pub(super) const SIGEV_SIGNAL: core::ffi::c_int = 0;
 
         #[repr(C)]
         #[derive(Clone, Copy, Debug)]
         #[cfg(target_os = "redox")]
         pub(super) struct sigevent {
             pub(super) sigev_value: libc::sigval,
-            pub(super) sigev_signo: libc::c_int,
-            pub(super) sigev_notify: libc::c_int,
-            pub(super) sigev_notify_thread_id: libc::c_int,
+            pub(super) sigev_signo: core::ffi::c_int,
+            pub(super) sigev_notify: core::ffi::c_int,
+            pub(super) sigev_notify_thread_id: core::ffi::c_int,
             #[cfg(target_pointer_width = "64")]
-            __unused1: std::mem::MaybeUninit<[libc::c_int; 11]>,
+            __unused1: std::mem::MaybeUninit<[core::ffi::c_int; 11]>,
             #[cfg(target_pointer_width = "32")]
-            __unused1: std::mem::MaybeUninit<[libc::c_int; 12]>,
+            __unused1: std::mem::MaybeUninit<[core::ffi::c_int; 12]>,
         }
     }
 }

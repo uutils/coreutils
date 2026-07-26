@@ -379,7 +379,7 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            let cstr = core::ffi::CStr::from_ptr(buffer.cast());
             if !cstr.is_empty() {
                 num_user += 1;
             }
@@ -428,7 +428,7 @@ pub fn get_formatted_nusers() -> String {
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(unix)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
-    use crate::libc::c_double;
+    use core::ffi::c_double;
     use libc::getloadavg;
 
     let mut avg: [c_double; 3] = [0.0; 3];

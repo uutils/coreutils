@@ -32,13 +32,14 @@
 //! assert!(entries::Group::locate(root_group).is_ok());
 //! ```
 
+use core::ffi::{CStr, c_char, c_int};
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
-use libc::{c_char, c_int, gid_t, uid_t};
 use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
+use libc::{gid_t, uid_t};
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;

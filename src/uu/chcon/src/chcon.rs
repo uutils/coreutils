@@ -17,10 +17,10 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use rustix::fs::{Mode, OFlags, openat};
 use selinux::{OpaqueSecurityContext, SecurityContext};
 
+use core::ffi::{CStr, c_int};
 use std::borrow::Cow;
-use std::ffi::{CStr, CString, OsStr, OsString};
+use std::ffi::{CString, OsStr, OsString};
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
-use std::os::raw::c_int;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 

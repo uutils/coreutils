@@ -34,7 +34,7 @@
 #![allow(dead_code)]
 
 use clap::{Arg, ArgAction, Command};
-use std::ffi::CStr;
+use core::ffi::CStr;
 use std::io::{self, Write};
 use uucore::display::Quotable;
 use uucore::entries::{self, Group, Locate, Passwd};
