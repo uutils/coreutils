@@ -23,7 +23,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
 use uucore::format_usage;
 use uucore::time::{FormatSystemTimeFallback, format, format_system_time};
-use uucore::translate;
+use uucore::{show_error, translate};
 
 const TAB: char = '\t';
 const LINES_PER_PAGE: usize = 66;
@@ -1022,7 +1022,18 @@ fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let buf = read_to_end(name)?;
 
     let mut writer = stdout().lock();
-    let pages = get_pages(options, 0, &buf);
+    let (pages, page_count) = get_pages(options, 0, &buf);
+    if options.start_page > page_count {
+        show_error!(
+            "{}",
+            translate!(
+                "pr-error-starting-page-exceeds-page-count",
+                "start" => options.start_page,
+                "count" => page_count
+            )
+        );
+        return Ok(0);
+    }
 
     // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
@@ -1036,9 +1047,13 @@ fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
 
 /// Group lines of a file into pages.
 ///
-/// Returns a list of the form `(page_num, lines)`.
+/// Returns a list of the form `(page_num, lines)` and the total page count.
 ///
-fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize, Vec<FileLine>)> {
+fn get_pages(
+    options: &OutputOptions,
+    file_id: usize,
+    buf: &[u8],
+) -> (Vec<(usize, Vec<FileLine>)>, usize) {
     let start_page = options.start_page;
     let end_page = options.end_page;
     let lines_needed_per_page = lines_to_read_for_page(options);
@@ -1131,7 +1146,7 @@ fn get_pages(options: &OutputOptions, file_id: usize, buf: &[u8]) -> Vec<(usize,
         pages.push((page_num, page.clone()));
     }
 
-    pages
+    (pages, page_num + 1)
 }
 
 /// Key used to group lines together according to their file and page number.
@@ -1188,7 +1203,8 @@ fn get_file_line_groups(
 
         // Split the text into pages and collect each line for
         // subsequent grouping.
-        for (_, mut page) in get_pages(options, file_id, &buf) {
+        let (pages, _) = get_pages(options, file_id, &buf);
+        for (_, mut page) in pages {
             all_lines.append(&mut page);
         }
     }

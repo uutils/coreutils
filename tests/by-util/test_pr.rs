@@ -221,6 +221,15 @@ fn test_with_valid_page_ranges() {
 }
 
 #[test]
+fn test_start_page_exceeds_page_count() {
+    new_ucmd!()
+        .args(&["--pages=2", "hosts.log"])
+        .succeeds()
+        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
+        .stdout_is("");
+}
+
+#[test]
 fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
