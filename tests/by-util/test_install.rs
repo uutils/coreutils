@@ -786,11 +786,7 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 }
 
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
-#[cfg(not(target_os = "freebsd"))]
-const SYMBOL_DUMP_PROGRAM: &str = "objdump";
-#[cfg(target_os = "freebsd")]
-const SYMBOL_DUMP_PROGRAM: &str = "llvm-objdump";
-const STRIP_SOURCE_FILE_SYMBOL: &str = "main";
+const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
 fn strip_source_file() -> PathBuf {
     use std::io::Write as _;
@@ -814,28 +810,29 @@ fn strip_source_file() -> PathBuf {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))] // missing strip binary
-// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+
+    at.write("strip", STRIP_PROGRAM);
+    at.set_mode("strip", 0o755);
+    at.write("source", "file contents");
+    let path = format!(
+        "{}:{}",
+        at.plus(".").display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
     scene
         .ucmd()
+        .env("PATH", path)
         .arg("-s")
-        .arg(strip_source_file())
+        .arg("source")
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
-        .arg("-t")
-        .arg(at.plus(STRIP_TARGET_FILE))
-        .output()
-        .unwrap();
-
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+    assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
 }
 
 #[test]
@@ -853,30 +850,25 @@ fn test_install_no_strip_with_program() {
 }
 
 #[test]
-#[cfg(not(target_os = "android"))] // missing strip binary
-// FIXME test runs in a timeout with macos-latest on x86_64 in the CI
-#[cfg(not(all(target_os = "macos", target_arch = "x86_64")))]
 fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+
+    at.write("strip-program", STRIP_PROGRAM);
+    at.set_mode("strip-program", 0o755);
+    at.write("source", "file contents");
+
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
-        .arg("/usr/bin/strip")
-        .arg(strip_source_file())
+        .arg("./strip-program")
+        .arg("source")
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .no_stderr();
 
-    let output = process::Command::new(SYMBOL_DUMP_PROGRAM)
-        .arg("-t")
-        .arg(at.plus(STRIP_TARGET_FILE))
-        .output()
-        .unwrap();
-
-    let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(!stdout.contains(STRIP_SOURCE_FILE_SYMBOL));
+    assert_eq!(at.metadata(STRIP_TARGET_FILE).len(), 0);
 }
 
 #[cfg(all(unix, feature = "chmod"))]
