@@ -13,6 +13,7 @@ use std::ffi::OsStr;
 use std::fs::metadata;
 use std::io::{Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
+use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
@@ -162,14 +163,6 @@ impl Default for NumberingMode {
     }
 }
 
-impl From<std::io::Error> for PrError {
-    fn from(err: std::io::Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
 impl From<FromUtf8Error> for PrError {
     fn from(err: FromUtf8Error) -> Self {
         Self::EncounteredErrors {
@@ -191,8 +184,17 @@ enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
 
-    #[error("pr: {path}: {msg}")]
-    ReadError { path: String, msg: String },
+    #[error("pr: {}", strip_errno(.0))]
+    Read(std::io::Error),
+
+    #[error("pr: {}", strip_errno(.0))]
+    Write(std::io::Error),
+
+    #[error("pr: {path}: {}", strip_errno(error))]
+    ReadPath {
+        path: PathBuf,
+        error: std::io::Error,
+    },
 }
 
 pub fn uu_app() -> Command {
@@ -979,20 +981,16 @@ fn build_options(
 
 /// Read the entire contents of the given path into memory.
 ///
-/// If `path` is `"-"`, then read from stdin.
-fn read_to_end(path: &str) -> Result<Vec<u8>, PrError> {
-    if path == "-" {
+/// If `name` is `"-"`, then read from stdin.
+fn read_to_end(name: &str) -> Result<Vec<u8>, PrError> {
+    if name == "-" {
         let mut f = stdin();
         let mut buf = vec![];
-        f.read_to_end(&mut buf)?;
+        f.read_to_end(&mut buf).map_err(PrError::Read)?;
         Ok(buf)
     } else {
-        // Include the file name and strip the raw "(os error N)" suffix so the
-        // message matches GNU pr, e.g. "pr: qwe: No such file or directory".
-        std::fs::read(path).map_err(|err| PrError::ReadError {
-            path: path.to_string(),
-            msg: strip_errno(&err),
-        })
+        let path = PathBuf::from(name);
+        std::fs::read(&path).map_err(|error| PrError::ReadPath { path, error })
     }
 }
 
@@ -1017,19 +1015,20 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
     }
 }
 
-fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
+fn pr(name: &str, options: &OutputOptions) -> Result<i32, PrError> {
     // Read the entire contents of the file into a buffer.
     //
     // TODO Read incrementally.
-    let buf = read_to_end(path)?;
+    let buf = read_to_end(name)?;
 
+    let mut writer = stdout().lock();
     let pages = get_pages(options, 0, &buf);
 
     // Split the text into pages, and then print each line in each page.
     for page_with_page_number in pages {
         let page_number = page_with_page_number.0 + 1;
         let page = page_with_page_number.1;
-        print_page(&page, options, page_number)?;
+        write_page(&mut writer, &page, options, page_number).map_err(PrError::Write)?;
     }
 
     Ok(0)
@@ -1206,6 +1205,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         return Ok(0);
     }
 
+    let mut writer = stdout().lock();
     let start_page = options.start_page;
     let mut lines = Vec::new();
     let mut page_counter = start_page;
@@ -1214,7 +1214,7 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         for file_line in file_line_group {
             let new_page_number = file_line.page_number + 1;
             if page_counter != new_page_number {
-                print_page(&lines, options, page_counter)?;
+                write_page(&mut writer, &lines, options, page_counter).map_err(PrError::Write)?;
                 lines = Vec::new();
                 page_counter = new_page_number;
             }
@@ -1222,12 +1222,13 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
         }
     }
 
-    print_page(&lines, options, page_counter)?;
+    write_page(&mut writer, &lines, options, page_counter).map_err(PrError::Write)?;
 
     Ok(0)
 }
 
-fn print_page(
+fn write_page(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
@@ -1238,24 +1239,21 @@ fn print_page(
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    let out = stdout();
-    let mut out = out.lock();
-
     for x in header {
-        out.write_all(x.as_bytes())?;
-        out.write_all(line_separator)?;
+        writer.write_all(x.as_bytes())?;
+        writer.write_all(line_separator)?;
     }
 
-    write_columns(lines, options, &mut out)?;
+    write_columns(writer, lines, options)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
-        out.write_all(x.as_bytes())?;
+        writer.write_all(x.as_bytes())?;
         if index + 1 != trailer_content.len() {
-            out.write_all(line_separator)?;
+            writer.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
-    out.flush()?;
+    writer.write_all(page_separator)?;
+    writer.flush()?;
     Ok(())
 }
 
@@ -1341,9 +1339,9 @@ fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> Result<(), std::io
 
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
-    out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
     let line_separator = options.content_line_separator.as_bytes();
 
@@ -1412,8 +1410,8 @@ fn write_columns(
                 Some(file_line) => file_line,
             };
 
-            write_offset_spaces(out, options.offset_spaces)?;
-            out.write_all(
+            write_offset_spaces(writer, options.offset_spaces)?;
+            writer.write_all(
                 get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
                     .as_bytes(),
             )?;
@@ -1421,7 +1419,7 @@ fn write_columns(
         if not_found_break && feed_line_present {
             break;
         }
-        out.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
     }
 
     Ok(())
