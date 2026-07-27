@@ -1024,8 +1024,6 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
 
     loop {
         // Skip pages before start_page without allocating FileLine objects.
-        // This avoids wasting memory when piping infinite output through
-        // `pr --start-page=N --end-page=M`.
         if page_num + 1 < start_page {
             match read_one_page(
                 &mut reader,
