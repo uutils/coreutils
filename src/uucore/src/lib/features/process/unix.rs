@@ -161,6 +161,10 @@ pub fn timeout_signal_set() -> SigSet {
     set.add(Signal::SIGCHLD);
     set.add(Signal::SIGTTIN);
     set.add(Signal::SIGTTOU);
+    set.add(Signal::SIGXCPU);
+    set.add(Signal::SIGXFSZ);
+    set.add(Signal::SIGVTALRM);
+    set.add(Signal::SIGPROF);
     set
 }
 
