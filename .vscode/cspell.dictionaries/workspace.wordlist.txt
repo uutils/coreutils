@@ -363,6 +363,7 @@ uutils
 sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat
@@ -370,7 +371,6 @@ setpipe
 
 # * other
 auxv
-dpkg
 getlimits
 weblate
 algs

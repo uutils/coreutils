@@ -430,7 +430,7 @@ impl<'a> Input<'a> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
+fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     if iflags.direct {
@@ -1334,7 +1334,7 @@ fn finalize<T>(
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::cognitive_complexity)]
-fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
+fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     // oflag=FLAG
