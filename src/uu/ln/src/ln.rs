@@ -316,16 +316,6 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     for srcpath in files {
         let targetpath = if settings.no_dereference && target_dir.is_symlink() {
             let remove_target = || {
-                // In that case, we don't want to do link resolution
-                // We need to clean the target
-                if target_dir.is_file()
-                    && let Err(e) = fs::remove_file(target_dir)
-                {
-                    show_error!(
-                        "{}",
-                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                    );
-                }
                 #[cfg(windows)]
                 if target_dir.is_dir() {
                     // Not sure why but on Windows, the symlink can be
