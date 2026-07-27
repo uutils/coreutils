@@ -980,11 +980,11 @@ fn make_options<'a>(
         .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let argv0 = matches
         .get_one::<OsString>("argv0")
