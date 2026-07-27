@@ -131,7 +131,7 @@ fn main() {
             // Argument looks like an option but wasn't recognized
             validation::unrecognized_option(binary_as_util, &util_os);
         }
-        process::exit(1);
+        validation::not_found(&util_os);
     }
     // GNU just fails, but busybox tests needs usage
     // todo: patch the test suite instead
