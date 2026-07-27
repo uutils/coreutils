@@ -29,6 +29,7 @@ help-flag-version = Afficher les informations de version
 error-io = Erreur E/S
 error-permission-denied = Permission refusée
 error-file-not-found = Aucun fichier ou répertoire de ce type
+error-no-such-process = Aucun processus de ce type
 error-invalid-argument = Argument invalide
 error-is-a-directory = { $file }: Est un répertoire
 
