@@ -430,7 +430,7 @@ impl<'a> Input<'a> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
+fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     if iflags.direct {
@@ -515,7 +515,9 @@ impl Input<'_> {
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read follows the previous one.
+    /// The start of each ibs-sized read follows the previous one; a short
+    /// read ends the fill, so the bytes received so far form one partial
+    /// record for the copy loop (as in GNU dd).
     fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
@@ -530,6 +532,12 @@ impl Input<'_> {
                 rlen if rlen > 0 => {
                     bytes_total += rlen;
                     reads_partial += 1;
+                    // A short read must end this fill: the next read would
+                    // start at the following ibs-aligned chunk, leaving a
+                    // gap of stale bytes inside `buf` that the `truncate`
+                    // below would keep in the output while dropping the
+                    // same number of real trailing bytes (issue #13458).
+                    break;
                 }
                 _ => break,
             }
@@ -1202,7 +1210,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
 
     // Add partial block buffering, if needed.
     let mut o = if o.settings.buffered {
-        BlockWriter::Buffered(BufferedOutput::new(o))
+        BlockWriter::Buffered(BufferedOutput::new(o)?)
     } else {
         BlockWriter::Unbuffered(o)
     };
@@ -1224,7 +1232,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
+        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
         let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
         if rstat_update.is_empty() {
             if input_nocache {
@@ -1326,7 +1334,7 @@ fn finalize<T>(
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::cognitive_complexity)]
-fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
+fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     // oflag=FLAG
@@ -1411,19 +1419,14 @@ fn read_helper(i: &mut Input, buf: &mut Vec<u8>, bsize: usize) -> io::Result<Rea
 // https://en.wikipedia.org/wiki/Least_common_multiple#Using_the_greatest_common_divisor
 fn calc_bsize(ibs: usize, obs: usize) -> usize {
     let gcd = Gcd::gcd(ibs, obs);
-    // calculate the lcm from gcd
-    (ibs / gcd) * obs
+    // calculate the lcm from gcd; saturate so an oversized product fails at
+    // allocation instead of panicking here
+    (ibs / gcd).saturating_mul(obs)
 }
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
 /// a `count=N` if present.
-fn calc_loop_bsize(
-    count: Option<Num>,
-    rstat: &ReadStat,
-    wstat: &WriteStat,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1431,9 +1434,9 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = bmax.into();
-            let bremain: u128 = bmax - wstat.bytes_total;
-            cmp::min(ideal_bsize as u128, bremain) as usize
+            // `iflag=count_bytes` limits input, so use bytes read.
+            let bremain = bmax.saturating_sub(rstat.bytes_total);
+            cmp::min(ideal_bsize as u64, bremain) as usize
         }
         None => ideal_bsize,
     }
@@ -1670,5 +1673,22 @@ mod tests {
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
+    }
+
+    #[test]
+    fn test_calc_loop_bsize_count_bytes() {
+        use crate::progress::ReadStat;
+        use crate::{Num, calc_loop_bsize};
+
+        for (bytes_read, expected) in [(512, 488), (1000, 0), (1001, 0)] {
+            let rstat = ReadStat {
+                bytes_total: bytes_read,
+                ..ReadStat::default()
+            };
+            assert_eq!(
+                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
+                expected
+            );
+        }
     }
 }

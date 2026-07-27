@@ -31,7 +31,7 @@ jobs:
         job:
           - { os: ubuntu-24.04 , features: unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Prepare, build and test
@@ -121,7 +121,7 @@ jobs:
     env:
       mem: 4096
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Avoid no space left on device (Ubuntu runner)

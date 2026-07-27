@@ -91,6 +91,32 @@ pub(crate) struct PaddingCollection {
 pub(crate) struct DisplayItemName {
     pub(crate) displayed: OsString,
     pub(crate) dired_name_len: usize,
+
+    /// Keep track of whether the quoted name started with a quote, so when
+    /// needed, we don't have to look at the `displayed` field and skip
+    /// the ANSI color codes that were added afterwards.
+    pub(crate) starts_with_quote: bool,
+}
+
+/// Same as above, but without the `dired_name_len` field.
+pub(crate) struct DisplayWithQuote {
+    pub(crate) displayed: OsString,
+    pub(crate) starts_with_quote: bool,
+}
+
+impl From<DisplayItemName> for DisplayWithQuote {
+    fn from(
+        DisplayItemName {
+            displayed,
+            dired_name_len: _,
+            starts_with_quote,
+        }: DisplayItemName,
+    ) -> Self {
+        Self {
+            displayed,
+            starts_with_quote,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -407,7 +433,7 @@ pub fn display_items(
             write!(state.out, "{}", style_manager.apply_normal())?;
         }
 
-        let mut names_vec = Vec::with_capacity(items.len());
+        let mut names_vec: Vec<DisplayWithQuote> = Vec::with_capacity(items.len());
 
         #[cfg(unix)]
         let should_display_leading_info = config.inode || config.alloc_size;
@@ -435,7 +461,7 @@ pub fn display_items(
                 LazyCell::new(|| 0),
             );
 
-            names_vec.push(cell.displayed);
+            names_vec.push(cell.into());
         }
 
         let mut names = names_vec.into_iter();
@@ -464,11 +490,11 @@ pub fn display_items(
             Format::Commas => {
                 let mut current_col = 0;
                 if let Some(name) = names.next() {
-                    write_os_str(&mut state.out, &name)?;
-                    current_col = ansi_width(&name.to_string_lossy()) as u16 + 2;
+                    write_os_str(&mut state.out, &name.displayed)?;
+                    current_col = ansi_width(&name.displayed.to_string_lossy()) as u16 + 2;
                 }
                 for name in names {
-                    let name_width = ansi_width(&name.to_string_lossy()) as u16;
+                    let name_width = ansi_width(&name.displayed.to_string_lossy()) as u16;
                     // If the width is 0 we print one single line
                     if config.width != 0 && current_col + name_width + 1 > config.width {
                         current_col = name_width + 2;
@@ -477,7 +503,7 @@ pub fn display_items(
                         current_col += name_width + 2;
                         write!(state.out, ", ")?;
                     }
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                 }
                 // Current col is never zero again if names have been printed.
                 // So we print a newline.
@@ -487,7 +513,7 @@ pub fn display_items(
             }
             _ => {
                 for name in names {
-                    write_os_str(&mut state.out, &name)?;
+                    write_os_str(&mut state.out, &name.displayed)?;
                     write!(state.out, "{}", config.line_ending)?;
                 }
             }
@@ -498,7 +524,7 @@ pub fn display_items(
 }
 
 fn display_grid(
-    names: impl Iterator<Item = OsString>,
+    names: impl Iterator<Item = DisplayWithQuote>,
     width: u16,
     direction: Direction,
     out: &mut BufWriter<Stdout>,
@@ -513,7 +539,7 @@ fn display_grid(
                 write!(out, "  ")?;
             }
             printed_something = true;
-            write_os_str(out, &name)?;
+            write_os_str(out, &name.displayed)?;
         }
         if printed_something {
             writeln!(out)?;
@@ -522,7 +548,7 @@ fn display_grid(
         let names: Vec<String> = {
             let mut buf = Vec::new();
             names
-                .map(|n| {
+                .map(|din| {
                     // In case some names are quoted, GNU adds a space before each
                     // entry that does not start with a quote to make it prettier
                     // on multiline.
@@ -537,10 +563,10 @@ fn display_grid(
                     // ```
                     // FIXME: the Grid crate only supports &str, so can't display raw bytes
                     buf.clear();
-                    if quoted && !os_str_starts_with(&n, b"'") && !os_str_starts_with(&n, b"\"") {
+                    if quoted && !din.starts_with_quote {
                         buf.push(b' ');
                     }
-                    buf.extend(n.as_encoded_bytes());
+                    buf.extend(din.displayed.as_encoded_bytes());
                     String::from_utf8_lossy(&buf).into_owned()
                 })
                 .collect()
@@ -720,6 +746,7 @@ fn display_item_name(
 ) -> DisplayItemName {
     // This is our return value. We start by `&path.display_name` and modify it along the way.
     let mut name = escape_name_with_locale(path.display_name(), config);
+    let starts_with_quote = os_str_starts_with(&name, b"'") || os_str_starts_with(&name, b"\"");
 
     let is_wrap =
         |namelen: usize| config.width != 0 && *current_column + namelen > config.width.into();
@@ -733,22 +760,20 @@ fn display_item_name(
         name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
-    if config.format != Format::Long {
-        if let Some(info) = more_info {
-            let old_name = name;
-            name = info.into();
-            name.push(&old_name);
-        }
+    if config.format != Format::Long
+        && let Some(info) = more_info
+    {
+        let old_name = name;
+        name = info.into();
+        name.push(&old_name);
     }
 
     let is_long_symlink = config.format == Format::Long
         && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference;
 
-    if !is_long_symlink {
-        if let Some(c) = indicator_char(path, config.indicator_style) {
-            let _ = name.write_char(c);
-        }
+    if !is_long_symlink && let Some(c) = indicator_char(path, config.indicator_style) {
+        let _ = name.write_char(c);
     }
 
     let dired_name_len = if config.dired { name.len() } else { 0 };
@@ -861,25 +886,26 @@ fn display_item_name(
 
     // Prepend the security context to the `name` and adjust `width` in order
     // to get correct alignment from later calls to`display_grid()`.
-    if config.context {
-        if let Some(pad_count) = prefix_context {
-            let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
-                path.security_context(config).into()
-            } else {
-                pad_left(path.security_context(config), pad_count).into()
-            };
+    if config.context
+        && let Some(pad_count) = prefix_context
+    {
+        let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
+            path.security_context(config).into()
+        } else {
+            pad_left(path.security_context(config), pad_count).into()
+        };
 
-            let old_name = name;
-            name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
-            name.push(security_context.as_ref());
-            name.push(" ");
-            name.push(old_name);
-        }
+        let old_name = name;
+        name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
+        name.push(security_context.as_ref());
+        name.push(" ");
+        name.push(old_name);
     }
 
     DisplayItemName {
         displayed: name,
         dired_name_len,
+        starts_with_quote,
     }
 }
 
@@ -1023,7 +1049,7 @@ fn display_item_long(
             LazyCell::new(|| ansi_width(&String::from_utf8_lossy(&state.display_buf))),
         );
 
-        let needs_space = quoted && !os_str_starts_with(&item_display.displayed, b"'");
+        let needs_space = quoted && !item_display.starts_with_quote;
 
         if config.dired {
             let mut dired_name_len = item_display.dired_name_len;
@@ -1313,11 +1339,11 @@ fn calculate_padding_collection(
             padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         if config.format == Format::Long {
@@ -1386,11 +1412,11 @@ fn calculate_padding_collection(
     };
 
     for item in items {
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         let context_len = item.security_context(config).len();

@@ -23,6 +23,7 @@ chmod-error-preserve-root = il est dangereux d'opérer récursivement sur {$file
   chmod: utiliser --no-preserve-root pour outrepasser cette protection
 chmod-error-permission-denied = impossible d'accéder à {$file} : Permission refusée
 chmod-error-new-permissions = {$file} : les nouvelles permissions sont {$actual}, pas {$expected}
+chmod-error-changing-permissions = changement des permissions de {$file} : {$err}
 chmod-error-missing-operand = opérande manquant
 
 # Messages verbeux/de statut

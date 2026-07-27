@@ -37,6 +37,28 @@ fn df_deep_directory(bencher: Bencher) {
     env::set_current_dir(original_dir).unwrap();
 }
 
+#[cfg(unix)]
+#[divan::bench]
+fn df_with_path(bencher: Bencher) {
+    use rustix::stdio::dup2_stdout;
+
+    let temp_dir = TempDir::new().unwrap();
+    let temp_path_str = temp_dir.path().to_str().unwrap();
+    let stdout_bak = rustix::io::dup(rustix::stdio::stdout()).unwrap();
+    let devnull = fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/null")
+        .unwrap();
+
+    bencher.bench_local(|| {
+        dup2_stdout(&devnull).unwrap();
+        black_box(run_util_function(uumain, &[temp_path_str]));
+    });
+
+    dup2_stdout(&stdout_bak).unwrap();
+}
+
+#[cfg(not(unix))]
 #[divan::bench]
 fn df_with_path(bencher: Bencher) {
     let temp_dir = TempDir::new().unwrap();

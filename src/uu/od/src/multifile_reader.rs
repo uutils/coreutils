@@ -22,6 +22,7 @@ pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
     curr_file: Option<Box<dyn io::Read>>,
     any_err: bool,
+    file_name: Option<&'a str>,
 }
 
 pub trait HasError {
@@ -34,6 +35,7 @@ impl MultifileReader<'_> {
             ni: fnames,
             curr_file: None, // normally this means done; call next_file()
             any_err: false,
+            file_name: None,
         };
         mf.next_file();
         mf
@@ -74,6 +76,7 @@ impl MultifileReader<'_> {
                 InputSource::FileName(fname) => {
                     match File::open(fname) {
                         Ok(f) => {
+                            self.file_name = Some(fname);
                             // No need to wrap `f` in a BufReader - buffered reading is taken care
                             // of elsewhere.
                             self.curr_file = Some(Box::new(f));
@@ -123,7 +126,11 @@ impl io::Read for MultifileReader<'_> {
                             Ok(0) => break,
                             Ok(n) => n,
                             Err(e) => {
-                                show_error!("I/O: {e}");
+                                show_error!(
+                                    "{}: {}",
+                                    self.file_name.unwrap_or("I/O"),
+                                    uucore::error::strip_errno(&e)
+                                );
                                 self.any_err = true;
                                 break;
                             }

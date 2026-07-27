@@ -418,7 +418,7 @@ divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 exacl = "0.13.0"
 file_diff = "1.0.0"
-filetime = "0.2.23"
+filetime = "0.2.29"
 foldhash = "0.2.0"
 fs_extra = "1.3.0"
 fts-sys = "0.2.16"
@@ -450,7 +450,7 @@ num-bigint = "0.4.4"
 num-prime = "0.5.0"
 num-traits = "0.2.19"
 onig = { version = "~6.5.1", default-features = false }
-parse_datetime = "0.14.0"
+parse_datetime = "0.15.0"
 phf = "0.14.0"
 phf_codegen = "0.14.0"
 platform-info = "2.0.3"
@@ -466,7 +466,7 @@ rstest_reuse = "0.7.0"
 rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 # raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
-rustix = { version = "1.1.4", features = ["param", "use-libc-auxv"] }
+rustix = { version = "1.1.4", features = ["param", "use-libc-auxv", "time"] }
 same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"
@@ -524,7 +524,6 @@ unexpected_cfgs = { level = "warn", check-cfg = [
 unused_qualifications = "warn"
 
 [workspace.lints.clippy]
-collapsible_if = { level = "allow", priority = 127 } # remove me
 # The counts were generated with this command:
 #   cargo clippy --all-targets --workspace --message-format=json --quiet \
 #     | jq -r '.message.code.code | select(. != null and startswith("clippy::"))' \
@@ -554,7 +553,6 @@ float_cmp = "allow"                          # 12
 return_self_not_must_use = "allow"           # 8
 inline_always = "allow"                      # 6
 fn_params_excessive_bools = "allow"          # 6
-used_underscore_items = "allow"              # 2
 should_panic_without_expect = "allow"        # 2
 
 doc_markdown = "allow"
@@ -731,10 +729,6 @@ rstest_reuse.workspace = true
 rustix.workspace = true
 selinux = { workspace = true, optional = true }
 
-# this breaks clippy linting with: "tests/by-util/test_factor_benches.rs: No such file or directory (os error 2)"
-# factor_benches = { optional = true, version = "0.0.0", package = "uu_factor_benches", path = "tests/benches/factor" }
-
-#
 # * pinned transitive dependencies
 # Not needed for now. Keep as examples:
 #pin_cc = { version="1.0.61, < 1.0.62", package="cc" } ## cc v1.0.62 has compiler errors for MinRustV v1.32.0, requires 1.34 (for `std::str::split_ascii_whitespace()`)

@@ -106,8 +106,8 @@ skip = [
   { name = "digest", version = "0.10.7" },
   # digest
   { name = "crypto-common", version = "0.1.7" },
-  # parse_datetime
-  { name = "winnow", version = "0.7.15" },
+  # various crates
+  { name = "syn", version = "2.0.117" },
 ]
 # spell-checker: enable
 

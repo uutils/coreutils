@@ -622,6 +622,22 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+#[test]
+fn test_touch_set_date_without_leading_zeroes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_without_leading_zeroes";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2026-6-27 13:12", file])
+        .succeeds()
+        .no_stderr();
+
+    let expected = FileTime::from_unix_time(1_782_537_120, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
 /// Regression test for https://github.com/uutils/coreutils/issues/11804
 ///
 /// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
@@ -1020,7 +1036,17 @@ fn test_touch_invalid_timestamp_leading_multibyte_char() {
         new_ucmd!()
             .args(&["-t", ts, "f"])
             .fails_with_code(1)
-            .stderr_only(format!("touch: invalid date ts format '{ts}'\n"));
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
+    }
+}
+
+#[test]
+fn test_touch_invalid_timestamp_reports_original_input() {
+    for ts in ["2026-04-10", "26-04-10", "00000000"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
     }
 }
 

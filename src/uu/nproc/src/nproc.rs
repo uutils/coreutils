@@ -109,8 +109,8 @@ fn cgroups2_quota() -> Option<usize> {
     let mut pair = pair.split_whitespace();
     // map the string "max" to None as we unwrap_or(usize::MAX) later
     let quota = pair.next()?.parse::<usize>().ok()?;
-    let period = pair.next()?.parse::<usize>().ok()?;
-    debug_assert!(period > 0, "kernel should validate it");
+    // kernel does not provide 0 period. But it seems GNU cares about it
+    let period = pair.next()?.parse::<usize>().ok().filter(|&p| p > 0)?;
     // mimic GNU's rounding
     Some(quota.saturating_add(period / 2) / period)
 }

@@ -32,7 +32,7 @@ We provide prebuilt binaries, manpages, and shell completions from main branch a
 The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
 Bug reporters should use binary from latest commit.
 
-Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-musl` is not compatible with your system.
+Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-gnu` is not compatible with your system.
 
 </div>
 

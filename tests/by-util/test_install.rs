@@ -17,6 +17,7 @@ use std::process;
 use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
+use uucore::error::strip_errno;
 use uucore::process::{getegid, geteuid};
 #[cfg(all(
     feature = "feat_selinux",
@@ -1384,6 +1385,20 @@ fn test_install_backup_custom_suffix_via_env() {
 }
 
 #[test]
+fn test_install_backup_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source");
+    at.touch("target");
+    at.mkdir("target.backup");
+    let error = strip_errno(&fs::rename(at.plus("target"), at.plus("target.backup")).unwrap_err());
+
+    ucmd.env("SIMPLE_BACKUP_SUFFIX", ".backup")
+        .args(&["--backup", "source", "target"])
+        .fails()
+        .stderr_is(format!("install: cannot backup 'target': {error}\n"));
+}
+
+#[test]
 fn test_install_backup_numbered_with_t() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1713,6 +1728,53 @@ fn test_install_dir_dot() {
     assert!(at.dir_exists("dir4/cal"));
     assert!(at.dir_exists("dir5/cali"));
     assert!(at.dir_exists("dir6"));
+}
+
+#[test]
+fn test_install_dir_with_existing_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let newdir1 = "newdir1";
+    let existing_file = "existing_file";
+    let newdir2 = "newdir2";
+    at.touch(existing_file);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(newdir1)
+        .arg(existing_file)
+        .arg(newdir2)
+        .fails()
+        .stderr_contains("cannot create directory 'existing_file': File exists");
+
+    assert!(at.dir_exists(newdir1));
+    assert!(!at.dir_exists(existing_file));
+    assert!(at.dir_exists(newdir2));
+}
+
+#[test]
+fn test_install_dir_with_multiple_existing_files() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let file1 = "file1";
+    let file2 = "file2";
+
+    at.touch(file1);
+    at.touch(file2);
+
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg(file1)
+        .arg(file2)
+        .fails()
+        .stderr_contains("cannot create directory 'file1': File exists")
+        .stderr_contains("cannot create directory 'file2': File exists");
+
+    assert!(at.file_exists(file1));
+    assert!(at.file_exists(file2));
 }
 
 #[test]

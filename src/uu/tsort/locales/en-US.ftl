@@ -7,5 +7,4 @@ tsort-error-is-dir = read error: Is a directory
 tsort-error-odd = input contains an odd number of tokens
 tsort-error-loop = input contains a loop:
 tsort-error-extra-operand = extra operand { $operand }
-  Try '{ $util } --help' for more information.
-tsort-error-at-least-one-input = at least one input
+  Try 'tsort --help' for more information.

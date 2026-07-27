@@ -22,7 +22,6 @@ touch-error-cannot-touch = impossible de toucher { $filename }
 touch-error-no-such-file-or-directory = Aucun fichier ou répertoire de ce type
 touch-error-failed-to-get-attributes = échec d'obtention des attributs de { $path }
 touch-error-setting-times-of-path = définition des temps de { $path }
-touch-error-invalid-date-ts-format = format de date ts invalide { $date }
 touch-error-invalid-date-format = format de date invalide { $date }
 touch-error-unable-to-parse-date = Impossible d'analyser la date : { $date }
 touch-error-windows-stdout-path-failed = GetFinalPathNameByHandleW a échoué avec le code { $code }

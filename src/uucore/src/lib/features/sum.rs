@@ -23,7 +23,7 @@ use memchr::memmem;
 use crate::error::{UResult, USimpleError};
 
 /// Represents the output of a checksum computation.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DigestOutput {
     /// Varying-size output
     Vec(Vec<u8>),
@@ -67,11 +67,22 @@ pub trait Digest {
         self.output_bits().div_ceil(8)
     }
 
-    fn result(&mut self) -> DigestOutput {
-        let mut buf: Vec<u8> = vec![0; self.output_bytes()];
+    fn result(&mut self) -> io::Result<DigestOutput> {
+        let mut buf: Vec<u8> = Vec::new();
+        try_reserve_zeroed(&mut buf, self.output_bytes())?;
         self.hash_finalize(&mut buf);
-        DigestOutput::Vec(buf)
+        Ok(DigestOutput::Vec(buf))
     }
+}
+
+/// Grows `buf` to `len` zero bytes, returning an [`io::Error`] with
+/// [`io::ErrorKind::OutOfMemory`] instead of aborting the process if the
+/// allocation can't be satisfied (e.g. an absurdly large `--length`, #12869).
+fn try_reserve_zeroed(buf: &mut Vec<u8>, len: usize) -> io::Result<()> {
+    buf.try_reserve_exact(len)
+        .map_err(|e| io::Error::new(io::ErrorKind::OutOfMemory, e))?;
+    buf.resize(len, 0);
+    Ok(())
 }
 
 /// first element of the tuple is the blake2b state
@@ -246,12 +257,12 @@ impl Digest for Crc {
         out.copy_from_slice(&self.digest.finalize().to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out: [u8; 8] = [0; 8];
         self.hash_finalize(&mut out);
 
         let x = u64::from_ne_bytes(out);
-        DigestOutput::Crc((x & (u32::MAX as u64)) as u32)
+        Ok(DigestOutput::Crc((x & (u32::MAX as u64)) as u32))
     }
 
     fn reset(&mut self) {
@@ -297,10 +308,10 @@ impl Digest for CRC32B {
         32
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 4];
         self.hash_finalize(&mut out);
-        DigestOutput::Crc(u32::from_be_bytes(out))
+        Ok(DigestOutput::Crc(u32::from_be_bytes(out)))
     }
 }
 
@@ -321,10 +332,10 @@ impl Digest for Bsd {
         out.copy_from_slice(&self.state.to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
-        DigestOutput::U16(self.state)
+        Ok(DigestOutput::U16(self.state))
     }
 
     fn reset(&mut self) {
@@ -354,10 +365,10 @@ impl Digest for SysV {
         out.copy_from_slice(&(self.state as u16).to_ne_bytes());
     }
 
-    fn result(&mut self) -> DigestOutput {
+    fn result(&mut self) -> io::Result<DigestOutput> {
         let mut out = [0; 2];
         self.hash_finalize(&mut out);
-        DigestOutput::U16((self.state & (u16::MAX as u32)) as u16)
+        Ok(DigestOutput::U16((self.state & (u16::MAX as u32)) as u16))
     }
 
     fn reset(&mut self) {
@@ -442,10 +453,11 @@ macro_rules! impl_digest_shake {
                 self.bit_size
             }
 
-            fn result(&mut self) -> DigestOutput {
-                let mut bytes = vec![0; self.output_bits().div_ceil(8)];
+            fn result(&mut self) -> io::Result<DigestOutput> {
+                let mut bytes = Vec::new();
+                try_reserve_zeroed(&mut bytes, self.output_bits().div_ceil(8))?;
                 self.hash_finalize(&mut bytes);
-                DigestOutput::Vec(bytes)
+                Ok(DigestOutput::Vec(bytes))
             }
         }
     };
@@ -721,7 +733,7 @@ mod tests {
         use super::Md5;
 
         // Writing "\r" in one call to `write()`, and then "\n" in another.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_crlf = DigestWriter::new(&mut digest, false);
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
@@ -729,7 +741,7 @@ mod tests {
         let result_crlf = digest.result();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
-        let mut digest = Box::new(Md5::new()) as Box<dyn Digest>;
+        let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();

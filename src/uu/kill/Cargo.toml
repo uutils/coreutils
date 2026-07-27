@@ -20,6 +20,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["signals"] }
 fluent = { workspace = true }
 

@@ -100,7 +100,7 @@ struct ParsedSpec<'a> {
 
 /// Try to parse a format spec at the start of `s`.
 ///
-/// Implements the grammar `%[_0^#+-]*[0-9]*:*[a-zA-Z]` anchored at the
+/// Implements the grammar `%[_0^#+-]*[0-9]*:{0,3}[a-zA-Z]` anchored at the
 /// beginning of `s`. Returns `None` if `s` does not start with `%` or no
 /// valid specifier follows.
 fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
@@ -129,9 +129,9 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
         None
     };
 
-    // Specifier: zero or more `:` followed by a single ASCII letter.
+    // Specifier: up to three `:` followed by a single ASCII letter.
     let spec_start = pos;
-    while pos < bytes.len() && bytes[pos] == b':' {
+    while pos < bytes.len() && bytes[pos] == b':' && pos - spec_start < 3 {
         pos += 1;
     }
     if pos >= bytes.len() || !bytes[pos].is_ascii_alphabetic() {
@@ -330,10 +330,13 @@ fn strip_default_padding(value: &str) -> String {
         if stripped.is_empty() {
             return "0".to_string();
         }
-        if let Some(first_char) = stripped.chars().next() {
-            if first_char.is_ascii_digit() {
-                return stripped.to_string();
-            }
+        if stripped
+            .chars()
+            .next()
+            .as_ref()
+            .is_some_and(char::is_ascii_digit)
+        {
+            return stripped.to_string();
         }
     }
     if value.starts_with(' ') {
@@ -460,13 +463,16 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     // GNU behavior: + only adds sign if:
     // 1. An explicit width is provided, OR
     // 2. The value exceeds the default width for that specifier (e.g., year > 4 digits)
-    if force_sign && !result.starts_with('+') && !result.starts_with('-') {
-        if result.chars().next().is_some_and(|c| c.is_ascii_digit()) {
-            let default_w = get_default_width(specifier);
-            // Add sign only if explicit width provided OR result exceeds default width
-            if width.is_some() || (default_w > 0 && result.len() > default_w) {
-                result.insert(0, '+');
-            }
+    if force_sign
+        && result
+            .chars()
+            .next()
+            .is_some_and(|c| !matches!(c, '+' | '-') && c.is_ascii_digit())
+    {
+        let default_w = get_default_width(specifier);
+        // Add sign only if explicit width provided OR result exceeds default width
+        if width.is_some() || (default_w > 0 && result.len() > default_w) {
+            result.insert(0, '+');
         }
     }
 
@@ -491,10 +497,11 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N') {
-        if effective_width <= get_default_width(specifier) && effective_width != 0 {
-            result.truncate(effective_width);
-        }
+    } else if specifier.ends_with('N')
+        && effective_width <= get_default_width(specifier)
+        && effective_width != 0
+    {
+        result.truncate(effective_width);
     }
 
     Ok(result)
@@ -1006,6 +1013,7 @@ mod tests {
             ("%:z", Some(("", None, ":z", 3))),
             ("%::z", Some(("", None, "::z", 4))),
             ("%:::z", Some(("", None, ":::z", 5))),
+            ("%::::z", None),
             ("%-3:z", Some(("-", Some(3), ":z", 5))),
             // ---- only the spec is consumed; trailing text is ignored ----
             ("%Y-%m-%d", Some(("", None, "Y", 2))),

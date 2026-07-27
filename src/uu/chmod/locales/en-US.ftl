@@ -11,6 +11,7 @@ chmod-error-preserve-root = it is dangerous to operate recursively on {$file}
   chmod: use --no-preserve-root to override this failsafe
 chmod-error-permission-denied = cannot access {$file}: Permission denied
 chmod-error-new-permissions = {$file}: new permissions are {$actual}, not {$expected}
+chmod-error-changing-permissions = changing permissions of {$file}: {$err}
 chmod-error-missing-operand = missing operand
 
 # Help messages

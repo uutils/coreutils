@@ -172,7 +172,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(env::var("VERSION_CONTROL").ok(), &matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
     if backup_mode != BackupMode::None
@@ -192,10 +193,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<OsString>(OPT_TARGET_DIRECTORY)
         .map(OsString::from);
 
-    if let Some(ref maybe_dir) = target_dir {
-        if !Path::new(&maybe_dir).is_dir() {
-            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
-        }
+    if let Some(ref maybe_dir) = target_dir
+        && !Path::new(&maybe_dir).is_dir()
+    {
+        return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
     }
 
     // Handle -Z and --context options
@@ -1207,10 +1208,10 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         }
 
-        if let Some(pb) = progress_bar {
-            if let Ok(metadata) = from_path.metadata() {
-                pb.inc(metadata.len());
-            }
+        if let Some(pb) = progress_bar
+            && let Ok(metadata) = from_path.metadata()
+        {
+            pb.inc(metadata.len());
         }
     }
 
@@ -1310,8 +1311,7 @@ fn rename_file_fallback(
             & 0o7777;
         let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-        // copy_stream has fast-path for Linux
-        uucore::buf_copy::copy_stream(&mut &src_file, &mut dst_file)
+        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
         #[cfg(not(any(target_os = "macos", target_os = "redox")))]

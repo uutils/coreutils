@@ -123,24 +123,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
     };
 
-    let mut output = BufWriter::with_capacity(
-        BUF_SIZE,
-        match options.output {
-            None => Box::new(stdout()) as Box<dyn OsWrite>,
-            Some(ref s) => {
-                let file = File::create(s).map_err_context(
-                    || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
-                )?;
-                Box::new(file) as Box<dyn OsWrite>
-            }
-        },
-    );
-
     if options.head_count == 0 {
-        // In this case we do want to touch the output file but we can quit immediately.
+        // GNU still truncates the -o file in this case, but quits immediately
+        // without reading the input or the random source.
+        if let Some(ref s) = options.output {
+            File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+        }
         return Ok(());
     }
 
+    // Open the random source and read the input *before* creating the output
+    // file. Truncating the -o file only once the data is in hand means a failure
+    // here (missing input, unreadable random source) leaves an existing output
+    // file untouched, matching GNU and avoiding silent data loss.
     let mut rng = match options.random_source {
         RandomSource::None => WrappedRng::Default(rand::rng()),
         RandomSource::Seed(ref seed) => WrappedRng::Seed(SeededRng::new(seed)),
@@ -153,6 +150,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     };
 
+    let fdata = match mode {
+        Mode::Default(ref filename) => Some(read_input_file(filename)?),
+        _ => None,
+    };
+
+    let mut output = open_output(options.output.as_deref())?;
+
     match mode {
         Mode::Echo(args) => {
             let mut evec: Vec<&OsStr> = args.iter().map(AsRef::as_ref).collect();
@@ -161,8 +165,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Mode::InputRange(mut range) => {
             shuf_exec(&mut range, &options, &mut rng, &mut output)?;
         }
-        Mode::Default(filename) => {
-            let fdata = read_input_file(&filename)?;
+        Mode::Default(_) => {
+            let fdata = fdata.unwrap_or_default();
             let mut items = split_seps(&fdata, options.sep);
             shuf_exec(&mut items, &options, &mut rng, &mut output)?;
         }
@@ -253,6 +257,19 @@ pub fn uu_app() -> Command {
                 .value_parser(ValueParser::os_string())
                 .value_hint(clap::ValueHint::FilePath),
         )
+}
+
+fn open_output(output: Option<&Path>) -> UResult<BufWriter<Box<dyn OsWrite>>> {
+    let writer: Box<dyn OsWrite> = match output {
+        None => Box::new(stdout()),
+        Some(s) => {
+            let file = File::create(s).map_err_context(
+                || translate!("shuf-error-failed-to-open-for-writing", "file" => s.quote()),
+            )?;
+            Box::new(file)
+        }
+    };
+    Ok(BufWriter::with_capacity(BUF_SIZE, writer))
 }
 
 fn read_input_file(filename: &Path) -> UResult<Vec<u8>> {

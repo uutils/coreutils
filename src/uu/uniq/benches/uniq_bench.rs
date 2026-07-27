@@ -108,6 +108,29 @@ fn uniq_case_insensitive(bencher: Bencher, num_lines: usize) {
     });
 }
 
+/// Benchmark 4: `-w N` over duplicate-heavy input, for both a narrow N (1)
+/// and a wide N (512, as reported in #13199).
+/// Regression coverage for #13199: `uniq -w N` was ~5x slower than GNU uniq
+/// because the locale check inside key bounds computation was re-evaluated
+/// via environment variable lookups on every single line (duplicate or not),
+/// regardless of N. Reuses the duplicate-heavy generator so the vast
+/// majority of lines collapse and the benchmark isn't dominated by output.
+#[divan::bench(args = [(10_000, "1"), (10_000, "512")])]
+fn uniq_check_chars(bencher: Bencher, (num_lines, check_chars): (usize, &str)) {
+    let num_groups = 1000;
+    let duplicates_per_group = num_lines / num_groups;
+    let data = generate_duplicate_heavy_data(num_groups, duplicates_per_group);
+    let file_path = setup_test_file(&data);
+    let file_path_str = file_path.to_str().unwrap();
+
+    bencher.bench(|| {
+        black_box(run_util_function(
+            uumain,
+            &["-w", check_chars, file_path_str],
+        ));
+    });
+}
+
 fn main() {
     divan::main();
 }

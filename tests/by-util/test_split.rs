@@ -133,6 +133,18 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_split_to_non_seekable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/stdout", "xaa");
+
+    ucmd.args(&["-"])
+        .pipe_in("string")
+        .succeeds()
+        .stdout_is("string");
+}
+
+#[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")

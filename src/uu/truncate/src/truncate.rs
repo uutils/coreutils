@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) RFILE refsize rfilename fsize tsize
+// spell-checker:ignore (ToDO) RFILE fsize
+
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::{OpenOptions, metadata};
@@ -30,6 +31,12 @@ enum TruncateMode {
     RoundUp(u64),
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum SizeCalculationError {
+    DivisionByZero,
+    Overflow,
+}
+
 impl TruncateMode {
     /// Compute a target size in bytes for this truncate mode.
     ///
@@ -41,7 +48,8 @@ impl TruncateMode {
     ///
     /// # Returns
     ///
-    /// `None` if rounding by 0, else the target size.
+    /// An error if rounding by 0 or if the target size overflows, else the
+    /// target size.
     ///
     /// # Examples
     ///
@@ -50,7 +58,7 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Extend(5);
     /// let fsize = 10;
-    /// assert_eq!(mode.to_size(fsize), Some(15));
+    /// assert_eq!(mode.to_size(fsize), Ok(15));
     /// ```
     ///
     /// Reducing a file by more than its size results in 0:
@@ -58,7 +66,7 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::Reduce(5);
     /// let fsize = 3;
-    /// assert_eq!(mode.to_size(fsize), Some(0));
+    /// assert_eq!(mode.to_size(fsize), Ok(0));
     /// ```
     ///
     /// Rounding a file by 0:
@@ -66,17 +74,28 @@ impl TruncateMode {
     /// ```rust,ignore
     /// let mode = TruncateMode::RoundDown(0);
     /// let fsize = 17;
-    /// assert_eq!(mode.to_size(fsize), None);
+    /// assert_eq!(
+    ///     mode.to_size(fsize),
+    ///     Err(SizeCalculationError::DivisionByZero),
+    /// );
     /// ```
-    fn to_size(&self, fsize: u64) -> Option<u64> {
+    fn to_size(&self, fsize: u64) -> Result<u64, SizeCalculationError> {
         match self {
-            Self::Absolute(size) => Some(*size),
-            Self::Extend(size) => Some(fsize + size),
-            Self::Reduce(size) => Some(fsize.saturating_sub(*size)),
-            Self::AtMost(size) => Some(fsize.min(*size)),
-            Self::AtLeast(size) => Some(fsize.max(*size)),
-            Self::RoundDown(size) => fsize.checked_rem(*size).map(|remainder| fsize - remainder),
-            Self::RoundUp(size) => fsize.checked_next_multiple_of(*size),
+            Self::Absolute(size) => Ok(*size),
+            Self::Extend(size) => fsize
+                .checked_add(*size)
+                .ok_or(SizeCalculationError::Overflow),
+            Self::Reduce(size) => Ok(fsize.saturating_sub(*size)),
+            Self::AtMost(size) => Ok(fsize.min(*size)),
+            Self::AtLeast(size) => Ok(fsize.max(*size)),
+            Self::RoundDown(size) => fsize
+                .checked_rem(*size)
+                .map(|remainder| fsize - remainder)
+                .ok_or(SizeCalculationError::DivisionByZero),
+            Self::RoundUp(0) => Err(SizeCalculationError::DivisionByZero),
+            Self::RoundUp(size) => fsize
+                .checked_next_multiple_of(*size)
+                .ok_or(SizeCalculationError::Overflow),
         }
     }
 
@@ -100,8 +119,7 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let app = uu_app();
-    let matches = uucore::clap_localization::handle_clap_result(app, args)?;
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
         .get_many::<OsString>(options::ARG_FILES)
@@ -109,19 +127,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .unwrap_or_default();
 
     if files.is_empty() {
-        Err(UUsageError::new(
+        return Err(UUsageError::new(
             1,
             translate!("truncate-error-missing-file-operand"),
-        ))
-    } else {
-        let io_blocks = matches.get_flag(options::IO_BLOCKS);
-        let no_create = matches.get_flag(options::NO_CREATE);
-        let reference = matches
-            .get_one::<String>(options::REFERENCE)
-            .map(String::from);
-        let size = matches.get_one::<String>(options::SIZE).map(String::from);
-        truncate(no_create, io_blocks, reference, size, &files)
+        ));
     }
+
+    let io_blocks = matches.get_flag(options::IO_BLOCKS);
+    let no_create = matches.get_flag(options::NO_CREATE);
+    let reference = matches
+        .get_one::<String>(options::REFERENCE)
+        .map(String::from);
+    let size = matches.get_one::<String>(options::SIZE).map(String::from);
+
+    truncate(&files, no_create, io_blocks, reference, size)
 }
 
 pub fn uu_app() -> Command {
@@ -187,9 +206,7 @@ pub fn uu_app() -> Command {
 /// If the file could not be opened, or there was a problem setting the
 /// size of the file.
 fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
-    let path = Path::new(filename);
-
-    match OpenOptions::new().write(true).create(create).open(path) {
+    match OpenOptions::new().write(true).create(create).open(filename) {
         Ok(file) => file.set_len(size),
         Err(e) if e.kind() == ErrorKind::NotFound && !create => Ok(()),
         Err(e) => Err(e),
@@ -200,10 +217,11 @@ fn do_file_truncate(filename: &Path, create: bool, size: u64) -> UResult<()> {
 }
 
 fn file_truncate(
+    filename: &OsString,
     no_create: bool,
     reference_size: Option<u64>,
     mode: &TruncateMode,
-    filename: &OsString,
+    size_argument: Option<&str>,
 ) -> UResult<()> {
     let path = Path::new(filename);
 
@@ -231,17 +249,33 @@ fn file_truncate(
 
     let truncate_size = mode
         .to_size(actual_reference_size)
-        .ok_or_else(|| USimpleError::new(1, translate!("truncate-error-division-by-zero")))?;
+        .map_err(|error| match error {
+            SizeCalculationError::DivisionByZero => {
+                USimpleError::new(1, translate!("truncate-error-division-by-zero"))
+            }
+            SizeCalculationError::Overflow => {
+                let error = match size_argument {
+                    None => translate!("truncate-error-value-too-large"),
+                    Some(arg) => {
+                        translate!("truncate-error-value-too-large-arg", "arg" => arg.quote())
+                    }
+                };
+                USimpleError::new(
+                    1,
+                    translate!("truncate-error-invalid-number", "error" => error),
+                )
+            }
+        })?;
 
     do_file_truncate(path, !no_create, truncate_size)
 }
 
 fn truncate(
+    filenames: &[OsString],
     no_create: bool,
-    _: bool,
+    _io_blocks: bool, // TODO: implement handling
     reference: Option<String>,
     size: Option<String>,
-    filenames: &[OsString],
 ) -> UResult<()> {
     let reference_size = match reference {
         Some(reference_path) => {
@@ -285,7 +319,13 @@ fn truncate(
     // Process every file: a failure on one (e.g. a directory) must not
     // prevent the remaining files from being truncated.
     for filename in filenames {
-        show_if_err!(file_truncate(no_create, reference_size, &mode, filename));
+        show_if_err!(file_truncate(
+            filename,
+            no_create,
+            reference_size,
+            &mode,
+            size_string,
+        ));
     }
 
     Ok(())
@@ -293,7 +333,7 @@ fn truncate(
 
 /// Decide whether a character is one of the size modifiers, like '+' or '<'.
 fn is_modifier(c: char) -> bool {
-    c == '+' || c == '-' || c == '<' || c == '>' || c == '/' || c == '%'
+    "+-<>/%".contains(c)
 }
 
 /// Parse a size string with optional modifier symbol as its first character.
@@ -344,6 +384,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
 
 #[cfg(test)]
 mod tests {
+    use crate::SizeCalculationError;
     use crate::TruncateMode;
     use crate::parse_mode_and_size;
 
@@ -363,39 +404,50 @@ mod tests {
 
     #[test]
     fn test_to_size() {
-        assert_eq!(TruncateMode::Extend(5).to_size(10), Some(15));
-        assert_eq!(TruncateMode::Reduce(5).to_size(10), Some(5));
-        assert_eq!(TruncateMode::Reduce(5).to_size(3), Some(0));
-        assert_eq!(TruncateMode::RoundDown(4).to_size(13), Some(12));
-        assert_eq!(TruncateMode::RoundDown(4).to_size(16), Some(16));
-        assert_eq!(TruncateMode::RoundUp(8).to_size(10), Some(16));
-        assert_eq!(TruncateMode::RoundUp(8).to_size(16), Some(16));
-        assert_eq!(TruncateMode::RoundDown(0).to_size(123), None);
-        assert_eq!(TruncateMode::RoundUp(0).to_size(123), None);
+        assert_eq!(TruncateMode::Extend(5).to_size(10), Ok(15));
+        assert_eq!(TruncateMode::Reduce(5).to_size(10), Ok(5));
+        assert_eq!(TruncateMode::Reduce(5).to_size(3), Ok(0));
+        assert_eq!(TruncateMode::RoundDown(4).to_size(13), Ok(12));
+        assert_eq!(TruncateMode::RoundDown(4).to_size(16), Ok(16));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(10), Ok(16));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(16), Ok(16));
+        assert_eq!(
+            TruncateMode::RoundDown(0).to_size(123),
+            Err(SizeCalculationError::DivisionByZero)
+        );
+        assert_eq!(
+            TruncateMode::RoundUp(0).to_size(123),
+            Err(SizeCalculationError::DivisionByZero)
+        );
+        assert_eq!(
+            TruncateMode::Extend(u64::MAX).to_size(1),
+            Err(SizeCalculationError::Overflow)
+        );
+        assert_eq!(
+            TruncateMode::RoundUp(u64::MAX - 1).to_size(u64::MAX),
+            Err(SizeCalculationError::Overflow)
+        );
     }
 
     #[test]
     fn test_round_up_when_file_smaller_than_size() {
         // fsize < size: must round up to size itself
-        assert_eq!(
-            TruncateMode::RoundUp(131_072).to_size(24_696),
-            Some(131_072)
-        );
-        assert_eq!(TruncateMode::RoundUp(4096).to_size(1), Some(4096));
-        assert_eq!(TruncateMode::RoundUp(100).to_size(50), Some(100));
+        assert_eq!(TruncateMode::RoundUp(131_072).to_size(24_696), Ok(131_072));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(1), Ok(4096));
+        assert_eq!(TruncateMode::RoundUp(100).to_size(50), Ok(100));
     }
 
     #[test]
     fn test_round_up_already_aligned() {
-        assert_eq!(TruncateMode::RoundUp(4096).to_size(0), Some(0));
-        assert_eq!(TruncateMode::RoundUp(4096).to_size(4096), Some(4096));
-        assert_eq!(TruncateMode::RoundUp(4096).to_size(8192), Some(8192));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(0), Ok(0));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(4096), Ok(4096));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(8192), Ok(8192));
     }
 
     #[test]
     fn test_round_up_not_aligned() {
         // fsize > size but not a multiple: must round up to next multiple
-        assert_eq!(TruncateMode::RoundUp(4096).to_size(5000), Some(8192));
-        assert_eq!(TruncateMode::RoundUp(8).to_size(13), Some(16));
+        assert_eq!(TruncateMode::RoundUp(4096).to_size(5000), Ok(8192));
+        assert_eq!(TruncateMode::RoundUp(8).to_size(13), Ok(16));
     }
 }

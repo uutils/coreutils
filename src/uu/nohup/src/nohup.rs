@@ -19,7 +19,7 @@ use std::process;
 use std::sync::LazyLock;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, set_exit_code};
+use uucore::error::{UError, UResult, set_exit_code, strip_errno};
 use uucore::translate;
 use uucore::{format_usage, show_error};
 
@@ -91,6 +91,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<&String> = cmd_iter.collect();
 
     let err = process::Command::new(cmd).args(args).exec();
+
+    show_error!(
+        "{}",
+        translate!("nohup-error-failed-to-run-command", "command" => cmd.quote(), "error" => strip_errno(&err))
+    );
 
     match err.kind() {
         ErrorKind::NotFound => set_exit_code(EXIT_ENOENT),
@@ -173,5 +178,5 @@ fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
 
 #[cfg(target_vendor = "apple")]
 unsafe extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
+    fn _vprocmgr_detach_from_console(flags: u32) -> *const core::ffi::c_int;
 }

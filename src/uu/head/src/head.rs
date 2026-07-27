@@ -150,11 +150,12 @@ impl HeadOptions {
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
-
-        options.files = match matches.get_many::<OsString>(options::FILES) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+        options.files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(options)
     }
@@ -472,20 +473,18 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Err(err) => {
                     #[cfg(windows)]
                     // On Windows, `File::open` on a directory fails with "Permission denied".
-                    if err.kind() == io::ErrorKind::PermissionDenied {
-                        if let Ok(m) = Path::new(file).metadata() {
-                            if m.is_dir() {
-                                // We need to print the header, as we have an existing directory
-                                print_header()?;
-                                if !zero_output {
-                                    show!(USimpleError::new(
-                                        1,
-                                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                                    ));
-                                }
-                                continue;
-                            }
+                    if err.kind() == io::ErrorKind::PermissionDenied
+                        && Path::new(file).metadata().is_ok_and(|m| m.is_dir())
+                    {
+                        // We need to print the header, as we have an existing directory
+                        print_header()?;
+                        if !zero_output {
+                            show!(USimpleError::new(
+                                1,
+                                translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                            ));
                         }
+                        continue;
                     }
 
                     show!(err.map_err_context(

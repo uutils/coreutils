@@ -11,15 +11,18 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, stdout};
+use std::io::{BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
 use std::thread;
+use std::time::SystemTime;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
@@ -39,8 +42,8 @@ use uucore::{format_usage, show, show_error, show_warning};
 use windows_sys::Win32::Foundation::HANDLE;
 #[cfg(windows)]
 use windows_sys::Win32::Storage::FileSystem::{
-    FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo, FileStandardInfo,
-    GetFileInformationByHandleEx,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO, FILE_STANDARD_INFO, FileIdInfo,
+    FileStandardInfo, GetFileInformationByHandleEx,
 };
 
 mod options {
@@ -82,6 +85,7 @@ struct TraversalOptions {
     count_links: bool,
     verbose: bool,
     excludes: Vec<Pattern>,
+    time: Option<MetadataTimeField>,
 }
 
 struct StatPrinter {
@@ -125,6 +129,7 @@ struct Stat {
     inodes: u64,
     inode: Option<FileInfo>,
     metadata: Metadata,
+    latest_time: Option<SystemTime>,
 }
 
 impl Stat {
@@ -153,6 +158,9 @@ impl Stat {
 
         let file_info = get_file_info(path, &metadata);
         let blocks = get_blocks(path, &metadata);
+        let latest_time = options
+            .time
+            .and_then(|time| metadata_get_time(&metadata, time));
 
         Ok(Self {
             path: path.to_path_buf(),
@@ -161,12 +169,17 @@ impl Stat {
             inodes: 1,
             inode: file_info,
             metadata,
+            latest_time,
         })
     }
 
     /// Create a Stat using safe traversal methods with `DirFd` for the root directory
     #[cfg(all(unix, not(target_os = "redox")))]
-    fn new_from_dirfd(dir_fd: &DirFd, full_path: &Path) -> std::io::Result<Self> {
+    fn new_from_dirfd(
+        dir_fd: &DirFd,
+        full_path: &Path,
+        time: Option<MetadataTimeField>,
+    ) -> std::io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -183,6 +196,7 @@ impl Stat {
         // This is still needed for compatibility but should work since we're dealing with
         // the root path which should be accessible
         let std_metadata = fs::symlink_metadata(full_path)?;
+        let latest_time = time.and_then(|time| metadata_get_time(&std_metadata, time));
 
         Ok(Self {
             path: full_path.to_path_buf(),
@@ -195,6 +209,7 @@ impl Stat {
             inodes: 1,
             inode: file_info_option,
             metadata: std_metadata,
+            latest_time,
         })
     }
 }
@@ -204,14 +219,25 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
     metadata.blocks()
 }
 
+// `File::open()` alone cannot open directories on Windows (`CreateFile`
+// fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
+// use that flag explicitly to be able to query directories as well as files.
+#[cfg(windows)]
+fn open_for_query(path: &Path) -> std::io::Result<File> {
+    fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+}
+
 #[cfg(windows)]
 fn get_blocks(path: &Path, _metadata: &Metadata) -> u64 {
     let mut size_on_disk = 0;
 
     // bind file so it stays in scope until end of function
     // if it goes out of scope the handle below becomes invalid
-    let Ok(file) = File::open(path) else {
-        return size_on_disk; // opening directories will fail
+    let Ok(file) = open_for_query(path) else {
+        return size_on_disk;
     };
 
     unsafe {
@@ -249,7 +275,7 @@ fn get_file_info(_path: &Path, metadata: &Metadata) -> Option<FileInfo> {
 fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
     let mut result = None;
 
-    let Ok(file) = File::open(path) else {
+    let Ok(file) = open_for_query(path) else {
         return result;
     };
 
@@ -289,6 +315,19 @@ fn read_block_size(s: Option<&str>) -> UResult<u64> {
 }
 
 #[cfg(all(unix, not(target_os = "redox")))]
+fn time_from_raw_stat(
+    entry_stat: &uucore::safe_traversal::Metadata,
+    time: MetadataTimeField,
+) -> Option<SystemTime> {
+    match time {
+        MetadataTimeField::Modification => entry_stat.modified(),
+        MetadataTimeField::Access => entry_stat.accessed(),
+        MetadataTimeField::Change => entry_stat.changed(),
+        MetadataTimeField::Birth => None,
+    }
+}
+
+#[cfg(all(unix, not(target_os = "redox")))]
 // Implement safe_du on Unix (except Redox which lacks full stat support)
 // This is done for TOCTOU safety
 fn safe_du(
@@ -300,81 +339,31 @@ fn safe_du(
     parent_fd: Option<&DirFd>,
     initial_stat: Option<std::io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
-    // Get initial stat for this path - use DirFd if available to avoid path length issues
-    let mut my_stat = if let Some(parent_fd) = parent_fd {
-        // We have a parent fd, this is a subdirectory - use openat
-        let dir_name = path.file_name().unwrap_or(path.as_os_str());
-        match parent_fd.metadata_at(dir_name, SymlinkBehavior::NoFollow) {
-            Ok(safe_metadata) => {
-                // Create Stat from safe metadata
-                let file_info = safe_metadata.file_info();
-                let file_info_option = Some(FileInfo {
-                    file_id: file_info.inode() as u128,
-                    dev_id: file_info.device(),
-                });
-                let blocks = safe_metadata.blocks();
-
-                // For compatibility, still try to get std::fs::Metadata
-                // but fallback to a minimal approach if it fails
-                let std_metadata = fs::symlink_metadata(path).unwrap_or_else(|_| {
-                    // If we can't get std metadata, create a minimal fake one
-                    // This should rarely happen but provides a fallback
-                    fs::symlink_metadata("/").expect("root should be accessible")
-                });
-
-                Stat {
-                    path: path.to_path_buf(),
-                    size: if safe_metadata.is_dir() {
-                        0
-                    } else {
-                        safe_metadata.len()
-                    },
-                    blocks,
-                    inodes: 1,
-                    inode: file_info_option,
-                    metadata: std_metadata,
-                }
+    // The caller provides an already-computed stat for this entry, which lets us
+    // avoid re-stating it here. For subdirectories this saves both a redundant
+    // `fstatat` and an expensive full-path `lstat` per directory (the dominant cost
+    // when traversing deep trees). The root directory may instead carry an error,
+    // in which case we fall back to opening it directly with a DirFd.
+    let initial_stat = initial_stat.unwrap_or_else(|| Stat::new(path, None, options));
+    let mut my_stat = match initial_stat {
+        Ok(mut s) => {
+            // For subdirectories the `metadata` field is a cheap placeholder (the
+            // parent directory's metadata). It is only consulted by `--time`, so we
+            // only pay for a real stat of this entry when time reporting is asked for.
+            if options.time.is_some()
+                && parent_fd.is_some()
+                && let Ok(md) = fs::symlink_metadata(&s.path)
+            {
+                s.metadata = md;
             }
-            Err(e) => {
-                let error = e.map_err_context(
-                    || translate!("du-error-cannot-access", "path" => path.quote()),
-                );
-                if let Err(send_error) = print_tx.send(Err(error)) {
-                    return Err(Box::new(send_error));
-                }
-                return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                    0,
-                    "Error already handled",
-                )))));
-            }
+            s
         }
-    } else {
-        // This is the initial directory - try regular Stat::new first, then fallback to DirFd
-        let initial_stat = match initial_stat {
-            Some(s) => s,
-            None => Stat::new(path, None, options),
-        };
-
-        match initial_stat {
-            Ok(s) => s,
-            Err(_e) => {
-                // Try using our new DirFd method for the root directory
-                match DirFd::open(path, SymlinkBehavior::Follow) {
-                    Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            let error = e.map_err_context(
-                                || translate!("du-error-cannot-access", "path" => path.quote()),
-                            );
-                            if let Err(send_error) = print_tx.send(Err(error)) {
-                                return Err(Box::new(send_error));
-                            }
-                            return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
-                                0,
-                                "Error already handled",
-                            )))));
-                        }
-                    },
+        Err(_e) => {
+            // Only the root path can reach this branch (subdirectories always pass a
+            // valid stat). Try using our DirFd method for the root directory.
+            match DirFd::open(path, SymlinkBehavior::Follow) {
+                Ok(dir_fd) => match Stat::new_from_dirfd(&dir_fd, path, options.time) {
+                    Ok(s) => s,
                     Err(e) => {
                         let error = e.map_err_context(
                             || translate!("du-error-cannot-access", "path" => path.quote()),
@@ -387,6 +376,18 @@ fn safe_du(
                             "Error already handled",
                         )))));
                     }
+                },
+                Err(e) => {
+                    let error = e.map_err_context(
+                        || translate!("du-error-cannot-access", "path" => path.quote()),
+                    );
+                    if let Err(send_error) = print_tx.send(Err(error)) {
+                        return Err(Box::new(send_error));
+                    }
+                    return Err(Box::new(mpsc::SendError(Err(USimpleError::new(
+                        0,
+                        "Error already handled",
+                    )))));
                 }
             }
         }
@@ -465,6 +466,11 @@ fn safe_du(
             dev_id: entry_stat.st_dev as u64,
         });
 
+        let safe_metadata = uucore::safe_traversal::Metadata::from_stat(entry_stat);
+        let latest_time = options
+            .time
+            .and_then(|time| time_from_raw_stat(&safe_metadata, time));
+
         // For safe traversal, we need to handle stats differently
         // We can't use std::fs::Metadata since that requires the full path
         let this_stat = if is_dir {
@@ -479,6 +485,7 @@ fn safe_du(
                 // We need a fake metadata - create one from symlink_metadata of parent
                 // This is a workaround since we can't get real metadata without the full path
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         } else {
             // For files
@@ -491,6 +498,7 @@ fn safe_du(
                 inodes: 1,
                 inode: file_info,
                 metadata: my_stat.metadata.clone(),
+                latest_time,
             }
         };
 
@@ -519,28 +527,35 @@ fn safe_du(
 
         // Process directories recursively
         if is_dir {
-            if options.one_file_system {
-                if let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode) {
-                    if this_inode.dev_id != my_inode.dev_id {
-                        continue;
-                    }
-                }
+            if options.one_file_system
+                && let (Some(this_inode), Some(my_inode)) = (this_stat.inode, my_stat.inode)
+                && this_inode.dev_id != my_inode.dev_id
+            {
+                continue;
             }
 
+            // Reuse the stat we already computed for this entry instead of
+            // re-stating it inside the recursive call.
+            let sub_path = this_stat.path.clone();
             let this_stat = safe_du(
-                &this_stat.path,
+                &sub_path,
                 options,
                 depth + 1,
                 seen_inodes,
                 print_tx,
                 Some(&dir_fd),
-                None,
+                Some(Ok(this_stat)),
             )?;
 
             if !options.separate_dirs {
                 my_stat.size += this_stat.size;
                 my_stat.blocks += this_stat.blocks;
                 my_stat.inodes += this_stat.inodes;
+                my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                    (Some(a), Some(b)) => Some(a.max(b)),
+                    (a, None) => a,
+                    (None, b) => b,
+                }
             }
             print_tx.send(Ok(StatPrintInfo {
                 stat: this_stat,
@@ -550,6 +565,11 @@ fn safe_du(
             my_stat.size += this_stat.size;
             my_stat.blocks += this_stat.blocks;
             my_stat.inodes += 1;
+            my_stat.latest_time = match (my_stat.latest_time, this_stat.latest_time) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, None) => a,
+                (None, b) => b,
+            };
             if options.all {
                 print_tx.send(Ok(StatPrintInfo {
                     stat: this_stat,
@@ -638,13 +658,11 @@ fn du_regular(
                             if is_symlink
                                 && options.dereference == Deref::All
                                 && this_stat.metadata.is_dir()
+                                && let Some(inode) = this_stat.inode
+                                && ancestors.contains(&inode)
                             {
-                                if let Some(inode) = this_stat.inode {
-                                    if ancestors.contains(&inode) {
-                                        // This symlink points to an ancestor directory - skip to avoid cycle
-                                        continue 'file_loop;
-                                    }
-                                }
+                                // This symlink points to an ancestor directory - skip to avoid cycle
+                                continue 'file_loop;
                             }
 
                             // We have an exclude list
@@ -678,14 +696,12 @@ fn du_regular(
                             }
 
                             if this_stat.metadata.is_dir() {
-                                if options.one_file_system {
-                                    if let (Some(this_inode), Some(my_inode)) =
+                                if options.one_file_system
+                                    && let (Some(this_inode), Some(my_inode)) =
                                         (this_stat.inode, my_stat.inode)
-                                    {
-                                        if this_inode.dev_id != my_inode.dev_id {
-                                            continue;
-                                        }
-                                    }
+                                    && this_inode.dev_id != my_inode.dev_id
+                                {
+                                    continue;
                                 }
 
                                 let this_stat = du_regular(
@@ -702,6 +718,12 @@ fn du_regular(
                                     my_stat.size += this_stat.size;
                                     my_stat.blocks += this_stat.blocks;
                                     my_stat.inodes += this_stat.inodes;
+                                    my_stat.latest_time =
+                                        match (my_stat.latest_time, this_stat.latest_time) {
+                                            (Some(a), Some(b)) => Some(a.max(b)),
+                                            (a, None) => a,
+                                            (None, b) => b,
+                                        };
                                 }
                                 print_tx.send(Ok(StatPrintInfo {
                                     stat: this_stat,
@@ -711,6 +733,12 @@ fn du_regular(
                                 my_stat.size += this_stat.size;
                                 my_stat.blocks += this_stat.blocks;
                                 my_stat.inodes += 1;
+                                my_stat.latest_time =
+                                    match (my_stat.latest_time, this_stat.latest_time) {
+                                        (Some(a), Some(b)) => Some(a.max(b)),
+                                        (a, None) => a,
+                                        (None, b) => b,
+                                    };
                                 if options.all {
                                     print_tx.send(Ok(StatPrintInfo {
                                         stat: this_stat,
@@ -844,8 +872,13 @@ impl StatPrinter {
         }
 
         if self.total {
-            print!("{}\t{}", self.convert_size(grand_total), self.total_text);
-            print!("{}", self.line_ending);
+            write!(
+                stdout(),
+                "{}\t{}{}",
+                self.convert_size(grand_total),
+                self.total_text,
+                self.line_ending
+            )?;
         }
 
         Ok(())
@@ -873,24 +906,24 @@ impl StatPrinter {
     }
 
     fn print_stat(&self, stat: &Stat, size: u64) -> UResult<()> {
-        print!("{}\t", self.convert_size(size));
+        write!(stdout(), "{}\t", self.convert_size(size))?;
 
-        if let Some(md_time) = &self.time {
-            if let Some(time) = metadata_get_time(&stat.metadata, *md_time) {
+        if self.time.is_some() {
+            if let Some(time) = stat.latest_time {
                 format_system_time(
                     &mut stdout(),
                     time,
                     &self.time_format,
                     FormatSystemTimeFallback::IntegerError,
                 )?;
-                print!("\t");
+                write!(stdout(), "\t")?;
             } else {
-                print!("???\t");
+                write!(stdout(), "???\t")?;
             }
         }
 
-        print_verbatim(&stat.path).unwrap();
-        print!("{}", self.line_ending);
+        print_verbatim(&stat.path)?;
+        write!(stdout(), "{}", self.line_ending)?;
 
         Ok(())
     }
@@ -938,8 +971,10 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
             show_error!("{}", translate!("du-error-hyphen-file-name-not-allowed"));
             set_exit_code(1);
         } else {
-            // Keep every entry: duplicates are handled later via inode tracking
-            // (which -l disables), matching GNU. Missing files must each report.
+            // Do not deduplicate here: GNU du processes every entry and
+            // relies on inode-based deduplication during traversal (which is
+            // disabled by --count-links). Deduplicating by name would, e.g.,
+            // collapse repeated missing files into a single error.
             paths.push(PathBuf::from(&*uucore::os_str_from_bytes(&path).unwrap()));
         }
     }
@@ -1035,16 +1070,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         read_files_from(file_from)?
     } else if let Some(files) = matches.get_many::<OsString>(options::FILE) {
-        let files = files.map(PathBuf::from);
-        if count_links {
-            files.collect()
-        } else {
-            // Deduplicate while preserving order
-            let mut seen = HashSet::default();
-            files
-                .filter(|path| seen.insert(path.clone()))
-                .collect::<Vec<_>>()
-        }
+        // Do not deduplicate by name: GNU du processes every operand and relies
+        // on inode-based deduplication during traversal (disabled by
+        // --count-links), so repeated missing files are reported once each.
+        files.map(PathBuf::from).collect()
     } else {
         vec![PathBuf::from(".")]
     };
@@ -1072,6 +1101,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         count_links,
         verbose: matches.get_flag(options::VERBOSE),
         excludes: build_exclude_patterns(&matches)?,
+        time,
     };
 
     let time_format = if time.is_some() {
@@ -1143,13 +1173,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         // Pre-populate seen_inodes with the starting directory to detect cycles
         let stat = Stat::new(&path, None, &traversal_options);
-        if let Ok(stat) = stat.as_ref() {
-            if let Some(inode) = stat.inode {
-                if !traversal_options.count_links && seen_inodes.contains(&inode) {
-                    continue 'loop_file;
-                }
-                seen_inodes.insert(inode);
+        if let Ok(stat) = stat.as_ref()
+            && let Some(inode) = stat.inode
+        {
+            if !traversal_options.count_links && seen_inodes.contains(&inode) {
+                continue 'loop_file;
             }
+            seen_inodes.insert(inode);
         }
 
         if use_safe_traversal {
@@ -1172,11 +1202,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                     Err(e) => {
                         // Check if this is our "already handled" error
-                        if let mpsc::SendError(Err(simple_error)) = e.as_ref() {
-                            if simple_error.code() == 0 {
-                                // Error already handled, continue to next file
-                                continue 'loop_file;
-                            }
+                        if let mpsc::SendError(Err(simple_error)) = e.as_ref()
+                            && simple_error.code() == 0
+                        {
+                            // Error already handled, continue to next file
+                            continue 'loop_file;
                         }
                         return Err(USimpleError::new(1, e.to_string()));
                     }

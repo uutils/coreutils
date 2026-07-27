@@ -196,7 +196,7 @@ make CARGOFLAGS='--no-fail-fast' UTILS='UTILITY_1 UTILITY_2' nextest
 
 ### Run Busybox Tests
 
-This testing functionality is only available on *nix operating systems and
+This testing functionality is only available on Unix-like operating systems and
 requires `make`.
 
 To run busybox tests for all utilities for which busybox has tests

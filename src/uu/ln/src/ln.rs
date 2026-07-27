@@ -128,7 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches)?;
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise
@@ -317,13 +318,13 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             let remove_target = || {
                 // In that case, we don't want to do link resolution
                 // We need to clean the target
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!(
-                            "{}",
-                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                        );
-                    }
+                if target_dir.is_file()
+                    && let Err(e) = fs::remove_file(target_dir)
+                {
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
                 }
                 #[cfg(windows)]
                 if target_dir.is_dir() {
@@ -389,17 +390,17 @@ fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
     // `dst.parent()` is None for a destination with no parent (`/`, `""`, or a
     // bare Windows prefix). Fall through to the non-relative `src` rather than
     // unwrapping it; the caller then reports the usual error.
-    if let (Ok(src_abs), Some(dst_parent)) = (
+    let Some(dst_parent) = dst.parent() else {
+        return src.into();
+    };
+    let (Ok(src_abs), Ok(dst_abs)) = (
         canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
-        dst.parent(),
-    ) {
-        if let Ok(dst_abs) =
-            canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical)
-        {
-            return make_path_relative_to(src_abs, dst_abs).into();
-        }
-    }
-    src.into()
+        canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical),
+    ) else {
+        return src.into();
+    };
+
+    make_path_relative_to(src_abs, dst_abs).into()
 }
 
 #[allow(clippy::cognitive_complexity)]

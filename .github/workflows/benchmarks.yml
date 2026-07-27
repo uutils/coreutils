@@ -7,7 +7,7 @@ on:
   pull_request:
   push:
     branches:
-      - '*'
+      - main
 
 permissions:
   contents: read # to fetch code (actions/checkout)
@@ -25,6 +25,9 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
     strategy:
+      # Stagger the jobs: 70 concurrent runners hitting the GitHub cache API
+      # (rust-cache + sccache + CodSpeed) at once triggers HTTP 429s.
+      max-parallel: 12
       matrix:
         type: [simulation, memory]
         package: [
@@ -53,6 +56,7 @@ jobs:
           uu_split,
           uu_tee,
           uu_timeout,
+          uu_tr,
           uu_tsort,
           uu_unexpand,
           uu_uniq,
@@ -64,7 +68,7 @@ jobs:
           uu_false
         ]
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 

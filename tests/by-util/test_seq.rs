@@ -31,6 +31,49 @@ fn test_format_and_equal_width() {
 }
 
 #[test]
+fn test_format_precision_too_large() {
+    // A precision near usize::MAX used to overflow the precision arithmetic
+    // shared with the float formatters; it must be rejected as invalid.
+    for spec in ["%.18446744073709551615e", "%.9999999999999999999a"] {
+        new_ucmd!()
+            .args(&[format!("--format={spec}"), "1".to_string()])
+            .fails_with_code(1)
+            .no_stdout()
+            .stderr_contains("invalid precision");
+    }
+}
+
+#[test]
+fn test_format_extreme_exponent_does_not_overflow() {
+    // A value with an exponent that does not fit in an i32 used to overflow the
+    // hex-float exponent math. GNU seq rejects such astronomically large
+    // magnitudes outright (unlike printf, which tolerates them as inf/0), so it
+    // must now fail cleanly with a parse error instead of panicking.
+    new_ucmd!()
+        .args(&[
+            "--format=%a",
+            "5e8123456789012345678",
+            "5e8123456789012345678",
+        ])
+        .fails_with_code(1)
+        .no_stdout()
+        .usage_error("invalid floating point argument: '5e8123456789012345678'");
+}
+
+#[test]
+fn test_equal_width_huge_exponent_does_not_overflow() {
+    // Equal-width padding adds the integral-digit count to the precision; a value
+    // with an astronomically large exponent used to overflow that arithmetic.
+    // GNU seq rejects such magnitudes as an invalid argument rather than
+    // accepting them, so it must fail cleanly instead of panicking or succeeding.
+    new_ucmd!()
+        .args(&["-w", "1e9223372036854775807", "1e-9223372036854775807", "1"])
+        .fails_with_code(1)
+        .no_stdout()
+        .usage_error("invalid floating point argument: '1e9223372036854775807'");
+}
+
+#[test]
 fn test_hex_rejects_sign_after_identifier() {
     new_ucmd!()
         .args(&["0x-123ABC"])

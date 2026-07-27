@@ -2,7 +2,7 @@
 # `run-gnu-test.bash [TEST]`
 # run GNU test (or all tests if TEST is missing/null)
 
-# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE MAKEFLAGS; (utils) shellcheck greadlink
+# spell-checker:ignore (env/vars) GNULIB SRCDIR SUBDIRS OSTYPE MAKEFLAGS; (utils) shellcheck greadlink ginstall
 
 # ref: [How the GNU coreutils are tested](https://www.pixelbeat.org/docs/coreutils-testing.html) @@ <https://archive.is/p2ITW>
 # * note: to run a single test => `make check TESTS=PATH/TO/TEST/SCRIPT SUBDIRS=. VERBOSE=yes`
@@ -34,6 +34,59 @@ export MAKEFLAGS
 ###
 
 cd "${path_GNU}" && echo "[ pwd:'${PWD}' ]"
+
+# --- Self-heal: make the shared GNU harness point at THIS checkout ----------
+# ${path_GNU} is shared between sibling uutils checkouts; whichever one last ran
+# build-gnu.sh leaves its own target dir patched into the Makefile/local.mk
+# PATH, so the harness can silently run a stale/other build. Re-point the PATH
+# (and re-create the multicall hardlinks) here so that running this script is
+# enough to test the current tree - no full rebuild just because another
+# checkout stole the PATH.
+if [ -n "${CARGO_TARGET_DIR}" ]; then
+    UU_TARGET_BASE="${CARGO_TARGET_DIR}"
+else
+    UU_TARGET_BASE="${path_UUTILS}/target"
+fi
+# Locate the multicall binary. Honor PROFILE when set; otherwise probe the usual
+# profiles (build-gnu.sh defaults to debug, CI uses release-small) and fall back
+# to whatever 'target/*/coreutils' actually exists so the harness adapts to the
+# build it is given.
+UU_BUILD_DIR=""
+for p in ${PROFILE:+"${PROFILE}"} debug release release-small; do
+    if [ -x "${UU_TARGET_BASE}/${p}/coreutils" ]; then
+        UU_BUILD_DIR="${UU_TARGET_BASE}/${p}"
+        break
+    fi
+done
+if [ -z "${UU_BUILD_DIR}" ]; then
+    for candidate in "${UU_TARGET_BASE}"/*/coreutils; do
+        if [ -x "${candidate}" ]; then UU_BUILD_DIR="$(dirname -- "${candidate}")"; break; fi
+    done
+fi
+if [ -z "${UU_BUILD_DIR}" ]; then
+    # No build to re-point at; leave whatever build-gnu.sh already patched in place.
+    echo "warning: no coreutils binary under '${UU_TARGET_BASE}'; skipping re-point." >&2
+else
+    echo "Re-pointing GNU harness at '${UU_BUILD_DIR}'"
+    for binary in $("${UU_BUILD_DIR}/coreutils" --list); do
+        tgt="${UU_BUILD_DIR}/${binary}"
+        [ "${tgt}" -ef "${UU_BUILD_DIR}/coreutils" ] || ln -f "${UU_BUILD_DIR}/coreutils" "${tgt}"
+    done
+    # The GNU tests invoke `ginstall` rather than `install`.
+    [ -e "${UU_BUILD_DIR}/ginstall" ] || [ ! -e "${UU_BUILD_DIR}/install" ] || ln -f "${UU_BUILD_DIR}/install" "${UU_BUILD_DIR}/ginstall"
+    uu_path_sed="s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/"
+    for f in Makefile tests/local.mk; do
+        if [ -f "${f}" ]; then sed -i "${uu_path_sed}" "${f}"; fi
+    done
+    # Keep Makefile.in newer than the local.mk we just edited (and Makefile newer
+    # than Makefile.in) so make won't re-run automake/config.status - which would
+    # both undo the patch and choke on GNU's factor-test continuation lines that
+    # build-gnu.sh strips (automake 1.18: "blank line following trailing backslash").
+    for f in Makefile.in Makefile; do
+        if [ -f "${f}" ]; then touch "${f}"; fi
+    done
+fi
+# ---------------------------------------------------------------------------
 
 export RUST_BACKTRACE=1
 

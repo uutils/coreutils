@@ -395,30 +395,33 @@ pub static ALL_SIGNALS: [&str; 32] = [
 /// Returns the signal number for a given signal name or value.
 pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
     let signal_name_upcase = signal_name_or_value.to_uppercase();
-    if let Ok(value) = signal_name_upcase.parse() {
-        if is_signal(value) {
-            return Some(value);
-        }
+    if let Some(value) = signal_name_upcase.parse().ok().filter(|&v| is_signal(v)) {
+        return Some(value);
     }
+
     let signal_name = signal_name_upcase.trim_start_matches("SIG");
 
     if let Some(pos) = ALL_SIGNALS.iter().position(|&s| s == signal_name) {
         return Some(pos);
     }
 
+    if let Some(value) = signal_alias_value(signal_name) {
+        return Some(value);
+    }
+
     realtime_signal_bounds().and_then(|(rtmin, rtmax)| {
-        if signal_name.starts_with("RTMIN+") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMIN+").parse::<usize>() {
-                let value = rtmin + n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMIN+")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmin + n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
-        if signal_name.starts_with("RTMAX-") {
-            if let Ok(n) = signal_name.trim_start_matches("RTMAX-").parse::<usize>() {
-                let value = rtmax - n;
-                return (value >= rtmin && value <= rtmax).then_some(value);
-            }
+        if let Some(s) = signal_name.strip_prefix("RTMAX-")
+            && let Ok(n) = s.parse::<usize>()
+        {
+            let value = rtmax - n;
+            return (value >= rtmin && value <= rtmax).then_some(value);
         }
 
         match signal_name {
@@ -427,6 +430,19 @@ pub fn signal_by_name_or_value(signal_name_or_value: &str) -> Option<usize> {
             _ => None,
         }
     })
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn signal_alias_value(signal_name: &str) -> Option<usize> {
+    match signal_name {
+        "IO" => Some(libc::SIGIO as usize),
+        _ => None,
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+fn signal_alias_value(_signal_name: &str) -> Option<usize> {
+    None
 }
 
 /// Returns true if the given number is a valid signal number.
@@ -550,7 +566,7 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 #[cfg(unix)]
 pub fn install_signal_handler(
     sig: i32,
-    handler: extern "C" fn(std::os::raw::c_int),
+    handler: extern "C" fn(core::ffi::c_int),
 ) -> Result<(), Errno> {
     let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
     let action = SigAction::new(
@@ -806,6 +822,17 @@ fn linux_realtime_signal_names_resolve_to_runtime_values() {
     assert_eq!(signal_list_value_by_name_or_number("RTMAX"), Some(rtmax));
     assert_eq!(signal_list_value_by_name_or_number("SIGRTMIN"), Some(rtmin));
     assert_eq!(signal_list_value_by_name_or_number("SIGRTMAX"), Some(rtmax));
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn linux_sigio_alias_resolves_to_poll_signal() {
+    let sigio = libc::SIGIO as usize;
+
+    assert_eq!(signal_by_name_or_value("IO"), Some(sigio));
+    assert_eq!(signal_by_name_or_value("SIGIO"), Some(sigio));
+    assert_eq!(signal_list_value_by_name_or_number("IO"), Some(sigio));
+    assert_eq!(signal_list_value_by_name_or_number("SIGIO"), Some(sigio));
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

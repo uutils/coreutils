@@ -325,6 +325,14 @@ impl Parser {
         if num == 0 {
             return Err(ParseError::InvalidNumber(val.to_string()));
         }
+        // GNU rejects a block size >= i64::MAX (intmax_t); otherwise the value
+        // overflows later when the buffer is computed or allocated.
+        if num >= i64::MAX as u64 {
+            return Err(ParseError::InvalidNumberWithErrMsg(
+                val.to_string(),
+                "Value too large for defined data type".to_string(),
+            ));
+        }
         num.try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }

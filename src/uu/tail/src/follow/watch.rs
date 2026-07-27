@@ -310,7 +310,15 @@ impl Observer {
             EventKind::Modify(ModifyKind::Metadata(MetadataKind::Any | MetadataKind::WriteTime) | ModifyKind::Data(DataChange::Any) | ModifyKind::Name(RenameMode::To)) |
             EventKind::Create(CreateKind::File | CreateKind::Folder | CreateKind::Any) => {
                 if let Ok(new_md) = event_path.metadata() {
-                    let is_tailable = new_md.is_tailable();
+                    // `metadata()` follows symlinks, so under --follow=name a
+                    // watched file swapped for a symlink would otherwise be
+                    // silently followed to its target. GNU treats such a
+                    // replacement as untailable.
+                    let replaced_by_symlink = self.follow_name()
+                        && event_path
+                            .symlink_metadata()
+                            .is_ok_and(|m| m.file_type().is_symlink());
+                    let is_tailable = !replaced_by_symlink && new_md.is_tailable();
                     let pd = self.files.get(event_path);
                     if let Some(old_md) = &pd.metadata {
                         if is_tailable {
@@ -345,7 +353,13 @@ impl Observer {
                             }
                             paths.push(event_path.clone());
                         } else if !is_tailable && old_md.is_tailable() {
-                            if pd.reader.is_some() {
+                            if replaced_by_symlink {
+                                show_error!(
+                                    "{}",
+                                    translate!("tail-status-replaced-with-untailable-symlink", "file" => display_name.quote())
+                                );
+                                self.files.reset_reader(event_path);
+                            } else if pd.reader.is_some() {
                                 self.files.reset_reader(event_path);
                             } else {
                                 show_error!(
@@ -386,20 +400,17 @@ impl Observer {
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
-
-                // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                 if self.follow_name() {
                     if settings.retry {
-                        if let Some(old_md) = self.files.get_mut_metadata(event_path) {
-                            if old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
+                        if let Some(old_md) = self.files.get_mut_metadata(event_path) &&
+                            old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
                                 show_error!(
                                     "{} {}: {}",
                                     display_name.quote(),
                                     translate!("tail-become-inaccessible"),
                                     translate!("tail-no-such-file-or-directory")
                                 );
-                            }
                         }
                         if event_path.is_orphan() && !self.orphans.contains(event_path) {
                             show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
@@ -548,14 +559,16 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                              settings: &Settings,
                              paths: &mut Vec<PathBuf>|
          -> UResult<()> {
-            if let Some(event_path) = event.paths.first() {
-                if observer.files.contains_key(event_path) {
-                    // Handle Event if it is about a path that we are monitoring
-                    let new_paths = observer.handle_event(&event, settings)?;
-                    for p in new_paths {
-                        if !paths.contains(&p) {
-                            paths.push(p);
-                        }
+            if event
+                .paths
+                .first()
+                .is_some_and(|path| observer.files.contains_key(path))
+            {
+                // Handle Event if it is about a path that we are monitoring
+                let new_paths = observer.handle_event(&event, settings)?;
+                for p in new_paths {
+                    if !paths.contains(&p) {
+                        paths.push(p);
                     }
                 }
             }
@@ -586,15 +599,13 @@ pub fn follow(mut observer: Observer, settings: &Settings) -> UResult<()> {
                 kind: notify::ErrorKind::Io(ref e),
                 paths,
             })) if e.kind() == std::io::ErrorKind::NotFound => {
-                if let Some(event_path) = paths.first() {
-                    if observer.files.contains_key(event_path) {
-                        let _ = observer
-                            .watcher_rx
-                            .as_mut()
-                            .unwrap()
-                            .watcher
-                            .unwatch(event_path);
-                    }
+                if let Some(event_path) = paths.first().filter(|p| observer.files.contains_key(p)) {
+                    let _ = observer
+                        .watcher_rx
+                        .as_mut()
+                        .unwrap()
+                        .watcher
+                        .unwatch(event_path);
                 }
             }
             Ok(Err(notify::Error {

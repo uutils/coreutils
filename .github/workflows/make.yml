@@ -1,7 +1,6 @@
 name: make
-
 # spell-checker:ignore (abbrev/names) CACHEDIR taiki
-# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs
+# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs EAGAIN
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
 # spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
@@ -46,7 +45,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
@@ -288,7 +287,7 @@ jobs:
         job:
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -301,11 +300,25 @@ jobs:
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
+      shell: powershell
+      run: |
+        # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
+        # See: https://github.com/appveyor/ci/issues/3777
+        Set-ProcessMitigation -System -Disable ForceRelocateImages
+    - name: Update MSYS2 packages
+      # msys2-runtime must be upgraded in a separate bash session before the build.
+      # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
+      # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        pacman -Sy --noconfirm --needed make rust base-devel
+      env:
+        CHERE_INVOKING: 1
     - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
       shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
       run: |
         set -x
-        pacman -Sy --noconfirm --needed make rust base-devel
         DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
         # Check that utils are built with given profile
         ./target/release-small/true
@@ -335,14 +348,15 @@ jobs:
           x86_64-pc-cygwin.tar.zst
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    - name: "`make build`"
+    - name: "`make install`"
       shell: bash
       run: |
         set -x
         # Check that we exclude unix programs to avoid build failure
-        make PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
-         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
-        target/debug/coreutils.exe true
+        # Windows's stdbuf depends on Cygwin's libstdbuf. So make should not try to install libstdbuf
+        make install DESTDIR=/tmp/w PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
+         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr true truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
+        target/release/coreutils.exe stdbuf --version
 
   test_busybox:
     name: Tests/BusyBox test suite
@@ -359,7 +373,7 @@ jobs:
       run: |
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
@@ -445,7 +459,7 @@ jobs:
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2

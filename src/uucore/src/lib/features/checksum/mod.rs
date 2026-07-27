@@ -540,7 +540,7 @@ pub fn digest_reader<T: Read>(
     let output_size = io::copy(reader, &mut digest_writer)? as usize;
     digest_writer.finalize();
 
-    Ok((digest.result(), output_size))
+    Ok((digest.result()?, output_size))
 }
 
 pub enum BlakeLength<'s> {

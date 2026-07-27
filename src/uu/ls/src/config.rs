@@ -668,6 +668,20 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
+/// Parses the tab size value from the command line
+fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
+    size_str
+        .parse::<usize>()
+        .ok()
+        .or_else(|| {
+            size_str
+                .strip_prefix("0x")
+                .or_else(|| size_str.strip_prefix("0X"))
+                .and_then(|hex| usize::from_str_radix(hex, 16).ok())
+        })
+        .ok_or_else(|| LsError::InvalidTabSize(size_str.to_string()))
+}
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -712,13 +726,12 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
@@ -912,20 +925,18 @@ impl Config {
             locale_quoting = None;
         }
 
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
+        if needs_color && let Err(err) = validate_ls_colors_env() {
+            if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "prefix" => prefix.quote()
+                    )
+                );
             }
+            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            needs_color = false;
         }
 
         let color = if needs_color {
@@ -961,13 +972,11 @@ impl Config {
 
         let tab_size = if needs_color {
             Some(0)
+        } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+            Some(parse_tab_size(size_str)?)
         } else {
-            options
-                .get_one::<String>(options::format::TAB_SIZE)
-                .and_then(|size| size.parse::<usize>().ok())
-                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        }
-        .unwrap_or(SPACES_IN_TAB);
+            None
+        };
 
         Ok(Self {
             format,
@@ -1002,7 +1011,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
-            tab_size,
+            tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
 }

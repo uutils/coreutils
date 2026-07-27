@@ -72,7 +72,7 @@ fn tee(options: &Options) -> Result<(), ()> {
         .filter_map(|file| open(file, options.append, options.output_error.as_ref()))
         .collect::<io::Result<Vec<NamedWriter>>>()
         .map_err(|_| ())?;
-    let had_open_errors = writers.len() != options.files.len();
+    let all_open_succeed = writers.len() == options.files.len();
 
     writers.insert(
         0,
@@ -96,10 +96,11 @@ fn tee(options: &Options) -> Result<(), ()> {
     }
 
     // don't use io::copy since content of 1 read should be immediately written for posix requirement
-    if output.copy_unbuffered().is_err() || had_open_errors || output.error_occurred() {
-        return Err(());
+    output.copy_unbuffered()?;
+    if all_open_succeed && output.ignored_errors == 0 {
+        return Ok(());
     }
-    Ok(())
+    Err(())
 }
 
 /// Tries to open the indicated file and return it. Reports an error if that's not possible.
@@ -235,10 +236,6 @@ impl MultiWriter {
             ignored_errors: 0,
             aborted: false,
         }
-    }
-
-    fn error_occurred(&self) -> bool {
-        self.ignored_errors != 0
     }
 
     fn write_flush(&mut self, buf: &[u8]) -> Result<(), ()> {

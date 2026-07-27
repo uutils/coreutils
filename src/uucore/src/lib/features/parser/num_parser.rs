@@ -290,10 +290,8 @@ fn parse_digits(base: Base, str: &str, fractional: bool) -> (Option<BigUint>, i6
 
     // If allowed, parse the fractional part of the number if there can be one and the
     // input contains a '.' decimal separator.
-    if fractional {
-        if let Some(rest) = rest.strip_prefix('.') {
-            return base.parse_digits_count(rest, digits);
-        }
+    if fractional && let Some(rest) = rest.strip_prefix('.') {
+        return base.parse_digits_count(rest, digits);
     }
 
     (digits, 0, rest)
@@ -330,13 +328,12 @@ fn parse_exponent(base: Base, str: &str) -> (Option<BigInt>, &str) {
 
 /// Parse a multiplier from allowed suffixes (e.g. s/m/h).
 fn parse_suffix_multiplier<'a>(str: &'a str, allowed_suffixes: &[(char, u32)]) -> (u32, &'a str) {
-    if let Some(ch) = str.chars().next() {
-        if let Some(mul) = allowed_suffixes
+    if let Some(ch) = str.chars().next()
+        && let Some(mul) = allowed_suffixes
             .iter()
             .find_map(|(c, t)| (ch == *c).then_some(*t))
-        {
-            return (mul, &str[1..]);
-        }
+    {
+        return (mul, &str[1..]);
     }
 
     // No suffix, just return 1 and intact string
@@ -425,10 +422,14 @@ fn construct_extended_big_decimal(
         } else {
             let new_scale = -exponent + scale;
 
-            // BigDecimal "only" supports i64 scale.
+            // BigDecimal supports an i64 scale, but a magnitude anywhere near that
+            // range is already many orders beyond any real floating-point type (a
+            // long double tops out around 10^±4932), and formatting it would mean
+            // materializing quintillions of digits. Cap the scale at `i32` so such
+            // values are treated as overflow/underflow, like a real float would.
             // Note that new_scale is a negative exponent: large positive value causes an underflow, large negative values an overflow.
-            if let Some(new_scale) = new_scale.to_i64() {
-                BigDecimal::from_bigint(signed_digits, new_scale)
+            if let Some(new_scale) = new_scale.to_i32() {
+                BigDecimal::from_bigint(signed_digits, new_scale.into())
             } else {
                 return Err(make_error(new_scale.is_negative(), negative));
             }

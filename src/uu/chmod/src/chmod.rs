@@ -13,7 +13,9 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::fs::{FileInformation, display_permissions_unix};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
@@ -38,6 +40,8 @@ enum ChmodError {
     PermissionDenied(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
     NewPermissions(PathBuf, String, String),
+    #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
+    ChangingPermissions(PathBuf, std::io::Error),
 }
 
 impl UError for ChmodError {}
@@ -540,10 +544,11 @@ impl Chmoder {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
-        if let Some(info) = &dir_info {
-            if !ancestors.insert(info.clone()) {
-                return r; // cycle: this directory is already an ancestor
-            }
+        if dir_info
+            .as_ref()
+            .is_some_and(|info| !ancestors.insert(info.clone()))
+        {
+            return r; // cycle: this directory is already an ancestor
         }
 
         let entries = dir_fd.read_dir()?;
@@ -772,13 +777,12 @@ impl Chmoder {
     }
 
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
-        if fperm == mode {
-            // Use the helper method for consistent reporting
-            self.report_permission_change(file, fperm, mode);
-            Ok(())
-        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
+        // Always issue the chmod(2) call, even when the bits are unchanged: the
+        // syscall can still fail (e.g. lacking permission on the file) and that
+        // failure must be reported, matching GNU.
+        if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                show_error!("{err}");
+                show_error!("{}", ChmodError::ChangingPermissions(file.into(), err));
             }
             if self.verbose {
                 println!(

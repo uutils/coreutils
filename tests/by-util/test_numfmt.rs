@@ -432,6 +432,22 @@ fn test_format_selected_field() {
 }
 
 #[test]
+fn test_field_with_multibyte_whitespace_separator() {
+    // A multibyte Unicode whitespace separator (U+3000) before a selected field
+    // is normalized to a single space rather than sliced mid-character.
+    new_ucmd!()
+        .args(&["--field", "2", "1　2"])
+        .succeeds()
+        .stdout_only("1 2\n");
+
+    new_ucmd!()
+        .args(&["--from=auto", "--field", "2"])
+        .pipe_in("1K\u{3000}2K\n")
+        .succeeds()
+        .stdout_only("1K 2000\n");
+}
+
+#[test]
 fn test_format_selected_fields() {
     new_ucmd!()
         .args(&["--from=auto", "--field", "1,4,3", "1K 2K 3K 4K 5K 6K"])
@@ -878,7 +894,13 @@ fn test_to_unit() {
 #[test]
 fn test_invalid_unit_size() {
     let commands = vec!["from", "to"];
-    let invalid_sizes = vec!["A", "0", "18446744073709551616"];
+    let invalid_sizes = vec![
+        "A",
+        "0",
+        "18446744073709551616",
+        "18446744073709551615K",
+        "18014398509481984Ki",
+    ];
 
     for command in commands {
         for invalid_size in &invalid_sizes {
@@ -1507,7 +1529,7 @@ fn test_format_precision_zero_with_to_scale_issue_11667() {
 fn test_invalid_utf8_input() {
     // 0xFF is invalid UTF-8
     new_ucmd!()
-        .pipe_in([b'1', b'0', b'\n', b'\xFF'])
+        .pipe_in(*b"10\n\xFF")
         .fails_with_code(2)
         .stdout_is("10\n")
         .stderr_is("numfmt: invalid number: '\\377'\n");
@@ -1637,6 +1659,22 @@ fn test_float_precision_greater_than_16bits() {
 }
 
 #[test]
+fn test_float_precision_greater_than_16bits_without_scaling() {
+    new_ucmd!()
+        .args(&["--format=%.65536f", "1.5"])
+        .succeeds()
+        .stdout_is("2\n");
+}
+
+#[test]
+fn test_float_precision_greater_than_16bits_with_suffix() {
+    new_ucmd!()
+        .args(&["--to=si", "--format=%.65536f", "1000000"])
+        .succeeds()
+        .stdout_is("1M\n");
+}
+
+#[test]
 fn test_format_precision_too_large_on_zero() {
     new_ucmd!()
         .args(&["--format=%.40f", "0"])
@@ -1649,4 +1687,14 @@ fn test_format_precision_too_large_on_zero() {
         .args(&["--format=%.18f", "0"])
         .succeeds()
         .stdout_only("0.000000000000000000\n");
+}
+
+// https://github.com/uutils/coreutils/issues/13272
+// argument following `--header` must not be interpreted as the option's value
+#[test]
+fn test_header_detached() {
+    new_ucmd!()
+        .args(&["--header", "1", "2"])
+        .succeeds()
+        .stdout_is("1\n2\n");
 }

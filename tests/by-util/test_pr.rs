@@ -959,6 +959,58 @@ fn test_zero_columns_shortcut() {
 }
 
 #[test]
+fn test_filename_ending_with_dash_number_is_not_an_option() {
+    for name in ["a-0", "a-b-0", "a-3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(name, "RUST-pr\n");
+        ucmd.args(&["-t", name])
+            .succeeds()
+            .stdout_contains("RUST-pr");
+    }
+}
+
+#[test]
+fn test_double_dash_terminates_option_parsing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-0", "RUST-pr\n");
+    ucmd.args(&["-t", "--", "-0"])
+        .succeeds()
+        .stdout_contains("RUST-pr");
+}
+
+#[test]
+fn test_double_dash_shields_expand_tabs_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-e", "RUST-pr\n");
+    ucmd.args(&["-t", "--", "-e"])
+        .succeeds()
+        .stdout_contains("RUST-pr");
+}
+
+#[test]
+fn test_double_dash_shields_number_lines_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-n", "first\n");
+    at.write("data", "second\n");
+    ucmd.args(&["-t", "--", "-n", "data"])
+        .succeeds()
+        .stdout_contains("first")
+        .stdout_contains("second");
+}
+
+#[test]
+fn test_double_dash_shields_filename_ending_with_dash_zero() {
+    for name in ["a-0", "a-b-0"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(name, "RUST-pr\n");
+
+        ucmd.args(&["-t", "--", name])
+            .succeeds()
+            .stdout_contains("RUST-pr\n");
+    }
+}
+
+#[test]
 fn test_zero_expand_tab_width() {
     let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
     new_ucmd!()
@@ -1018,4 +1070,16 @@ fn test_merge_empty_input() {
         .args(&["-m", "/dev/null", "/dev/null"])
         .succeeds()
         .no_output();
+}
+
+#[test]
+fn test_missing_file_error_message() {
+    // A nonexistent operand must be reported as "pr: <file>: <message>", like
+    // GNU pr, with the raw "(os error N)" suffix stripped. The exact message
+    // text is platform dependent, so only assert the portable parts.
+    new_ucmd!()
+        .arg("nonexistent_file")
+        .fails_with_code(1)
+        .stderr_contains("pr: nonexistent_file: ")
+        .stderr_does_not_contain("(os error");
 }
