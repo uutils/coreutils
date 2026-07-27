@@ -73,7 +73,7 @@ pub mod perms;
 pub mod pipes;
 #[cfg(all(target_os = "linux", feature = "proc-info"))]
 pub mod proc_info;
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(any(unix, windows), feature = "process"))]
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
@@ -88,7 +88,10 @@ pub mod fsxattr;
 pub mod hardware;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub mod selinux;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(
+    any(windows, all(unix, not(target_os = "fuchsia"))),
+    feature = "signals"
+))]
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;

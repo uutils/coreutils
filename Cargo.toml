@@ -298,7 +298,7 @@ feat_os_unix_musl = [
   "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
-feat_os_windows = ["feat_Tier1", "stdbuf"]
+feat_os_windows = ["feat_Tier1", "stdbuf", "timeout"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [

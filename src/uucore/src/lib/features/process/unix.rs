@@ -17,9 +17,10 @@ use nix::unistd::Pid;
 use rustix::process::Signal as RixSignal;
 use std::io;
 use std::process::Child;
-use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 use timer::Timer;
+
+use super::{ChildExt, TimeoutRet};
 
 /// `geteuid()` returns the effective user ID of the calling process.
 pub fn geteuid() -> uid_t {
@@ -74,28 +75,6 @@ pub fn getsid(pid: i32) -> Result<pid_t, Errno> {
         Some(Pid::from_raw(pid))
     };
     nix::unistd::getsid(pid).map(Pid::as_raw)
-}
-
-/// Missing methods for Child objects
-pub trait ChildExt {
-    /// Send a signal to a Child process.
-    ///
-    /// Caller beware: if the process already exited then you may accidentally
-    /// send the signal to an unrelated process that recycled the PID.
-    fn send_signal(&mut self, signal: usize) -> io::Result<()>;
-
-    /// Send a signal to a process group.
-    fn send_signal_group(&mut self, signal: usize) -> io::Result<()>;
-
-    /// Wait for a process to finish or return after the specified duration.
-    /// A `timeout` of zero disables the timeout.
-    fn wait_or_timeout(&mut self, timeout: Duration, ignore_term: bool) -> io::Result<TimeoutRet>;
-}
-
-pub enum TimeoutRet {
-    Interrupted(RixSignal),
-    Exited(ExitStatus),
-    TimedOut,
 }
 
 impl ChildExt for Child {
@@ -158,12 +137,7 @@ impl ChildExt for Child {
                     } // otherwise waits again
                 }
                 Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
-                // SAFETY: nix's Signal is also a valid rustix Signal.
-                Ok(Some(signal)) => {
-                    break Ok(TimeoutRet::Interrupted(unsafe {
-                        RixSignal::from_raw_unchecked(signal as _)
-                    }));
-                }
+                Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
             remaining = timeout.saturating_sub(start.elapsed());
