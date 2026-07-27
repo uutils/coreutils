@@ -137,6 +137,7 @@ impl ChildExt for Child {
                     } // otherwise waits again
                 }
                 Ok(Some(Signal::SIGTERM)) if ignore_term => {} // waits again
+                Ok(Some(Signal::SIGTTIN | Signal::SIGTTOU)) => {} // waits again
                 Ok(Some(signal)) => break Ok(TimeoutRet::Interrupted(signal as usize)),
                 Err(e) => break Err(e),
             }
@@ -158,6 +159,8 @@ pub fn timeout_signal_set() -> SigSet {
     set.add(Signal::SIGUSR1);
     set.add(Signal::SIGUSR2);
     set.add(Signal::SIGCHLD);
+    set.add(Signal::SIGTTIN);
+    set.add(Signal::SIGTTOU);
     set
 }
 
