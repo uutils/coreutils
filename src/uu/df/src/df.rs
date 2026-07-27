@@ -21,13 +21,13 @@ use uucore::{format_usage, show, show_warning};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
-use std::io::stdout;
-use std::path::Path;
+use std::io::{BufWriter, Write, stdout};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
-use crate::filesystem::Filesystem;
+pub use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
 
@@ -58,7 +58,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 /// Most of these parameters control which rows and which columns are
 /// displayed. The `block_size` determines the units to use when
 /// displaying numbers of bytes or inodes.
-struct Options {
+pub struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     human_readable: Option<HumanReadable>,
@@ -112,6 +112,11 @@ impl Default for Options {
 }
 
 impl Options {
+    /// Convert command-line arguments into [`Options`].
+    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
+        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    }
+
     /// Whether -a, -l, -t, or -x options require the mount table.
     fn requires_mount_table(&self) -> bool {
         self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
@@ -410,6 +415,70 @@ impl UError for DfError {
     }
 }
 
+/// Gather the filesystems that `df` would report on, without formatting anything.
+pub fn filesystems<P>(paths: Option<&[P]>, opt: &Options) -> UResult<Vec<Filesystem>>
+where
+    P: AsRef<Path>,
+{
+    // Run a sync call before any operation if so instructed.
+    if opt.sync {
+        #[cfg(not(any(windows, target_os = "redox")))]
+        rustix::fs::sync();
+    }
+
+    let unreadable_mount_table = |e: Box<dyn UError>| {
+        let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+        USimpleError::new(e.code(), format!("{context}: {e}"))
+    };
+
+    match paths {
+        None => {
+            let filesystems = get_all_filesystems(opt).map_err(unreadable_mount_table)?;
+
+            if filesystems.is_empty() {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("df-error-no-file-systems-processed"),
+                ));
+            }
+
+            Ok(filesystems)
+        }
+        Some(paths) => get_named_filesystems(paths, opt).map_err(unreadable_mount_table),
+    }
+}
+
+/// Write `filesystems` to `writer` as the standard `df` table.
+pub fn write_table<W>(writer: &mut W, filesystems: Vec<Filesystem>, opt: &Options) -> UResult<()>
+where
+    W: Write,
+{
+    Table::new(opt, filesystems).write_to(writer)?;
+    Ok(())
+}
+
+/// Display filesystem usage information as a table on stdout.
+pub fn df<P>(paths: Option<&[P]>, opt: &Options) -> UResult<()>
+where
+    P: AsRef<Path>,
+{
+    let filesystems = filesystems(paths, opt)?;
+
+    // Every path given on the command line was rejected; `filesystems` has
+    // already emitted a diagnostic for each, so there is no table to print.
+    if filesystems.is_empty() {
+        return Ok(());
+    }
+
+    let mut writer = BufWriter::new(stdout().lock());
+    write_table(&mut writer, filesystems, opt)?;
+
+    // `BufWriter` swallows errors per drop, so flush explicitly.
+    writer.flush()?;
+
+    Ok(())
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
@@ -425,51 +494,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
+    let opt = Options::from_matches(&matches)?;
+    let paths: Option<Vec<PathBuf>> = matches
+        .get_many::<OsString>(OPT_PATHS)
+        .map(|paths| paths.map(PathBuf::from).collect());
 
-    // Run a sync call before any operation if so instructed.
-    if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        rustix::fs::sync();
-    }
-
-    // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
-        None => {
-            let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
-
-            if filesystems.is_empty() {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("df-error-no-file-systems-processed"),
-                ));
-            }
-
-            filesystems
-        }
-        Some(paths) => {
-            let paths: Vec<_> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
-
-            // This can happen if paths are given as command-line arguments
-            // but none of the paths exist.
-            if filesystems.is_empty() {
-                return Ok(());
-            }
-
-            filesystems
-        }
-    };
-
-    Table::new(&opt, filesystems).write_to(&mut stdout())?;
-
-    Ok(())
+    df(paths.as_deref(), &opt)
 }
 
 pub fn uu_app() -> Command {
@@ -622,6 +652,70 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+
+    // spell-checker:ignore apfs
+    mod write_table {
+
+        use crate::{Filesystem, Options, write_table};
+        use std::ffi::OsString;
+        use uucore::fsext::{FsUsage, MountInfo};
+
+        fn filesystem() -> Filesystem {
+            Filesystem {
+                file: Some(OsString::from("/tmp/file")),
+                mount_info: MountInfo {
+                    dev_id: String::from("1"),
+                    dev_name: String::from("/dev/disk1"),
+                    fs_type: String::from("apfs"),
+                    mount_dir: OsString::from("/"),
+                    mount_option: String::new(),
+                    mount_root: OsString::new(),
+                    remote: false,
+                    dummy: false,
+                },
+                usage: FsUsage {
+                    blocksize: 1024,
+                    blocks: 10,
+                    bfree: 4,
+                    bavail: 3,
+                    bavail_top_bit_set: false,
+                    files: 20,
+                    ffree: 5,
+                },
+            }
+        }
+
+        /// Rendering must be possible without touching stdout, so that crate
+        /// users can capture the table themselves.
+        #[test]
+        fn test_write_table_to_arbitrary_writer() {
+            let mut buffer: Vec<u8> = Vec::new();
+            write_table(&mut buffer, vec![filesystem()], &Options::default()).unwrap();
+
+            // Header text is localized and the bundle is not loaded in unit
+            // tests, so only the data row is asserted on here.
+            let table = String::from_utf8(buffer).unwrap();
+            let row = table.lines().nth(1).unwrap();
+
+            assert_eq!(table.lines().count(), 2);
+            assert!(row.starts_with("/dev/disk1"));
+            assert!(row.ends_with(" /"));
+            // 10 blocks of 1K, of which 6 are used and 3 available.
+            assert_eq!(
+                row.split_whitespace().collect::<Vec<_>>(),
+                ["/dev/disk1", "10", "6", "3", "67%", "/"]
+            );
+        }
+
+        #[test]
+        fn test_write_table_empty() {
+            let mut buffer: Vec<u8> = Vec::new();
+            write_table(&mut buffer, vec![], &Options::default()).unwrap();
+
+            let table = String::from_utf8(buffer).unwrap();
+            assert_eq!(table.lines().count(), 1);
+        }
+    }
 
     mod mount_info_lt {
 
