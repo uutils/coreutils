@@ -9,7 +9,6 @@ use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{ErrorKind, Read, Write, stdin, stdout};
-use std::os::unix::io::AsFd;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
@@ -154,18 +153,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let stdout_handle = stdout();
-
-    let mut written = 0;
-    while written < out_buf.len() {
-        match rustix::io::write(stdout_handle.as_fd(), &out_buf[written..]) {
-            Ok(n) => written += n,
-            Err(e) => {
-                return Err(USimpleError::new(
-                    1,
-                    format!("write error: {}", std::io::Error::from(e)),
-                ));
-            }
-        }
+    if let Err(e) = stdout_handle.lock().write_all(&out_buf) {
+        return Err(USimpleError::new(1, format!("write error: {e}")));
     }
 
     Ok(())
