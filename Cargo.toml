@@ -509,6 +509,7 @@ uucore_procs = { version = "0.9.0", path = "src/uucore_procs" }
 uu_ls = { version = "0.9.0", path = "src/uu/ls" }
 uu_base32 = { version = "0.9.0", path = "src/uu/base32" }
 uu_checksum_common = { version = "0.9.0", path = "src/uu/checksum_common" }
+uu_false = { version = "0.9.0", path = "src/uu/false" }
 uutests = { version = "0.9.0", path = "tests/uutests" }
 
 # This is the linting configuration for all crates.

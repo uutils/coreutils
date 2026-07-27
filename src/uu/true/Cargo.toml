@@ -21,8 +21,9 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true }
 fluent = { workspace = true }
+uucore = { workspace = true }
+uu_false = { workspace = true }
 
 [[bin]]
 name = "true"

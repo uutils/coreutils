@@ -3,36 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::io::{self, Write as _};
 use uucore::{crate_version, translate};
 
 // uucore::main does not support no-result
-pub fn uumain(mut args: impl uucore::Args) -> i32 {
-    // skip binary name
-    let (Some(flag), None) = (args.nth(1), args.next()) else {
-        return 0;
-    };
-
-    let res = if flag == "--help" {
-        uu_app().print_help()
-    } else if flag == "--version" {
-        // avoid uu_app for smaller binary size
-        writeln!(io::stdout(), "true {}", crate_version!())
-    } else {
-        return 0;
-    };
-
-    if let Err(e) = res
-        && e.kind() != io::ErrorKind::BrokenPipe
-    {
-        // Try to display this error.
-        let _ = writeln!(io::stderr(), "true: {}", uucore::error::strip_errno(&e));
-        // Mirror GNU options. When failing to print warnings or version flags, then we exit
-        // with FAIL. This avoids allocation some error information which may result in yet
-        // other types of failure.
-        return 1;
-    }
-    0
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    uu_false::true_false(args, 0, "true")
 }
 
 pub fn uu_app() -> Command {

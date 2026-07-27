@@ -6,28 +6,33 @@ use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
 use uucore::{crate_version, translate};
 
-// uucore::main does not support no-result
-pub fn uumain(mut args: impl uucore::Args) -> i32 {
+pub fn true_false(mut args: impl uucore::Args, exit_code: i32, name: &str) -> i32 {
     // skip binary name
     let (Some(flag), None) = (args.nth(1), args.next()) else {
-        return 1;
+        return exit_code;
     };
 
     let res = if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
-        writeln!(io::stdout(), "false {}", crate_version!())
+        writeln!(io::stdout(), "{name} {}", crate_version!())
     } else {
-        return 1;
+        return exit_code;
     };
 
     if let Err(e) = res
         && e.kind() != io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(io::stderr(), "false: {}", uucore::error::strip_errno(&e));
+        let _ = writeln!(io::stderr(), "{name}: {}", uucore::error::strip_errno(&e));
+        return 1;
     }
-    1
+    exit_code
+}
+
+// uucore::main does not support no-result
+pub fn uumain(args: impl uucore::Args) -> i32 {
+    true_false(args, 1, "false")
 }
 
 pub fn uu_app() -> Command {
