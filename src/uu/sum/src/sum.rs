@@ -13,7 +13,6 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::display::{OsWrite, Quotable};
 use uucore::error::{FromIo, UResult, USimpleError, strip_errno};
-use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
