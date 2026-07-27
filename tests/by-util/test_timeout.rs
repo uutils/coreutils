@@ -443,3 +443,13 @@ fn test_windows_command_cannot_invoke() {
         .args(&["1", ".\\not_executable.txt"])
         .fails_with_code(126);
 }
+
+#[test]
+#[cfg(unix)]
+fn test_nohang_ttin() {
+    let (ts, bin) = scenario_with_bin();
+    ts.cmd("/bin/sh")
+        .arg("-c")
+        .arg(format!("trap 'echo' SIGTTIN; {bin:?} 2 /bin/cat"))
+        .timeout(Duration::from_secs(4));
+}
