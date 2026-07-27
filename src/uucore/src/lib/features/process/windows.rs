@@ -5,9 +5,10 @@
 
 // spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled
 // spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
-// spell-checker:ignore catchable targetable wakeup
+// spell-checker:ignore catchable targetable wakeup unreaped pids
 
-//! Windows emulation of POSIX signal delivery for child processes.
+//! Windows emulation of POSIX signal delivery, for child processes and
+//! arbitrary pids ([`send_signal_to_pid`]).
 //!
 //! Windows has no signals, so this module emulates the POSIX default
 //! dispositions with native primitives: signal numbers follow the Linux
@@ -26,8 +27,11 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
+use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER};
 use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT};
-use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, INFINITE};
+use windows_sys::Win32::System::Threading::{
+    CREATE_NEW_PROCESS_GROUP, INFINITE, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+};
 use windows_sys::core::BOOL;
 
 use super::{ChildExt, TimeoutRet};
@@ -49,9 +53,9 @@ pub mod sys {
         AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::{
-        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, ResetEvent,
-        SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects,
-        WaitForSingleObject,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, OpenProcess,
+        ResetEvent, SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess,
+        WaitForMultipleObjects, WaitForSingleObject,
     };
     use windows_sys::core::BOOL;
 
@@ -115,6 +119,13 @@ pub mod sys {
         // SAFETY: the process handle is valid for the duration of the call;
         // terminating an already-exited process fails cleanly.
         cvt(unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// Open `pid` with exactly `desired_access`; the handle is non-inheritable.
+    pub fn open_process(pid: u32, desired_access: u32) -> io::Result<OwnedHandle> {
+        // SAFETY: OpenProcess returns null on failure, otherwise a fresh
+        // handle owned by us — the `cvt_created_handle` contract.
+        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }
     }
 
     /// Create an unnamed manual-reset event, initially unsignaled.
@@ -298,6 +309,73 @@ pub fn send_signal_to_process(child: &Child, signal: usize) -> io::Result<()> {
         Disposition::Interrupt | Disposition::Terminate => {
             terminate_with_signal(child.as_handle(), signal)
         }
+    }
+}
+
+const PROBE_ACCESS: u32 = PROCESS_SYNCHRONIZE;
+// SYNCHRONIZE tells "already exited" apart from a real denial after a failed
+// TerminateProcess (both report ERROR_ACCESS_DENIED).
+const TERMINATE_ACCESS: u32 = PROCESS_TERMINATE | PROCESS_SYNCHRONIZE;
+
+fn no_such_process() -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, "No such process")
+}
+
+/// A process handle becomes signaled when the process exits.
+fn has_exited(handle: BorrowedHandle) -> io::Result<bool> {
+    Ok(matches!(
+        sys::wait_for_one(handle, 0)?,
+        sys::WaitOutcome::Object(_)
+    ))
+}
+
+// OpenProcess reports dead and never-allocated pids as ERROR_INVALID_PARAMETER;
+// the custom message matches unix ESRCH stderr. ERROR_ACCESS_DENIED stays raw
+// (already renders "Permission denied", like unix EPERM).
+fn map_open_error(error: io::Error) -> io::Error {
+    if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+        no_such_process()
+    } else {
+        error
+    }
+}
+
+/// Deliver `signal` (POSIX numbering) to the arbitrary process `pid`,
+/// emulating `kill(2)` for `pid > 0`. `SeDebugPrivilege` is never enabled.
+pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
+    // pid 0 is the System Idle Process; its ERROR_INVALID_PARAMETER would
+    // masquerade as ESRCH.
+    if pid == 0 {
+        return Err(io::ErrorKind::InvalidInput.into());
+    }
+    match disposition(signal)? {
+        Disposition::Probe | Disposition::Ignore => probe_pid(pid),
+        Disposition::Interrupt | Disposition::Terminate => terminate_pid(pid, signal),
+    }
+}
+
+/// Ok while `pid` runs, "No such process" once it has exited, even if open
+/// handles still pin its pid.
+fn probe_pid(pid: u32) -> io::Result<()> {
+    let handle = sys::open_process(pid, PROBE_ACCESS).map_err(map_open_error)?;
+    if has_exited(handle.as_handle())? {
+        return Err(no_such_process());
+    }
+    Ok(())
+}
+
+fn terminate_pid(pid: u32, signal: usize) -> io::Result<()> {
+    let handle = sys::open_process(pid, TERMINATE_ACCESS).map_err(map_open_error)?;
+    match terminate_with_signal(handle.as_handle(), signal) {
+        // An already-exited target also reports ERROR_ACCESS_DENIED; it
+        // counts as delivered, like unix kill on an unreaped process.
+        Err(e)
+            if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+                && has_exited(handle.as_handle()).unwrap_or(false) =>
+        {
+            Ok(())
+        }
+        result => result,
     }
 }
 
@@ -550,6 +628,14 @@ mod tests {
         )
     }
 
+    fn spawn_child() -> Child {
+        Command::new("ping")
+            .args(["-n", "10", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
     /// `LAST_CTRL_SIGNAL` and `WAKE_EVENT` are process-global, so every phase
     /// runs inside this single test to keep them free of cross-test races
     /// (cargo runs tests on parallel threads).
@@ -583,11 +669,7 @@ mod tests {
         // Phase 5: `wait_or_timeout` consumes a latched console event: it
         // returns `Interrupted` promptly with the child still running, and
         // leaves latch and event clear so they cannot satisfy a later wait.
-        let mut child = Command::new("ping")
-            .args(["-n", "10", "127.0.0.1"])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+        let mut child = spawn_child();
         // SAFETY: as above.
         assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
         let started = Instant::now();
@@ -600,5 +682,45 @@ mod tests {
         assert!(!wake_event_signaled());
         child.kill().unwrap();
         child.wait().unwrap();
+    }
+
+    // The send_signal_to_pid tests touch no process-global state (unlike the
+    // ctrl-forwarding lifecycle above), so they can run in parallel.
+
+    #[test]
+    fn send_signal_to_pid_terminates_with_128_plus_signal() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 15).unwrap();
+        assert_eq!(child.wait().unwrap().code(), Some(143));
+    }
+
+    #[test]
+    fn send_signal_to_pid_probe_ignore_and_exited_semantics() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 0).unwrap();
+        send_signal_to_pid(child.id(), 17).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "CHLD must be a no-op");
+
+        child.kill().unwrap();
+        child.wait().unwrap();
+        // `child` still holds the process handle, pinning the pid: the checks
+        // below cannot race a pid reuse.
+        let err = send_signal_to_pid(child.id(), 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        assert_eq!(err.to_string(), "No such process");
+        send_signal_to_pid(child.id(), 9).unwrap();
+    }
+
+    #[test]
+    fn send_signal_to_pid_rejects_invalid_input_before_any_open() {
+        let own_pid = std::process::id();
+        assert_eq!(
+            send_signal_to_pid(0, 9).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+        assert_eq!(
+            send_signal_to_pid(own_pid, 64).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
     }
 }
