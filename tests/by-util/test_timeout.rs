@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore dont SIGBREAK
+// spell-checker:ignore dont SIGBREAK SIGTTIN ttin
 
 use rstest::rstest;
 use std::time::Duration;
@@ -446,7 +446,7 @@ fn test_windows_command_cannot_invoke() {
 
 #[test]
 #[cfg(unix)]
-fn test_nohang_ttin() {
+fn test_continue_terminal_job_ctrl_sigs() {
     let (ts, bin) = scenario_with_bin();
     ts.cmd("/bin/sh")
         .arg("-c")

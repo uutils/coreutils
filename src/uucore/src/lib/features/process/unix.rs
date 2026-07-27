@@ -8,6 +8,7 @@
 // spell-checker:ignore pgrep pwait snice getpgrp
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
+// spell-checker:ignore SIGXCPU SIGXFSZ SIGVTALRM SIGPROF
 
 use libc::{gid_t, pid_t, uid_t};
 #[cfg(not(target_os = "redox"))]
