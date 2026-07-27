@@ -64,21 +64,21 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
         .arg("kern.boottime")
         .output();
 
-    if let Ok(output) = output {
-        if output.status.success() {
-            // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
-            // We need to extract the seconds value from the structured output
-            let stdout = String::from_utf8_lossy(&output.stdout);
+    if let Ok(output) = output
+        && output.status.success()
+    {
+        // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
+        // We need to extract the seconds value from the structured output
+        let stdout = String::from_utf8_lossy(&output.stdout);
 
-            // Extract the seconds from the output
-            // Look for "sec = " pattern
-            if let Some(sec_start) = stdout.find("sec = ") {
-                let sec_part = &stdout[sec_start + 6..];
-                if let Some(sec_end) = sec_part.find(',') {
-                    let sec_str = &sec_part[..sec_end];
-                    if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
-                        return Some(boot_time as time_t);
-                    }
+        // Extract the seconds from the output
+        // Look for "sec = " pattern
+        if let Some(sec_start) = stdout.find("sec = ") {
+            let sec_part = &stdout[sec_start + 6..];
+            if let Some(sec_end) = sec_part.find(',') {
+                let sec_str = &sec_part[..sec_end];
+                if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
+                    return Some(boot_time as time_t);
                 }
             }
         }
@@ -379,7 +379,7 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let cstr = std::ffi::CStr::from_ptr(buffer.cast());
+            let cstr = core::ffi::CStr::from_ptr(buffer.cast());
             if !cstr.is_empty() {
                 num_user += 1;
             }
@@ -428,7 +428,7 @@ pub fn get_formatted_nusers() -> String {
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
 #[cfg(unix)]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
-    use crate::libc::c_double;
+    use core::ffi::c_double;
     use libc::getloadavg;
 
     let mut avg: [c_double; 3] = [0.0; 3];

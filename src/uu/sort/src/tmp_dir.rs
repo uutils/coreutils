@@ -69,16 +69,16 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
 
         if let Some(lock) = lock {
             let _guard = lock.lock().unwrap();
-            if let Some(path) = path {
-                if let Err(e) = remove_tmp_dir(&path) {
-                    show_error!(
-                        "{}",
-                        translate!(
-                            "sort-failed-to-delete-temporary-directory",
-                            "error" => e
-                        )
-                    );
-                }
+            if let Some(path) = path
+                && let Err(e) = remove_tmp_dir(&path)
+            {
+                show_error!(
+                    "{}",
+                    translate!(
+                        "sort-failed-to-delete-temporary-directory",
+                        "error" => e
+                    )
+                );
             }
         }
 

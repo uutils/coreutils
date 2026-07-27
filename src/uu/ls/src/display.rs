@@ -760,22 +760,20 @@ fn display_item_name(
         name = color_name(name, path, style_manager, None, is_wrap(len));
     }
 
-    if config.format != Format::Long {
-        if let Some(info) = more_info {
-            let old_name = name;
-            name = info.into();
-            name.push(&old_name);
-        }
+    if config.format != Format::Long
+        && let Some(info) = more_info
+    {
+        let old_name = name;
+        name = info.into();
+        name.push(&old_name);
     }
 
     let is_long_symlink = config.format == Format::Long
         && path.file_type().is_some_and(FileType::is_symlink)
         && !path.must_dereference;
 
-    if !is_long_symlink {
-        if let Some(c) = indicator_char(path, config.indicator_style) {
-            let _ = name.write_char(c);
-        }
+    if !is_long_symlink && let Some(c) = indicator_char(path, config.indicator_style) {
+        let _ = name.write_char(c);
     }
 
     let dired_name_len = if config.dired { name.len() } else { 0 };
@@ -888,20 +886,20 @@ fn display_item_name(
 
     // Prepend the security context to the `name` and adjust `width` in order
     // to get correct alignment from later calls to`display_grid()`.
-    if config.context {
-        if let Some(pad_count) = prefix_context {
-            let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
-                path.security_context(config).into()
-            } else {
-                pad_left(path.security_context(config), pad_count).into()
-            };
+    if config.context
+        && let Some(pad_count) = prefix_context
+    {
+        let security_context: Cow<'_, str> = if matches!(config.format, Format::Commas) {
+            path.security_context(config).into()
+        } else {
+            pad_left(path.security_context(config), pad_count).into()
+        };
 
-            let old_name = name;
-            name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
-            name.push(security_context.as_ref());
-            name.push(" ");
-            name.push(old_name);
-        }
+        let old_name = name;
+        name = OsString::with_capacity(security_context.len() + 1 + old_name.len());
+        name.push(security_context.as_ref());
+        name.push(" ");
+        name.push(old_name);
     }
 
     DisplayItemName {
@@ -1341,11 +1339,11 @@ fn calculate_padding_collection(
             padding_collections.inode = inode_len.max(padding_collections.inode);
         }
 
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         if config.format == Format::Long {
@@ -1414,11 +1412,11 @@ fn calculate_padding_collection(
     };
 
     for item in items {
-        if config.alloc_size {
-            if let Some(md) = item.metadata() {
-                let block_size_len = display_size(get_block_size(md, config), config).len();
-                padding_collections.block_size = block_size_len.max(padding_collections.block_size);
-            }
+        if config.alloc_size
+            && let Some(md) = item.metadata()
+        {
+            let block_size_len = display_size(get_block_size(md, config), config).len();
+            padding_collections.block_size = block_size_len.max(padding_collections.block_size);
         }
 
         let context_len = item.security_context(config).len();

@@ -758,11 +758,9 @@ impl EnvAppData {
         self.do_input_debug_printing = self
             .do_input_debug_printing
             .or(Some(matches.get_count("debug") >= 2));
-        if let Some(value) = self.do_input_debug_printing {
-            if value {
-                debug_print_args(&original_args);
-                self.do_input_debug_printing = Some(false);
-            }
+        if Some(true) == self.do_input_debug_printing {
+            debug_print_args(&original_args);
+            self.do_input_debug_printing = Some(false);
         }
 
         let mut opts = make_options(
@@ -1162,7 +1160,7 @@ fn ignore_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_IGN);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1179,7 +1177,7 @@ fn reset_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_DFL);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1208,9 +1206,9 @@ fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
         ));
     }
 
-    if let Err(err) =
-        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
-    {
+    if let Err(err) = unsafe {
+        nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as core::ffi::c_int))
+    } {
         return Err(USimpleError::new(
             125,
             translate!(

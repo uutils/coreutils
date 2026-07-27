@@ -566,7 +566,7 @@ pub fn ignore_interrupts() -> Result<(), Errno> {
 #[cfg(unix)]
 pub fn install_signal_handler(
     sig: i32,
-    handler: extern "C" fn(std::os::raw::c_int),
+    handler: extern "C" fn(core::ffi::c_int),
 ) -> Result<(), Errno> {
     let signal = Signal::try_from(sig).map_err(|_| Errno::EINVAL)?;
     let action = SigAction::new(
