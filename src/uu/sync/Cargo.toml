@@ -28,7 +28,7 @@ uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
