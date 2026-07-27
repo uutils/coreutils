@@ -10,19 +10,22 @@
 use std::io;
 
 use uucore::process::send_signal_to_pid;
+use uucore::translate;
 
 const SIGNAL_STOP: usize = 19;
 
-fn unsupported(message: &'static str) -> io::Error {
+fn unsupported(message: String) -> io::Error {
     io::Error::new(io::ErrorKind::Unsupported, message)
 }
 
 pub(crate) fn send_signal(pid: i32, sig: usize) -> io::Result<()> {
     if sig == SIGNAL_STOP {
-        return Err(unsupported("SIGSTOP is not supported on Windows"));
+        return Err(unsupported(translate!("kill-error-stop-unsupported")));
     }
     match u32::try_from(pid) {
         Ok(pid) if pid != 0 => send_signal_to_pid(pid, sig),
-        _ => Err(unsupported("process groups are not supported on Windows")),
+        _ => Err(unsupported(translate!(
+            "kill-error-process-groups-unsupported"
+        ))),
     }
 }
