@@ -400,8 +400,6 @@ impl Observer {
                 }
             }
             EventKind::Remove(RemoveKind::File | RemoveKind::Any)
-
-                // | EventKind::Modify(ModifyKind::Name(RenameMode::Any))
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                 if self.follow_name() {
                     if settings.retry {

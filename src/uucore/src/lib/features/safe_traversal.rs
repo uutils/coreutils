@@ -19,8 +19,10 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fs;
 use std::io;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd, RawFd};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
 
 use nix::dir::Dir;
 use nix::fcntl::{OFlag, openat};
@@ -322,7 +324,7 @@ impl DirFd {
 
             if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
                 // Syscall number for fchmodat2 on asm-generic architectures.
-                const SYS_FCHMODAT2: libc::c_long = 452;
+                const SYS_FCHMODAT2: core::ffi::c_long = 452;
                 // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
                 // - fd: valid open file descriptor
                 // - name: valid C string pointer (name_cstr lives for the duration)
@@ -391,7 +393,7 @@ impl DirFd {
     /// race because the fd pins the inode.
     ///
     #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &std::ffi::CStr, mode: u32) -> io::Result<()> {
+    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
         use rustix::fs::{Mode, OFlags, chmod, openat};
 
         let fd = openat(
@@ -403,7 +405,7 @@ impl DirFd {
         .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
 
         let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = std::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
+        let proc_cstr = core::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
 
         chmod(proc_cstr, Mode::from_bits_truncate(mode))
@@ -742,10 +744,31 @@ impl Metadata {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    fn time_from_secs_nsecs(secs: i64, nsecs: i64) -> Option<SystemTime> {
+        use std::time::{Duration, UNIX_EPOCH};
+        if secs >= 0 {
+            UNIX_EPOCH.checked_add(Duration::new(secs as u64, nsecs as u32))
+        } else {
+            UNIX_EPOCH.checked_sub(Duration::new((-secs) as u64, 0))
+        }
+    }
+
+    pub fn modified(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.mtime(), self.mtime_nsec())
+    }
+
+    pub fn accessed(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.atime(), self.atime_nsec())
+    }
+
+    pub fn changed(&self) -> Option<SystemTime> {
+        Self::time_from_secs_nsecs(self.ctime(), self.ctime_nsec())
+    }
 }
 
 // Add MetadataExt trait implementation for compatibility
-impl std::os::unix::fs::MetadataExt for Metadata {
+impl MetadataExt for Metadata {
     // st_dev type varies by platform (i32 on macOS, u64 on Linux)
     #[allow(clippy::unnecessary_cast)]
     fn dev(&self) -> u64 {

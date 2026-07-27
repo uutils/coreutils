@@ -2394,62 +2394,62 @@ fn test_debug_key_annotations() {
 fn test_debug_key_annotations_locale() {
     let ts = TestScenario::new("sort");
 
-    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
-        if locale_fr_utf8 != "none" {
-            let probe = ts
-                .ucmd()
-                .args(&["-g", "--debug", "/dev/null"])
-                .env("LC_NUMERIC", &locale_fr_utf8)
-                .env("LC_MESSAGES", "C")
-                .run();
-            if probe
-                .stderr_str()
-                .contains("numbers use .*,.* as a decimal point")
-            {
-                let mut locale_output = String::new();
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", "C")
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&[
-                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
-                            "-k3,3n", "-k3,3g", "-k3,3h",
-                        ])
-                        .pipe_in("+1234 1234Gi 1,234M\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8")
+        && locale_fr_utf8 != "none"
+    {
+        let probe = ts
+            .ucmd()
+            .args(&["-g", "--debug", "/dev/null"])
+            .env("LC_NUMERIC", &locale_fr_utf8)
+            .env("LC_MESSAGES", "C")
+            .run();
+        if probe
+            .stderr_str()
+            .contains("numbers use .*,.* as a decimal point")
+        {
+            let mut locale_output = String::new();
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", "C")
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&[
+                        "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                        "-k3,3n", "-k3,3g", "-k3,3h",
+                    ])
+                    .pipe_in("+1234 1234Gi 1,234M\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
 
-                let normalized = locale_output
-                    .lines()
-                    .map(|line| {
-                        if line.starts_with("^^ ") {
-                            "^ no match for key".to_string()
-                        } else {
-                            line.to_string()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-                    + "\n";
+            let normalized = locale_output
+                .lines()
+                .map(|line| {
+                    if line.starts_with("^^ ") {
+                        "^ no match for key".to_string()
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
 
-                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
-            }
+            assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
         }
     }
 }

@@ -13,6 +13,7 @@ use std::ffi::OsStr;
 use std::fs::{File, metadata};
 use std::io::{BufRead, BufReader, BufWriter, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
+use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTime;
@@ -154,14 +155,6 @@ impl Default for NumberingMode {
     }
 }
 
-impl From<std::io::Error> for PrError {
-    fn from(err: std::io::Error) -> Self {
-        Self::EncounteredErrors {
-            msg: err.to_string(),
-        }
-    }
-}
-
 impl From<FromUtf8Error> for PrError {
     fn from(err: FromUtf8Error) -> Self {
         Self::EncounteredErrors {
@@ -183,8 +176,17 @@ enum PrError {
     #[error("pr: {msg}")]
     EncounteredErrors { msg: String },
 
-    #[error("pr: {path}: {msg}")]
-    ReadError { path: String, msg: String },
+    #[error("pr: {}", strip_errno(.0))]
+    Read(std::io::Error),
+
+    #[error("pr: {}", strip_errno(.0))]
+    Write(std::io::Error),
+
+    #[error("pr: {path}: {}", strip_errno(error))]
+    ReadPath {
+        path: PathBuf,
+        error: std::io::Error,
+    },
 }
 
 pub fn uu_app() -> Command {
@@ -969,7 +971,7 @@ fn build_options(
     })
 }
 
-/// Open files (or stdin) for reading.
+/// Open files (or stdin) for streaming reads.
 ///
 /// If `path` is `"-"`, then read from stdin. The returned `BufRead` allows
 /// streaming one page at a time to keep memory bounded on large inputs.
@@ -977,11 +979,12 @@ fn open_readers(path: &str) -> Result<Box<dyn BufRead>, PrError> {
     if path == "-" {
         Ok(Box::new(stdin().lock()))
     } else {
-        File::open(path)
+        let path_buf = PathBuf::from(path);
+        File::open(&path_buf)
             .map(|f| Box::new(BufReader::new(f)) as Box<dyn BufRead>)
-            .map_err(|err| PrError::ReadError {
-                path: path.to_string(),
-                msg: strip_errno(&err),
+            .map_err(|error| PrError::ReadPath {
+                path: path_buf,
+                error,
             })
     }
 }
@@ -1014,6 +1017,7 @@ fn apply_expand_tab(chunk: &mut Vec<u8>, byte: u8, expand_options: &ExpandTabsOp
 /// page in memory, which prevents OOM on large or infinite inputs.
 fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
     let mut reader = open_readers(path)?;
+    let mut writer = BufWriter::new(stdout().lock());
 
     let start_page = options.start_page;
     let end_page = options.end_page;
@@ -1045,7 +1049,7 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
         // Read chunks from the file and accumulate lines until a page
         // boundary (form feed or lines_needed_per_page), then print.
         loop {
-            let (line_content, sep) = read_chunk(&mut reader)?;
+            let (line_content, sep) = read_chunk(&mut reader).map_err(PrError::Read)?;
 
             match sep {
                 None => {
@@ -1058,7 +1062,8 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                         && end_page.is_none_or(|e| page_num < e)
                     {
                         let page_number = page_num + 1;
-                        print_page(&page, options, page_number)?;
+                        write_page(&mut writer, &page, options, page_number)
+                            .map_err(PrError::Write)?;
                     }
                     return Ok(0);
                 }
@@ -1068,7 +1073,8 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                     }
                     if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
                         let page_number = page_num + 1;
-                        print_page(&page, options, page_number)?;
+                        write_page(&mut writer, &page, options, page_number)
+                            .map_err(PrError::Write)?;
                     }
                     page_num += 1;
                     page.clear();
@@ -1087,7 +1093,8 @@ fn pr(path: &str, options: &OutputOptions) -> Result<i32, PrError> {
                     if page.len() >= lines_needed_per_page {
                         if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
                             let page_number = page_num + 1;
-                            print_page(&page, options, page_number)?;
+                            write_page(&mut writer, &page, options, page_number)
+                                .map_err(PrError::Write)?;
                         }
                         page_num += 1;
                         page.clear();
@@ -1169,7 +1176,7 @@ fn read_one_page(
     let mut page_lines_needed = lines_needed_per_page;
 
     loop {
-        let (line_content, sep) = read_chunk(reader)?;
+        let (line_content, sep) = read_chunk(reader).map_err(PrError::Read)?;
 
         match sep {
             None => {
@@ -1355,23 +1362,24 @@ fn mpr(paths: &[&str], options: &OutputOptions) -> Result<i32, PrError> {
 
             if print_header {
                 for x in header_content(options, output_page) {
-                    out.write_all(x.as_bytes())?;
-                    out.write_all(b"\n")?;
+                    out.write_all(x.as_bytes()).map_err(PrError::Write)?;
+                    out.write_all(b"\n").map_err(PrError::Write)?;
                 }
             }
 
-            write_merge_page(&lines, options, &mut out, &mut col_counts, &mut col_starts)?;
+            write_merge_page(&lines, options, &mut out, &mut col_counts, &mut col_starts)
+                .map_err(PrError::Write)?;
 
             if print_header {
                 let trailer = trailer_content(options);
                 for (index, x) in trailer.iter().enumerate() {
-                    out.write_all(x.as_bytes())?;
+                    out.write_all(x.as_bytes()).map_err(PrError::Write)?;
                     if index + 1 != trailer.len() {
-                        out.write_all(b"\n")?;
+                        out.write_all(b"\n").map_err(PrError::Write)?;
                     }
                 }
             }
-            out.write_all(page_separator)?;
+            out.write_all(page_separator).map_err(PrError::Write)?;
         }
 
         output_page += 1;
@@ -1494,7 +1502,8 @@ fn write_truncated_bytes(
     }
 }
 
-fn print_page(
+fn write_page(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
@@ -1505,23 +1514,21 @@ fn print_page(
     let header = header_content(options, page);
     let trailer_content = trailer_content(options);
 
-    let out = stdout();
-    let mut out = BufWriter::new(out.lock());
-
     for x in header {
-        out.write_all(x.as_bytes())?;
-        out.write_all(line_separator)?;
+        writer.write_all(x.as_bytes())?;
+        writer.write_all(line_separator)?;
     }
 
-    write_columns(lines, options, &mut out)?;
+    write_columns(writer, lines, options)?;
 
     for (index, x) in trailer_content.iter().enumerate() {
-        out.write_all(x.as_bytes())?;
+        writer.write_all(x.as_bytes())?;
         if index + 1 != trailer_content.len() {
-            out.write_all(line_separator)?;
+            writer.write_all(line_separator)?;
         }
     }
-    out.write_all(page_separator)?;
+    writer.write_all(page_separator)?;
+    writer.flush()?;
     Ok(())
 }
 
@@ -1588,9 +1595,9 @@ fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> Result<(), std::io
 
 #[allow(clippy::cognitive_complexity)]
 fn write_columns(
+    writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
-    out: &mut impl Write,
 ) -> Result<(), std::io::Error> {
     let line_separator = options.content_line_separator.as_bytes();
 
@@ -1631,8 +1638,8 @@ fn write_columns(
                 break;
             };
 
-            write_offset_spaces(out, options.offset_spaces)?;
-            out.write_all(
+            write_offset_spaces(writer, options.offset_spaces)?;
+            writer.write_all(
                 get_line_for_printing(options, line_to_print, columns, i, line_width, indexes)
                     .as_bytes(),
             )?;
@@ -1640,7 +1647,7 @@ fn write_columns(
         if not_found_break && feed_line_present {
             break;
         }
-        out.write_all(line_separator)?;
+        writer.write_all(line_separator)?;
     }
 
     Ok(())

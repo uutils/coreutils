@@ -591,9 +591,8 @@ fn extract_strings_from_input(
         let to_skip = cmp::min(8192, skip_bytes - skipped);
         let mut skip_buf = vec![0u8; to_skip as usize];
         match mf.read(&mut skip_buf) {
-            Ok(0) => break, // EOF reached
+            Ok(0) | Err(_) => break, // 0 is EOF
             Ok(n) => skipped += n as u64,
-            Err(_) => break,
         }
     }
 

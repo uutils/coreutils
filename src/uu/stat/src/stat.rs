@@ -823,12 +823,12 @@ impl Stater {
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
         if *i + 1 < bound
-            && let Some(&next_char) = chars.get(*i + 1)
+            && let Some(&next_char) = chars.get(*i + 1).filter(|c| **c == 'd' || **c == 'r')
             && (chars[*i] == 'H' || chars[*i] == 'L')
-            && (next_char == 'd' || next_char == 'r')
         {
-            flag.major = chars[*i] == 'H';
-            flag.minor = chars[*i] == 'L';
+            let is_major = chars[*i] == 'H';
+            flag.major = is_major;
+            flag.minor = !is_major; // chars[*i] == 'L'
             *i += 1;
             return Ok(Token::Directive {
                 flag,
