@@ -1222,7 +1222,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
-    let alignment = if i.settings.iflags.direct {
+    let alignment = if i.settings.iflags.direct || output_direct {
         io_buffer_alignment()
     } else {
         1
