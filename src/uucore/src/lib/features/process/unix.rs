@@ -5,6 +5,7 @@
 
 // spell-checker:ignore sigwait KTIME timeval itimerval setitimer itimer timerid
 // spell-checker:ignore sigevent sigev sigval itimerspec signo clockid sevp
+// spell-checker:ignore SIGXCPU SIGXFSZ SIGVTALRM SIGPROF
 
 #[cfg(not(any(target_os = "fuchsia", target_os = "haiku")))]
 use libc::pid_t;
