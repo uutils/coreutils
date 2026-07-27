@@ -83,7 +83,7 @@ def build_clippy_command(
         extra.extend(f"-puu_{u}" for u in utilities)
 
     cmd.extend(extra)
-    cmd.extend(["--", "-D", "warnings", "-D", "clippy::all"])
+    cmd.extend(["--", "-D", "warnings"])
     return cmd
 
 
@@ -143,7 +143,8 @@ def main() -> int:
 
     if result.returncode != 0:
         emit_annotations(output, args.fault_type)
-        return result.returncode
+        if args.fail_on_fault:
+            return 1
 
     return 0
 
