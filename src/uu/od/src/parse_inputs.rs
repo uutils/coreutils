@@ -71,13 +71,14 @@ pub fn parse_inputs(matches: &dyn CommandLineOpts) -> Result<CommandLineInputs, 
             let offset = parse_offset_operand(input_strings[input_strings.len() - 1]);
             match offset {
                 Ok(n) => {
-                    // if there is just 1 input (stdin), an offset must start with '+'
-                    if input_strings.len() == 1 && input_strings[0].starts_with('+') {
+                    if let [first] = input_strings[..]
+                        && first.starts_with('+')
+                    {
                         return Ok(CommandLineInputs::FileAndOffset(("-".to_string(), n, None)));
                     }
-                    if input_strings.len() == 2 {
+                    if let [first, _] = input_strings[..] {
                         return Ok(CommandLineInputs::FileAndOffset((
-                            input_strings[0].to_string(),
+                            first.to_string(),
                             n,
                             None,
                         )));
