@@ -316,17 +316,15 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     for srcpath in files {
         let targetpath = if settings.no_dereference && target_dir.is_symlink() {
             let remove_target = || {
+                // Not sure why but on Windows, the symlink can be
+                // considered as a dir
+                // See test_ln::test_symlink_no_deref_dir
                 #[cfg(windows)]
-                if target_dir.is_dir() {
-                    // Not sure why but on Windows, the symlink can be
-                    // considered as a dir
-                    // See test_ln::test_symlink_no_deref_dir
-                    if let Err(e) = fs::remove_dir(target_dir) {
-                        show_error!(
-                            "{}",
-                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                        );
-                    }
+                if let Err(e) = fs::remove_dir(target_dir) {
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
                 }
             };
             match settings.overwrite {
