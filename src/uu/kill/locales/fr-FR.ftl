@@ -20,3 +20,5 @@ kill-error-invalid-signal = { $signal } : signal invalide
 kill-error-parse-argument = échec de l'analyse de l'argument { $argument } : { $error }
 kill-error-sending-signal = échec de l'envoi du signal au processus { $pid }
 kill-error-write = erreur d'écriture : { $error }
+kill-error-stop-unsupported = SIGSTOP n'est pas pris en charge sur Windows
+kill-error-process-groups-unsupported = les groupes de processus ne sont pas pris en charge sur Windows

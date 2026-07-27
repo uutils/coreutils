@@ -29,6 +29,7 @@ help-flag-version = Print version information
 error-io = I/O error
 error-permission-denied = Permission denied
 error-file-not-found = No such file or directory
+error-no-such-process = No such process
 error-invalid-argument = Invalid argument
 error-is-a-directory = { $file }: Is a directory
 

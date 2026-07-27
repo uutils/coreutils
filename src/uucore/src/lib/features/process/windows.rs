@@ -35,6 +35,7 @@ use windows_sys::Win32::System::Threading::{
 use windows_sys::core::BOOL;
 
 use super::{ChildExt, TimeoutRet};
+use crate::translate;
 
 /// Safe wrappers around the raw Win32 calls used for process control: each
 /// validates results into [`io::Error`] and takes
@@ -318,7 +319,7 @@ const PROBE_ACCESS: u32 = PROCESS_SYNCHRONIZE;
 const TERMINATE_ACCESS: u32 = PROCESS_TERMINATE | PROCESS_SYNCHRONIZE;
 
 fn no_such_process() -> io::Error {
-    io::Error::new(io::ErrorKind::NotFound, "No such process")
+    io::Error::new(io::ErrorKind::NotFound, translate!("error-no-such-process"))
 }
 
 /// A process handle becomes signaled when the process exits.
@@ -705,9 +706,10 @@ mod tests {
         child.wait().unwrap();
         // `child` still holds the process handle, pinning the pid: the checks
         // below cannot race a pid reuse.
+        // The message text is asserted end-to-end in tests/by-util/test_kill.rs;
+        // unit tests run without localization initialized.
         let err = send_signal_to_pid(child.id(), 0).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::NotFound);
-        assert_eq!(err.to_string(), "No such process");
         send_signal_to_pid(child.id(), 9).unwrap();
     }
 
