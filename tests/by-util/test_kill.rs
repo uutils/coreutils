@@ -2,39 +2,56 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA
+// spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA CHLD SIGSTOP taskkill unreaped
 use regex::Regex;
+#[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-use std::process::{Child, Command};
+use std::process::{Child, Command, ExitStatus};
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::signals::realtime_signal_bounds;
 use uutests::new_ucmd;
+use uutests::util::get_tests_binary;
 
-// A child process the tests will try to kill.
+// A child process the tests will try to kill: `<coreutils> sleep 30` via the
+// multicall test binary, which exists on every test platform (unlike `sleep`
+// from PATH on Windows). The natural death after 30s avoids hanging failing
+// tests.
 struct Target {
     child: Child,
     killed: bool,
 }
 
 impl Target {
-    // Creates a target that will naturally die after some time if not killed
-    // fast enough.
-    // This timeout avoids hanging failing tests.
     fn new() -> Self {
         Self {
-            child: Command::new("sleep")
-                .arg("30")
+            child: Command::new(get_tests_binary())
+                .args(["sleep", "30"])
                 .spawn()
                 .expect("cannot spawn target"),
             killed: false,
         }
     }
 
-    // Waits for the target to complete and returns the signal it received if any.
-    fn wait_for_signal(&mut self) -> Option<i32> {
-        let sig = self.child.wait().expect("cannot wait on target").signal();
+    /// Wait for the target to exit, so `Drop` no longer has to kill it.
+    fn reap(&mut self) -> ExitStatus {
+        let status = self.child.wait().expect("cannot wait on target");
         self.killed = true;
-        sig
+        status
+    }
+
+    /// Reap the target and assert it was killed by `signal` (`128 + n` exit
+    /// code on windows).
+    fn assert_signaled(&mut self, signal: i32) {
+        let status = self.reap();
+        #[cfg(unix)]
+        assert_eq!(status.signal(), Some(signal));
+        #[cfg(windows)]
+        assert_eq!(status.code(), Some(128 + signal));
+    }
+
+    #[cfg(windows)]
+    fn assert_alive(&mut self) {
+        assert!(self.child.try_wait().expect("cannot poll target").is_none());
     }
 
     fn pid(&self) -> u32 {
@@ -266,10 +283,15 @@ fn test_kill_out_of_range_signal_is_rejected_not_sent() {
             .arg(format!("{}", target.pid()))
             .fails_with_code(1)
             .stderr_contains("invalid signal");
-        // The target must have survived: kill it for real and confirm it was
-        // the SIGKILL we just sent, not an earlier stray SIGTERM.
+        // The target must have survived: kill it for real and confirm the
+        // exit came from std's kill (SIGKILL / code 1), not a stray uu-kill
+        // TERM (which would report 143 on windows).
         target.child.kill().expect("cannot kill surviving target");
-        assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+        let status = target.reap();
+        #[cfg(unix)]
+        assert_eq!(status.signal(), Some(9));
+        #[cfg(windows)]
+        assert_eq!(status.code(), Some(1));
     }
 }
 
@@ -277,7 +299,7 @@ fn test_kill_out_of_range_signal_is_rejected_not_sent() {
 fn test_kill_with_default_signal() {
     let mut target = Target::new();
     new_ucmd!().arg(format!("{}", target.pid())).succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGTERM));
+    target.assert_signaled(15);
 }
 
 #[test]
@@ -287,7 +309,7 @@ fn test_kill_with_signal_number_old_form() {
         .arg("-9")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(9));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -298,7 +320,7 @@ fn test_kill_with_signal_name_old_form() {
             .arg(arg)
             .arg(format!("{}", target.pid()))
             .succeeds();
-        assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+        target.assert_signaled(9);
     }
 }
 
@@ -319,7 +341,7 @@ fn test_kill_with_signal_prefixed_name_old_form() {
         .arg("-SIGKILL")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -330,7 +352,7 @@ fn test_kill_with_signal_number_new_form() {
         .arg("9")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(9));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -341,7 +363,7 @@ fn test_kill_with_signal_name_new_form() {
         .arg("KILL")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -352,7 +374,7 @@ fn test_kill_with_signal_name_new_form_ignore_case() {
         .arg("KiLl")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -363,7 +385,7 @@ fn test_kill_with_signal_prefixed_name_new_form() {
         .arg("SIGKILL")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -374,7 +396,7 @@ fn test_kill_with_signal_prefixed_name_new_form_ignore_case() {
         .arg("SiGKiLl")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGKILL));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -413,7 +435,7 @@ fn test_kill_with_signal_number_hidden_compatibility_option() {
         .arg("9")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(9));
+    target.assert_signaled(9);
 }
 
 #[test]
@@ -585,10 +607,103 @@ fn test_kill_signal_zero_nonexistent() {
     new_ucmd!().arg("-0").arg("999999999").fails();
 }
 
+#[cfg(unix)]
 #[test]
 fn test_kill_signal_zero_current_process_group() {
     // kill -0 0 should succeed (checks current process group)
     new_ucmd!().arg("-0").arg("0").succeeds();
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_help_mentions_taskkill() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("taskkill");
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_int_and_hup_terminate_directly() {
+    for (name, sig) in [("INT", 2), ("HUP", 1)] {
+        let mut target = Target::new();
+        new_ucmd!()
+            .args(&["-s", name, &target.pid().to_string()])
+            .succeeds();
+        target.assert_signaled(sig);
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_ignored_signals_are_noops() {
+    let mut target = Target::new();
+    for sig in ["CHLD", "CONT"] {
+        new_ucmd!()
+            .args(&["-s", sig, &target.pid().to_string()])
+            .succeeds();
+    }
+    target.assert_alive();
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_stop_is_rejected() {
+    let mut target = Target::new();
+    new_ucmd!()
+        .args(&["-s", "STOP", &target.pid().to_string()])
+        .fails_with_code(1)
+        .stderr_contains("SIGSTOP is not supported");
+    target.assert_alive();
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_process_groups_unsupported() {
+    new_ucmd!()
+        .args(&["-0", "0"])
+        .fails_with_code(1)
+        .stderr_contains("process groups are not supported");
+    new_ucmd!()
+        .args(&["-9", "-1"])
+        .fails_with_code(1)
+        .stderr_contains("process groups are not supported");
+    let target = Target::new();
+    new_ucmd!()
+        .arg("--")
+        .arg(format!("-{}", target.pid()))
+        .fails_with_code(1)
+        .stderr_contains("process groups are not supported");
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_nonexistent_pid_no_such_process() {
+    new_ucmd!()
+        .arg("999999999")
+        .fails_with_code(1)
+        .stderr_contains("No such process");
+    new_ucmd!()
+        .args(&["-0", "999999999"])
+        .fails_with_code(1)
+        .stderr_contains("No such process");
+}
+
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_exited_target_with_held_handle() {
+    // The Child handle pins the exited process object: terminating still
+    // succeeds (unix kill-on-unreaped parity) while -0 reports it gone.
+    let mut target = Target::new();
+    target.child.kill().expect("cannot kill target");
+    target.reap();
+    let pid = target.pid().to_string();
+    new_ucmd!().arg(&pid).succeeds();
+    new_ucmd!()
+        .args(&["-0", &pid])
+        .fails_with_code(1)
+        .stderr_contains("No such process");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -601,7 +716,7 @@ fn test_kill_realtime_signal() {
         .arg("RTMIN")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(libc::SIGRTMIN()));
+    target.assert_signaled(libc::SIGRTMIN());
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -616,7 +731,7 @@ fn test_kill_with_rtmax_offset() {
         .arg("SIGRTMAX-7")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(sig));
+    target.assert_signaled(sig);
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -631,5 +746,5 @@ fn test_kill_with_rtmin_offset() {
         .arg("SIGRTMIN+7")
         .arg(format!("{}", target.pid()))
         .succeeds();
-    assert_eq!(target.wait_for_signal(), Some(sig));
+    target.assert_signaled(sig);
 }
