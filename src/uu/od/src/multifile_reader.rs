@@ -119,7 +119,11 @@ impl MultifileReader<'_> {
                             // then move to the next file.
                             // This matches the behavior of the original `od`
                             // Format error without OS error code to match GNU od
-                            let error_msg = uucore::error::strip_errno(&e);
+                            let error_msg = match e.kind() {
+                                io::ErrorKind::NotFound => "No such file or directory".to_owned(),
+                                io::ErrorKind::PermissionDenied => "Permission denied".to_owned(),
+                                _ => uucore::error::strip_errno(&e),
+                            };
                             show_error!("{}: {error_msg}", fname.maybe_quote().external(true));
                             self.any_err = true;
                         }

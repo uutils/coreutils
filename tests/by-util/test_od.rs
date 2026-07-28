@@ -95,6 +95,7 @@ fn test_non_existing_file() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: Unix sockets are not supported")]
 fn test_socket_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     let socket = "socket";
