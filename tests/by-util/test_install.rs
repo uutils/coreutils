@@ -6,13 +6,11 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs::{self, File};
+use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::PathBuf;
 use std::process;
-use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
@@ -786,27 +784,6 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
-fn strip_source_file() -> PathBuf {
-    use std::io::Write as _;
-    static BINARY: OnceLock<PathBuf> = OnceLock::new();
-    BINARY
-        .get_or_init(|| {
-            let dir = std::env::temp_dir();
-            let source = dir.join("hello.rs");
-            let binary = dir.join("hello_bin");
-            let mut file = File::create(&source).unwrap();
-            file.write_all(b"fn main() {}").unwrap();
-            process::Command::new("rustc")
-                .arg("-o")
-                .arg(&binary)
-                .arg(&source)
-                .status()
-                .unwrap();
-            binary
-        })
-        .clone()
-}
-
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
@@ -839,7 +816,7 @@ fn test_install_no_strip_with_program() {
         .ucmd()
         .arg("--strip-program")
         .arg("false")
-        .arg(strip_source_file())
+        .arg("/usr/bin/false") // source file
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .stderr_only(
@@ -973,7 +950,7 @@ fn test_install_and_strip_with_invalid_program() {
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
-        .arg(strip_source_file())
+        .arg("/bin/date") // source file
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
@@ -1009,7 +986,7 @@ fn test_install_and_strip_with_non_existent_program() {
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
-        .arg(strip_source_file())
+        .arg("/bin/false") // source file
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("No such file or directory");
