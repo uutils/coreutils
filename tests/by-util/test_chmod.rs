@@ -551,6 +551,26 @@ fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
 }
 
 #[test]
+fn test_chmod_preserve_root_symlink_during_recursion() {
+    // The failsafe must be re-checked during the descent, not only for the
+    // operands: with -L, a symlink met inside the tree that resolves to '/'
+    // would otherwise be recursed into.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.symlink_dir("/", "tree/link");
+
+    ucmd.arg("-R")
+        .arg("-L")
+        .arg("--preserve-root")
+        .arg("755")
+        .arg("tree")
+        .fails_with_code(1)
+        .stderr_contains(
+            "chmod: it is dangerous to operate recursively on 'tree/link' (same as '/')",
+        );
+}
+
+#[test]
 fn test_chmod_symlink_non_existing_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

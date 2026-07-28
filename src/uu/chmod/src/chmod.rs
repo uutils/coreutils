@@ -36,6 +36,8 @@ enum ChmodError {
     NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
     PreserveRoot(PathBuf),
+    #[error("{}", translate!("chmod-error-preserve-root-same-as", "file" => _0.quote()))]
+    PreserveRootSameAs(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
@@ -424,6 +426,17 @@ impl Chmoder {
         matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
     }
 
+    /// `--preserve-root` guard for the recursive descent.
+    ///
+    /// The operand loop in [`Self::chmod`] only checks the paths named on the
+    /// command line. With `-L`, a symlink met *inside* the tree can resolve to
+    /// `/`, so the failsafe has to be re-checked at every descent or the
+    /// recursion walks straight into the real root. Only symlinks are
+    /// canonicalized, so ordinary trees pay nothing for this.
+    fn descends_into_root(&self, path: &Path) -> bool {
+        self.preserve_root && path.is_symlink() && Self::is_root(path)
+    }
+
     // Non-safe traversal implementation for platforms without safe_traversal support
     #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(
@@ -432,6 +445,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -503,6 +522,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode
