@@ -26,7 +26,7 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin}
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
 
@@ -521,6 +521,12 @@ struct ByteChunkWriter<'a> {
 
     /// Iterator that yields filenames for each chunk.
     filename_iterator: FilenameIterator<'a>,
+
+    /// Current filename being written to.
+    current_filename: OsString,
+
+    /// Whether an error has already been reported for the current file.
+    error_reported: bool,
 }
 
 impl<'a> ByteChunkWriter<'a> {
@@ -540,7 +546,44 @@ impl<'a> ByteChunkWriter<'a> {
             num_chunks_written: 0,
             inner,
             filename_iterator,
+            current_filename: filename,
+            error_reported: false,
         })
+    }
+
+    /// Report a write error on the current chunk, at most once per chunk.
+    ///
+    /// Returns an empty error: the message is already out, so the caller only
+    /// has to stop, without printing anything else.
+    fn report_error(&mut self, e: &io::Error) -> io::Error {
+        if !self.error_reported {
+            uucore::show_error!("{}: {}", self.current_filename.display(), strip_errno(e));
+            set_exit_code(1);
+            self.error_reported = true;
+        }
+        io::Error::other("")
+    }
+
+    /// Write to the current chunk, flushing right away.
+    ///
+    /// Without the flush, a write failure on a full device would only surface
+    /// when the buffer happens to be flushed, by which point we have moved on
+    /// to another chunk and would blame the wrong file.
+    fn write_chunk(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let written = custom_write(bytes, &mut self.inner, self.settings)
+            .and_then(|n| self.inner.flush().map(|()| n));
+        match written {
+            Err(e) if ignorable_io_error(&e, self.settings) => Ok(bytes.len()),
+            Err(e) => Err(self.report_error(&e)),
+            ok => ok,
+        }
+    }
+}
+
+impl Drop for ByteChunkWriter<'_> {
+    fn drop(&mut self) {
+        // Safety net: a buffered error must not be lost when the writer goes away.
+        let _ = self.inner.flush().map_err(|e| self.report_error(&e));
     }
 }
 
@@ -555,6 +598,10 @@ impl Write for ByteChunkWriter<'_> {
         let mut carryover_bytes_written: usize = 0;
         while !buf.is_empty() {
             if self.num_bytes_remaining_in_current_chunk == 0 {
+                // Flush before switching file, so a delayed write error is
+                // still attributed to the chunk it belongs to.
+                self.inner.flush().map_err(|e| self.report_error(&e))?;
+
                 // Increment the chunk number, reset the number of bytes remaining, and instantiate the new underlying writer.
                 self.num_chunks_written += 1;
                 self.num_bytes_remaining_in_current_chunk = self.chunk_size;
@@ -567,6 +614,8 @@ impl Write for ByteChunkWriter<'_> {
                     writeln!(io::stdout(), "creating file {}", filename.quote())?;
                 }
                 self.inner = self.settings.instantiate_current_writer(&filename, true)?;
+                self.current_filename = filename;
+                self.error_reported = false;
             }
 
             // If the capacity of this chunk is greater than the number of
@@ -575,7 +624,7 @@ impl Write for ByteChunkWriter<'_> {
             // the chunk number and repeat.
             let buf_len = buf.len();
             if (buf_len as u64) < self.num_bytes_remaining_in_current_chunk {
-                let num_bytes_written = custom_write(buf, &mut self.inner, self.settings)?;
+                let num_bytes_written = self.write_chunk(buf)?;
                 self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
                 return Ok(carryover_bytes_written + num_bytes_written);
             }
@@ -586,7 +635,7 @@ impl Write for ByteChunkWriter<'_> {
             // self.num_bytes_remaining_in_current_chunk is lower than
             // n, which is already usize.
             let i = self.num_bytes_remaining_in_current_chunk as usize;
-            let num_bytes_written = custom_write(&buf[..i], &mut self.inner, self.settings)?;
+            let num_bytes_written = self.write_chunk(&buf[..i])?;
             self.num_bytes_remaining_in_current_chunk -= num_bytes_written as u64;
 
             // It's possible that the underlying writer did not
@@ -604,7 +653,7 @@ impl Write for ByteChunkWriter<'_> {
         Ok(carryover_bytes_written)
     }
     fn flush(&mut self) -> io::Result<()> {
-        self.inner.flush()
+        self.inner.flush().map_err(|e| self.report_error(&e))
     }
 }
 
@@ -1359,8 +1408,15 @@ fn split(settings: &Settings) -> UResult<()> {
         Strategy::Bytes(chunk_size) => {
             let mut writer = ByteChunkWriter::new(chunk_size, settings)?;
             // todo: distinct read error and write error
-            io::copy(&mut reader, &mut writer)?;
-            Ok(())
+            match io::copy(&mut reader, &mut writer) {
+                Ok(_) => Ok(()),
+                // The writer already reported the write error and set the exit
+                // code, and signals that with an empty error: stay quiet here.
+                Err(e) if e.kind() == ErrorKind::Other && e.to_string().is_empty() => {
+                    Err(USimpleError::new(1, ""))
+                }
+                Err(e) => Err(e.into()),
+            }
         }
         Strategy::LineBytes(chunk_size) => {
             line_bytes(settings, &mut reader, chunk_size as usize, io_blksize)
