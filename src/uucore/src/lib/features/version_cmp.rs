@@ -18,8 +18,7 @@ fn version_non_digit_cmp(a: &[u8], b: &[u8]) -> Ordering {
             (Some(c1), Some(c2)) if c1 == c2 => {}
             (None, None) => return Ordering::Equal,
             (_, Some(b'~')) => return Ordering::Greater,
-            (Some(b'~'), _) => return Ordering::Less,
-            (None, Some(_)) => return Ordering::Less,
+            (Some(b'~'), _) | (None, Some(_)) => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(c1), Some(c2)) if c1.is_ascii_alphabetic() && !c2.is_ascii_alphabetic() => {
                 return Ordering::Less;

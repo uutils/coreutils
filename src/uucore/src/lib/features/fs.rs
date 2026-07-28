@@ -329,11 +329,10 @@ enum OwningComponent {
 impl OwningComponent {
     fn as_os_str(&self) -> &OsStr {
         match self {
-            Self::Prefix(s) => s.as_os_str(),
+            Self::Prefix(s) | Self::Normal(s) => s.as_os_str(),
             Self::RootDir => Component::RootDir.as_os_str(),
             Self::CurDir => Component::CurDir.as_os_str(),
             Self::ParentDir => Component::ParentDir.as_os_str(),
-            Self::Normal(s) => s.as_os_str(),
         }
     }
 }

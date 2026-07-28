@@ -87,8 +87,8 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
     match (stdin_ok, readable, writable, options.interactive) {
-        (false, _, _, InteractiveMode::PromptProtected) => true,
-        (false, false, false, InteractiveMode::Never) => true,
+        (false, _, _, InteractiveMode::PromptProtected)
+        | (false, false, false, InteractiveMode::Never) => true,
         (_, false, false, _) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()

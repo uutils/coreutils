@@ -203,8 +203,7 @@ impl Column {
         match self {
             // 14 = length of "Filesystem" plus 4 spaces
             Self::Source => 14,
-            Self::Used => 5,
-            Self::Size => 5,
+            Self::Used | Self::Size => 5,
             // the shortest headers have a length of 4 chars so we use that as the minimum width
             _ => 4,
         }

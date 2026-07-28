@@ -479,13 +479,9 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             )
         };
         match e {
-            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_)
+            | EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _)
+            | EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
                 USimpleError::new(125, e.to_string())
             }
             EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
