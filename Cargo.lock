@@ -4338,6 +4338,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "uucore",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

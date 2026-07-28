@@ -703,13 +703,11 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-O", "nonexistent_file"])
@@ -749,7 +747,6 @@ fn test_file_owned_by_egid() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_egid() {
     new_ucmd!()
         .args(&["-G", "nonexistent_file"])
@@ -770,6 +767,24 @@ fn test_file_not_owned_by_egid() {
 
     new_ucmd!()
         .args(&["-f", target_file, "-a", "!", "-G", target_file])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_owned_by_current_group_windows() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_not_owned_by_current_token_windows() {
+    // The system directory belongs to TrustedInstaller, so it is owned neither
+    // by the user nor by the Administrators group an elevated shell runs as.
+    let system_root = std::env::var("SystemRoot").expect("SystemRoot is not set");
+
+    new_ucmd!()
+        .args(&["-d", &system_root, "-a", "!", "-O", &system_root])
         .succeeds();
 }
 
@@ -964,7 +979,6 @@ fn test_bracket_syntax_version() {
 
 #[test]
 #[allow(non_snake_case)]
-#[cfg(unix)]
 fn test_file_N() {
     use std::{fs::FileTimes, time::Duration};
 
@@ -980,6 +994,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH);
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).fails();
 
@@ -990,6 +1005,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).succeeds();
 }
