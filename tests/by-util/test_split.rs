@@ -2115,3 +2115,26 @@ fn test_io_error() {
         //todo: add file path with proper distinction of input/output
         .stderr_contains("Input/output error\n");
 }
+
+/// Writing a chunk to a full device must be reported and must stop the split.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_on_full_device() {
+    if !Path::new("/dev/full").exists() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The first chunk lands on /dev/full, so its write can never succeed.
+    at.symlink_file("/dev/full", "xaa");
+    at.write("input", "uv");
+
+    ucmd.args(&["-b", "1", "input"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("split: xaa: No space left on device");
+
+    // split must not have moved on to the next chunk.
+    assert!(!at.file_exists("xab"));
+}
