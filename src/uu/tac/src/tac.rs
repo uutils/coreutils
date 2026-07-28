@@ -293,8 +293,7 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
             }
             b'$' if !inside_brackets && !is_escaped => {
                 let next_is_anchor_position = match bytes.get(i + 1) {
-                    None => true,
-                    Some(b')' | b'|') => true,
+                    None | Some(b')' | b'|') => true,
                     Some(b'\\') => {
                         // Peek two ahead to see if it's \) or \|
                         matches!(bytes.get(i + 2), Some(b')' | b'|'))

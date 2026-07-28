@@ -256,9 +256,8 @@ impl Iterator for FileLines<'_> {
     fn next(&mut self) -> Option<Line> {
         let mut buf = Vec::new();
         match self.reader.read_until(b'\n', &mut buf) {
-            Ok(0) => return None,
+            Ok(0) | Err(_) => return None,
             Ok(_) => {}
-            Err(_) => return None,
         }
         if buf.ends_with(b"\n") {
             buf.pop();
