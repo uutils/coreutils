@@ -6695,6 +6695,47 @@ fn test_cp_parents_symlink_permissions_file() {
     );
 }
 
+/// The finalize chmod goes through a parent-fd + `NoFollow` chmod rather than a
+/// path-based `set_permissions`. Pin the modes it is responsible for, including
+/// the setuid and read-only cases, so the no-follow path cannot silently stop
+/// applying them.
+#[test]
+#[cfg(unix)]
+fn test_cp_preserve_mode_via_nofollow_chmod() {
+    for mode in [0o644, 0o600, 0o755, 0o444, 0o4755] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.write("src", "hi");
+        at.set_mode("src", mode);
+
+        scene.ucmd().args(&["-p", "src", "dst"]).succeeds();
+
+        assert_eq!(
+            at.metadata("dst").permissions().mode() & 0o7777,
+            mode,
+            "cp -p did not reproduce mode {mode:o}"
+        );
+    }
+}
+
+/// Overwriting an existing destination keeps the destination's mode, not the
+/// source's — the other branch feeding the same chmod.
+#[test]
+#[cfg(unix)]
+fn test_cp_existing_dest_keeps_its_mode() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("src", "new");
+    at.set_mode("src", 0o600);
+    at.write("dst", "old");
+    at.set_mode("dst", 0o640);
+
+    scene.ucmd().args(&["src", "dst"]).succeeds();
+
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, 0o640);
+    assert_eq!(at.read("dst"), "new");
+}
+
 /// Test the behavior of preserving permissions of parents when copying through
 /// a symlink when source is a dir.
 #[test]
