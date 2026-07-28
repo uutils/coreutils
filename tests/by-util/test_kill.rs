@@ -654,7 +654,7 @@ fn test_kill_windows_stop_is_rejected() {
     new_ucmd!()
         .args(&["-s", "STOP", &target.pid().to_string()])
         .fails_with_code(1)
-        .stderr_contains("SIGSTOP is not supported");
+        .stderr_contains("unsupported signal");
     target.assert_alive();
 }
 

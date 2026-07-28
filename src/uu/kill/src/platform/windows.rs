@@ -20,7 +20,7 @@ fn unsupported(message: String) -> io::Error {
 
 pub(crate) fn send_signal(pid: i32, sig: usize) -> io::Result<()> {
     if sig == SIGNAL_STOP {
-        return Err(unsupported(translate!("kill-error-stop-unsupported")));
+        return Err(unsupported(translate!("kill-error-unsupported-signal")));
     }
     match u32::try_from(pid) {
         Ok(pid) if pid != 0 => send_signal_to_pid(pid, sig),
