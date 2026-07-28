@@ -114,37 +114,31 @@ fn main() {
             _ => {}
         }
 
-        match utils.get(util) {
-            Some(&(uumain, _)) => {
-                // TODO: plug the deactivation of the translation
-                // and load the English strings directly at compilation time in the
-                // binary to avoid the load of the flt
-                // Could be something like:
-                // #[cfg(not(feature = "only_english"))]
-                validation::setup_localization_or_exit(util);
-                process::exit(uumain(vec![util_os].into_iter().chain(args)));
-            }
-            None => {
-                // GNU coreutils --help string shows help for coreutils
-                if util == "--help" || util == "-h" {
-                    usage(&utils, binary_as_util);
-                    process::exit(0);
-                } else if util.starts_with('-') {
-                    // Argument looks like an option but wasn't recognized
-                    validation::unrecognized_option(binary_as_util, &util_os);
-                } else {
-                    validation::not_found(&util_os);
-                }
-            }
+        if let Some(&(uumain, _)) = utils.get(util) {
+            // TODO: plug the deactivation of the translation
+            // and load the English strings directly at compilation time in the
+            // binary to avoid the load of the flt
+            // Could be something like:
+            // #[cfg(not(feature = "only_english"))]
+            validation::setup_localization_or_exit(util);
+            process::exit(uumain(vec![util_os].into_iter().chain(args)));
         }
-    } else {
-        // GNU just fails, but busybox tests needs usage
-        // todo: patch the test suite instead
-        if binary_as_util.ends_with("box") {
+        // GNU coreutils --help string shows help for coreutils
+        if util == "--help" || util == "-h" {
             usage(&utils, binary_as_util);
-        } else {
-            let _ = writeln!(io::stderr(), "coreutils: missing argument");
+            process::exit(0);
+        } else if util.starts_with('-') {
+            // Argument looks like an option but wasn't recognized
+            validation::unrecognized_option(binary_as_util, &util_os);
         }
-        process::exit(1);
+        validation::not_found(&util_os);
     }
+    // GNU just fails, but busybox tests needs usage
+    // todo: patch the test suite instead
+    if binary_as_util.ends_with("box") {
+        usage(&utils, binary_as_util);
+    } else {
+        let _ = writeln!(io::stderr(), "coreutils: missing argument");
+    }
+    process::exit(1);
 }
