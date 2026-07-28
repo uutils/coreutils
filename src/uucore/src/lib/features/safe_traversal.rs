@@ -444,7 +444,15 @@ impl DirFd {
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
+        // O_NOFOLLOW: `openat` anchors the *directory*, not the final component,
+        // so without it a symlink planted at `name` is still followed and its
+        // target truncated. Callers reach here right after unlinking `name`,
+        // which is precisely the window an attacker races.
+        let flags = OFlag::O_CREAT
+            | OFlag::O_WRONLY
+            | OFlag::O_TRUNC
+            | OFlag::O_CLOEXEC
+            | OFlag::O_NOFOLLOW;
         let mode = Mode::from_bits_truncate(0o666); // Default file permissions
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
@@ -1283,6 +1291,23 @@ mod tests {
 
         let content = fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "new");
+    }
+
+    #[test]
+    fn test_open_file_at_refuses_symlink() {
+        // A symlink planted at the final component must not be followed:
+        // otherwise the O_TRUNC would destroy the link's target.
+        let temp_dir = TempDir::new().unwrap();
+        let victim = temp_dir.path().join("victim");
+        fs::write(&victim, "SECRET").unwrap();
+        symlink(&victim, temp_dir.path().join("link")).unwrap();
+
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+        assert!(
+            dir_fd.open_file_at(OsStr::new("link")).is_err(),
+            "open_file_at followed a symlink at the final component"
+        );
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "SECRET");
     }
 
     #[test]
