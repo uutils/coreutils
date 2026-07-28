@@ -339,7 +339,6 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo
         | PathCondition::GroupIdFlag
-        | PathCondition::Readable
         | PathCondition::Socket
         | PathCondition::Sticky
         | PathCondition::SymLink
