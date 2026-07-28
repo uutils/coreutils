@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore FLT DBL
+// spell-checker:ignore FLT DBL subnormals
 
 use half::{bf16, f16};
 
@@ -80,7 +80,9 @@ impl FloatKind {
     /// Whether `repr` parses back to exactly `value` at this precision.
     fn round_trips(self, repr: &str, value: f64) -> bool {
         match self {
-            Self::Single => repr.parse::<f32>().is_ok_and(|parsed| parsed == value as f32),
+            Self::Single => repr
+                .parse::<f32>()
+                .is_ok_and(|parsed| parsed == value as f32),
             Self::Double => repr.parse::<f64>().is_ok_and(|parsed| parsed == value),
         }
     }
@@ -254,7 +256,7 @@ mod tests {
         assert_eq!(single(0.25), "0.25");
         assert_eq!(single(0.0625), "0.0625");
         assert_eq!(single(0.1), "0.1");
-        assert_eq!(single(3.141_592_7), "3.1415927");
+        assert_eq!(single(std::f32::consts::PI), "3.1415927");
         assert_eq!(single(1_234_567.0), "1234567");
         assert_eq!(single(-1.0), "-1");
         assert_eq!(single(-1_234_567.0), "-1234567");
@@ -321,7 +323,10 @@ mod tests {
     #[test]
     fn f64_subnormals() {
         assert_eq!(double(1e-308), "1e-308");
-        assert_eq!(double(2.225_073_858_507_201_4e-308), "2.2250738585072014e-308");
+        assert_eq!(
+            double(2.225_073_858_507_201_4e-308),
+            "2.2250738585072014e-308"
+        );
         assert_eq!(double(4e-320), "4e-320");
         assert_eq!(double(5e-324), "5e-324");
     }
@@ -380,6 +385,9 @@ mod tests {
             format_item_f16(f64::from(f16::from_bits(0x8400))).trim(),
             "-6.1035156e-05"
         );
-        assert_eq!(format_item_f16(f64::from(f16::from_f32(0.25))).trim(), "0.25");
+        assert_eq!(
+            format_item_f16(f64::from(f16::from_f32(0.25))).trim(),
+            "0.25"
+        );
     }
 }
