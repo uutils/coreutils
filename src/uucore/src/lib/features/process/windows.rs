@@ -27,7 +27,7 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
-use windows_sys::Win32::Foundation::{ERROR_ACCESS_DENIED, ERROR_INVALID_PARAMETER};
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT};
 use windows_sys::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, INFINITE, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
@@ -45,7 +45,7 @@ pub mod sys {
     use std::os::windows::io::{AsRawHandle, BorrowedHandle, HandleOrNull, OwnedHandle};
 
     use windows_sys::Win32::Foundation::{
-        FALSE, HANDLE, TRUE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        ERROR_INVALID_PARAMETER, FALSE, HANDLE, TRUE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
     };
     use windows_sys::Win32::System::Console::{
         GenerateConsoleCtrlEvent, PHANDLER_ROUTINE, SetConsoleCtrlHandler,
@@ -123,10 +123,20 @@ pub mod sys {
     }
 
     /// Open `pid` with exactly `desired_access`; the handle is non-inheritable.
+    ///
+    /// Dead, never-allocated and idle (0) pids report `ERROR_INVALID_PARAMETER`,
+    /// reported here as the POSIX ESRCH analog. `ERROR_ACCESS_DENIED` stays raw:
+    /// its kind already renders "Permission denied", like unix EPERM.
     pub fn open_process(pid: u32, desired_access: u32) -> io::Result<OwnedHandle> {
         // SAFETY: OpenProcess returns null on failure, otherwise a fresh
         // handle owned by us — the `cvt_created_handle` contract.
-        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }
+        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }.map_err(|error| {
+            if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+                super::no_such_process()
+            } else {
+                error
+            }
+        })
     }
 
     /// Create an unnamed manual-reset event, initially unsignaled.
@@ -330,25 +340,9 @@ fn has_exited(handle: BorrowedHandle) -> io::Result<bool> {
     ))
 }
 
-// OpenProcess reports dead and never-allocated pids as ERROR_INVALID_PARAMETER;
-// the custom message matches unix ESRCH stderr. ERROR_ACCESS_DENIED stays raw
-// (already renders "Permission denied", like unix EPERM).
-fn map_open_error(error: io::Error) -> io::Error {
-    if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
-        no_such_process()
-    } else {
-        error
-    }
-}
-
 /// Deliver `signal` (POSIX numbering) to the arbitrary process `pid`,
 /// emulating `kill(2)` for `pid > 0`. `SeDebugPrivilege` is never enabled.
 pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
-    // pid 0 is the System Idle Process; its ERROR_INVALID_PARAMETER would
-    // masquerade as ESRCH.
-    if pid == 0 {
-        return Err(io::ErrorKind::InvalidInput.into());
-    }
     match disposition(signal)? {
         Disposition::Probe | Disposition::Ignore => probe_pid(pid),
         Disposition::Interrupt | Disposition::Terminate => terminate_pid(pid, signal),
@@ -358,7 +352,7 @@ pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
 /// Ok while `pid` runs, "No such process" once it has exited, even if open
 /// handles still pin its pid.
 fn probe_pid(pid: u32) -> io::Result<()> {
-    let handle = sys::open_process(pid, PROBE_ACCESS).map_err(map_open_error)?;
+    let handle = sys::open_process(pid, PROBE_ACCESS)?;
     if has_exited(handle.as_handle())? {
         return Err(no_such_process());
     }
@@ -366,7 +360,7 @@ fn probe_pid(pid: u32) -> io::Result<()> {
 }
 
 fn terminate_pid(pid: u32, signal: usize) -> io::Result<()> {
-    let handle = sys::open_process(pid, TERMINATE_ACCESS).map_err(map_open_error)?;
+    let handle = sys::open_process(pid, TERMINATE_ACCESS)?;
     match terminate_with_signal(handle.as_handle(), signal) {
         // An already-exited target also reports ERROR_ACCESS_DENIED; it
         // counts as delivered, like unix kill on an unreaped process.
@@ -714,15 +708,22 @@ mod tests {
     }
 
     #[test]
-    fn send_signal_to_pid_rejects_invalid_input_before_any_open() {
-        let own_pid = std::process::id();
+    fn send_signal_to_pid_rejects_invalid_signal_before_any_open() {
         assert_eq!(
-            send_signal_to_pid(0, 9).unwrap_err().kind(),
+            send_signal_to_pid(std::process::id(), 64)
+                .unwrap_err()
+                .kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn send_signal_to_pid_reports_idle_pid_as_missing() {
+        // OpenProcess rejects the System Idle Process like any pid that names
+        // no process.
         assert_eq!(
-            send_signal_to_pid(own_pid, 64).unwrap_err().kind(),
-            io::ErrorKind::InvalidInput
+            send_signal_to_pid(0, 9).unwrap_err().kind(),
+            io::ErrorKind::NotFound
         );
     }
 }
