@@ -12,6 +12,7 @@ use clap::{Arg, ArgAction, Command};
 use jiff::fmt::strtime::{self, BrokenDownTime, Config, PosixCustom};
 use jiff::tz::{Offset, TimeZone, TimeZoneDatabase};
 use jiff::{Timestamp, Zoned};
+use parse_datetime::{ExtendedDateTime, ParsedDateTime};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fs::File;
@@ -364,18 +365,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Zoned::now()
     };
 
-    let set_to = match matches
-        .get_one::<String>(OPT_SET)
-        .map(|s| parse_date(s, &now, DebugOptions::new(debug_mode, true)))
-    {
+    let set_to = match matches.get_one::<String>(OPT_SET) {
         None => None,
-        Some(Err((input, _err))) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => input),
-            ));
-        }
-        Some(Ok(date)) => Some(date),
+        Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
+            Ok(ParsedDateTime::InRange(date)) => Some(date),
+            Ok(ParsedDateTime::Extended(_)) | Err(_) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("date-error-invalid-date", "date" => input),
+                ));
+            }
+        },
     };
 
     let settings = Settings {
@@ -390,12 +390,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_system_datetime(convert_for_set(date, settings.utc));
     }
 
+    let allow_extended = matches!(settings.format, Format::Default);
+    let output_time_zone = now.time_zone().clone();
+
     // Iterate over all dates - whether it's a single date or a file.
     let dates: Box<dyn Iterator<Item = _>> = match settings.date_source {
         DateSource::Human(ref input) => {
             // GNU compatibility (Comments in parentheses)
             let input = strip_parenthesized_comments(input);
             let input = input.trim();
+            let parse = |input: &str, warn_midnight| {
+                parse_date(
+                    input,
+                    &now,
+                    DebugOptions::new(settings.debug, warn_midnight),
+                    allow_extended,
+                )
+            };
 
             // GNU compatibility (Empty string):
             // An empty string (or whitespace-only) should be treated as midnight today.
@@ -447,7 +458,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         "date: warning: using midnight as starting time: 00:00:00"
                     );
                 }
-                parse_date(composed, &now, DebugOptions::new(settings.debug, false))
+                parse(&composed, false)
             } else if let Some((total_hours, day_delta)) = military_tz_with_offset {
                 // Military timezone with optional hour offset
                 // Convert to UTC time: midnight + military_tz_offset + additional_hours
@@ -467,7 +478,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     DayDelta::Previous => format_date_with_epoch_fallback(now.yesterday()),
                 };
                 let composed = format!("{date_part} {total_hours:02}:00:00 +00:00");
-                parse_date(composed, &now, DebugOptions::new(settings.debug, false))
+                parse(&composed, false)
             } else if is_pure_digits {
                 // Derive HH and MM from the digits
                 let (hh_opt, mm_opt) = if time_digits.len() <= 2 {
@@ -493,13 +504,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     } else {
                         format!("{date_part} {hh:02}:{mm:02} {offset}")
                     };
-                    parse_date(composed, &now, DebugOptions::new(settings.debug, false))
+                    parse(&composed, false)
                 } else {
                     // Fallback on parse failure of digits
-                    parse_date(input, &now, DebugOptions::new(settings.debug, true))
+                    parse(input, true)
                 }
             } else {
-                parse_date(input, &now, DebugOptions::new(settings.debug, true))
+                parse(input, true)
             };
 
             let iter = std::iter::once(date);
@@ -509,6 +520,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             std::io::stdin(),
             &now,
             DebugOptions::new(settings.debug, true),
+            allow_extended,
         ),
         DateSource::File(ref path) => {
             if path.is_dir() {
@@ -519,7 +531,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
-            parse_dates_from_reader(file, &now, DebugOptions::new(settings.debug, true))
+            parse_dates_from_reader(
+                file,
+                &now,
+                DebugOptions::new(settings.debug, true),
+                allow_extended,
+            )
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
@@ -532,17 +549,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 )
             })?;
             let date = ts.to_zoned(TimeZone::try_system().unwrap_or(TimeZone::UTC));
-            let iter = std::iter::once(Ok(date));
+            let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
         }
         DateSource::Resolution => {
             let resolution = get_clock_resolution();
             let date = resolution.to_zoned(TimeZone::system());
-            let iter = std::iter::once(Ok(date));
+            let iter = std::iter::once(Ok(ParsedDateTime::InRange(date)));
             Box::new(iter)
         }
         DateSource::Now => {
-            let iter = std::iter::once(Ok(now));
+            let iter = std::iter::once(Ok(ParsedDateTime::InRange(now)));
             Box::new(iter)
         }
     };
@@ -555,19 +572,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     for date in dates {
         match date {
             Ok(date) => {
-                let date = if settings.utc {
-                    date.with_time_zone(TimeZone::UTC)
-                } else {
-                    date
-                };
                 let skip_localization =
                     matches!(settings.format, Format::Rfc5322 | Format::Rfc3339(_));
-                match format_date_with_locale_aware_months(
-                    &date,
-                    format_string,
-                    &config,
-                    skip_localization,
-                ) {
+                let formatted = match date {
+                    ParsedDateTime::InRange(date) => {
+                        let date = if settings.utc {
+                            date.with_time_zone(TimeZone::UTC)
+                        } else {
+                            date
+                        };
+                        format_date_with_locale_aware_months(
+                            &date,
+                            format_string,
+                            &config,
+                            skip_localization,
+                        )
+                    }
+                    ParsedDateTime::Extended(date) => {
+                        format_extended_default(&date, format_string, &config, &output_time_zone)
+                    }
+                };
+                match formatted {
                     Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
                         USimpleError::new(1, translate!("date-error-write", "error" => e))
                     })?,
@@ -719,7 +744,7 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
         return fmt.to_string();
     }
 
-    let seconds = parse_datetime::ParsedDateTime::InRange(date.clone())
+    let seconds = ParsedDateTime::InRange(date.clone())
         .unix_epoch_second()
         .to_string();
 
@@ -744,6 +769,77 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
         }
     }
     out
+}
+
+fn format_extended_default(
+    date: &ExtendedDateTime,
+    format_string: &str,
+    config: &Config<PosixCustom>,
+    output_time_zone: &TimeZone,
+) -> Result<String, String> {
+    // Apply the output timezone to an equivalent in-range instant, then let the
+    // existing formatter handle every field except the real extended year.
+    let utc = ExtendedDateTime::from_unix_seconds(date.unix_seconds(), date.nanosecond, 0)
+        .map_err(str::to_string)?;
+    let surrogate = jiff::civil::DateTime::new(
+        surrogate_year(utc.year),
+        utc.month as i8,
+        utc.day as i8,
+        utc.hour as i8,
+        utc.minute as i8,
+        utc.second as i8,
+        utc.nanosecond as i32,
+    )
+    .map_err(|e| e.to_string())?
+    .to_zoned(TimeZone::UTC)
+    .map_err(|e| e.to_string())?
+    .with_time_zone(output_time_zone.clone());
+    let output = ExtendedDateTime::from_unix_seconds(
+        date.unix_seconds(),
+        date.nanosecond,
+        surrogate.offset().seconds(),
+    )
+    .map_err(str::to_string)?;
+    let format_string = substitute_extended_year(format_string, output.year)?;
+
+    format_date_with_locale_aware_months(&surrogate, &format_string, config, false)
+}
+
+fn surrogate_year(year: u32) -> i16 {
+    // The Gregorian calendar and recurring timezone rules repeat every 400 years.
+    const BASE: i64 = 9_599;
+    (BASE + (i64::from(year) - BASE).rem_euclid(400)) as i16
+}
+
+fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, String> {
+    let mut output = String::with_capacity(format_string.len() + 8);
+    let mut chars = format_string.chars().peekable();
+    let year = year.to_string();
+    let mut replaced = false;
+
+    while let Some(ch) = chars.next() {
+        if ch != '%' {
+            output.push(ch);
+            continue;
+        }
+
+        match chars.next() {
+            Some('%') => output.push_str("%%"),
+            Some('Y') => {
+                output.push_str(&year);
+                replaced = true;
+            }
+            Some(specifier) => {
+                output.push('%');
+                output.push(specifier);
+            }
+            None => output.push('%'),
+        }
+    }
+
+    replaced
+        .then_some(output)
+        .ok_or_else(|| "default date format does not contain %Y".to_string())
 }
 
 fn format_date_with_locale_aware_months(
@@ -934,8 +1030,6 @@ fn try_parse_with_abbreviation<S: AsRef<str>>(date_str: S, now: &Zoned) -> Optio
     Some(zoned.with_time_zone(now.time_zone().clone()))
 }
 
-/// Parse a `String` into a `DateTime`.
-/// If it fails, return a tuple of the `String` along with its `ParseError`.
 /// Helper function to parse dates from a line-based reader (stdin or file)
 ///
 /// Takes any `Read` source, reads it line by line, and parses each line as a date.
@@ -944,27 +1038,25 @@ fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
     dbg_opts: DebugOptions,
-) -> Box<dyn Iterator<Item = Result<Zoned, (String, parse_datetime::ParseDateTimeError)>> + '_> {
+    allow_extended: bool,
+) -> Box<
+    dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
+> {
     let lines = BufReader::new(reader).lines();
     Box::new(
         lines
             .map_while(Result::ok)
-            .map(move |s| parse_date(s, now, dbg_opts)),
+            .map(move |s| parse_date(s, now, dbg_opts, allow_extended)),
     )
 }
 
-///
-/// **Update for parse_datetime 0.13:**
-/// - parse_datetime 0.11: returned `chrono::DateTime` → required conversion to `jiff::Zoned`
-/// - parse_datetime 0.13: returns `jiff::Zoned` directly → no conversion needed
-///
-/// This change was necessary to fix issue #8754 (parsing large second values like
-/// "12345.123456789 seconds ago" which failed in 0.11 but works in 0.13).
-fn parse_date<S: AsRef<str> + Clone>(
+/// Parse a string into either an in-range [`Zoned`] value or an extended date.
+fn parse_date<S: AsRef<str>>(
     s: S,
     now: &Zoned,
     dbg_opts: DebugOptions,
-) -> Result<Zoned, (String, parse_datetime::ParseDateTimeError)> {
+    allow_extended: bool,
+) -> Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)> {
     let input_str = s.as_ref();
 
     if dbg_opts.debug {
@@ -988,21 +1080,13 @@ fn parse_date<S: AsRef<str> + Clone>(
             let tz_display = zoned.time_zone().iana_name().unwrap_or("system default");
             let _ = writeln!(err, "date: input timezone: {tz_display}");
         }
-        return Ok(zoned);
+        return Ok(ParsedDateTime::InRange(zoned));
     }
 
     match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
         // Convert to system timezone for display
         // (parse_datetime returns a value in the input's timezone)
-        Ok(parsed) => {
-            // Out-of-range years (the `Extended` variant) can't be represented
-            // as a `Zoned`; treat them as an unparseable input.
-            let Some(date) = parsed.into_zoned() else {
-                return Err((
-                    input_str.into(),
-                    parse_datetime::ParseDateTimeError::InvalidInput,
-                ));
-            };
+        Ok(ParsedDateTime::InRange(date)) => {
             let result = date.timestamp().to_zoned(now.time_zone().clone());
             if dbg_opts.debug {
                 // Show final parsed date and time
@@ -1035,8 +1119,13 @@ fn parse_date<S: AsRef<str> + Clone>(
                     }
                 }
             }
-            Ok(result)
+            Ok(ParsedDateTime::InRange(result))
         }
+        Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
+        Ok(ParsedDateTime::Extended(_)) => Err((
+            input_str.into(),
+            parse_datetime::ParseDateTimeError::InvalidInput,
+        )),
         Err(e) => Err((input_str.into(), e)),
     }
 }
@@ -1197,8 +1286,14 @@ mod tests {
     #[test]
     fn test_abbreviation_resolves_relative_date_against_now() {
         let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
-        let result =
-            parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false)).unwrap();
+        let result = parse_date(
+            "yesterday 10:00 GMT",
+            &now,
+            DebugOptions::new(false, false),
+            false,
+        )
+        .unwrap()
+        .expect_in_range();
         assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
@@ -1210,8 +1305,10 @@ mod tests {
             "Sat 20 Mar 2021 14:53:01 AWST",
             &now,
             DebugOptions::new(false, false),
+            false,
         )
-        .unwrap();
+        .unwrap()
+        .expect_in_range();
         let utc = convert_for_set(date, true);
         assert_eq!((utc.hour(), utc.minute(), utc.second()), (6, 53, 1)); // AWST(+08:00) -> -8h
     }
