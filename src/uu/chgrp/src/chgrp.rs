@@ -18,11 +18,18 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 
 use thiserror::Error;
+use uucore::error::UError;
 
 #[derive(Error, Debug)]
 enum ChgrpError {
     #[error("{}", translate!("chgrp-error-invalid-user", "from_group" => .from_group))]
     InvalidUser { from_group: String },
+}
+
+impl UError for ChgrpError {
+    fn code(&self) -> i32 {
+        1
+    }
 }
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
@@ -79,7 +86,9 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
         parse_gid_from_str(from_group)
             .map(IfFrom::Group)
-            .map_err(|_| ChgrpError::InvalidUser)?
+            .map_err(|_| ChgrpError::InvalidUser {
+                from_group: from_group.to_string(),
+            })?
     } else {
         IfFrom::All
     };
