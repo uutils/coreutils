@@ -385,19 +385,21 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    if source.symlink_metadata().is_err() {
+    let Ok(source_metadata) = source.symlink_metadata() else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {
             MvError::NoSuchFile(source.quote().to_string()).into()
         });
-    }
+    };
 
-    let source_is_dir = source.is_dir() && !source.is_symlink();
-    let target_is_dir = if target.is_symlink() {
-        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
-    } else {
-        target.is_dir()
+    // `symlink_metadata` does not follow symlinks, so this is equivalent to
+    // `source.is_dir() && !source.is_symlink()` without the extra `stat` calls.
+    let source_is_dir = source_metadata.is_dir();
+    let target_is_dir = match target.symlink_metadata() {
+        Ok(metadata) if metadata.is_symlink() => fs::canonicalize(target).is_ok_and(|p| p.is_dir()),
+        Ok(metadata) => metadata.is_dir(),
+        Err(_) => false,
     };
 
     if path_ends_with_terminator(target)
@@ -437,7 +439,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source_is_dir {
+    } else if source_is_dir && target.exists() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
@@ -514,14 +516,15 @@ fn assert_not_same_file(
         }
     };
 
-    let same_file = (canonicalized_source.eq(&canonicalized_target)
-        || are_hardlinks_to_same_file(source, target)
-        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::None;
+    let same_file = opts.backup == BackupMode::None
+        && (canonicalized_source.eq(&canonicalized_target)
+            || are_hardlinks_to_same_file(source, target)
+            || are_hardlinks_or_one_way_symlink_to_same_file(source, target));
 
     // get the expected target path to show in errors
     // this is based on the argument and not canonicalized
-    let target_display = match source.file_name() {
+    // only computed when an error is actually reported
+    let target_display = || match source.file_name() {
         Some(file_name) if target_is_dir => {
             // join target_dir/source_file in a platform-independent manner
             let mut path = target
@@ -544,13 +547,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
-        return Err(MvError::SameFile(source.quote().to_string(), target_display).into());
+        return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
         && !source.is_symlink()
     {
         return Err(
-            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display).into(),
+            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display()).into(),
         );
     }
     Ok(())
@@ -824,7 +827,13 @@ fn rename(
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() && !to.is_symlink() {
+    // `symlink_metadata` does not follow symlinks, so a symlink to a directory
+    // is not reported as a directory, as with the previous
+    // `to.exists() && to.is_dir() && !to.is_symlink()` check
+    if to
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_dir())
+    {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {

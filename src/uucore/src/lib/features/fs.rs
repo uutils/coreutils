@@ -722,9 +722,12 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::symlink_metadata(source), fs::symlink_metadata(target))
-    else {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
         return false;
     };
 
@@ -748,9 +751,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::metadata(source), fs::symlink_metadata(target))
-    else {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
         return false;
     };
 
