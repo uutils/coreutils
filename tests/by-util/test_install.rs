@@ -2656,6 +2656,65 @@ fn test_install_non_utf8_paths() {
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
 
+/// A failed ownership change must not leave the setuid/setgid mode applied.
+#[test]
+fn test_install_failed_chown_does_not_leave_setuid() {
+    // Only meaningful when the chown can actually fail.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene
+        .ucmd()
+        .args(&["-m", "4755", "-o", "root", "src", "dst"])
+        .fails();
+
+    if at.file_exists("dst") {
+        let mode = at.metadata("dst").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+
+    // The same for a directory created with -d.
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "4755", "-o", "root", "newdir"])
+        .fails();
+
+    if at.dir_exists("newdir") {
+        let mode = at.metadata("newdir").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install -d left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+}
+
+/// The mode must still be applied in full when no ownership change is requested.
+#[test]
+fn test_install_setuid_mode_applied_without_chown() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene.ucmd().args(&["-m", "4755", "src", "dst"]).succeeds();
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, 0o4755);
+
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "2755", "newdir"])
+        .succeeds();
+    assert_eq!(at.metadata("newdir").permissions().mode() & 0o7777, 0o2755);
+}
+
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
