@@ -87,7 +87,7 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
         parse_gid_from_str(from_group)
             .map(IfFrom::Group)
             .map_err(|_| ChgrpError::InvalidUser {
-                from_group: from_group.to_string(),
+                from_group: from_group.clone(),
             })?
     } else {
         IfFrom::All
