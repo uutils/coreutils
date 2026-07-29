@@ -65,3 +65,4 @@ mv-prompt-overwrite-mode = replace {$target}, overriding mode {$mode_info}?
 
 # Progress messages
 mv-progress-moving = moving
+mv-error-dest-appeared = destination { $path } was replaced while moving; refusing to follow it
