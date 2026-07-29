@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
