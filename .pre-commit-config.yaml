@@ -69,4 +69,4 @@ repos:
         language: system
 
 ci:
-  skip: [rust-linting, rust-clippy, cargo-lock-check]
+  skip: [cspell, rust-linting, rust-clippy, cargo-lock-check]
