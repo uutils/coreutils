@@ -370,40 +370,60 @@ impl Chmoder {
 
         for filename in files {
             let file = Path::new(filename);
-            if !file.exists() {
-                if file.is_symlink() {
-                    if !self.dereference && !self.recursive {
-                        // The file is a symlink and we should not follow it
-                        // Don't try to change the mode of the symlink itself
-                        continue;
-                    }
-                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
-                        continue;
-                    }
+            // `Path::exists()` returns `false` when the path's metadata cannot be
+            // read at all (for example a parent directory without search
+            // permission), which made chmod misreport an existing but
+            // inaccessible file as "No such file or directory". Use
+            // `try_exists()` so a permission error is surfaced as such, matching
+            // GNU (issue #9789).
+            match file.try_exists() {
+                Ok(false) => {
+                    if file.is_symlink() {
+                        if !self.dereference && !self.recursive {
+                            // The file is a symlink and we should not follow it
+                            // Don't try to change the mode of the symlink itself
+                            continue;
+                        }
+                        if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                            continue;
+                        }
 
-                    if !self.quiet {
-                        show!(ChmodError::DanglingSymlink(filename.into()));
-                        set_exit_code(1);
-                    }
+                        if !self.quiet {
+                            show!(ChmodError::DanglingSymlink(filename.into()));
+                            set_exit_code(1);
+                        }
 
-                    if self.verbose {
-                        println!(
-                            "{}",
-                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                        );
+                        if self.verbose {
+                            println!(
+                                "{}",
+                                translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
+                            );
+                        }
+                    } else if !self.quiet {
+                        show!(ChmodError::NoSuchFile(filename.into()));
                     }
-                } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.into()));
+                    // GNU exits with exit code 1 even if -q or --quiet are passed
+                    // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                    set_exit_code(1);
+                    continue;
                 }
-                // GNU exits with exit code 1 even if -q or --quiet are passed
-                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
-                set_exit_code(1);
-                continue;
-            } else if !self.dereference && file.is_symlink() {
-                // The file is a symlink and we should not follow it
-                // chmod 755 --no-dereference a/link
-                // should not change the permissions in this case
-                continue;
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !self.quiet {
+                        show!(ChmodError::PermissionDenied(filename.into()));
+                    }
+                    set_exit_code(1);
+                    continue;
+                }
+                // Present, or an unexpected error that the chmod attempt below
+                // will surface with a precise message.
+                Ok(true) | Err(_) => {
+                    if !self.dereference && file.is_symlink() {
+                        // The file is a symlink and we should not follow it
+                        // chmod 755 --no-dereference a/link
+                        // should not change the permissions in this case
+                        continue;
+                    }
+                }
             }
             if self.recursive && self.preserve_root && Self::is_root(file) {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
