@@ -1019,18 +1019,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exacl"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8de9e551ced9d700a31dacb8b168129640240fcd7a279a3fa4d59608b84ebcae"
-dependencies = [
- "bitflags 2.11.1",
- "log",
- "scopeguard",
- "uuid",
-]
-
-[[package]]
 name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3430,7 +3418,6 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "codspeed-divan-compat",
- "exacl",
  "filetime",
  "fluent",
  "indicatif",
@@ -4613,16 +4600,6 @@ version = "0.10.0"
 dependencies = [
  "proc-macro2",
  "quote",
-]
-
-[[package]]
-name = "uuid"
-version = "1.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd74a9687298c6858e9b88ec8935ec45d22e8fd5e6394fa1bd4e99a87789c76"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
 ]
 
 [[package]]

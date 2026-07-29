@@ -1875,18 +1875,13 @@ pub(crate) fn copy_attributes(
 
             fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source, None)
-                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| CpError::Error(err.to_string()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
             // so we keep ACL parity with GNU without preserving user xattrs
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
             // do not support ACL xattrs.
-            #[cfg(all(unix, not(target_os = "android")))]
+            #[cfg(all(unix, not(target_os = "android")))] // todo: support acl for other targets
             copy_acls(source, dest);
         }
 
