@@ -409,8 +409,8 @@ impl Observer {
                 | EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
                 if self.follow_name() {
                     if settings.retry {
-                        if let Some(old_md) = self.files.get_mut_metadata(event_path) &&
-                            old_md.is_tailable() && self.files.get(event_path).reader.is_some() {
+                        if self.files.get_mut_metadata(event_path).is_some_and(MetadataExtTail::is_tailable)
+                            && self.files.get(event_path).reader.is_some() {
                                 show_error!(
                                     "{} {}: {}",
                                     display_name.quote(),
