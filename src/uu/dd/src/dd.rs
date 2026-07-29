@@ -743,21 +743,16 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         let flags_without_direct = oflags & !OFlags::DIRECT;
 
         // Remove O_DIRECT flag
-        if fcntl_setfl(&*f, flags_without_direct).is_err() {
-            return Err(original_error);
-        }
+        fcntl_setfl(&*f, flags_without_direct).map_err(|_| original_error)?;
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
         // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
+        if let Err(e) = fcntl_setfl(&*f, oflags).map_err(io::Error::from) {
             // Just log the error, don't fail the whole operation
-            show_error!(
-                "Failed to restore O_DIRECT flag: {}",
-                io::Error::from(os_err)
-            );
+            show_error!("Failed to restore O_DIRECT flag: {e}");
         }
 
         write_result
