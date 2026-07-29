@@ -9,7 +9,7 @@
 
 use std::io;
 
-use uucore::process::send_signal_to_pid;
+use uucore::process::{enable_debug_privilege, send_signal_to_pid};
 use uucore::translate;
 
 const SIGNAL_STOP: usize = 19;
@@ -23,7 +23,10 @@ pub(crate) fn send_signal(pid: i32, sig: usize) -> io::Result<()> {
         return Err(unsupported(translate!("kill-error-unsupported-signal")));
     }
     match u32::try_from(pid) {
-        Ok(pid) if pid != 0 => send_signal_to_pid(pid, sig),
+        Ok(pid) if pid != 0 => {
+            enable_debug_privilege();
+            send_signal_to_pid(pid, sig)
+        }
         _ => Err(unsupported(translate!(
             "kill-error-process-groups-unsupported"
         ))),

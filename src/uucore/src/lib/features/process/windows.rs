@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled
 // spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
-// spell-checker:ignore catchable targetable wakeup unreaped pids
+// spell-checker:ignore catchable targetable wakeup unreaped pids LUID luid
 
 //! Windows emulation of POSIX signal delivery, for child processes and
 //! arbitrary pids ([`send_signal_to_pid`]).
@@ -42,10 +42,17 @@ use crate::translate;
 /// [`BorrowedHandle`]/[`OwnedHandle`] so callers never touch raw `HANDLE`s.
 pub mod sys {
     use std::io;
-    use std::os::windows::io::{AsRawHandle, BorrowedHandle, HandleOrNull, OwnedHandle};
+    use std::os::windows::io::{
+        AsRawHandle, BorrowedHandle, FromRawHandle, HandleOrNull, OwnedHandle,
+    };
 
     use windows_sys::Win32::Foundation::{
-        ERROR_INVALID_PARAMETER, FALSE, HANDLE, TRUE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        ERROR_INVALID_PARAMETER, FALSE, HANDLE, LUID, TRUE, WAIT_FAILED, WAIT_OBJECT_0,
+        WAIT_TIMEOUT,
+    };
+    use windows_sys::Win32::Security::{
+        AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_DEBUG_NAME,
+        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
     };
     use windows_sys::Win32::System::Console::{
         GenerateConsoleCtrlEvent, PHANDLER_ROUTINE, SetConsoleCtrlHandler,
@@ -54,9 +61,9 @@ pub mod sys {
         AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::{
-        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, OpenProcess,
-        ResetEvent, SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess,
-        WaitForMultipleObjects, WaitForSingleObject,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW,
+        GetCurrentProcess, OpenProcess, OpenProcessToken, ResetEvent, SetEvent, SetWaitableTimer,
+        TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
     };
     use windows_sys::core::BOOL;
 
@@ -136,6 +143,45 @@ pub mod sys {
             } else {
                 error
             }
+        })
+    }
+
+    /// Request `SeDebugPrivilege` in this process's token.
+    ///
+    /// `Ok` does not mean the privilege is now enabled: `AdjustTokenPrivileges`
+    /// succeeds for a token that does not hold it too, reporting that only
+    /// through `GetLastError`.
+    pub fn enable_debug_privilege() -> io::Result<()> {
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: the pseudo-handle is always valid; `token` is an out-param.
+        cvt(unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &raw mut token)
+        })?;
+        // SAFETY: OpenProcessToken succeeded, so `token` is a fresh owned handle.
+        let token = unsafe { OwnedHandle::from_raw_handle(token) };
+
+        let mut luid = LUID::default();
+        // SAFETY: a null system name means the local system; `luid` is an out-param.
+        cvt(unsafe { LookupPrivilegeValueW(std::ptr::null(), SE_DEBUG_NAME, &raw mut luid) })?;
+
+        let privileges = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+        // SAFETY: `privileges` outlives the call; a null previous-state pointer
+        // is documented as valid.
+        cvt(unsafe {
+            AdjustTokenPrivileges(
+                token.as_raw_handle(),
+                FALSE,
+                &raw const privileges,
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
         })
     }
 
@@ -340,8 +386,20 @@ fn has_exited(handle: BorrowedHandle) -> io::Result<bool> {
     ))
 }
 
+/// Request `SeDebugPrivilege` once per process; with it, opening a process
+/// bypasses the target's security descriptor.
+///
+/// Silent and best-effort: only an elevated administrator's token holds the
+/// privilege, and tokens without it are left untouched.
+pub fn enable_debug_privilege() {
+    static REQUESTED: OnceLock<()> = OnceLock::new();
+    REQUESTED.get_or_init(|| {
+        let _ = sys::enable_debug_privilege();
+    });
+}
+
 /// Deliver `signal` (POSIX numbering) to the arbitrary process `pid`,
-/// emulating `kill(2)` for `pid > 0`. `SeDebugPrivilege` is never enabled.
+/// emulating `kill(2)` for `pid > 0`.
 pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
     match disposition(signal)? {
         Disposition::Probe | Disposition::Ignore => probe_pid(pid),
@@ -715,6 +773,12 @@ mod tests {
                 .kind(),
             io::ErrorKind::InvalidInput
         );
+    }
+
+    #[test]
+    fn enable_debug_privilege_is_silent_whether_or_not_the_token_holds_it() {
+        enable_debug_privilege();
+        enable_debug_privilege();
     }
 
     #[test]
