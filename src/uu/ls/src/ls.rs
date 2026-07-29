@@ -864,17 +864,7 @@ impl<'a> PathData<'a> {
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
-            Dereference::DirArgs => {
-                if command_line {
-                    if let Ok(md) = p_buf.metadata() {
-                        md.is_dir()
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
+            Dereference::DirArgs => command_line && p_buf.metadata().is_ok_and(|m| m.is_dir()),
             Dereference::None => false,
         };
 
