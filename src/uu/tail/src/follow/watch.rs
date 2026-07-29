@@ -273,10 +273,9 @@ impl Observer {
                         if path.is_tailable() {
                             // Add existing regular files to `Watcher` (InotifyWatcher).
                             watcher_rx.watch_with_parent(&path)?;
-                        } else if !path.is_orphan() {
+                        } else if let Some(active_parent) = path.parent().filter(|p| p.is_dir()) {
                             // If `path` is not a tailable file, add its parent to `Watcher`.
-                            watcher_rx
-                                .watch(path.parent().unwrap(), RecursiveMode::NonRecursive)?;
+                            watcher_rx.watch(active_parent, RecursiveMode::NonRecursive)?;
                             // Add symlinks to orphans for retry polling (target may not exist)
                             if path.is_symlink() {
                                 self.orphans.push(path);
@@ -418,7 +417,7 @@ impl Observer {
                                     translate!("tail-no-such-file-or-directory")
                                 );
                         }
-                        if event_path.is_orphan() && !self.orphans.contains(event_path) {
+                        if !event_path.has_active_parent() && !self.orphans.contains(event_path) {
                             show_error!("{}", translate!("tail-status-directory-containing-watched-file-removed"));
                             show_error!(
                                 "{}",
