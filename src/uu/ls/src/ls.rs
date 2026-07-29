@@ -109,15 +109,8 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidLineWidth(_) => 2,
-            Self::IOError(_) | Self::WriteError(_) => 1,
-            Self::IOErrorContext(_, _, false) => 1,
-            Self::IOErrorContext(_, _, true) => 2,
-            Self::BlockSizeParseError(_) => 2,
-            Self::DiredAndZeroAreIncompatible => 2,
-            Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_) => 2,
-            Self::InvalidTabSize(_) => 2,
+            Self::IOError(_) | Self::WriteError(_) | Self::IOErrorContext(_, _, false) => 1,
+            _ => 2,
         }
     }
 }
