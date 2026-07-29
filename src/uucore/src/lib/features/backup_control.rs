@@ -84,6 +84,7 @@
 use crate::{
     display::Quotable,
     error::{UError, UResult},
+    fs::FileInformation,
 };
 use clap::ArgMatches;
 use std::{
@@ -483,10 +484,23 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 /// ```
 ///
 pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
-    let source_filename = source.as_os_str();
     let mut target_backup_filename = target.as_os_str().to_owned();
     target_backup_filename.push(suffix);
-    source_filename == target_backup_filename
+    let target_backup = PathBuf::from(target_backup_filename);
+
+    // Compare the files themselves, not how they were spelled: `a~`, `./a~` and
+    // an absolute path all name the same file, and comparing the strings lets
+    // the guard fail open and silently destroy the source.
+    if let (Ok(source_info), Ok(backup_info)) = (
+        FileInformation::from_path(source, false),
+        FileInformation::from_path(&target_backup, false),
+    ) {
+        return source_info == backup_info;
+    }
+
+    // The backup does not exist yet (so nothing can be destroyed), or one of the
+    // paths could not be stat'd; fall back to comparing the spellings.
+    source.as_os_str() == target_backup.as_os_str()
 }
 
 //
