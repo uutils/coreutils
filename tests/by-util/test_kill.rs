@@ -4,9 +4,15 @@
 // file that was distributed with this source code.
 // spell-checker:ignore IAMNOTASIGNAL RTMAX RTMIN SIGIO SIGRTMAX GHSA CHLD SIGSTOP taskkill unreaped
 use regex::Regex;
+#[cfg(windows)]
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
+#[cfg(windows)]
+use std::process::Stdio;
 use std::process::{Child, Command, ExitStatus};
+#[cfg(windows)]
+use uucore::process::Job;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use uucore::signals::realtime_signal_bounds;
 use uutests::new_ucmd;
@@ -66,6 +72,66 @@ impl Drop for Target {
         if !self.killed {
             self.child.kill().expect("cannot kill target");
         }
+    }
+}
+
+/// A `cmd.exe` in a freshly created Job object, waiting for a command line on
+/// its stdin pipe.
+///
+/// The only safe way to run a *terminating* `kill 0` from a test: `kill 0`
+/// signals the killer's immediate job, which here is `job` and nothing else, so
+/// it cannot reach the test runner, another test's children, nextest's per-test
+/// job or a CI agent — the ambient job is `job`'s *parent*, and a parent's
+/// members are not in a child job's list.
+///
+/// The gate is what makes that true rather than merely likely: `cmd` gets no
+/// command until `assign` has succeeded, so the window between `CreateProcess`
+/// and `AssignProcessToJobObject` contains nothing that could signal. Fail-safe
+/// too — if anything panics before [`JobShell::run`], the pipe closes, `cmd`
+/// sees EOF and exits having executed nothing.
+#[cfg(windows)]
+struct JobShell {
+    job: Job,
+    shell: Child,
+}
+
+#[cfg(windows)]
+impl JobShell {
+    fn new() -> Self {
+        let job = Job::new().expect("cannot create job object");
+        let shell = Command::new("cmd")
+            // `/d` skips the AutoRun registry command, so a machine that has
+            // one cannot run it inside this job or write to the stderr the
+            // assertions quote.
+            .args(["/d", "/q"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("cannot spawn cmd");
+        job.assign(&shell)
+            .expect("cannot assign cmd to the fresh job");
+        Self { job, shell }
+    }
+
+    /// So a group signal from inside reaches `child`.
+    fn adopt(&self, child: &Child) {
+        self.job
+            .assign(child)
+            .expect("cannot assign process to the fresh job");
+    }
+
+    /// Closes stdin afterwards so cmd exits at EOF rather than blocking forever
+    /// if the command fails to kill it.
+    fn run(mut self, command: &str) -> (Option<i32>, String) {
+        let mut stdin = self.shell.stdin.take().expect("cmd has no stdin pipe");
+        write!(stdin, "{command}\r\n").expect("cannot write command");
+        drop(stdin);
+        let output = self.shell.wait_with_output().expect("cannot wait on cmd");
+        (
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
     }
 }
 
@@ -607,20 +673,29 @@ fn test_kill_signal_zero_nonexistent() {
     new_ucmd!().arg("-0").arg("999999999").fails();
 }
 
-#[cfg(unix)]
 #[test]
 fn test_kill_signal_zero_current_process_group() {
-    // kill -0 0 should succeed (checks current process group)
+    // Signal 0 never terminates anything (windows opens group members with
+    // SYNCHRONIZE only), so this is safe un-isolated. It proves only that the
+    // enumeration does not error: probing yourself always succeeds, so it would
+    // pass on an empty pid list too.
     new_ucmd!().arg("-0").arg("0").succeeds();
 }
 
 #[cfg(windows)]
 #[test]
 fn test_kill_windows_help_has_platform_notes() {
+    // Every asserted phrase sits entirely inside one `kill-after-help-windows`
+    // continuation line: clap's `wrap_help` re-wraps lines longer than the
+    // terminal width but never joins short ones, so the .ftl line breaks
+    // survive verbatim and these assertions cannot straddle a break.
     new_ucmd!()
         .arg("--help")
         .succeeds()
-        .stdout_contains("Windows notes");
+        .stdout_contains("Windows notes")
+        .stdout_contains("PID 0 targets the Job object")
+        .stdout_contains("Outside a job")
+        .stdout_contains("a Job object is usually not yours");
 }
 
 #[cfg(windows)]
@@ -660,22 +735,57 @@ fn test_kill_windows_stop_is_rejected() {
 
 #[cfg(windows)]
 #[test]
-fn test_kill_windows_process_groups_unsupported() {
-    new_ucmd!()
-        .args(&["-0", "0"])
-        .fails_with_code(1)
-        .stderr_contains("process groups are not supported");
+fn test_kill_windows_negative_pid_unsupported() {
+    // `-1` is the dangerous one on unix ("every process you may signal"); on
+    // windows it must be inert, and `u32::try_from` fails before any Win32 call.
     new_ucmd!()
         .args(&["-9", "-1"])
         .fails_with_code(1)
-        .stderr_contains("process groups are not supported");
-    let target = Target::new();
+        .stderr_contains("a negative PID");
+
+    let mut target = Target::new();
     new_ucmd!()
         .arg("--")
         .arg(format!("-{}", target.pid()))
         .fails_with_code(1)
-        .stderr_contains("process groups are not supported");
+        .stderr_contains("a negative PID");
+    target.assert_alive();
 }
+
+/// `kill 0` must reach *other* members of the job, not just the caller.
+///
+/// The victim is the proof: it is neither the killer's parent nor its child, so
+/// the only path by which it can die is the job pid list. An implementation
+/// that regressed to "signal only myself" would still make cmd exit 137, so the
+/// exit code alone would not catch it.
+#[cfg(windows)]
+#[test]
+fn test_kill_windows_pid_zero_terminates_the_whole_job() {
+    for (args, signal) in [("-9 0", 9), ("0", 15)] {
+        let shell = JobShell::new();
+        let mut victim = Target::new();
+        shell.adopt(&victim.child);
+
+        // Only now can anything in the job run.
+        let (code, stderr) = shell.run(&format!("\"{}\" kill {args}", get_tests_binary()));
+
+        // Read cmd's status first, so a broken kill surfaces its own message
+        // rather than only a 30-second victim timeout below.
+        assert_eq!(
+            code,
+            Some(128 + signal),
+            "cmd survived `kill {args}`; kill said: {stderr}"
+        );
+        victim.assert_signaled(signal);
+    }
+}
+
+// The "not in a job" fallback has no integration test on purpose: nothing can
+// guarantee a spawned process is job-less. `CREATE_BREAKAWAY_FROM_JOB` detaches
+// only from the immediate job, so under a nested chain (`cargo nextest` inside
+// `cargo`) the child stays in an ancestor job and `kill -9 0` terminates the
+// test runner — an earlier version of this test did exactly that. Covered by
+// `with_self_last` in uucore instead, whose empty-member case is that case.
 
 #[cfg(windows)]
 #[test]
