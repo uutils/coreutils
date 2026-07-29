@@ -703,6 +703,49 @@ fn test_mv_same_hardlink_backup_simple_destroy() {
         .stderr_contains("backing up 'test_mv_same_file_a' might destroy source");
 }
 
+/// The guard must compare the files, not how the operands were spelled.
+/// Comparing strings let `'a~'` versus `'./a'` slip through, and mv then
+/// destroyed the source and exited 0 with no diagnostic.
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_backup_simple_guard_ignores_spelling() {
+    for target in ["./test_mv_spell_a", "test_mv_spell_a"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        let source = "test_mv_spell_a~";
+        at.write(source, "SRCDATA");
+        at.write("test_mv_spell_a", "DSTDATA");
+
+        ucmd.arg(source)
+            .arg(target)
+            .arg("--backup=simple")
+            .fails()
+            .stderr_contains("might destroy source");
+
+        assert_eq!(
+            at.read(source),
+            "SRCDATA",
+            "mv destroyed the source when the target was spelled {target}"
+        );
+    }
+}
+
+/// ...but it must not fire for unrelated operands that merely look similar.
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_backup_simple_guard_allows_unrelated_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("test_mv_spell_src", "SRCDATA");
+    at.write("test_mv_spell_dst", "DSTDATA");
+
+    ucmd.arg("test_mv_spell_src")
+        .arg("test_mv_spell_dst")
+        .arg("--backup=simple")
+        .succeeds();
+
+    assert_eq!(at.read("test_mv_spell_dst"), "SRCDATA");
+    assert_eq!(at.read("test_mv_spell_dst~"), "DSTDATA");
+}
+
 #[test]
 fn test_mv_same_file_not_dot_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
