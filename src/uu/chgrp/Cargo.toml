@@ -23,6 +23,7 @@ doctest = false
 clap = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
 fluent = { workspace = true }
+thiserror = { workspace = true }
 
 [[bin]]
 name = "chgrp"
