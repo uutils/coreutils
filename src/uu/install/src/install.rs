@@ -531,23 +531,30 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             }
         }
 
-        if mode::chmod(path, b.mode()).is_err() {
-            // Error messages are printed by the mode::chmod function!
+        // Ownership before mode; on failure skip the chmod.
+        // See set_ownership_and_permissions for why.
+        if b.privileged
+            && let Err(e) = chown_optional_user_group(path, b)
+        {
+            show!(e);
             uucore::error::set_exit_code(1);
             continue;
         }
 
+        // Set SELinux context for directory if needed
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if b.privileged {
-            show_if_err!(chown_optional_user_group(path, b));
-
-            // Set SELinux context for directory if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             if b.default_context {
                 show_if_err!(set_selinux_default_context(path));
             } else if b.context.is_some() {
                 let context = get_context_for_selinux(b);
                 show_if_err!(set_selinux_security_context(path, context));
             }
+        }
+
+        if mode::chmod(path, b.mode()).is_err() {
+            // Error messages are printed by the mode::chmod function!
+            uucore::error::set_exit_code(1);
         }
     }
     // If the exit code was set, or show! has been called at least once
@@ -1068,11 +1075,13 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
-    // Silent the warning as we want to the error message
-    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
+    // Ownership first, then mode, as GNU does: chown(2) clears setuid/setgid, and
+    // a failed chown must not leave a mode carrying them already applied.
     if b.privileged {
         chown_optional_user_group(to, b)?;
     }
+    // Silent the warning as we want to the error message
+    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
 
     Ok(())
 }
