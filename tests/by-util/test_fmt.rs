@@ -8,6 +8,8 @@
 use std::os::unix::ffi::OsStringExt;
 use uutests::new_ucmd;
 
+const FMT_TEST_LINE_LIMIT: usize = 1024 * 1024;
+
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
@@ -435,4 +437,29 @@ fn test_fmt_width_multiplication_overflow() {
         .args(&["-w", "267672676527678256"])
         .fails_with_code(1)
         .stderr_is("fmt: invalid width: '267672676527678256'\n");
+}
+
+#[test]
+fn test_fmt_line_limit_boundaries_raw_output() {
+    let mut lf_input = vec![b'a'; FMT_TEST_LINE_LIMIT];
+    lf_input.extend_from_slice(b"\nb\n");
+    let lf_expected = lf_input.clone();
+
+    let mut crlf_input = vec![b'a'; FMT_TEST_LINE_LIMIT - 1];
+    crlf_input.extend_from_slice(b"\r\nb\n");
+    let mut crlf_expected = vec![b'a'; FMT_TEST_LINE_LIMIT - 1];
+    crlf_expected.extend_from_slice(b"\nb\n");
+
+    for (input, expected) in [(lf_input, lf_expected), (crlf_input, crlf_expected)] {
+        for split_only in [false, true] {
+            let mut command = new_ucmd!();
+            if split_only {
+                command.arg("-s");
+            }
+            command
+                .pipe_in(input.clone())
+                .succeeds()
+                .stdout_is_bytes(expected.clone());
+        }
+    }
 }
