@@ -4,9 +4,10 @@ kill-after-help-windows = Notes pour Windows :
   Les processus signalés sont terminés de force (Windows ne délivre pas de
   signaux) ; leur code de sortie est 128 plus le numéro du signal. Les groupes
   de processus (PID <= 0) et STOP ne sont pas pris en charge. Les permissions
-  proviennent de votre jeton actuel : kill n'active jamais SeDebugPrivilege,
-  donc un kill élevé peut signaler « Permission denied » là où « taskkill /F »
-  réussit.
+  proviennent de votre jeton actuel, avec SeDebugPrivilege activé lorsqu'il est
+  détenu ; exécutez kill en tant qu'administrateur pour atteindre les processus
+  qu'un jeton standard ne peut pas signaler. Les processus protégés
+  (anti-programmes malveillants) ne peuvent jamais être terminés.
 
 # Messages d'aide
 kill-help-list = Liste les signaux

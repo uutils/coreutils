@@ -616,11 +616,11 @@ fn test_kill_signal_zero_current_process_group() {
 
 #[cfg(windows)]
 #[test]
-fn test_kill_windows_help_mentions_taskkill() {
+fn test_kill_windows_help_has_platform_notes() {
     new_ucmd!()
         .arg("--help")
         .succeeds()
-        .stdout_contains("taskkill");
+        .stdout_contains("Windows notes");
 }
 
 #[cfg(windows)]
