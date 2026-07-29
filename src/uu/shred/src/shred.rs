@@ -624,17 +624,26 @@ fn wipe_file(
         }
     }
 
-    if !path.exists() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
-        ));
-    }
-    if !path.is_file() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-not-a-file", "file" => path.maybe_quote()),
-        ));
+    // `Path::exists()` and `Path::is_file()` both collapse any metadata error
+    // (including a permission error) into `false`, which made shred report a
+    // file whose parent directory lacks search permission as "No such file or
+    // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
+    // "no such file" error while a permission error falls through to the
+    // open-for-writing below, which surfaces the real reason.
+    match fs::metadata(path) {
+        Ok(md) if !md.is_file() => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-not-a-file", "file" => path.maybe_quote()),
+            ));
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
+            ));
+        }
+        _ => {}
     }
 
     let metadata =
