@@ -26,11 +26,7 @@ enum ChgrpError {
     InvalidUser { from_group: String },
 }
 
-impl UError for ChgrpError {
-    fn code(&self) -> i32 {
-        1
-    }
-}
+impl UError for ChgrpError {}
 
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
