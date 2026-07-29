@@ -2738,6 +2738,47 @@ fn test_mv_cross_device_refuses_planted_symlink_dest() {
     );
 }
 
+/// Directory counterpart of `test_mv_cross_device_refuses_planted_symlink_dest`.
+///
+/// The cross-device directory fallback removes the destination and recreates it.
+/// Recreation must fail closed: `create_dir_all` would accept a symlink-to-directory
+/// left at the path and move the whole source tree through it, outside the destination.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
+    use std::os::unix::fs::symlink;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let src_dir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let src = src_dir.path().join("srcdir");
+    std::fs::create_dir(&src).expect("create src");
+    std::fs::write(src.join("payload"), "PAYLOAD_FROM_SRC").expect("write payload");
+
+    at.mkdir("victim");
+    at.write("victim/guard", "PROTECTED_DATA");
+    at.symlink_dir("victim", "target");
+
+    // Whether this succeeds or fails, the invariant is that nothing from the
+    // source is written inside `victim`.
+    scene
+        .ucmd()
+        .arg("-T")
+        .arg(src.to_str().unwrap())
+        .arg("target")
+        .run();
+
+    assert!(
+        !at.file_exists("victim/payload"),
+        "cross-device dir move escaped the destination through a symlink"
+    );
+    assert_eq!(at.read("victim/guard"), "PROTECTED_DATA");
+}
+
 #[test]
 #[cfg(all(
     feature = "feat_selinux",

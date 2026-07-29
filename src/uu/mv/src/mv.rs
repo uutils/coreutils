@@ -1076,6 +1076,23 @@ fn rename_dir_fallback(
 }
 
 /// Copy directory recursively, optionally preserving hardlinks
+/// Create `path`, refusing to reuse anything already there.
+///
+/// `create_dir_all` would accept a symlink planted at `path` after the caller
+/// removed the destination, redirecting the move out of the destination tree.
+fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
+    fs::create_dir(path).map_err(|e| {
+        if e.kind() == io::ErrorKind::AlreadyExists {
+            io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                translate!("mv-error-dest-appeared", "path" => path.quote()),
+            )
+        } else {
+            e
+        }
+    })
+}
+
 fn copy_dir_contents(
     from: &Path,
     to: &Path,
@@ -1086,7 +1103,7 @@ fn copy_dir_contents(
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // Create the destination directory
-    fs::create_dir_all(to)?;
+    create_dir_fail_closed(to)?;
 
     #[cfg(unix)]
     {
@@ -1168,7 +1185,7 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         } else if from_path.is_dir() {
             // Recursively copy subdirectory (only real directories, not symlinks)
-            fs::create_dir_all(&to_path)?;
+            create_dir_fail_closed(&to_path)?;
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]

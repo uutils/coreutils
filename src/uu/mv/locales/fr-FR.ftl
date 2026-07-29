@@ -62,3 +62,4 @@ mv-prompt-overwrite = écraser {$target} ?
 
 # Messages de progression
 mv-progress-moving = déplacement
+mv-error-dest-appeared = la destination { $path } a été remplacée pendant le déplacement ; refus de la suivre
