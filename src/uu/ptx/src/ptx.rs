@@ -530,7 +530,7 @@ fn get_output_chunks(
 
     // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
     let max_tail_size = cmp::max(
-        max_before_size as isize - before.len() as isize - config.gap_size as isize,
+        max_before_size as isize - before.chars().count() as isize - config.gap_size as isize,
         0,
     ) as usize;
 
