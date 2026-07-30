@@ -5074,7 +5074,7 @@ fn test_failed_write_is_reported_on_seekable_input() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_dev_zero() {
     new_ucmd!()
         .args(&["-c", "1", "/dev/zero"])
