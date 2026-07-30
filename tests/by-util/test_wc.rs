@@ -433,10 +433,7 @@ fn test_file_bytes_dictate_width() {
 #[test]
 fn test_read_from_directory_error() {
     let cmd = new_ucmd!().args(&["."]).fails();
-    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        // wasi-libc may report a different error string than the host libc
-        cmd.stderr_contains("wc: .:");
-    } else if cfg!(windows) {
+    if cfg!(windows) {
         cmd.stderr_contains(".: Permission denied").stdout_is("");
     } else {
         cmd.stderr_contains(".: Is a directory")
@@ -450,17 +447,14 @@ fn test_read_error_order_with_stderr_to_stdout() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("ioerrdir");
 
-    let cmd = ucmd.arg("ioerrdir").stderr_to_stdout().fails();
-    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
-        // wasi-libc may report a different error string than the host libc
-        cmd.stdout_contains("wc: ioerrdir:");
-    } else {
-        let expected = format!(
-            "{:>7} {:>7} {:>7} ioerrdir\nwc: ioerrdir: Is a directory\n",
-            0, 0, 0
-        );
-        cmd.stdout_only(expected);
-    }
+    let expected = format!(
+        "{:>7} {:>7} {:>7} ioerrdir\nwc: ioerrdir: Is a directory\n",
+        0, 0, 0
+    );
+    ucmd.arg("ioerrdir")
+        .stderr_to_stdout()
+        .fails()
+        .stdout_only(expected);
 }
 
 /// Test that getting counts from nonexistent file is an error.
@@ -812,23 +806,17 @@ fn files0_from_dir() {
     const DOT_ERR: &str = dir_err!(".");
 
     // On Unix, `read(open("."))` fails. On Windows, `open(".")` fails. Thus, the errors happen in
-    // different contexts. On WASI, the error string may differ (e.g., "Bad file descriptor").
-    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
-
-    let cmd = new_ucmd!().args(&["--files0-from=dir with spaces"]).fails();
-    if wasm {
-        cmd.stderr_contains("wc: 'dir with spaces': read error:");
-    } else {
-        cmd.stderr_only(dir_err!("'dir with spaces'"));
-    }
+    // different contexts.
+    new_ucmd!()
+        .args(&["--files0-from=dir with spaces"])
+        .fails()
+        .stderr_only(dir_err!("'dir with spaces'"));
 
     // Those contexts have different rules about quoting in errors...
-    let cmd = new_ucmd!().args(&["--files0-from=."]).fails();
-    if wasm {
-        cmd.stderr_contains("wc: .: read error:");
-    } else {
-        cmd.stderr_only(DOT_ERR);
-    }
+    new_ucmd!()
+        .args(&["--files0-from=."])
+        .fails()
+        .stderr_only(DOT_ERR);
 
     // That also means you cannot `< . wc --files0-from=-` on Windows.
     #[cfg(not(windows))]

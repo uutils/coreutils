@@ -1330,6 +1330,7 @@ fn test_od_eintr_handling() {
 // Regression test: od should handle write errors to /dev/full without aborting.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_write_error_dev_full() {
     use std::fs::File;
 

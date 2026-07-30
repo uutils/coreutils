@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (formats) cymdhm cymdhms datetime mdhm mdhms mktime strtime ymdhm ymdhms
+//spell-checker: ignore (wasi) utimensat
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
@@ -166,6 +167,10 @@ fn test_touch_2_digit_years_2038() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: utimensat rejects negative (pre-1970) timestamps with EINVAL"
+)]
 fn test_touch_2_digit_years_69() {
     // 69 and after are 19xx
     let (at, mut ucmd) = at_and_ucmd!();
@@ -623,6 +628,7 @@ fn test_touch_set_date7() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: timezone database not visible")]
 fn test_touch_set_date_without_leading_zeroes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_without_leading_zeroes";
@@ -646,6 +652,10 @@ fn test_touch_set_date_without_leading_zeroes() {
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: utimensat rejects negative (pre-1970) timestamps with EINVAL"
+)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";
@@ -780,6 +790,7 @@ fn test_touch_mtime_dst_succeeds() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: timezone database not visible")]
 fn test_touch_mtime_dst_fails() {
     let file = "test_touch_set_mtime_dst_fails";
 
@@ -797,6 +808,10 @@ fn test_touch_mtime_dst_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: '/' is the guest's own writable root, not the real filesystem root"
+)]
 fn test_touch_system_fails() {
     let file = "/";
     new_ucmd!()
@@ -874,6 +889,7 @@ fn test_touch_no_such_file_error_msg() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -896,6 +912,10 @@ fn test_touch_changes_time_of_file_in_stdout() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: chmod has no ENOSYS-free syscall; directories can't be made read-only"
+)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -954,6 +974,10 @@ fn test_touch_leap_second() {
 #[test]
 #[cfg(not(windows))]
 // File::create doesn't support trailing separator in Windows
+#[cfg_attr(
+    wasip2_runner,
+    ignore = "WASI preview2: stat on a dangling-symlink-with-trailing-slash returns ENOTDIR instead of ENOENT"
+)]
 fn test_touch_trailing_slash_no_create() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -1016,6 +1040,7 @@ fn test_touch_no_dereference_dangling() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
 fn test_touch_dash() {
     new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
 }
@@ -1124,6 +1149,7 @@ fn test_touch_f_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_touch_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1140,6 +1166,7 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
@@ -1156,11 +1183,9 @@ fn test_touch_device_files() {
 #[test]
 #[cfg(unix)]
 fn test_touch_does_not_truncate_symlink_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("victim", "do not truncate me");
-    symlink(at.plus("victim"), at.plus("link")).unwrap();
+    at.symlink_file("victim", "link");
 
     ucmd.arg("link").succeeds();
 
@@ -1171,10 +1196,8 @@ fn test_touch_does_not_truncate_symlink_target() {
 #[test]
 #[cfg(unix)]
 fn test_touch_through_dangling_symlink_creates_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
-    symlink(at.plus("missing"), at.plus("link")).unwrap();
+    at.symlink_file("missing", "link");
 
     ucmd.arg("link").succeeds();
 

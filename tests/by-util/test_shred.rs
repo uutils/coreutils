@@ -134,6 +134,10 @@ fn test_shred_u() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: chmod has no ENOSYS-free syscall; -f can't restore write permission"
+)]
 fn test_shred_force() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -265,6 +269,10 @@ fn test_all_patterns_present() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_random_source_regular_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -349,6 +357,7 @@ fn test_shred_rename_exhaustion() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_shred_non_utf8_paths() {
     use std::os::unix::ffi::OsStrExt;
     let ts = TestScenario::new(util_name!());
@@ -362,6 +371,10 @@ fn test_shred_non_utf8_paths() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_gnu_shred_passes_20() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -420,6 +433,10 @@ fn test_gnu_shred_passes_20() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: File::try_clone() (used for --random-source) is unsupported"
+)]
 fn test_gnu_shred_passes_different_counts() {
     let (at, mut ucmd) = at_and_ucmd!();
 

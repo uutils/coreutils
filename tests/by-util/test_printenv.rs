@@ -5,6 +5,10 @@
 use uutests::new_ucmd;
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "sets HOME to a relative path, which breaks wasmtime's own cache-dir resolution"
+)]
 fn test_get_all() {
     new_ucmd!()
         .env("HOME", "FOO")
@@ -68,6 +72,10 @@ fn test_invalid_option_exit_code() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "sets HOME to a relative path, which breaks wasmtime's own cache-dir resolution"
+)]
 fn test_null_separator() {
     // printenv should use \x00 as separator if null option is provided
     for null_opt in ["-0", "--null"] {
@@ -94,6 +102,7 @@ fn test_null_separator() {
 #[test]
 #[cfg(unix)]
 #[cfg(not(any(target_os = "freebsd", target_os = "android", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_value() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -120,6 +129,7 @@ fn test_non_utf8_value() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: env values must be valid UTF-8")]
 fn test_non_utf8_env_vars() {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;

@@ -1629,8 +1629,9 @@ fn test_octal_escape_ambiguous_followed_by_non_utf8() {
         .stderr_contains("warning: invalid utf8 sequence");
 }
 
-#[cfg(target_os = "linux")]
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")

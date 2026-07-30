@@ -234,6 +234,7 @@ fn test_format() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .arg("-G")

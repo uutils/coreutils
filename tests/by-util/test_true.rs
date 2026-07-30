@@ -54,6 +54,7 @@ fn test_conflict() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_full() {
     for option in ["--version", "--help"] {
         let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();

@@ -132,7 +132,7 @@ fn test_check_sha1() {
     scene
         .ccmd("sha1sum")
         .arg("-c")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .succeeds()
         .stdout_is("testf: OK\n")
         .stderr_is("");
@@ -152,7 +152,7 @@ fn test_check_file_not_found_warning() {
     scene
         .ccmd("sha1sum")
         .arg("-c")
-        .arg(at.subdir.join("testf.sha1"))
+        .arg("testf.sha1")
         .fails()
         .stdout_is("testf: FAILED open or read\n")
         .stderr_is("sha1sum: testf: No such file or directory\nsha1sum: WARNING: 1 listed file could not be read\n");

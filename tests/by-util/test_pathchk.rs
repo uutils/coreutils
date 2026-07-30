@@ -24,6 +24,10 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: symlink_metadata(\"\") succeeds instead of returning ENOENT"
+)]
 fn test_default_mode() {
     // accept some reasonable default
     new_ucmd!().args(&["dir/file"]).succeeds().no_stdout();
@@ -176,6 +180,7 @@ fn test_posix_all() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();

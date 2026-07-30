@@ -387,6 +387,7 @@ fn fails_on_invalid_number() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn short_circuit_write_error() {
     use std::fs::OpenOptions;
 

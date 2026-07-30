@@ -50,7 +50,9 @@ fn test_nproc_all_omp() {
     assert_eq!(nproc, nproc_omp);
 
     // clamp overflow
-    #[cfg(target_pointer_width = "64")]
+    // The wasm guest is always a 32-bit target regardless of the host's
+    // pointer width, so it clamps to u32::MAX there instead of u64::MAX.
+    #[cfg(all(target_pointer_width = "64", not(wasi_runner)))]
     TestScenario::new(util_name!())
         .ucmd()
         .env("OMP_NUM_THREADS", "99999999999999999999")

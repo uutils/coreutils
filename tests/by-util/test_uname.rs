@@ -71,11 +71,19 @@ fn test_uname_operating_system() {
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Android\n");
-    #[cfg(target_vendor = "apple")]
+    // The test binary runs on the host (e.g. macOS), but under the WASI
+    // runner the coreutils binary under test is the wasm guest, which
+    // correctly self-reports "WASI" rather than the host's OS name.
+    #[cfg(all(target_vendor = "apple", not(wasi_runner)))]
     new_ucmd!()
         .arg("--operating-system")
         .succeeds()
         .stdout_is("Darwin\n");
+    #[cfg(all(target_vendor = "apple", wasi_runner))]
+    new_ucmd!()
+        .arg("--operating-system")
+        .succeeds()
+        .stdout_is("WASI\n");
     #[cfg(target_os = "freebsd")]
     new_ucmd!()
         .arg("--operating-system")

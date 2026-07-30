@@ -87,6 +87,7 @@ fn test_no_options_big_input() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_fifo_symlink() {
     use std::io::Write;
     use std::thread;
@@ -121,6 +122,7 @@ fn test_fifo_symlink() {
 // TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: resource limits not supported")]
 fn test_closes_file_descriptors() {
     // Each file creates a pipe, which has two file descriptors.
     // If they are not closed then five is certainly too many.
@@ -138,6 +140,7 @@ fn test_closes_file_descriptors() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_broken_pipe() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
@@ -199,6 +202,7 @@ fn test_piped_to_dev_null() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_piped_to_dev_full() {
     for append in [true, false] {
         let s = TestScenario::new(util_name!());
@@ -514,6 +518,7 @@ fn test_squeeze_blank_before_numbering() {
 /// This tests reading from Unix character devices
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_dev_random() {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     const DEV_RANDOM: &str = "/dev/urandom";
@@ -544,6 +549,7 @@ fn test_dev_random() {
 /// Wikipedia says there is support on Linux, FreeBSD, and `NetBSD`.
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_dev_full() {
     let mut proc = new_ucmd!()
         .set_stdout(Stdio::piped())
@@ -559,6 +565,7 @@ fn test_dev_full() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_dev_full_show_all() {
     let buf_len = 2048;
     let mut proc = new_ucmd!()
@@ -581,6 +588,7 @@ fn test_dev_full_show_all() {
 // without additional flush output gets reversed.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: /proc filesystem not available")]
 fn test_write_fast_fallthrough_uses_flush() {
     const PROC_INIT_CMDLINE: &str = "/proc/1/cmdline";
     let cmdline = read_to_string(PROC_INIT_CMDLINE).unwrap();
@@ -603,10 +611,15 @@ fn test_domain_socket() {
     s.ucmd()
         .args(&[socket_path])
         .fails()
-        .stderr_contains("No such device or address");
+        .stderr_contains(if cfg!(wasi_runner) {
+            "No such file or directory"
+        } else {
+            "No such device or address"
+        });
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
     let s = TestScenario::new(util_name!());
@@ -622,6 +635,7 @@ fn test_write_to_self_empty() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_write_to_self() {
     let s = TestScenario::new(util_name!());
     let file_path = s.fixtures.plus("first_file");
@@ -678,6 +692,7 @@ fn test_successful_write_to_read_write_self() {
 ///
 /// `cat fx fx3 1<>fx3`
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_failed_write_to_read_write_self() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("fx", "g");
@@ -746,6 +761,7 @@ fn test_write_fast_read_error() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_cat_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -770,6 +786,10 @@ fn test_cat_non_utf8_paths() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: direct file descriptor manipulation not supported"
+)]
 fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -858,6 +878,7 @@ fn test_write_error_handling() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_version_help_dev_full() {
     use std::fs::OpenOptions;
 

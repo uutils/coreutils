@@ -134,6 +134,7 @@ fn test_invalid_arg() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "android")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_split_to_non_seekable() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("/dev/stdout", "xaa");
@@ -311,6 +312,7 @@ fn test_split_additional_suffix_hyphen_value() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: --filter has no process-spawning support")]
 fn test_filter() {
     // like `test_split_default()` but run a command before writing
     let (at, mut ucmd) = at_and_ucmd!();
@@ -361,6 +363,7 @@ fn test_filter_with_env_var_set() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: --filter has no process-spawning support")]
 fn test_filter_command_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "filter-will-fail";
@@ -967,6 +970,10 @@ creating file 'xaf'
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_number_n() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "5", "asciilowercase.txt"]).succeeds();
@@ -983,6 +990,10 @@ fn test_number_n() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_number_kth_of_n() {
     new_ucmd!()
         .args(&["--number=3/5", "asciilowercase.txt"])
@@ -1028,6 +1039,10 @@ fn test_number_kth_of_n() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "wasm guest is always 32-bit; u64::MAX-sized args overflow differently there"
+)]
 fn test_number_kth_of_n_round_robin() {
     new_ucmd!()
         .args(&["--number", "r/2/3", "fivelines.txt"])
@@ -1196,6 +1211,10 @@ fn test_elide_empty_files_n_chunks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_elide_dev_null_n_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "3", "/dev/null"])
@@ -1208,6 +1227,10 @@ fn test_elide_dev_null_n_chunks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_dev_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "3", "/dev/zero"])
@@ -1235,6 +1258,10 @@ fn test_elide_empty_files_l_chunks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_elide_dev_null_l_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "l/3", "/dev/null"])
@@ -1247,6 +1274,10 @@ fn test_elide_dev_null_l_chunks() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_number_by_bytes_dev_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "3", "/dev/zero"])
@@ -1277,6 +1308,10 @@ fn test_number_by_lines_kth() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_number_by_lines_kth_dev_null() {
     new_ucmd!()
         .args(&["-n", "l/3/10", "/dev/null"])
@@ -1668,6 +1703,10 @@ fn test_round_robin() {
 // TODO(#7542): Re-enable on Android once we figure out why rlimit is broken.
 // #[cfg(any(target_os = "linux", target_os = "android"))]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: wasmtime itself needs more file descriptors than the guest's rlimit allows"
+)]
 fn test_round_robin_limited_file_descriptors() {
     new_ucmd!()
         .args(&["-n", "r/40", "onehundredlines.txt"])
@@ -1712,6 +1751,7 @@ fn test_split_invalid_input() {
 /// clap is expected to fail/panic
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_split_non_utf8_argument_unix() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -2007,6 +2047,7 @@ fn test_long_lines() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_split_non_utf8_paths() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2021,6 +2062,7 @@ fn test_split_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_split_non_utf8_prefix_is_byte_preserving() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -2060,6 +2102,7 @@ fn test_split_non_utf8_prefix_is_byte_preserving() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
@@ -2107,6 +2150,7 @@ fn test_split_directory_already_exists() {
 
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_io_error() {
     // /proc/self/mem causes EIO
     new_ucmd!()
@@ -2119,6 +2163,10 @@ fn test_io_error() {
 /// Writing a chunk to a full device must be reported and must stop the split.
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/full) not visible"
+)]
 fn test_write_error_on_full_device() {
     if !Path::new("/dev/full").exists() {
         return;

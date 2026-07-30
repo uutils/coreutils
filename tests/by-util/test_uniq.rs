@@ -1172,6 +1172,7 @@ fn gnu_tests() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_stdin_w1_multibyte() {
     let input = "à\ná\n";
     new_ucmd!()
@@ -1195,6 +1196,7 @@ fn test_c_locale_counts_bytes() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")

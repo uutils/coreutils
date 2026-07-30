@@ -232,6 +232,10 @@ fn test_width_invalid_float() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "invokes the binary directly from a shell script, bypassing the wasmtime runner"
+)]
 fn test_sigpipe_ignored_reports_write_error() {
     let scene = TestScenario::new(util_name!());
     let seq_bin = scene.bin_path.clone().into_os_string();
@@ -296,6 +300,7 @@ fn test_separator_and_terminator() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -319,6 +324,7 @@ fn test_separator_non_utf8() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_terminator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
@@ -732,9 +738,11 @@ fn test_infinite_sequence(#[case] args: &[&str], #[case] expected_start: &[u8]) 
     let result = new_ucmd!()
         .args(args)
         .run_stdout_starts_with(expected_start);
-    #[cfg(unix)]
+    // On Unix systems (not WASI), seq should be terminated by SIGPIPE when the pipe closes.
+    // On WASI and Windows, there are no signals, so just check the process succeeded.
+    #[cfg(all(unix, not(wasi_runner)))]
     result.signal_name_is("PIPE");
-    #[cfg(not(unix))]
+    #[cfg(any(not(unix), wasi_runner))]
     result.success();
 }
 

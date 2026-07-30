@@ -285,8 +285,9 @@ fn test_zero_width_data_line_counts() {
     );
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_fold_reports_no_space_left_on_dev_full() {
     use std::fs::OpenOptions;
     use std::process::Stdio;

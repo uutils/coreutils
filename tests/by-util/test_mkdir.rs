@@ -28,6 +28,10 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
+)]
 fn test_version_no_path() {
     use std::process::Command;
     use uutests::get_tests_binary;
@@ -150,6 +154,10 @@ fn test_mkdir_dup_dir_parent() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -177,6 +185,10 @@ fn test_mkdir_parent_mode() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode_check_existing_parent() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -241,6 +253,7 @@ fn test_mkdir_dup_file() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -252,6 +265,7 @@ fn test_symbolic_mode() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_symbolic_alteration() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -269,6 +283,7 @@ fn test_symbolic_alteration() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_multi_symbolic() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_dir = "test_dir";
@@ -426,6 +441,7 @@ fn test_mkdir_p_respects_umask_without_acl() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: st_mode has no real permission bits")]
 fn test_mkdir_explicit_mode_zero() {
     use std::os::unix::fs::PermissionsExt;
     let (at, mut ucmd) = at_and_ucmd!();
@@ -436,6 +452,10 @@ fn test_mkdir_explicit_mode_zero() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_explicit_mode_with_umask() {
     // -m must win over umask: requesting 0o777 with a restrictive umask must
     // still yield 0o777, since the umask is shaped to not block requested bits.
@@ -824,6 +844,10 @@ fn test_mkdir_case_sensitivity() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: UNC-style path resolves differently inside the guest root than on the host"
+)]
 fn test_mkdir_network_paths() {
     // Test network path formats (UNC paths on Windows)
     let scene = TestScenario::new(util_name!());
@@ -887,6 +911,10 @@ fn test_mkdir_environment_expansion() {
 /// Now it temporarily sets umask to 0 and creates with the exact mode.
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_mode_ignores_umask() {
     // Test that -m 0700 with restrictive umask still creates 0700
     {
@@ -960,6 +988,10 @@ fn test_mkdir_mode_ignores_umask() {
 /// - Final directory uses the exact requested mode (ignoring umask)
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: umask() only affects the wasmtime host process, not the guest sandbox"
+)]
 fn test_mkdir_parent_mode_with_explicit_mode() {
     let (at, mut ucmd) = at_and_ucmd!();
     let umask: mode_t = 0o022;
@@ -1026,6 +1058,10 @@ fn test_mkdir_parent_inherits_setgid() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "spawns the binary directly via std::process::Command, bypassing the wasmtime runner"
+)]
 fn test_mkdir_concurrent_creation() {
     // Test concurrent mkdir -p operations: 10 iterations, 8 threads, 40 levels nesting
     use std::thread;
