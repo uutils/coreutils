@@ -168,9 +168,16 @@ impl FileInformation {
 
     #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "netbsd", target_os = "wasi")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[cfg(any(
+            target_os = "netbsd",
+            target_os = "wasi",
+            not(target_pointer_width = "64")
+        ))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
@@ -689,8 +696,8 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
-#[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
+#[cfg(not(any(unix, target_os = "wasi")))]
+// Hard link comparison is not supported on non-Unix, non-WASI platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -719,7 +726,20 @@ pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
-#[cfg(not(unix))]
+// `std::os::unix::fs::MetadataExt` is unavailable on WASI (`std::os::wasi` is
+// nightly-only). `rustix::fs::stat` exposes the same st_ino/st_dev fields and
+// works on stable for both wasip1 and wasip2.
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::lstat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -746,6 +766,16 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     };
 
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::stat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
@@ -1334,5 +1364,130 @@ mod tests {
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_equality_same_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let info1 = FileInformation::from_path(temp_file.path(), true).unwrap();
+        let info2 = FileInformation::from_path(temp_file.path(), true).unwrap();
+        assert!(info1 == info2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_equality_hard_link() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let link_path = temp_file.path().with_extension("link");
+        fs::hard_link(temp_file.path(), &link_path).unwrap();
+
+        let info1 = FileInformation::from_path(temp_file.path(), true).unwrap();
+        let info2 = FileInformation::from_path(&link_path, true).unwrap();
+        assert!(info1 == info2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_inequality_different_files() {
+        let file1 = NamedTempFile::new().unwrap();
+        let file2 = NamedTempFile::new().unwrap();
+
+        let info1 = FileInformation::from_path(file1.path(), true).unwrap();
+        let info2 = FileInformation::from_path(file2.path(), true).unwrap();
+        assert!(info1 != info2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_hash_consistent_with_eq() {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let link_path = temp_file.path().with_extension("link");
+        fs::hard_link(temp_file.path(), &link_path).unwrap();
+
+        let info1 = FileInformation::from_path(temp_file.path(), true).unwrap();
+        let info2 = FileInformation::from_path(&link_path, true).unwrap();
+
+        let mut h1 = DefaultHasher::new();
+        let mut h2 = DefaultHasher::new();
+        info1.hash(&mut h1);
+        info2.hash(&mut h2);
+        assert_eq!(h1.finish(), h2.finish());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_file_information_inode() {
+        use std::os::unix::fs::MetadataExt;
+
+        let temp_file = NamedTempFile::new().unwrap();
+        let info = FileInformation::from_path(temp_file.path(), true).unwrap();
+        let expected_ino = fs::metadata(temp_file.path()).unwrap().ino();
+        assert_eq!(info.inode(), expected_ino);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_nonexistent_target() {
+        let temp_file = NamedTempFile::new().unwrap();
+        assert!(!are_hardlinks_to_same_file(
+            temp_file.path(),
+            Path::new("/nonexistent_path_xyz")
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_to_same_file_nonexistent_source() {
+        let temp_file = NamedTempFile::new().unwrap();
+        assert!(!are_hardlinks_to_same_file(
+            Path::new("/nonexistent_path_xyz"),
+            temp_file.path()
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_same_file() {
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("file.txt");
+        fs::write(&file_path, "content").unwrap();
+
+        let symlink_path = temp_dir.path().join("link");
+        unix::fs::symlink(&file_path, &symlink_path).unwrap();
+
+        // symlink resolves to file_path, so source (symlink) via stat
+        // matches target (file) via lstat
+        assert!(are_hardlinks_or_one_way_symlink_to_same_file(
+            &symlink_path,
+            &file_path
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_different_files() {
+        let temp_dir = tempdir().unwrap();
+        let file1 = temp_dir.path().join("a.txt");
+        let file2 = temp_dir.path().join("b.txt");
+        fs::write(&file1, "a").unwrap();
+        fs::write(&file2, "b").unwrap();
+
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(
+            &file1, &file2
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_are_hardlinks_or_one_way_symlink_nonexistent() {
+        let temp_file = NamedTempFile::new().unwrap();
+        assert!(!are_hardlinks_or_one_way_symlink_to_same_file(
+            temp_file.path(),
+            Path::new("/nonexistent_path_xyz")
+        ));
     }
 }
