@@ -38,7 +38,7 @@ walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }

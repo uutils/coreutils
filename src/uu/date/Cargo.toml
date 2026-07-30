@@ -46,6 +46,9 @@ uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 libc = { workspace = true }
 rustix = { workspace = true, features = ["time"] }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+libc = { workspace = true }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Foundation",
