@@ -383,7 +383,43 @@ fn test_verbose_write_error_does_not_panic_dir() {
         .stderr_contains("No space left on device")
         .stderr_does_not_contain("panicked");
 
+    // A broken stdout must not stop the removal itself.
     assert!(!at.file_exists(file));
+    assert!(!at.dir_exists(dir));
+}
+
+// A broken standard output must be reported once, not once per removed entry.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_once";
+
+    at.mkdir(dir);
+    for name in ["alpha", "bravo", "charlie", "delta"] {
+        at.touch(format!("{dir}/{name}"));
+    }
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1);
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    assert!(!at.dir_exists(dir));
 }
 
 #[test]
