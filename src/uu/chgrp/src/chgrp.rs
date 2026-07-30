@@ -80,11 +80,12 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        parse_gid_from_str(from_group)
-            .map(IfFrom::Group)
-            .map_err(|_| ChgrpError::InvalidUser {
+        let Ok(gid) = parse_gid_from_str(from_group) else {
+            return Err(ChgrpError::InvalidUser {
                 from_group: from_group.clone(),
-            })?
+            });
+        };
+        IfFrom::Group(gid)
     } else {
         IfFrom::All
     };
