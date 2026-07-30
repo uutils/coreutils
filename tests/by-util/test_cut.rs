@@ -862,3 +862,28 @@ fn test_cut_chars_utf8() {
         .succeeds()
         .stdout_only("n+v\n");
 }
+
+// Lines with no byte above 0x7F take a byte-wise shortcut in a multi-byte
+// locale; mixing them with multi-byte ones checks both paths agree on offsets.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
+fn test_cut_chars_utf8_mixed_ascii_lines() {
+    let input = "quokka\nfjärd\nwombat\ntøys\n";
+
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-c3-5")
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("okk\närd\nmba\nys\n");
+
+    // `-b -n` selects a character when its last byte falls in the range, so the
+    // accented lines cover a different span than the ASCII ones.
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .args(&["-b", "3-5", "-n"])
+        .pipe_in(input)
+        .succeeds()
+        .stdout_only("okk\när\nmba\nøys\n");
+}
