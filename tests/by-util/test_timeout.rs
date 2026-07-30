@@ -447,9 +447,10 @@ fn test_windows_command_cannot_invoke() {
 #[test]
 #[cfg(unix)]
 fn test_continue_terminal_job_ctrl_sigs() {
+    let name = util_name!();
     let (ts, bin) = scenario_with_bin();
     ts.cmd("/bin/sh")
         .arg("-c")
-        .arg(format!("trap 'echo' SIGTTIN; {bin:?} 2 /bin/cat"))
+        .arg(format!("trap 'echo' SIGTTIN; {bin:?} {name} 2 /bin/cat"))
         .timeout(Duration::from_secs(4));
 }
