@@ -1023,3 +1023,44 @@ fn test_unreadable_file_prints_no_header() {
         .stdout_does_not_contain("==> unreadable <==")
         .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
 }
+
+/// Regression for #11972: head must reject directories detected on the
+/// open fd, not via a separate `Path::is_dir()` call. A symlink that
+/// resolves to a directory must still be rejected — verifying the fd
+/// check survives an indirection.
+#[test]
+#[cfg(unix)]
+fn test_head_rejects_directory_through_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("real_dir");
+    symlink("real_dir", at.plus("link_to_dir")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_dir")
+        .fails_with_code(1)
+        .stderr_contains("Is a directory");
+}
+
+/// Regression for #11972: a symlink that points to a regular file must
+/// still be readable by head (the fd-based check must distinguish the
+/// fd's mode, not the symlink's).
+#[test]
+#[cfg(unix)]
+fn test_head_follows_symlink_to_regular_file() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("regular", "hello\n");
+    symlink("regular", at.plus("link_to_regular")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_regular")
+        .succeeds()
+        .stdout_is("hello\n");
+}
