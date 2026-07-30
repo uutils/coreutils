@@ -586,8 +586,7 @@ fn print_integer(
         ""
     };
     let extended = match precision {
-        Precision::NotSpecified => format!("{prefix}{arg}"),
-        Precision::NoNumber => format!("{prefix}{arg}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{arg}"),
         Precision::Number(p) => format!("{prefix}{arg:0>p$}"),
     };
     pad_and_print(&extended, flags.left, width, padding_char);
@@ -618,13 +617,14 @@ fn precision_trunc(num: f64, precision: Precision) -> String {
     let num_str = num.to_string();
     let n = num_str.len();
     match (num_str.find('.'), precision) {
-        (None, Precision::NotSpecified) => num_str,
-        (None, Precision::NoNumber) => num_str,
-        (None, Precision::Number(0)) => num_str,
+        (None, Precision::NotSpecified)
+        | (None, Precision::NoNumber)
+        | (None, Precision::Number(0))
+        | (Some(_), Precision::NoNumber) => num_str,
         (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
-        (Some(i), Precision::NotSpecified) => num_str[..i].to_string(),
-        (Some(_), Precision::NoNumber) => num_str,
-        (Some(i), Precision::Number(0)) => num_str[..i].to_string(),
+        (Some(i), Precision::NotSpecified) | (Some(i), Precision::Number(0)) => {
+            num_str[..i].to_string()
+        }
         (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
         (Some(i), Precision::Number(p)) => {
             format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
@@ -668,8 +668,7 @@ fn print_unsigned(
         Cow::Borrowed(num.as_str())
     };
     let s = match precision {
-        Precision::NotSpecified => s,
-        Precision::NoNumber => s,
+        Precision::NotSpecified | Precision::NoNumber => s,
         Precision::Number(p) => format!("{s:0>p$}").into(),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -693,8 +692,7 @@ fn print_unsigned_oct(
 ) {
     let prefix = if flags.alter { "0" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:o}"),
-        Precision::NoNumber => format!("{prefix}{num:o}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:o}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -718,8 +716,7 @@ fn print_unsigned_hex(
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:x}"),
-        Precision::NoNumber => format!("{prefix}{num:x}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:x}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$x}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -732,6 +729,7 @@ fn print_raw_byte(byte: u8) {
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
         while *i < bound {
+            #[expect(clippy::match_same_arms)] // needs comment
             match chars[*i] {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
