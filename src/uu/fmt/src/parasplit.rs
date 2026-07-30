@@ -8,22 +8,18 @@
 use std::io::BufRead;
 use std::iter::Peekable;
 use std::slice::Iter;
-use unicode_width::UnicodeWidthChar;
 
 use crate::FileOrStdReader;
 use crate::FmtOptions;
 
+/// Column contribution of a decoded character toward GNU `fmt` `-w`/`--width`.
+///
+/// Current GNU `fmt` (through at least 9.11) is not multibyte-aware: it measures
+/// line length in UTF-8 bytes (pointer differences in `fmt.c`), not Unicode
+/// display columns. Match that so wrapping agrees on CJK and other multibyte text.
+/// When GNU switches to display-column width, revisit this.
 fn char_width(c: char) -> usize {
-    if (c as usize) < 0xA0 {
-        // if it is ASCII, call it exactly 1 wide (including control chars)
-        // calling control chars' widths 1 is consistent with OpenBSD fmt
-        1
-    } else {
-        // otherwise, get the unicode width
-        // note that we shouldn't actually get None here because only c < 0xA0
-        // can return None, but for safety and future-proofing we do it this way
-        UnicodeWidthChar::width(c).unwrap_or(1)
-    }
+    c.len_utf8()
 }
 
 /// Return the UTF-8 sequence length implied by a leading byte, or `None` if invalid.
@@ -98,8 +94,9 @@ fn decode_char_info(bytes: &[u8], start: usize) -> DecodedCharInfo {
     }
 }
 
-/// Compute display width for a UTF-8 byte slice, treating invalid bytes as width 1.
-fn byte_display_width(bytes: &[u8]) -> usize {
+/// Compute GNU-compatible width for a UTF-8 byte slice (byte length).
+/// Invalid UTF-8 bytes are treated as width 1 each via `decode_char_info`.
+fn byte_width(bytes: &[u8]) -> usize {
     let mut width = 0;
     let mut idx = 0;
     while idx < bytes.len() {
@@ -157,7 +154,7 @@ pub struct FileLine {
     indent_end: usize,
     /// The end of the PREFIX's indent, that is, the spaces before the prefix
     prefix_indent_end: usize,
-    /// Display length of indent taking into account tabs
+    /// Printed length of indent taking into account tabs (GNU: byte-oriented)
     indent_len: usize,
     /// PREFIX indent length taking into account tabs
     prefix_len: usize,
@@ -561,7 +558,7 @@ impl<'a> ParaWords<'a> {
                     .map(|x| WordInfo {
                         word: x,
                         word_start: 0,
-                        word_nchars: byte_display_width(x),
+                        word_nchars: byte_width(x),
                         before_tab: None,
                         after_tab: 0,
                         sentence_start: false,

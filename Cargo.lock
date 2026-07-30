@@ -3640,7 +3640,6 @@ dependencies = [
  "clap",
  "fluent",
  "thiserror 2.0.19",
- "unicode-width 0.2.2",
  "uucore",
 ]
 
