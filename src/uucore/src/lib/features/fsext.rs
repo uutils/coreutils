@@ -170,7 +170,11 @@ fn metadata_get_change_time(md: &Metadata) -> Option<SystemTime> {
 
 #[cfg(not(unix))]
 fn metadata_get_change_time(_md: &Metadata) -> Option<SystemTime> {
-    // Not available.
+    // Not available: `std::fs::Metadata` has no ctime accessor without
+    // `std::os::unix::fs::MetadataExt` (unix-only) or `std::os::wasi::fs::MetadataExt`
+    // (WASI, but nightly-only). Getting ctime on WASI would require get stat of
+    // the path directly via `rustix::fs::stat` instead of going through
+    // `Metadata`, which isn't available at this call site.
     None
 }
 
