@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
-use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod};
 use std::io::{self, Write as _};
 
 use uucore::display::Quotable;
@@ -73,26 +73,24 @@ struct Config {
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
-    // set umask to 0 and store previous umask
-    let have_prev_umask = if config.use_umask {
-        None
-    } else {
-        Some(nix_umask(Mode::empty()))
-    };
+    let mknod_err = {
+        // Use UmaskGuard to ensure umask is restored even on panic.
+        // Setting umask to 0 lets the kernel apply the exact requested mode.
+        let _guard = if config.use_umask {
+            None
+        } else {
+            Some(uucore::mode::UmaskGuard::set(0))
+        };
 
-    let mknod_err = nix_mknod(
-        file_name,
-        config.file_type.as_sflag(),
-        config.mode,
-        config.dev as _,
-    )
-    .err();
+        nix_mknod(
+            file_name,
+            config.file_type.as_sflag(),
+            config.mode,
+            config.dev as _,
+        )
+        .err()
+    }; // Guard dropped here, restoring umask
     let errno = if mknod_err.is_some() { -1 } else { 0 };
-
-    // set umask back to original value
-    if let Some(prev_umask) = have_prev_umask {
-        nix_umask(prev_umask);
-    }
 
     if let Some(err) = mknod_err {
         let _ = writeln!(
