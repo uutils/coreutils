@@ -2112,6 +2112,9 @@ fn symlink_file(
             )
         })?;
     }
+    // `std::os::unix::fs::symlink` is unavailable on WASI (`std::os::wasi` is
+    // nightly-only), so route symlink creation through the platform module,
+    // which uses `rustix::fs::symlink` (stable for both wasip1 and wasip2).
     #[cfg(target_os = "wasi")]
     {
         platform::create_symlink(source, dest).map_err(|e| {
