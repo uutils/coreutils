@@ -209,14 +209,14 @@ macro_rules! bin_inner {
                         } => eprintln!("Localization parse error at {snippet}: {err_msg:?}"),
                         other => eprintln!("Could not init the localization system: {other}"),
                     }
-                    std::process::exit(99)
+                    uucore::error::process_exit(99)
                 });
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
             $post
 
-            std::process::exit(code);
+            uucore::error::process_exit(code);
         }
     };
 }

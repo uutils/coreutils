@@ -7,7 +7,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
-use uucore::error::{UResult, set_exit_code};
+use uucore::error::{UResult, process_exit, set_exit_code};
 use uucore::format_usage;
 
 use uucore::translate;
@@ -77,7 +77,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if write_result.is_err() || stdout.flush().is_err() {
         // Don't return to prevent a panic later when another flush is attempted
         // because the `uucore_procs::main` macro inserts a flush after execution for every utility.
-        std::process::exit(3);
+        process_exit(3);
     }
 
     Ok(())

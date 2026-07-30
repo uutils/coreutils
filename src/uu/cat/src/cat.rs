@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UResult, strip_errno};
+use uucore::error::{UResult, process_exit, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -714,7 +714,7 @@ fn write_end_of_line<W: Write>(
 fn handle_broken_pipe(error: &io::Error) {
     // SIGPIPE is not available on Windows.
     if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
-        std::process::exit(13);
+        process_exit(13);
     }
 }
 

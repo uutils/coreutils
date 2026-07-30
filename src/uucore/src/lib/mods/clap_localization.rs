@@ -113,7 +113,7 @@ impl<'a> ErrorFormatter<'a> {
     {
         let code = self.print_error(err, exit_code);
         callback();
-        std::process::exit(code);
+        crate::error::process_exit(code);
     }
 
     /// Print error and return exit code (no exit call)

@@ -559,7 +559,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
     #[cfg(target_os = "windows")]
     writer.flush().inspect_err(|err| {
         if err.kind() == ErrorKind::BrokenPipe {
-            std::process::exit(13);
+            uucore::error::process_exit(13);
         }
     })?;
     Ok(())
