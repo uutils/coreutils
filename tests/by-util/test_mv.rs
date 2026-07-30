@@ -746,6 +746,41 @@ fn test_mv_backup_simple_guard_allows_unrelated_source() {
     assert_eq!(at.read("test_mv_spell_dst~"), "DSTDATA");
 }
 
+/// A symlink source is a distinct file from the backup it points at, so the
+/// backup rename cannot destroy it. GNU allows this.
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_backup_simple_guard_allows_symlink_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("test_mv_sym_a", "DSTDATA");
+    at.write("test_mv_sym_real", "REALDATA");
+    at.symlink_file("test_mv_sym_real", "test_mv_sym_a~");
+
+    ucmd.arg("test_mv_sym_a~")
+        .arg("test_mv_sym_a")
+        .arg("--backup=simple")
+        .succeeds();
+}
+
+/// A hard link under another name shares the backup's inode but keeps the data
+/// alive after the rename, so the guard must not fire. GNU allows this.
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_mv_backup_simple_guard_allows_hardlink_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("test_mv_hl_a", "DSTDATA");
+    at.write("test_mv_hl_a~", "SRCDATA");
+    at.hard_link("test_mv_hl_a~", "test_mv_hl_b");
+
+    ucmd.arg("test_mv_hl_b")
+        .arg("test_mv_hl_a")
+        .arg("--backup=simple")
+        .succeeds();
+
+    assert_eq!(at.read("test_mv_hl_a"), "SRCDATA");
+    assert_eq!(at.read("test_mv_hl_a~"), "DSTDATA");
+}
+
 #[test]
 fn test_mv_same_file_not_dot_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
