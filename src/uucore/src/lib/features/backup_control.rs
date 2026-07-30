@@ -470,37 +470,59 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 /// * `source` - A Path reference that holds the source (backup) file path.
 /// * `target` - A Path reference that holds the target file path.
 /// * `suffix` - Str that holds the backup suffix.
+/// * `dereference` - Whether the source is resolved through symlinks, matching
+///   how the calling utility opens it (`false` for `mv`, `true` for `cp`/`install`).
 ///
 /// # Examples
 ///
 /// ```
+/// use std::fs;
 /// use std::path::Path;
 /// use uucore::backup_control::source_is_target_backup;
-/// let source = Path::new("data.txt~");
-/// let target = Path::new("data.txt");
-/// let suffix = String::from("~");
 ///
-/// assert_eq!(source_is_target_backup(&source, &target, &suffix), true);
+/// let dir = tempfile::tempdir().unwrap();
+/// let target = dir.path().join("data.txt");
+/// let source = dir.path().join("data.txt~");
+/// fs::write(&target, "").unwrap();
+/// fs::write(&source, "").unwrap();
+///
+/// // `./data.txt~` and `data.txt~` name the same file, so both are caught.
+/// assert!(source_is_target_backup(&source, &target, "~", false));
 /// ```
 ///
-pub fn source_is_target_backup(source: &Path, target: &Path, suffix: &str) -> bool {
+pub fn source_is_target_backup(
+    source: &Path,
+    target: &Path,
+    suffix: &str,
+    dereference: bool,
+) -> bool {
+    // GNU gates on the file names first: only a source whose final component is
+    // the target's final component plus the suffix can be clobbered by the
+    // backup rename. This keeps unrelated files that merely happen to share an
+    // inode (a hard link, say) from being refused.
+    let (Some(source_base), Some(target_base)) = (source.file_name(), target.file_name()) else {
+        return false;
+    };
+    let mut expected_base = target_base.to_owned();
+    expected_base.push(suffix);
+    if source_base != expected_base {
+        return false;
+    }
+
+    // Then compare the files themselves rather than how they were spelled, so
+    // `a~`, `./a~` and an absolute path are all recognised. If the backup does
+    // not exist yet there is nothing to destroy.
     let mut target_backup_filename = target.as_os_str().to_owned();
     target_backup_filename.push(suffix);
     let target_backup = PathBuf::from(target_backup_filename);
 
-    // Compare the files themselves, not how they were spelled: `a~`, `./a~` and
-    // an absolute path all name the same file, and comparing the strings lets
-    // the guard fail open and silently destroy the source.
-    if let (Ok(source_info), Ok(backup_info)) = (
-        FileInformation::from_path(source, false),
-        FileInformation::from_path(&target_backup, false),
+    match (
+        FileInformation::from_path(source, dereference),
+        FileInformation::from_path(&target_backup, true),
     ) {
-        return source_info == backup_info;
+        (Ok(source_info), Ok(backup_info)) => source_info == backup_info,
+        _ => false,
     }
-
-    // The backup does not exist yet (so nothing can be destroyed), or one of the
-    // paths could not be stat'd; fall back to comparing the spellings.
-    source.as_os_str() == target_backup.as_os_str()
 }
 
 //
@@ -689,28 +711,79 @@ mod tests {
 
     #[test]
     fn test_source_is_target_backup() {
-        let source = Path::new("data.txt.bak");
-        let target = Path::new("data.txt");
-        let suffix = String::from(".bak");
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("data.txt");
+        let source = dir.path().join("data.txt.bak");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(source, target, &suffix));
+        assert!(source_is_target_backup(&source, &target, ".bak", false));
     }
 
     #[test]
     fn test_source_is_not_target_backup() {
-        let source = Path::new("data.txt");
-        let target = Path::new("backup.txt");
-        let suffix = String::from(".bak");
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("backup.txt");
+        let source = dir.path().join("data.txt");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(!source_is_target_backup(source, target, &suffix));
+        assert!(!source_is_target_backup(&source, &target, ".bak", false));
     }
 
     #[test]
     fn test_source_is_target_backup_with_tilde_suffix() {
-        let source = Path::new("example~");
-        let target = Path::new("example");
-        let suffix = String::from("~");
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("example");
+        let source = dir.path().join("example~");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(source, target, &suffix));
+        assert!(source_is_target_backup(&source, &target, "~", false));
+    }
+
+    /// The guard must see through how the operands were spelled.
+    #[test]
+    fn test_source_is_target_backup_ignores_spelling() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a"), "").unwrap();
+        fs::write(dir.path().join("a~"), "").unwrap();
+
+        for target in ["a", "./a"] {
+            let source = dir.path().join("a~");
+            let target = dir.path().join(target);
+            assert!(
+                source_is_target_backup(&source, &target, "~", false),
+                "guard failed open for target spelled {}",
+                target.display()
+            );
+        }
+    }
+
+    /// A backup that does not exist yet cannot destroy anything.
+    #[test]
+    fn test_source_is_target_backup_absent_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("a");
+        let source = dir.path().join("a~");
+        fs::write(&target, "").unwrap();
+
+        assert!(!source_is_target_backup(&source, &target, "~", false));
+    }
+
+    /// Sharing the backup's inode under a different name is safe: the rename
+    /// only drops one link, so the data survives.
+    #[cfg(unix)]
+    #[test]
+    fn test_source_is_target_backup_hard_link_under_other_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("a");
+        let backup = dir.path().join("a~");
+        let source = dir.path().join("b");
+        fs::write(&target, "").unwrap();
+        fs::write(&backup, "").unwrap();
+        fs::hard_link(&backup, &source).unwrap();
+
+        assert!(!source_is_target_backup(&source, &target, "~", false));
     }
 }
