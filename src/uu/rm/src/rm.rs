@@ -20,7 +20,7 @@ use std::path::MAIN_SEPARATOR;
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
@@ -52,24 +52,48 @@ enum RmError {
 
 impl UError for RmError {}
 
+/// Write one verbose line to standard output, turning a write failure
+/// (e.g. a full device or a closed pipe) into an error instead of
+/// panicking like `println!` would.
+fn write_verbose_line(message: &str) -> UResult<()> {
+    writeln!(io::stdout().lock(), "{message}").map_err(|err| {
+        USimpleError::new(
+            1,
+            translate!("rm-error-standard-output", "error" => strip_errno(&err)),
+        )
+    })?;
+    Ok(())
+}
+
 /// Helper function to print verbose message for removed file
-fn verbose_removed_file(path: &Path, options: &Options) {
+fn verbose_removed_file(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
     }
+    Ok(())
 }
 
 /// Helper function to print verbose message for removed directory
-fn verbose_removed_directory(path: &Path, options: &Options) {
+fn verbose_removed_directory(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed-directory",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
     }
+    Ok(())
+}
+
+/// Helper function to report a verbose output write error and return error status
+fn show_verbose_write_error(result: UResult<()>) -> bool {
+    if let Err(e) = result {
+        show_error!("{e}");
+        return true;
+    }
+    false
 }
 
 /// Helper function to show error with context and return error status
@@ -93,10 +117,7 @@ fn show_permission_denied_error(path: &Path) -> bool {
 /// Helper function to remove a directory and handle results
 fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     match fs::remove_dir(path) {
-        Ok(_) => {
-            verbose_removed_directory(path, options);
-            false
-        }
+        Ok(_) => show_verbose_write_error(verbose_removed_directory(path, options)),
         Err(e) => show_removal_error(e, path),
     }
 }
@@ -720,7 +741,9 @@ fn remove_dir_recursive(
                 // show another error message as we return from each level
                 // of the recursion.
             }
-            Ok(_) => verbose_removed_directory(path, options),
+            Ok(_) => {
+                error = error || show_verbose_write_error(verbose_removed_directory(path, options));
+            }
         }
 
         error
@@ -845,7 +868,7 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
         // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
-                verbose_removed_file(path, options);
+                return show_verbose_write_error(verbose_removed_file(path, options));
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::PermissionDenied {
