@@ -440,11 +440,20 @@ impl DirFd {
     }
 
     /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    ///
+    /// Creates the file if it doesn't exist, truncates it if it does. `name` is
+    /// opened with `O_NOFOLLOW`, so a symlink at that final component is refused
+    /// rather than followed to its target. This keeps the primitive in line with
+    /// the rest of this module (see `open`/`open_subdir`) and stops the fd-based
+    /// copy from writing through a symlink planted at the destination name.
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
-        let flags = OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC | OFlag::O_CLOEXEC;
+        let flags = OFlag::O_CREAT
+            | OFlag::O_WRONLY
+            | OFlag::O_TRUNC
+            | OFlag::O_NOFOLLOW
+            | OFlag::O_CLOEXEC;
         let mode = Mode::from_bits_truncate(0o666); // Default file permissions
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
@@ -1283,6 +1292,32 @@ mod tests {
 
         let content = fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "new");
+    }
+
+    /// `open_file_at` must not follow a symlink at the final component. The
+    /// fd-based install copy unlinks the destination and then creates it here,
+    /// so a symlink planted at that name must be refused rather than followed,
+    /// otherwise a file outside the destination directory gets truncated.
+    #[test]
+    fn test_open_file_at_nofollow_refuses_symlink() {
+        let temp_dir = TempDir::new().unwrap();
+
+        // A sentinel file that lives outside the destination directory.
+        let sentinel = temp_dir.path().join("sentinel");
+        fs::write(&sentinel, "victim contents").unwrap();
+
+        // Destination directory holding a symlink pointing at the sentinel.
+        let dest = temp_dir.path().join("dest");
+        fs::create_dir(&dest).unwrap();
+        symlink(&sentinel, dest.join("link")).unwrap();
+
+        let dir_fd = DirFd::open(&dest, SymlinkBehavior::Follow).unwrap();
+        let result = dir_fd.open_file_at(OsStr::new("link"));
+
+        // The open is refused (ELOOP) instead of resolving the link.
+        assert!(result.is_err());
+        // The sentinel outside the directory is left untouched.
+        assert_eq!(fs::read_to_string(&sentinel).unwrap(), "victim contents");
     }
 
     #[test]
