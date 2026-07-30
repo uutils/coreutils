@@ -13,7 +13,7 @@ use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, std
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
-use uucore::i18n::charmap::{is_multibyte_locale, mb_char_len, mb_chars};
+use uucore::i18n::charmap::{is_multibyte_locale, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 
@@ -107,6 +107,37 @@ fn cut_bytes<R: Read, W: Write>(
     Ok(())
 }
 
+/// Walk `line` from byte offset `idx` (at position `pos`) as long as the
+/// position of the last consumed character stays within `limit`, and return the
+/// byte offset and position reached.
+///
+/// The position is the number of characters seen so far when `by_char` is set
+/// (`-c`), or the offset of the last byte consumed otherwise (`-b -n`).
+fn advance(
+    line: &[u8],
+    mut idx: usize,
+    mut pos: usize,
+    limit: usize,
+    by_char: bool,
+) -> (usize, usize) {
+    while pos < limit && idx < line.len() {
+        // ASCII bytes are single-byte characters in every encoding handled
+        // here, which keeps the common case out of the decoder.
+        let len = if line[idx] < 0x80 {
+            1
+        } else {
+            mb_char_len(&line[idx..]).max(1) // never exceeds the length left
+        };
+        let step = if by_char { 1 } else { len };
+        if pos + step > limit {
+            break;
+        }
+        idx += len;
+        pos += step;
+    }
+    (idx, pos)
+}
+
 /// Cut `-c` (whole characters) or `-b -n` (bytes, keeping whole characters).
 ///
 /// In a single-byte locale, or for `-b` without `-n`, this falls back to the
@@ -130,25 +161,35 @@ fn cut_chars<R: Read, W: Write>(
 
     let result = buf_in.for_byte_record(newline_char, |line| {
         let mut print_delim = false;
+        // Byte offset of the next character to look at, and the position
+        // already consumed. `ranges` is sorted and disjoint, so one pass over
+        // the line is enough and each range maps to a contiguous slice of it.
+        let (mut idx, mut pos) = (0, 0);
         for &Range { low, high } in ranges {
-            let mut pos = 0;
-            let mut wrote = false;
-            for ch in mb_chars(line) {
-                pos += if by_char { 1 } else { ch.len() };
-                if pos > high {
-                    break;
+            // Skip the characters located before the range, then take the ones
+            // it covers: a character belongs to the range when its position is
+            // in `low..=high`.
+            (idx, pos) = advance(line, idx, pos, low - 1, by_char);
+            let start = idx;
+            if high >= line.len() {
+                // A character never ends before its own byte offset, so a range
+                // reaching past the end of the line covers everything left:
+                // there is no need to decode it.
+                idx = line.len();
+            } else {
+                (idx, pos) = advance(line, idx, pos, high, by_char);
+            }
+            if start < idx {
+                if print_delim {
+                    out.write_all(out_delim)?;
+                } else if opts.out_delimiter.is_some() {
+                    print_delim = true;
                 }
-                if pos >= low {
-                    if !wrote {
-                        if print_delim {
-                            out.write_all(out_delim)?;
-                        } else if opts.out_delimiter.is_some() {
-                            print_delim = true;
-                        }
-                        wrote = true;
-                    }
-                    out.write_all(ch)?;
-                }
+                out.write_all(&line[start..idx])?;
+            }
+            if idx == line.len() {
+                // The rest of the ranges start further away, past the line end.
+                break;
             }
         }
         out.write_all(&[newline_char])?;
