@@ -148,7 +148,19 @@ impl FileInformation {
     pub fn inode(&self) -> u64 {
         #[cfg(target_os = "haiku")]
         return self.0.st_ino.try_into().unwrap();
-        #[cfg(not(target_os = "haiku"))]
+        #[cfg(all(
+            not(any(target_os = "haiku", target_os = "netbsd", target_os = "wasi")),
+            target_pointer_width = "64"
+        ))]
+        return self.0.st_ino;
+        #[cfg(all(
+            not(target_os = "haiku"),
+            any(
+                target_os = "netbsd",
+                target_os = "wasi",
+                not(target_pointer_width = "64")
+            )
+        ))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
@@ -770,8 +782,8 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     true
 }
 
-#[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
+#[cfg(not(any(unix, target_os = "wasi")))]
+// Hard link comparison is not supported on non-Unix, non-WASI platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -800,7 +812,20 @@ pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
-#[cfg(not(unix))]
+// `std::os::unix::fs::MetadataExt` is unavailable on WASI (`std::os::wasi` is
+// nightly-only). `rustix::fs::stat` exposes the same st_ino/st_dev fields and
+// works on stable for both wasip1 and wasip2.
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::lstat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -827,6 +852,16 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     };
 
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::stat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
 }
 
 /// Returns true if the passed `path` ends with a path terminator.
