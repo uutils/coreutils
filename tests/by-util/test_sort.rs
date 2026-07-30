@@ -1238,6 +1238,33 @@ fn test_check_silent() {
 }
 
 #[test]
+fn test_check_stops_early_without_panicking() {
+    // `--check` returns as soon as it finds the first disorder. That used to drop the
+    // channel while the reader thread was still sending chunks, so the reader panicked
+    // on a `SendError`. Under `panic = "abort"` (our release profile) that aborts the
+    // whole process instead of exiting 1.
+    //
+    // The disorder sits midway through an input that is large relative to the buffer
+    // size, so the reader is certain to be blocked on a full channel when we stop.
+    // Note this cannot fail spuriously: once the receiver outlives the reader, no
+    // panic is possible.
+    const LINES_BEFORE: usize = 20_000;
+    let mut input = "c\n".repeat(LINES_BEFORE);
+    input.push_str("a\n");
+    input.push_str(&"c\n".repeat(LINES_BEFORE));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("disorder.txt", &input);
+
+    ucmd.args(&["-c", "--buffer-size=1K", "disorder.txt"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "sort: disorder.txt:{}: disorder: a\n",
+            LINES_BEFORE + 1
+        ));
+}
+
+#[test]
 fn test_check_unique() {
     new_ucmd!()
         .args(&["-c", "-u"])
