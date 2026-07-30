@@ -95,7 +95,7 @@ impl<T: BufRead> Iterator for LinesWithNewlines<T> {
         match self.inner.read_until(b'\n', &mut v) {
             Ok(0) => None,
             Ok(_) => Some(ret(v)),
-            Err(e) => Some(Err(e)),
+            Err(e) => Some(Err(uucore::error::wasi_normalize_open_error(e))),
         }
     }
 }

@@ -75,7 +75,10 @@ where
             Ok(0) => break,
             Ok(len) => len,
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.map_err_context(|| translate!("tr-error-read-error"))),
+            Err(e) => {
+                let e = uucore::error::wasi_normalize_read_error(e);
+                return Err(e.map_err_context(|| translate!("tr-error-read-error")));
+            }
         };
 
         output_buf.clear();

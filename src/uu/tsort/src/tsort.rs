@@ -55,7 +55,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
         // some platforms cannot catch this as read error. Needs additional cost by stat
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "wasi"))]
         {
             let input = std::path::Path::new(input);
             if input.is_dir() {

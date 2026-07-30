@@ -214,6 +214,7 @@ impl MultiWriter {
                 Ok(slice) => self.write_flush(slice)?,
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(e) => {
+                    let e = uucore::error::wasi_normalize_read_error(e);
                     let _ = writeln!(
                         stderr(),
                         "tee: {}",

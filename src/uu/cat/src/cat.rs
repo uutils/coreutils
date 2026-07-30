@@ -383,7 +383,16 @@ fn cat_path(path: &OsString, options: &OutputOptions, state: &mut OutputState) -
         #[cfg(unix)]
         InputType::Socket => Err(CatError::NoSuchDeviceOrAddress),
         _ => {
-            let file = File::open(path)?;
+            let file = File::open(path).map_err(|e| {
+                let e = uucore::error::wasi_normalize_open_error(e);
+                match e.kind() {
+                    ErrorKind::IsADirectory => CatError::IsDirectory,
+                    // WASI: Check if this might be a symlink loop error (ELOOP == 32)
+                    #[cfg(target_os = "wasi")]
+                    _ if e.raw_os_error() == Some(32) => CatError::TooManySymlinks,
+                    _ => CatError::from(e),
+                }
+            })?;
             if !is_safe_overwrite(&file, &io::stdout()) {
                 return Err(CatError::OutputIsInput);
             }
@@ -442,13 +451,20 @@ fn get_input_type(path: &OsString) -> CatResult<InputType> {
     let ft = match metadata(path) {
         Ok(md) => md.file_type(),
         Err(e) => {
+            let e = uucore::error::wasi_normalize_open_error(e);
+            if e.kind() == ErrorKind::IsADirectory {
+                return Err(CatError::IsDirectory);
+            }
             if let Some(raw_error) = e.raw_os_error() {
                 // On Unix-like systems, the error code for "Too many levels of symbolic links" is 40 (ELOOP).
                 // we want to provide a proper error message in this case.
-                #[cfg(not(any(target_os = "macos", target_os = "freebsd")))]
+                #[cfg(not(any(target_os = "macos", target_os = "freebsd", target_os = "wasi")))]
                 let too_many_symlink_code = 40;
                 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
                 let too_many_symlink_code = 62;
+                // wasi-libc's ELOOP is 32, unlike the 63 used by some other targets.
+                #[cfg(target_os = "wasi")]
+                let too_many_symlink_code = 32;
                 if raw_error == too_many_symlink_code {
                     return Err(CatError::TooManySymlinks);
                 }

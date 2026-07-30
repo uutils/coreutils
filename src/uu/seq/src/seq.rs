@@ -212,7 +212,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     match result {
         Ok(()) => Ok(()),
-        Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+        Err(err) if uucore::error::wasi_is_broken_pipe(&err) => {
             // GNU seq prints the Broken pipe message but still exits with status 0
             // unless SIGPIPE was explicitly ignored, in which case it should fail.
             let err = err.map_err_context(|| "write error".into());
