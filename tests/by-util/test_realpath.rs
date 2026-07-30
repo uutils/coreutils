@@ -164,9 +164,15 @@ fn test_realpath_logical_mode() {
 fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
-    ucmd.arg("link")
-        .succeeds()
-        .stdout_contains(at.plus_as_string("nonexistent-file\n"));
+    let output = ucmd.arg("link").succeeds().stdout_move_str();
+    let printed = Path::new(output.trim_end_matches('\n'));
+    assert_eq!(printed.file_name().unwrap(), "nonexistent-file");
+    // Canonicalize the printed parent dir before comparing, since on Windows
+    // CI the temp dir may be reported using its short (8.3) alias, which is
+    // not guaranteed to match the long-form path from `root_dir_resolved()`.
+    let printed_dir = printed.parent().unwrap().canonicalize().unwrap();
+    let expect_dir = Path::new(&at.root_dir_resolved()).canonicalize().unwrap();
+    assert_eq!(printed_dir, expect_dir);
 }
 
 #[test]

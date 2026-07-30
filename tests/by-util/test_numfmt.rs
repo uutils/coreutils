@@ -1678,8 +1678,7 @@ fn test_float_precision_greater_than_16bits_with_suffix() {
 fn test_format_precision_too_large_on_zero() {
     new_ucmd!()
         .args(&["--format=%.40f", "0"])
-        .fails()
-        .code_is(2)
+        .fails_with_code(2)
         .stderr_only(
             "numfmt: value/precision too large to be printed: '0e+0/40' (consider using --to)\n",
         );
