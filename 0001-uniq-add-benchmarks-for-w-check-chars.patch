@@ -19,7 +19,7 @@ index ab5e57038..780ecff15 100644
 @@ -108,6 +108,29 @@ fn uniq_case_insensitive(bencher: Bencher, num_lines: usize) {
      });
  }
- 
+
 +/// Benchmark 4: `-w N` over duplicate-heavy input, for both a narrow N (1)
 +/// and a wide N (512, as reported in #13199).
 +/// Regression coverage for #13199: `uniq -w N` was ~5x slower than GNU uniq
@@ -46,6 +46,5 @@ index ab5e57038..780ecff15 100644
  fn main() {
      divan::main();
  }
--- 
+--
 2.53.0
-
