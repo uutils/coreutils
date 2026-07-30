@@ -83,7 +83,8 @@ fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
         let Ok(gid) = parse_gid_from_str(from_group) else {
             return Err(ChgrpError::InvalidUser {
                 from_group: from_group.clone(),
-            });
+            }
+            .into());
         };
         IfFrom::Group(gid)
     } else {
