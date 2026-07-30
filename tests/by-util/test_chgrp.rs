@@ -207,7 +207,8 @@ fn test_reference() {
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from root to root\n");
+            // group name can differ, so just check the first part of the message
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
     }
 }
 
