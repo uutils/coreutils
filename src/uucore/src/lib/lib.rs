@@ -574,8 +574,12 @@ pub fn read_byte_lines<R: std::io::Read>(
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
 ) -> impl Iterator<Item = std::io::Result<OsString>> {
-    read_byte_lines(buf_reader)
-        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
+    read_byte_lines(buf_reader).map(|byte_line_res| {
+        byte_line_res.and_then(|bl| {
+            os_string_from_vec(bl)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+        })
+    })
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`

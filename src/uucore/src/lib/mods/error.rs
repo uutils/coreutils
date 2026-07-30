@@ -501,6 +501,67 @@ pub fn strip_errno(err: &std::io::Error) -> String {
     msg
 }
 
+/// Remap the `EBADF`-instead-of-`EISDIR` error WASI raises for filesystem
+/// operations attempted on a directory as if it were a regular file.
+///
+/// On WASI (both preview 1 and preview 2), `std::fs::File::open`/`.read()`,
+/// `std::fs::remove_file`, and similar calls surface raw errno `8` (`EBADF`)
+/// when given a directory, instead of the `EISDIR` that Unix platforms
+/// return, so `std::io::Error::kind()` comes back `Uncategorized` rather
+/// than `IsADirectory`. Call this on such errors to normalize that case to
+/// `ErrorKind::IsADirectory`, matching Unix behavior.
+///
+/// This is a no-op on non-WASI targets.
+pub fn wasi_normalize_open_error(err: std::io::Error) -> std::io::Error {
+    #[cfg(target_os = "wasi")]
+    if err.raw_os_error() == Some(8) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    err
+}
+
+/// Remap the error from reading a stream that turned out to be backed by a
+/// directory file descriptor (e.g. stdin redirected from a directory, or a
+/// raw `read()` on an fd already open on a directory).
+///
+/// This covers two distinct WASI error shapes for the same underlying
+/// condition: reading a directory fd that was already open when handed to
+/// us (e.g. stdin redirected from a directory) surfaces `EISDIR`, under a
+/// different errno per preview version (`31` on preview 1, `29` on preview
+/// 2); reading a directory fd that we opened ourselves via
+/// `std::fs::File::open` surfaces the same `EBADF` (errno `8`) that
+/// [`wasi_normalize_open_error`] handles for `open()`-time failures, because
+/// on WASI the directory check is deferred from `open` to the first `read`.
+///
+/// This is a no-op on non-WASI targets.
+pub fn wasi_normalize_read_error(err: std::io::Error) -> std::io::Error {
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
+    if matches!(err.raw_os_error(), Some(31) | Some(8)) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    if matches!(err.raw_os_error(), Some(29) | Some(8)) {
+        return std::io::Error::new(std::io::ErrorKind::IsADirectory, "Is a directory");
+    }
+    err
+}
+
+/// Whether `err` represents a broken pipe on the current platform.
+///
+/// On WASI preview 2, writing to stdout after the reader is gone surfaces a
+/// raw `EIO` (errno `29`) instead of being mapped to `ErrorKind::BrokenPipe`
+/// like preview 1 and Unix do; this checks for both.
+pub fn wasi_is_broken_pipe(err: &std::io::Error) -> bool {
+    if err.kind() == std::io::ErrorKind::BrokenPipe {
+        return true;
+    }
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    if err.raw_os_error() == Some(29) {
+        return true;
+    }
+    false
+}
+
 /// Enables the conversion from [`std::io::Error`] to [`UError`] and from [`std::io::Result`] to
 /// [`UResult`].
 pub trait FromIo<T> {
