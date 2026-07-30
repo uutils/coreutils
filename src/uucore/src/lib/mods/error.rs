@@ -64,6 +64,40 @@ use std::{
 
 static EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 
+/// Exit the process with `code`.
+///
+/// On `wasm32-wasip2`, `std::process::exit` goes through the WASI Preview 2
+/// `wasi:cli/exit#exit` function, which only carries a success/failure bit,
+/// so every nonzero code collapses to `1`. When the `wasip2-exit-with-code`
+/// feature is enabled, this instead calls the unstable
+/// `wasi:cli/exit#exit-with-code` function, which propagates the real code.
+///
+/// That function is gated behind an unstable WASI feature: hosts that don't
+/// explicitly opt in to it (e.g. `wasmtime run -S cli-exit-with-code=y`) will
+/// trap instead of exiting. The feature is therefore off by default; only
+/// enable it when the target WASI host is known to support it.
+pub fn process_exit(code: i32) -> ! {
+    #[cfg(all(
+        target_os = "wasi",
+        target_env = "p2",
+        feature = "wasip2-exit-with-code"
+    ))]
+    {
+        // `std::process::exit` flushes stdout as part of its runtime cleanup
+        // (see rust-lang/rust#23818); calling the WASI import directly
+        // bypasses that, so flush explicitly to avoid losing buffered output.
+        let _ = std::io::stdout().flush();
+        wasip2::cli::exit::exit_with_code(code as u8);
+        unreachable!("wasi:cli/exit#exit-with-code does not return");
+    }
+    #[cfg(not(all(
+        target_os = "wasi",
+        target_env = "p2",
+        feature = "wasip2-exit-with-code"
+    )))]
+    std::process::exit(code)
+}
+
 /// Get the last exit code set with [`set_exit_code`].
 /// The default value is `0`.
 pub fn get_exit_code() -> i32 {
