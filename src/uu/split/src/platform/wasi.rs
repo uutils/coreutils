@@ -29,16 +29,22 @@ pub fn instantiate_current_writer(
             translate!("split-error-would-overwrite-input", "file" => filename.quote()),
         ));
     }
+    let open_file_error = |e: std::io::Error| {
+        let e = uucore::error::strip_errno(&e);
+        std::io::Error::other(format!("{}: {e}", filename.quote()))
+    };
     let file = if is_new {
         std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
-            .open(std::path::Path::new(filename))?
+            .open(std::path::Path::new(filename))
+            .map_err(open_file_error)?
     } else {
         std::fs::OpenOptions::new()
             .append(true)
-            .open(std::path::Path::new(filename))?
+            .open(std::path::Path::new(filename))
+            .map_err(open_file_error)?
     };
     Ok(Writer::File(file))
 }

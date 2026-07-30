@@ -15,12 +15,14 @@
 use std::io::Write;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_os = "wasi"))]
 use std::sync::mpsc;
 use std::time::Duration;
+#[cfg(not(target_os = "wasi"))]
+use uucore::locale::setup_localization;
 use uucore::{
     error::{UResult, set_exit_code},
     format::num_format::{FloatVariant, Formatter},
-    locale::setup_localization,
     translate,
 };
 
@@ -419,12 +421,79 @@ pub(crate) enum StatusLevel {
     None,
 }
 
+/// Reports [`ProgUpdate`]s to stderr as `dd` runs.
+///
+/// On platforms with thread support, updates are sent over a channel to a
+/// dedicated reporting thread so that printing progress never takes CPU
+/// time away from the actual reading and writing of data. WASI has no
+/// thread support, so there updates are printed inline by the caller
+/// instead.
+#[cfg(not(target_os = "wasi"))]
+pub(crate) struct ProgressReporter {
+    tx: mpsc::Sender<ProgUpdate>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+#[cfg(not(target_os = "wasi"))]
+impl ProgressReporter {
+    pub(crate) fn spawn(print_level: Option<StatusLevel>) -> Self {
+        let (tx, rx) = mpsc::channel();
+        let thread = std::thread::spawn(gen_prog_updater(rx, print_level));
+        Self { tx, thread }
+    }
+
+    /// Send a progress update to the reporting thread.
+    pub(crate) fn send(&self, update: ProgUpdate) {
+        self.tx.send(update).unwrap_or(());
+    }
+
+    /// Wait for the reporting thread to finish processing the final update.
+    pub(crate) fn finish(self) {
+        self.thread
+            .join()
+            .expect("Failed to join with the output thread.");
+    }
+}
+
+/// WASI has no thread support, so [`ProgressReporter::send`] processes each
+/// update inline instead of forwarding it to a background thread.
+#[cfg(target_os = "wasi")]
+pub(crate) struct ProgressReporter {
+    print_level: Option<StatusLevel>,
+    progress_printed: std::cell::Cell<bool>,
+}
+
+#[cfg(target_os = "wasi")]
+impl ProgressReporter {
+    pub(crate) fn spawn(print_level: Option<StatusLevel>) -> Self {
+        Self {
+            print_level,
+            progress_printed: std::cell::Cell::new(false),
+        }
+    }
+
+    /// Process a progress update inline.
+    pub(crate) fn send(&self, update: ProgUpdate) {
+        if update.update_type == ProgUpdateType::Final {
+            update.print_final_stats(self.print_level, self.progress_printed.get());
+            return;
+        }
+        if Some(StatusLevel::Progress) == self.print_level {
+            update.reprint_prog_line();
+            self.progress_printed.set(true);
+        }
+    }
+
+    /// No background thread to wait for on WASI.
+    pub(crate) fn finish(self) {}
+}
+
 /// Return a closure that can be used in its own thread to print progress info.
 ///
 /// This function returns a closure that receives [`ProgUpdate`]
 /// instances sent through `rx`. When a [`ProgUpdate`] instance is
 /// received, the transfer statistics are re-printed to stderr.
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "wasi")))]
 pub(crate) fn gen_prog_updater(
     rx: mpsc::Receiver<ProgUpdate>,
     print_level: Option<StatusLevel>,

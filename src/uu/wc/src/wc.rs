@@ -701,7 +701,10 @@ fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult 
     };
     match maybe_err {
         None => CountResult::Success(total),
-        Some(err) => CountResult::Interrupted(total, err),
+        Some(err) => {
+            let err = uucore::error::wasi_normalize_open_error(err);
+            CountResult::Interrupted(total, err)
+        }
     }
 }
 
@@ -775,16 +778,19 @@ fn files0_iter_stdin<'a>() -> impl Iterator<Item = InputIterItem<'a>> {
 fn files0_iter_file<'a>(path: &Path) -> UResult<impl Iterator<Item = InputIterItem<'a>>> {
     match File::open(path) {
         Ok(f) => Ok(files0_iter(f, path.into())),
-        Err(e) => Err(e.map_err_context(|| {
-            translate!("wc-error-cannot-open-for-reading",
-                "path" => quoting_style::locale_aware_escape_name(
-                    path.as_os_str(),
-                    QuotingStyle::SHELL_ESCAPE_QUOTE,
+        Err(e) => {
+            let e = uucore::error::wasi_normalize_open_error(e);
+            Err(e.map_err_context(|| {
+                translate!("wc-error-cannot-open-for-reading",
+                    "path" => quoting_style::locale_aware_escape_name(
+                        path.as_os_str(),
+                        QuotingStyle::SHELL_ESCAPE_QUOTE,
+                    )
+                    .into_string()
+                    .expect("All escaped names with the escaping option return valid strings.")
                 )
-                .into_string()
-                .expect("All escaped names with the escaping option return valid strings.")
-            )
-        })),
+            }))
+        }
     }
 }
 
@@ -813,9 +819,12 @@ fn files0_iter<'a>(
                         Ok(Input::Path(PathBuf::from(s).into()))
                     }
                 }
-                Err(e) => Err(e.map_err_context(
-                    || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
-                ) as Box<dyn UError>),
+                Err(e) => {
+                    let e = uucore::error::wasi_normalize_read_error(e);
+                    Err(e.map_err_context(
+                        || translate!("wc-error-read-error", "path" => escape_name_wrapper(&err_path)),
+                    ) as Box<dyn UError>)
+                }
             }),
     );
     // Loop until there is an error; yield that error and then nothing else.

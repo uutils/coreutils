@@ -32,6 +32,11 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 [target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
+[target.'cfg(target_os = "wasi")'.dependencies]
+# rustix's `std` feature is off at the workspace level; on wasip2 nothing else
+# in the graph turns it on, so enable it here for the `AsFd` bound on `fadvise`.
+rustix = { workspace = true, features = ["std"] }
+
 [[bin]]
 name = "tsort"
 path = "src/main.rs"
