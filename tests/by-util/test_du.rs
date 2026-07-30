@@ -2391,7 +2391,7 @@ fn test_du_long_path_from_unreadable() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_du_hard_links_multiple_dirs_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2408,7 +2408,7 @@ fn test_du_hard_links_multiple_dirs_in_args() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_du_hard_links_multiple_links_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
