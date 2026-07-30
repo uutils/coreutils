@@ -343,6 +343,10 @@ fn test_follow_redirect_stdin_name_retry() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no /dev/fd/0, so redirected-directory stdin hits the generic pipe path (like macOS) instead of the regular-file path with the GNU-matching error message"
+)]
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -380,6 +384,10 @@ fn test_stdin_redirect_dir() {
 //  `test_stdin_redirect_dir`
 #[test]
 #[cfg(target_vendor = "apple")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "test binary runs on macOS but the wasm guest under test does not, so the expected macOS-specific error text never appears"
+)]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -4219,6 +4227,10 @@ fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
 
 // TODO: Add test for the warning `--pid=PID is not supported on this system`
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: follow mode (-f) is not supported on this platform"
+)]
 fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5253,6 +5265,7 @@ fn test_child_when_run_with_stderr_to_stdout() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported() {
     new_ucmd!()
         .pipe_in("hello")
@@ -5272,6 +5285,7 @@ fn test_failed_warning_write_is_reported() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;

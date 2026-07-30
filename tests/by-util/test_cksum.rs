@@ -987,6 +987,10 @@ fn test_check_error_incorrect_format() {
 
 #[cfg(unix)]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_dev_null() {
     let scene = TestScenario::new(util_name!());
 
@@ -1048,7 +1052,7 @@ fn test_reset_binary() {
         .arg("--tag")
         .arg("--untagged")
         .arg("--algorithm=md5")
-        .arg(at.subdir.join("f"))
+        .arg("f")
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
@@ -1067,7 +1071,7 @@ fn test_reset_binary_but_set() {
         .arg("--untagged")
         .arg("--binary")
         .arg("--algorithm=md5")
-        .arg(at.subdir.join("f"))
+        .arg("f")
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 }
@@ -1083,7 +1087,7 @@ mod output_format {
         ucmd.arg("--text")
             .arg("--tag")
             .args(&["-a", "md5"])
-            .arg(at.subdir.join("f"))
+            .arg("f")
             .fails();
     }
 
@@ -1095,7 +1099,7 @@ mod output_format {
         // --text without --untagged fails
         ucmd.arg("--text")
             .args(&["-a", "md5"])
-            .arg(at.subdir.join("f"))
+            .arg("f")
             .fails_with_code(1)
             .stderr_contains("--text mode is only supported with --untagged");
     }
@@ -1109,7 +1113,7 @@ mod output_format {
         ucmd.arg("--text")
             .arg("--binary")
             .args(&["-a", "md5"])
-            .arg(at.subdir.join("f"))
+            .arg("f")
             .succeeds()
             // No --untagged, tagged output is used
             .stdout_contains("f) = d41d8cd98f00b204e9800998ecf8427e");
@@ -1125,7 +1129,7 @@ mod output_format {
             .arg("--binary")
             .arg("--untagged")
             .args(&["-a", "md5"])
-            .arg(at.subdir.join("f"))
+            .arg("f")
             .succeeds()
             // Untagged output is used
             .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
@@ -1144,7 +1148,7 @@ fn test_binary_file() {
         .arg("--untagged")
         .arg("-b")
         .arg("--algorithm=md5")
-        .arg(at.subdir.join("f"))
+        .arg("f")
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 
@@ -1154,7 +1158,7 @@ fn test_binary_file() {
         .arg("--untagged")
         .arg("--binary")
         .arg("--algorithm=md5")
-        .arg(at.subdir.join("f"))
+        .arg("f")
         .succeeds()
         .stdout_contains("d41d8cd98f00b204e9800998ecf8427e *");
 
@@ -1784,7 +1788,7 @@ fn test_check_directory_error() {
     #[cfg(windows)]
     let err_msg = "cksum: d: Permission denied\n";
     ucmd.arg("--check")
-        .arg(at.subdir.join("f"))
+        .arg("f")
         .fails()
         .stderr_contains(err_msg);
 }
@@ -1802,7 +1806,7 @@ fn test_check_base64_hashes() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("check"))
+        .arg("check")
         .succeeds()
         .stdout_is("empty: OK\nempty: OK\nempty: OK\n");
 }
@@ -2005,6 +2009,10 @@ mod check_encoding {
     // This test should pass on linux and macos.
     #[cfg(not(windows))]
     #[test]
+    #[cfg_attr(
+        wasip2_runner,
+        ignore = "WASI preview2: OsString requires valid UTF-8, unlike unix/wasip1"
+    )]
     fn test_check_non_utf8_comment() {
         use super::*;
         let hashes =
@@ -2020,7 +2028,7 @@ mod check_encoding {
         at.write_bytes("check", hashes);
 
         cmd.arg("--check")
-            .arg(at.subdir.join("check"))
+            .arg("check")
             .succeeds()
             .stdout_is("empty: OK\nempty: OK\nempty: OK\n")
             .no_stderr();
@@ -2030,6 +2038,10 @@ mod check_encoding {
     // create a file which name contains '\xff'.
     #[cfg(target_os = "linux")]
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
+    )]
     fn test_check_non_utf8_filename() {
         use super::*;
         use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -2045,7 +2057,7 @@ mod check_encoding {
         scene
             .ucmd()
             .arg("--check")
-            .arg(at.subdir.join("check"))
+            .arg("check")
             .succeeds()
             .stdout_is_bytes(b"'funky'$'\\377''name': OK\n")
             .no_stderr();
@@ -2056,7 +2068,7 @@ mod check_encoding {
         scene
             .ucmd()
             .arg("--check")
-            .arg(at.subdir.join("check"))
+            .arg("check")
             .fails()
             .stdout_is_bytes(b"'funky'$'\\377''name': FAILED\n")
             .stderr_contains("1 computed checksum did NOT match");
@@ -2067,7 +2079,7 @@ mod check_encoding {
         scene
             .ucmd()
             .arg("--check")
-            .arg(at.subdir.join("check"))
+            .arg("check")
             .fails()
             .stdout_is_bytes(b"'flakey'$'\\377''name': FAILED open or read\n")
             .stderr_contains("1 listed file could not be read");
@@ -2075,6 +2087,10 @@ mod check_encoding {
 
     #[cfg(target_os = "linux")]
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI: preopened directories reject non-UTF-8 filenames"
+    )]
     fn test_quoting_in_stderr() {
         use super::*;
         use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
@@ -2120,7 +2136,7 @@ fn test_check_blake_length_guess() {
         scene
             .ucmd()
             .arg("--check")
-            .arg(at.subdir.join("foo.sums"))
+            .arg("foo.sums")
             .succeeds()
             .stdout_is("foo.dat: OK\n");
     }
@@ -2134,7 +2150,7 @@ fn test_check_blake_length_guess() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("foo.sums"))
+        .arg("foo.sums")
         .fails()
         .stderr_contains("foo.sums: no properly formatted checksum lines found");
 
@@ -2145,7 +2161,7 @@ fn test_check_blake_length_guess() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("foo.sums"))
+        .arg("foo.sums")
         .fails()
         .stderr_contains("foo.sums: no properly formatted checksum lines found");
 
@@ -2156,7 +2172,7 @@ fn test_check_blake_length_guess() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("foo.sums"))
+        .arg("foo.sums")
         .fails()
         .stderr_contains("foo.sums: no properly formatted checksum lines found");
 }
@@ -2174,7 +2190,7 @@ fn test_check_confusing_base64() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("foo.sums"))
+        .arg("foo.sums")
         .succeeds()
         .stdout_is("foo.dat: OK\n");
 }
@@ -2198,14 +2214,14 @@ fn test_check_mix_hex_base64() {
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("hex_b64"))
+        .arg("hex_b64")
         .succeeds()
         .stdout_only("foo2.dat: OK\nfoo1.dat: OK\n");
 
     scene
         .ucmd()
         .arg("--check")
-        .arg(at.subdir.join("b64_hex"))
+        .arg("b64_hex")
         .succeeds()
         .stdout_only("foo1.dat: OK\nfoo2.dat: OK\n");
 }
@@ -2592,6 +2608,10 @@ mod cksum_check_mode {
 
     #[test]
     #[cfg_attr(not(unix), ignore = "/dev/null is only available on UNIX")]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: host paths (/dev/null) not visible"
+    )]
     fn test_untagged_base64_matching_tag() {
         let (at, mut ucmd) = at_and_ucmd!();
 
@@ -3199,6 +3219,7 @@ mod debug_flag {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_file_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()
@@ -3213,6 +3234,7 @@ fn test_check_file_with_io_error() {
 
 #[test]
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_check_checkfile_with_io_error() {
     // /proc/self/mem causes EIO when read without proper seeking
     new_ucmd!()

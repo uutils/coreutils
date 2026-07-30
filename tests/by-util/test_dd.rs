@@ -1130,6 +1130,7 @@ fn test_random_73k_test_obs_lt_not_a_multiple_ibs() {
 
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: fifo reads surface as BrokenPipe")]
 fn test_random_73k_test_lazy_fullblock() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -1282,6 +1283,7 @@ fn test_truncated_record() {
 /// Test that the output file can be `/dev/null`.
 #[cfg(unix)]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: no /dev/null device node")]
 fn test_outfile_dev_null() {
     new_ucmd!().arg("of=/dev/null").succeeds().no_stdout();
 }
@@ -1551,6 +1553,7 @@ fn test_bytes_suffix_recursive() {
 /// Test for "conv=sync" with a slow reader.
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: fifo reads surface as BrokenPipe")]
 fn test_sync_delayed_reader() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkfifo("fifo");
@@ -1613,6 +1616,7 @@ fn test_sparse() {
 /// Test that a seek on an output FIFO results in a read.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: hangs reading from a fifo opened for output")]
 fn test_seek_output_fifo() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1657,6 +1661,10 @@ fn test_skip_input_fifo() {
 /// Test for reading part of stdin from each of two child processes.
 #[cfg(not(windows))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "runs the coreutils binary directly via a raw shell pipeline, bypassing the WASI runner wrapping"
+)]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
     let printf = "printf 'abcdef\n'".to_string();
@@ -1985,6 +1993,11 @@ fn test_iflag_directory_fails_when_file_is_piped_via_std_in() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "wasmtime's stdin worker thread over-reads from a host fd backed by a regular file, \
+              consuming bytes beyond what the guest actually requested (bytecodealliance/wasmtime)"
+)]
 fn test_stdin_stdout_not_rewound_even_when_connected_to_seekable_file() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2044,6 +2057,7 @@ fn test_wrong_number_err_msg() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: no /dev/urandom device node")]
 fn test_no_dropped_writes() {
     const BLK_SIZE: usize = 0x4000;
     const COUNT: usize = 1000;
@@ -2204,6 +2218,10 @@ fn test_nocache_eof_fadvise_zero_length() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: rust-lang/libc lacks LC_* constants for the wasi target, so dd can't call setlocale there"
+)]
 fn test_iso8859_1_case_conversion() {
     use std::process::Command;
     // Test ISO-8859-1 case conversion for accented characters

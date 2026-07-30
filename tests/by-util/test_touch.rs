@@ -980,6 +980,10 @@ fn test_touch_leap_second() {
 #[test]
 #[cfg(not(windows))]
 // File::create doesn't support trailing separator in Windows
+#[cfg_attr(
+    wasip2_runner,
+    ignore = "WASI preview2: stat on a dangling-symlink-with-trailing-slash returns ENOTDIR instead of ENOENT"
+)]
 fn test_touch_trailing_slash_no_create() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file");
@@ -1205,11 +1209,9 @@ fn test_touch_device_files() {
     ignore = "WASI sandbox: absolute symlink targets cannot be followed"
 )]
 fn test_touch_does_not_truncate_symlink_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("victim", "do not truncate me");
-    symlink(at.plus("victim"), at.plus("link")).unwrap();
+    at.symlink_file("victim", "link");
 
     ucmd.arg("link").succeeds();
 
@@ -1224,10 +1226,8 @@ fn test_touch_does_not_truncate_symlink_target() {
     ignore = "WASI sandbox: absolute symlink targets cannot be followed"
 )]
 fn test_touch_through_dangling_symlink_creates_target() {
-    use std::os::unix::fs::symlink;
-
     let (at, mut ucmd) = at_and_ucmd!();
-    symlink(at.plus("missing"), at.plus("link")).unwrap();
+    at.symlink_file("missing", "link");
 
     ucmd.arg("link").succeeds();
 

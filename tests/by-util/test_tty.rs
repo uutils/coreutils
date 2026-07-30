@@ -72,6 +72,10 @@ fn test_help() {
 #[test]
 // FixME: freebsd panic
 #[cfg(all(unix, not(target_os = "freebsd")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "runs the coreutils binary directly via a raw shell command, bypassing the WASI runner wrapping"
+)]
 fn test_stdout_fail() {
     use std::process::{Command, Stdio};
     use uutests::at_and_ts;
