@@ -365,7 +365,10 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
-    if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
+    // `mv` never follows a symlink source, so the guard must not either.
+    if opts.backup == BackupMode::Simple
+        && source_is_target_backup(source, target, &opts.suffix, false)
+    {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             translate!("mv-error-backup-might-destroy-source", "target" => target.quote(), "source" => source.quote()),
