@@ -1137,6 +1137,41 @@ fn test_merge_preserves_long_lines() {
     assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
+// Regression test: a failing write must not take the merge reader thread down with it.
+// The write error used to propagate straight out of `write_all_to`, dropping the chunk
+// receivers while the reader was still sending, and `chunks::read` unwraps that send.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_write_error_does_not_panic() {
+    use std::fs::File;
+
+    // The inputs have to be long enough that the reader is still feeding us chunks when
+    // the write fails, otherwise it has already finished and there is nothing to race.
+    const LINES: usize = 100_000;
+    let mut input = String::with_capacity(LINES * 7);
+    for line in 0..LINES {
+        writeln!(input, "{line:06}").unwrap();
+    }
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("a.txt", &input);
+    ts.fixtures.write("b.txt", &input);
+
+    // Whether the reader is mid-send when the write fails is a race, so repeat: a single
+    // attempt reproduced the panic only about a quarter of the time. With the fix the
+    // reader is always shut down in an orderly fashion, so this cannot fail spuriously.
+    for _ in 0..20 {
+        let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+        ts.ucmd()
+            .args(&["-m", "a.txt", "b.txt"])
+            .set_stdout(dev_full)
+            .fails()
+            .code_is(1)
+            .stderr_contains("No space left on device")
+            .stderr_does_not_contain("panicked");
+    }
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()

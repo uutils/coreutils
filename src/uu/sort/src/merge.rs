@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
+    sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
@@ -309,12 +309,48 @@ impl FileMerger<'_> {
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        while self
-            .write_next(out, settings)
-            .map_err_context(|| "write failed".into())?
-        {}
-        drop(self.request_sender);
-        self.reader_join_handle.join().unwrap()
+        let mut write_result = Ok(());
+        loop {
+            match self
+                .write_next(out, settings)
+                .map_err_context(|| "write failed".into())
+            {
+                Ok(true) => (),
+                Ok(false) => break,
+                Err(error) => {
+                    // Don't return yet: we still have to shut the reader thread down in an
+                    // orderly fashion below. Returning here would drop our receivers while
+                    // the reader is still sending, and `chunks::read` unwraps that send.
+                    write_result = Err(error);
+                    break;
+                }
+            }
+        }
+
+        let Self {
+            heap,
+            request_sender,
+            reader_join_handle,
+            ..
+        } = self;
+
+        // Stop asking for chunks, so the reader runs out of work and returns.
+        drop(request_sender);
+        // Until it does, keep draining the files it might still be sending to. We have to
+        // poll all of them in turn rather than draining one at a time: the reader can be
+        // blocked on any one channel, and blocking on a different one would deadlock.
+        let mut files = heap.into_vec();
+        while !files.is_empty() {
+            files.retain(|file| {
+                !matches!(file.receiver.try_recv(), Err(TryRecvError::Disconnected))
+            });
+            thread::yield_now();
+        }
+
+        let reader_result = reader_join_handle.join().unwrap();
+        // A write failure is what the user needs to hear about; the reader hitting an error
+        // on the way down is secondary.
+        write_result.and(reader_result)
     }
 
     fn write_next(
