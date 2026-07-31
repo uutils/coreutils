@@ -89,11 +89,10 @@ fn verbose_removed_directory(path: &Path, options: &Options) -> UResult<()> {
 
 /// Helper function to report a verbose output write error and return error status
 fn show_verbose_write_error(result: UResult<()>) -> bool {
-    if let Err(e) = result {
+    if let Err(e) = &result {
         show_error!("{e}");
-        return true;
     }
-    false
+    result.is_err()
 }
 
 /// Helper function to show error with context and return error status
