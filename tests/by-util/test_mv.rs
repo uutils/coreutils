@@ -2746,7 +2746,6 @@ fn test_mv_cross_device_refuses_planted_symlink_dest() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
-    use std::os::unix::fs::symlink;
     use tempfile::TempDir;
     use uutests::util::TestScenario;
 
