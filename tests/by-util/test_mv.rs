@@ -3343,3 +3343,51 @@ fn test_mv_cross_device_preserves_ownership_recursive() {
         "nested file gid should be preserved after cross-device move"
     );
 }
+
+#[test]
+fn test_mv_backup_existing_mode_protects_source() {
+    // `--backup=existing` falls back to a simple backup when no numbered
+    // backup is present, so it can destroy the source just as `simple` does.
+    // GNU refuses in every mode but `numbered`.
+    for mode in ["simple", "existing"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("a");
+        at.write("a~", "source content");
+
+        ucmd.arg(format!("--backup={mode}"))
+            .arg("a~")
+            .arg("a")
+            .fails()
+            .stderr_contains("might destroy source");
+
+        assert_eq!(at.read("a~"), "source content");
+    }
+}
+
+#[test]
+fn test_mv_backup_existing_mode_protects_source_even_with_numbered_present() {
+    // GNU's check always uses the simple suffix once the mode is not
+    // `numbered`, so an existing `a.~1~` does not make this safe.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.write("a~", "source content");
+    at.write("a.~1~", "old numbered backup");
+
+    ucmd.arg("--backup=existing")
+        .arg("a~")
+        .arg("a")
+        .fails()
+        .stderr_contains("might destroy source");
+
+    assert_eq!(at.read("a~"), "source content");
+}
+
+#[test]
+fn test_mv_backup_numbered_allows_source_named_like_backup() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.write("a~", "source content");
+
+    ucmd.arg("--backup=numbered").arg("a~").arg("a").succeeds();
+    assert_eq!(at.read("a"), "source content");
+}
