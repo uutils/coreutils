@@ -35,7 +35,7 @@ use crate::hardlink::{
     HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
     with_optional_hardlink_context,
 };
-use uucore::backup_control::{self, source_is_target_backup};
+use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
@@ -366,12 +366,7 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
     // `mv` never follows a symlink source, so the guard must not either.
-    // GNU applies this to every mode but `numbered`, which cannot reuse an
-    // existing name; `existing` falls back to a simple backup when no numbered
-    // backup is present, and so can destroy the source just the same.
-    if !matches!(opts.backup, BackupMode::None | BackupMode::Numbered)
-        && source_is_target_backup(source, target, &opts.suffix, false)
-    {
+    if backup_would_destroy_source(source, target, &opts.suffix, opts.backup, false) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             translate!("mv-error-backup-might-destroy-source", "target" => target.quote(), "source" => source.quote()),

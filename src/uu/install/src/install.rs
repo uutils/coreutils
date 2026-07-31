@@ -20,7 +20,7 @@ use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
-use uucore::backup_control::{self, BackupMode, source_is_target_backup};
+use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
@@ -910,11 +910,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
     // Renaming the destination over the source would leave nothing to install
-    // from, so refuse instead. Numbered backups never reuse an existing name,
-    // and with no backup at all there is no rename to worry about.
-    if !matches!(b.backup_mode, BackupMode::None | BackupMode::Numbered)
-        && source_is_target_backup(from, to, &b.suffix, true)
-    {
+    // from, so refuse instead.
+    if backup_would_destroy_source(from, to, &b.suffix, b.backup_mode, true) {
         return Err(
             InstallError::BackupWouldDestroySource(to.to_path_buf(), from.to_path_buf()).into(),
         );
