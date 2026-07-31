@@ -20,7 +20,7 @@ use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
-use uucore::backup_control::{self, BackupMode};
+use uucore::backup_control::{self, BackupMode, source_is_target_backup};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
@@ -90,6 +90,9 @@ enum InstallError {
 
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
     BackupFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-backing-up-destroy-source", "dest" => .0.quote(), "source" => .1.quote()))]
+    BackupWouldDestroySource(PathBuf, PathBuf),
 
     #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
     InstallFailed(PathBuf, PathBuf, String),
@@ -781,7 +784,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     return Ok(());
                 }
 
-                let backup_path = perform_backup(&target, b)?;
+                let backup_path = perform_backup(source, &target, b)?;
 
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
                     && e.kind() != std::io::ErrorKind::NotFound
@@ -896,6 +899,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
+/// * `from` - The source file path, needed to refuse a backup that would
+///   destroy it.
 /// * `to` - The destination file path.
 /// * `b` - The behavior configuration.
 ///
@@ -903,7 +908,18 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// Returns an Option containing the backup path, or None if backup is not needed.
 ///
-fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+    // Renaming the destination over the source would leave nothing to install
+    // from, so refuse instead. Numbered backups never reuse an existing name,
+    // and with no backup at all there is no rename to worry about.
+    if !matches!(b.backup_mode, BackupMode::None | BackupMode::Numbered)
+        && source_is_target_backup(from, to, &b.suffix, true)
+    {
+        return Err(
+            InstallError::BackupWouldDestroySource(to.to_path_buf(), from.to_path_buf()).into(),
+        );
+    }
+
     if to.exists() {
         if b.verbose {
             writeln!(
@@ -1174,7 +1190,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
+    let backup_path = perform_backup(from, to, b)?;
 
     copy_file(from, to)?;
 
