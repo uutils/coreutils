@@ -1356,6 +1356,9 @@ fn test_cp_backup_simple_protect_source() {
 }
 
 #[test]
+// Android denies hard links on the filesystem backing the test directory, so
+// the setup cannot be built there; see the mv analogue.
+#[cfg(not(target_os = "android"))]
 fn test_cp_backup_simple_allows_hardlink_under_another_name() {
     // `other` shares an inode with the backup path but is not named after it,
     // so the backup rename cannot clobber it. GNU copies this happily.
