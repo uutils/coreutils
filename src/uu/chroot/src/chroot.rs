@@ -38,8 +38,12 @@ enum UserSpec {
 }
 
 struct Options {
-    /// Path to the new root directory.
+    /// Path to the new root directory, as the caller spelled it. Used for
+    /// diagnostics.
     newroot: PathBuf,
+    /// The path actually passed to `chroot(2)`, when it must differ from
+    /// `newroot`. See the `--skip-chdir` handling in `uumain`.
+    chroot_target: Option<PathBuf>,
     /// Whether to change to the new root directory.
     skip_chdir: bool,
     /// List of groups under which the command will be run.
@@ -146,6 +150,7 @@ impl Options {
             .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
+            chroot_target: None,
             skip_chdir,
             groups,
             userspec,
@@ -158,26 +163,35 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let options = Options::from(&matches)?;
+    let mut options = Options::from(&matches)?;
 
     // We are resolving the path in case it is a symlink or /. or /../
-    if options.skip_chdir
-        && canonicalize(
+    //
+    // GNU validates the resolved path but then chroots the original spelling,
+    // which leaves a window: a NEWROOT symlink repointed after the check would
+    // pass the guard and still put the process somewhere else, with a working
+    // directory left outside it because --skip-chdir suppresses the chdir.
+    // Since the guard only succeeds when the resolution is `/`, chrooting the
+    // resolved path is the same destination and closes that window.
+    if options.skip_chdir {
+        let resolved = canonicalize(
             &options.newroot,
             MissingHandling::Normal,
             ResolveMode::Logical,
         )
         // A NEWROOT that does not resolve is by definition not old `/`, so treat
         // an Err as a non-match instead of unwrapping it.
-        .ok()
-        .as_deref()
-        .and_then(|p| p.to_str())
-            != Some("/")
-    {
-        return Err(UUsageError::new(
-            125,
-            translate!("chroot-error-skip-chdir-only-permitted"),
-        ));
+        .ok();
+        if resolved.as_deref().and_then(|p| p.to_str()) != Some("/") {
+            return Err(UUsageError::new(
+                125,
+                translate!("chroot-error-skip-chdir-only-permitted"),
+            ));
+        }
+        // The guard proved the resolution is `/`, so chrooting it is the same
+        // destination, minus the window. NEWROOT is kept for diagnostics so the
+        // error text still names what the caller asked for.
+        options.chroot_target = resolved;
     }
 
     if !options.newroot.is_dir() {
@@ -386,14 +400,14 @@ fn set_context(options: &Options) -> UResult<()> {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            enter_chroot(&options.newroot, options.skip_chdir)?;
+            enter_chroot(options, options.skip_chdir)?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            enter_chroot(&options.newroot, options.skip_chdir)?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -401,7 +415,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            enter_chroot(&options.newroot, options.skip_chdir)?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
@@ -409,7 +423,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
-            enter_chroot(&options.newroot, options.skip_chdir)?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -417,8 +431,12 @@ fn set_context(options: &Options) -> UResult<()> {
     Ok(())
 }
 
-fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
-    rustix::process::chroot(root).map_err(|e| ChrootError::CannotEnter(root.into(), e.into()))?;
+fn enter_chroot(options: &Options, skip_chdir: bool) -> UResult<()> {
+    // chroot the resolved target when there is one; name the caller's spelling
+    // in the error either way.
+    let target = options.chroot_target.as_deref().unwrap_or(&options.newroot);
+    rustix::process::chroot(target)
+        .map_err(|e| ChrootError::CannotEnter(options.newroot.clone(), e.into()))?;
     if !skip_chdir {
         std::env::set_current_dir("/")?;
     }
