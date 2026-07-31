@@ -28,6 +28,7 @@ use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
+use uucore::backup_control::source_is_target_backup;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
@@ -2125,7 +2126,13 @@ fn handle_existing_dest(
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
-        if paths_refer_to_same_file(source, &backup_path, true) {
+        // Only a source that the backup rename could actually land on is a
+        // problem. Comparing inodes alone also refuses a hard link that merely
+        // shares one, which GNU copies happily. Numbered backups never reuse an
+        // existing name, so they cannot destroy anything.
+        if options.backup != BackupMode::Numbered
+            && source_is_target_backup(source, dest, &options.backup_suffix, true)
+        {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
