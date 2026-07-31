@@ -309,23 +309,21 @@ impl FileMerger<'_> {
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        let mut write_result = Ok(());
-        loop {
+        let write_result = loop {
             match self
                 .write_next(out, settings)
                 .map_err_context(|| "write failed".into())
             {
                 Ok(true) => (),
-                Ok(false) => break,
+                Ok(false) => break Ok(()),
                 Err(error) => {
                     // Don't return yet: we still have to shut the reader thread down in an
                     // orderly fashion below. Returning here would drop our receivers while
                     // the reader is still sending, and `chunks::read` unwraps that send.
-                    write_result = Err(error);
-                    break;
+                    break Err(error);
                 }
             }
-        }
+        };
 
         let Self {
             heap,
