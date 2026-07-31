@@ -1356,6 +1356,56 @@ fn test_cp_backup_simple_protect_source() {
 }
 
 #[test]
+fn test_cp_backup_simple_allows_hardlink_under_another_name() {
+    // `other` shares an inode with the backup path but is not named after it,
+    // so the backup rename cannot clobber it. GNU copies this happily.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let backup = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&backup, "backup content");
+    at.hard_link(&backup, "other");
+
+    ucmd.arg("--backup=simple")
+        .arg("other")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "backup content");
+}
+
+#[test]
+fn test_cp_backup_simple_protect_source_regardless_of_spelling() {
+    // The guard compares files, not the strings naming them.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&source, "source content");
+
+    ucmd.arg("--backup=simple")
+        .arg(format!("./{source}"))
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .stderr_contains("might destroy source");
+
+    assert_eq!(at.read(&source), "source content");
+}
+
+#[test]
+fn test_cp_backup_numbered_allows_source_named_like_backup() {
+    // A numbered backup never reuses an existing name, so nothing is at risk.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&source, "source content");
+
+    ucmd.arg("--backup=numbered")
+        .arg(&source)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(&source), "source content");
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "source content");
+}
+
+#[test]
 fn test_cp_backup_never() {
     let (at, mut ucmd) = at_and_ucmd!();
 
