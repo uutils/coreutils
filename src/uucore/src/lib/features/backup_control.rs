@@ -463,13 +463,25 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
     simple_backup_path(path, suffix.as_ref())
 }
 
-/// Returns true if the source file is likely to be the simple backup file for the target file.
+/// Returns true if backing up `target` would destroy `source`.
+///
+/// Backing up renames `target` onto its backup name. When `source` *is* that
+/// backup, the rename clobbers it and the operation has nothing left to read,
+/// leaving both files empty. GNU refuses instead (`source_is_dst_backup` in
+/// `copy.c`), and `cp`, `mv` and `install` all need the same answer.
+///
+/// The mode is part of the question, not the caller's business: numbered
+/// backups never reuse an existing name, and [`BackupMode::None`] performs no
+/// rename at all, so neither can destroy anything. Both return false here so no
+/// caller has to remember the rule - getting that gate wrong per-utility is
+/// exactly how `mv` came to miss `--backup=existing`.
 ///
 /// # Arguments
 ///
 /// * `source` - A Path reference that holds the source (backup) file path.
 /// * `target` - A Path reference that holds the target file path.
 /// * `suffix` - Str that holds the backup suffix.
+/// * `mode` - The backup mode in effect.
 /// * `dereference` - Whether the source is resolved through symlinks, matching
 ///   how the calling utility opens it (`false` for `mv`, `true` for `cp`/`install`).
 ///
@@ -478,7 +490,7 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 /// ```
 /// use std::fs;
 /// use std::path::Path;
-/// use uucore::backup_control::source_is_target_backup;
+/// use uucore::backup_control::{BackupMode, backup_would_destroy_source};
 ///
 /// let dir = tempfile::tempdir().unwrap();
 /// let target = dir.path().join("data.txt");
@@ -487,15 +499,26 @@ fn existing_backup_path<S: AsRef<OsStr>>(path: &Path, suffix: S) -> PathBuf {
 /// fs::write(&source, "").unwrap();
 ///
 /// // `./data.txt~` and `data.txt~` name the same file, so both are caught.
-/// assert!(source_is_target_backup(&source, &target, "~", false));
+/// assert!(backup_would_destroy_source(
+///     &source, &target, "~", BackupMode::Simple, false
+/// ));
+///
+/// // A numbered backup picks a fresh name, so the source is safe.
+/// assert!(!backup_would_destroy_source(
+///     &source, &target, "~", BackupMode::Numbered, false
+/// ));
 /// ```
 ///
-pub fn source_is_target_backup(
+pub fn backup_would_destroy_source(
     source: &Path,
     target: &Path,
     suffix: &str,
+    mode: BackupMode,
     dereference: bool,
 ) -> bool {
+    if matches!(mode, BackupMode::None | BackupMode::Numbered) {
+        return false;
+    }
     // GNU gates on the file names first: only a source whose final component is
     // the target's final component plus the suffix can be clobbered by the
     // backup rename. This keeps unrelated files that merely happen to share an
@@ -710,14 +733,20 @@ mod tests {
     }
 
     #[test]
-    fn test_source_is_target_backup() {
+    fn test_backup_would_destroy_source() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("data.txt");
         let source = dir.path().join("data.txt.bak");
         fs::write(&target, "").unwrap();
         fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(&source, &target, ".bak", false));
+        assert!(backup_would_destroy_source(
+            &source,
+            &target,
+            ".bak",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     #[test]
@@ -728,23 +757,35 @@ mod tests {
         fs::write(&target, "").unwrap();
         fs::write(&source, "").unwrap();
 
-        assert!(!source_is_target_backup(&source, &target, ".bak", false));
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            ".bak",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     #[test]
-    fn test_source_is_target_backup_with_tilde_suffix() {
+    fn test_backup_would_destroy_source_with_tilde_suffix() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("example");
         let source = dir.path().join("example~");
         fs::write(&target, "").unwrap();
         fs::write(&source, "").unwrap();
 
-        assert!(source_is_target_backup(&source, &target, "~", false));
+        assert!(backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     /// The guard must see through how the operands were spelled.
     #[test]
-    fn test_source_is_target_backup_ignores_spelling() {
+    fn test_backup_would_destroy_source_ignores_spelling() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("a"), "").unwrap();
         fs::write(dir.path().join("a~"), "").unwrap();
@@ -753,7 +794,7 @@ mod tests {
             let source = dir.path().join("a~");
             let target = dir.path().join(target);
             assert!(
-                source_is_target_backup(&source, &target, "~", false),
+                backup_would_destroy_source(&source, &target, "~", BackupMode::Simple, false),
                 "guard failed open for target spelled {}",
                 target.display()
             );
@@ -762,20 +803,51 @@ mod tests {
 
     /// A backup that does not exist yet cannot destroy anything.
     #[test]
-    fn test_source_is_target_backup_absent_backup() {
+    fn test_backup_would_destroy_source_absent_backup() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("a");
         let source = dir.path().join("a~");
         fs::write(&target, "").unwrap();
 
-        assert!(!source_is_target_backup(&source, &target, "~", false));
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
     }
 
     /// Sharing the backup's inode under a different name is safe: the rename
     /// only drops one link, so the data survives.
     #[cfg(unix)]
     #[test]
-    fn test_source_is_target_backup_hard_link_under_other_name() {
+    fn test_backup_would_destroy_source_mode_gate() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("data.txt");
+        let source = dir.path().join("data.txt~");
+        fs::write(&target, "").unwrap();
+        fs::write(&source, "").unwrap();
+
+        // Modes that rename onto an existing name would destroy the source.
+        for mode in [BackupMode::Simple, BackupMode::Existing] {
+            assert!(
+                backup_would_destroy_source(&source, &target, "~", mode, false),
+                "{mode:?} should be guarded"
+            );
+        }
+
+        // Numbered picks a fresh name; None renames nothing at all.
+        for mode in [BackupMode::Numbered, BackupMode::None] {
+            assert!(
+                !backup_would_destroy_source(&source, &target, "~", mode, false),
+                "{mode:?} cannot destroy the source"
+            );
+        }
+    }
+
+    #[test]
+    fn test_backup_would_destroy_source_hard_link_under_other_name() {
         let dir = tempfile::tempdir().unwrap();
         let target = dir.path().join("a");
         let backup = dir.path().join("a~");
@@ -784,6 +856,12 @@ mod tests {
         fs::write(&backup, "").unwrap();
         fs::hard_link(&backup, &source).unwrap();
 
-        assert!(!source_is_target_backup(&source, &target, "~", false));
+        assert!(!backup_would_destroy_source(
+            &source,
+            &target,
+            "~",
+            BackupMode::Simple,
+            false
+        ));
     }
 }
