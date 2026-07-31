@@ -334,6 +334,58 @@ fn test_verbose() {
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
 }
 
+// Regression test for issue #10551: `rm -v` must report a verbose output
+// write failure on stderr and exit 1 instead of panicking.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_verbose_write_error_file";
+
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-v")
+        .arg(file)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(file));
+}
+
+// Directory variant of the #10551 regression test.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic_dir() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_dir";
+    let file = "test_rm_verbose_write_error_dir/a";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(file));
+}
+
 #[test]
 #[cfg(not(windows))]
 // on unix symlink_dir is a file

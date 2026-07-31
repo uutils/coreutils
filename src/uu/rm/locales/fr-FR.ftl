@@ -47,6 +47,7 @@ rm-error-use-no-preserve-root = utilisez --no-preserve-root pour outrepasser cet
 rm-error-refusing-to-remove-directory = refus de supprimer le répertoire '.' ou '..' : ignorer {$path}
 rm-error-cannot-remove = impossible de supprimer {$file}
 rm-error-may-not-abbreviate-no-preserve-root = Vous ne pouvez pas abréger l'option --no-preserve-root
+rm-error-standard-output = sortie standard : {$error}
 
 # Messages verbeux
 rm-verbose-removed = {$file} supprimé
