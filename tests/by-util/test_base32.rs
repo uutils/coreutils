@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -171,7 +171,7 @@ fn test_encode_large_input_is_buffered() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_base32_file_with_trailing_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a", "b");

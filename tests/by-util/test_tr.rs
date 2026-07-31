@@ -385,6 +385,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
 fn test_truncate_applies_before_complement_with_class() {
     new_ucmd!()
         .args(&["-ct", "[:digit:]", "X"])
+        .ignore_stdin_write_error()
         .pipe_in("A")
         .fails()
         .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");

@@ -769,7 +769,7 @@ fn test_cat_non_utf8_paths() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_appending_same_input_output() {
     let (at, mut ucmd) = at_and_ucmd!();
 

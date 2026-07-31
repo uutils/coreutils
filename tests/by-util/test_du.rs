@@ -2232,7 +2232,7 @@ fn test_du_safe_traversal_with_symlinks() {
     assert!(!result.stdout_str().is_empty());
 }
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_du_inaccessible_directory() {
     // tested by tests/du/no-x
     let ts = TestScenario::new(util_name!());
@@ -2427,7 +2427,7 @@ fn test_du_hard_links_multiple_links_in_args() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_du_symlinks_multiple_links_in_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

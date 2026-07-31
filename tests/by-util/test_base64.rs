@@ -5,7 +5,7 @@
 
 // spell-checker:ignore unpadded, QUJD
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -287,7 +287,7 @@ fn test_read_error() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_base64_file_with_trailing_slash() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("a", "b");

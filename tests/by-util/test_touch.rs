@@ -645,7 +645,7 @@ fn test_touch_set_date_without_leading_zeroes() {
 /// expected by the old nix-based implementation. After switching to rustix
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";

@@ -1828,7 +1828,7 @@ fn test_files0_read_error() {
         .stderr_only("sort: cannot read: .: Is a directory\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
 fn test_files0_from_empty_non_regular() {
