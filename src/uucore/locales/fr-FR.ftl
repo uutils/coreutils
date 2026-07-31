@@ -32,6 +32,25 @@ error-file-not-found = Aucun fichier ou répertoire de ce type
 error-invalid-argument = Argument invalide
 error-is-a-directory = { $file }: Est un répertoire
 
+uio-err-not-found = Aucun fichier ou répertoire de ce type
+uio-err-permission-denied = Permission refusée
+uio-err-conn-refused = Connexion refusée
+uio-err-conn-reset = Connexion réinitialisée
+uio-err-conn-abort = Connexion interrompue
+uio-err-not-connected = Déconnecté
+# uio-err-addr-in-use = ?
+# uio-err-addr-not-avail = ?
+# uio-err-broken-pipe = ?
+# uio-err-already-exists = ?
+# uio-err-would-block = ?
+# uio-err-invalid-input = ?
+# uio-err-invalid-data = ?
+# uio-err-timed-out = ?
+# uio-err-write-zero = ?
+# uio-err-interrupted = ?
+# uio-err-unexpected-eof = ?
+uio-err-is-a-directory = Est un répertoire
+
 # Actions communes
 action-copying = copie
 action-moving = déplacement
