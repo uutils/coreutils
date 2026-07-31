@@ -1985,6 +1985,40 @@ mod inter_partition_copying {
     use uutests::util::TestScenario;
     use uutests::util_name;
 
+    // setuid/setgid must survive a cross-device move when ownership is
+    // preserved. The mover owns the file here, so the chown is a no-op and the
+    // bits are legitimate; only a failed chown justifies stripping them, and
+    // that needs a second uid, so it is exercised out of band rather than here.
+    #[test]
+    pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "src contents");
+        set_permissions(at.plus("src"), PermissionsExt::from_mode(0o6755))
+            .expect("Unable to set setuid/setgid on src");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("dest");
+
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let mode = fs::metadata(&dest)
+            .expect("destination should exist")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(
+            mode, 0o6755,
+            "setuid/setgid must be kept when ownership was preserved, got {mode:o}"
+        );
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
