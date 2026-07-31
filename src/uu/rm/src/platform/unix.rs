@@ -16,7 +16,7 @@ use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
 use uucore::prompt_yes;
-use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+use uucore::safe_traversal::{DirFd, SymlinkBehavior, clear_errno, take_errno};
 use uucore::show_error;
 use uucore::translate;
 
@@ -380,6 +380,7 @@ pub fn safe_remove_dir_recursive_impl(
     parent_dev: u64,
 ) -> bool {
     // Read directory entries using safe traversal
+    clear_errno();
     let entries = match dir_fd.read_dir() {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
@@ -392,6 +393,18 @@ pub fn safe_remove_dir_recursive_impl(
             return handle_error_with_force(e, path, options);
         }
     };
+
+    // Check if readdir failed partway through (partial read)
+    if let Some(err) = take_errno() {
+        if !entries.is_empty() {
+            show_error!(
+                "{}: {}",
+                translate!("rm-error-traversal-failed", "path" => path.display()),
+                err
+            );
+            return true;
+        }
+    }
 
     let mut error = false;
 
