@@ -452,7 +452,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     }
 
     let res = if settings.symbolic {
-        symlink(&source, dst).map_err(Into::into)
+        symlink(&source, dst).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!(
+                    "ln-failed-to-create-symbolic-link",
+                    "dest" => dst.quote()
+                ),
+            )
+        })
     } else {
         let p = if settings.logical && source.is_symlink() {
             fs::canonicalize(&source).map_err(|e| {
