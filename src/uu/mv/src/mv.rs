@@ -1324,8 +1324,18 @@ fn rename_file_fallback(
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
         // so the final mode must be applied last to preserve those bits.
-        let _ = preserve_ownership(from, to);
-        let _ = dst_file.set_permissions(Permissions::from_mode(src_mode));
+        //
+        // If the chown did not take, the destination belongs to whoever ran
+        // `mv`, and re-applying setuid/setgid would hand them a binary running
+        // as themselves that used to run as someone else. GNU strips the bits
+        // in that case and so do we.
+        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+        let dest_mode = if ownership_preserved {
+            src_mode
+        } else {
+            src_mode & !0o6000
+        };
+        let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
     }
 
     #[cfg(not(unix))]
@@ -1342,8 +1352,13 @@ fn rename_file_fallback(
 /// Preserve ownership (uid/gid) from source to destination.
 /// Uses lchown so it works on symlinks without following them.
 /// Errors are silently ignored for non-root users who cannot chown.
+///
+/// Returns whether the destination ended up with the source's uid and gid.
+/// Callers that re-apply the source mode must strip setuid/setgid when this is
+/// false: those bits on a file that changed hands grant the new owner's
+/// identity, not the original one's, which is why GNU drops them.
 #[cfg(unix)]
-fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
     use std::os::unix::fs::MetadataExt;
 
     let source_meta = from.symlink_metadata()?;
@@ -1360,7 +1375,7 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
         // Use follow=false so lchown is used (works on symlinks)
         // Silently ignore errors: non-root users typically cannot chown to
         // arbitrary uid, matching GNU mv behavior which also uses best-effort.
-        let _ = wrap_chown(
+        if wrap_chown(
             to,
             &dest_meta,
             Some(uid),
@@ -1370,10 +1385,14 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
                 groups_only: false,
                 level: VerbosityLevel::Silent,
             },
-        );
+        )
+        .is_err()
+        {
+            return Ok(false);
+        }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 fn is_empty_dir(path: &Path) -> bool {
