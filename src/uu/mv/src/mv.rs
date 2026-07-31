@@ -366,7 +366,10 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
     // `mv` never follows a symlink source, so the guard must not either.
-    if opts.backup == BackupMode::Simple
+    // GNU applies this to every mode but `numbered`, which cannot reuse an
+    // existing name; `existing` falls back to a simple backup when no numbered
+    // backup is present, and so can destroy the source just the same.
+    if !matches!(opts.backup, BackupMode::None | BackupMode::Numbered)
         && source_is_target_backup(source, target, &opts.suffix, false)
     {
         return Err(io::Error::new(
