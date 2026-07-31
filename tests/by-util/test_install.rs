@@ -2980,3 +2980,97 @@ fn test_install_backup_nil_same_file() {
         assert_eq!(at.read(file), "content");
     }
 }
+
+#[test]
+fn test_install_backup_refuses_when_source_is_the_backup() {
+    // Installing `a~` over `a` renames `a` to `a~`, which would clobber the
+    // source before it is read. GNU refuses; so must we.
+    for mode in ["simple", "existing"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("a");
+        at.write("a~", "source content");
+
+        scene
+            .ucmd()
+            .arg(format!("--backup={mode}"))
+            .arg("a~")
+            .arg("a")
+            .fails()
+            .stderr_is("install: backing up 'a' might destroy source;  'a~' not copied\n");
+
+        // The source must be intact.
+        assert_eq!(at.read("a~"), "source content");
+    }
+}
+
+#[test]
+fn test_install_backup_numbered_allows_source_named_like_backup() {
+    // A numbered backup never reuses an existing name, so it cannot destroy
+    // the source and must not be refused.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=numbered")
+        .arg("a~")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a~"), "source content");
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+fn test_install_backup_allows_hardlink_under_another_name() {
+    // `other` shares an inode with `a~` but its name is not `a` + suffix, so
+    // the backup rename cannot clobber it. GNU allows this.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+    at.hard_link("a~", "other");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("other")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+fn test_install_backup_refuses_regardless_of_spelling() {
+    // The guard compares files, not the strings naming them.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("./a~")
+        .arg("a")
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a~"), "source content");
+}
+
+#[test]
+fn test_install_backup_custom_suffix_refuses() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a.bak", "source content");
+
+    scene
+        .ucmd()
+        .args(&["-b", "--suffix=.bak", "a.bak", "a"])
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a.bak"), "source content");
+}
