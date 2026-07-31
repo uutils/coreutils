@@ -684,22 +684,20 @@ impl Dest {
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f, _) => {
-                let pos = f.stream_position()?;
-                // `set_len()` can fail with EINVAL on special outputs such as
-                // `/dev/null`; GNU `dd` ignores that. But on a regular file a
-                // truncate failure (e.g. ENOSPC, read-only fs) means silent data
-                // loss, so the error must surface there.
-                match f.set_len(pos) {
-                    Ok(()) => Ok(()),
-                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
-                    Err(_) => Ok(()),
-                }
-            }
-            _ => Ok(()),
+        let Self::File(f, _) = self else {
+            return Ok(());
+        };
+        let pos = f.stream_position()?;
+        // `set_len()` can fail with EINVAL on special outputs such as
+        // `/dev/null`; GNU ignores that. But on a regular file a
+        // truncate failure (e.g. ENOSPC, read-only fs) means silent data
+        // loss.
+        if let Err(e) = f.set_len(pos)
+            && f.metadata().is_ok_and(|m| m.file_type().is_file())
+        {
+            return Err(e);
         }
+        Ok(())
     }
 
     /// Discard the system file cache for the given portion of the destination.
@@ -743,21 +741,16 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         let flags_without_direct = oflags & !OFlags::DIRECT;
 
         // Remove O_DIRECT flag
-        if fcntl_setfl(&*f, flags_without_direct).is_err() {
-            return Err(original_error);
-        }
+        fcntl_setfl(&*f, flags_without_direct).map_err(|_| original_error)?;
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
         // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
+        if let Err(e) = fcntl_setfl(&*f, oflags).map_err(io::Error::from) {
             // Just log the error, don't fail the whole operation
-            show_error!(
-                "Failed to restore O_DIRECT flag: {}",
-                io::Error::from(os_err)
-            );
+            show_error!("Failed to restore O_DIRECT flag: {e}");
         }
 
         write_result
@@ -1281,18 +1274,13 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         if check_and_reset_sigusr1() {
             alarm.manual_trigger();
         }
-        match alarm.get_trigger() {
-            ALARM_TRIGGER_NONE => {}
-            t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
-                let tp = match t {
-                    ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
-                    _ => ProgUpdateType::Signal,
-                };
-                let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
-                prog_tx.send(prog_update).unwrap_or(());
-            }
-            _ => {}
-        }
+        let tp = match alarm.get_trigger() {
+            ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
+            ALARM_TRIGGER_SIGNAL => ProgUpdateType::Signal,
+            _ => continue,
+        };
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
+        prog_tx.send(prog_update).unwrap_or(());
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)

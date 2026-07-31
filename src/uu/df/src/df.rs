@@ -22,7 +22,7 @@ use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
 use std::io::{BufWriter, Write, stdout};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
@@ -177,8 +177,9 @@ impl Options {
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
-                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
-                ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
+                ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
+                    OptionsError::InvalidBlockSize(s)
+                }
             })?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
@@ -416,10 +417,11 @@ impl UError for DfError {
 }
 
 /// Gather the filesystems that `df` would report on, without formatting anything.
-pub fn filesystems<P>(paths: Option<&[P]>, opt: &Options) -> UResult<Vec<Filesystem>>
-where
-    P: AsRef<Path>,
-{
+///
+/// `paths` is `None` to report on every mounted filesystem, as `df` does when
+/// called without operands, or `Some` to report on the filesystems containing
+/// the given paths.
+pub fn filesystems(paths: Option<&[&Path]>, opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
         #[cfg(not(any(windows, target_os = "redox")))]
@@ -458,10 +460,9 @@ where
 }
 
 /// Display filesystem usage information as a table on stdout.
-pub fn df<P>(paths: Option<&[P]>, opt: &Options) -> UResult<()>
-where
-    P: AsRef<Path>,
-{
+///
+/// `paths` has the same meaning as in [`filesystems`].
+pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
     let filesystems = filesystems(paths, opt)?;
 
     // Every path given on the command line was rejected; `filesystems` has
@@ -495,9 +496,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let opt = Options::from_matches(&matches)?;
-    let paths: Option<Vec<PathBuf>> = matches
+    let paths: Option<Vec<&Path>> = matches
         .get_many::<OsString>(OPT_PATHS)
-        .map(|paths| paths.map(PathBuf::from).collect());
+        .map(|paths| paths.map(Path::new).collect());
 
     df(paths.as_deref(), &opt)
 }
@@ -656,9 +657,19 @@ mod tests {
     // spell-checker:ignore apfs
     mod write_table {
 
+        use crate::blocks::BlockSize;
         use crate::{Filesystem, Options, write_table};
         use std::ffi::OsString;
         use uucore::fsext::{FsUsage, MountInfo};
+
+        /// `Options::default()` picks up the block size from the environment
+        /// (`POSIXLY_CORRECT` halves it), so pin it for reproducible output.
+        fn options() -> Options {
+            Options {
+                block_size: BlockSize::Bytes(1024),
+                ..Options::default()
+            }
+        }
 
         fn filesystem() -> Filesystem {
             Filesystem {
@@ -690,7 +701,7 @@ mod tests {
         #[test]
         fn test_write_table_to_arbitrary_writer() {
             let mut buffer: Vec<u8> = Vec::new();
-            write_table(&mut buffer, vec![filesystem()], &Options::default()).unwrap();
+            write_table(&mut buffer, vec![filesystem()], &options()).unwrap();
 
             // Header text is localized and the bundle is not loaded in unit
             // tests, so only the data row is asserted on here.
@@ -710,7 +721,7 @@ mod tests {
         #[test]
         fn test_write_table_empty() {
             let mut buffer: Vec<u8> = Vec::new();
-            write_table(&mut buffer, vec![], &Options::default()).unwrap();
+            write_table(&mut buffer, vec![], &options()).unwrap();
 
             let table = String::from_utf8(buffer).unwrap();
             assert_eq!(table.lines().count(), 1);

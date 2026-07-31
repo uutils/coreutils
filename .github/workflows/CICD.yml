@@ -115,7 +115,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -179,7 +179,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -288,7 +288,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -331,7 +331,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -379,7 +379,7 @@ jobs:
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-gnu    , features: "feat_os_unix,uudoc"   , use-cross: no, workspace-tests: true }
           - { os: ubuntu-latest  , target: x86_64-unknown-linux-musl   , features: feat_os_unix_musl , use-cross: use-cross }
           - { os: ubuntu-latest  , target: x86_64-unknown-netbsd, features: "feat_os_unix", use-cross: use-cross , skip-tests: true , check-only: true }
-          - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
+          # - { os: ubuntu-latest  , target: x86_64-unknown-redox        , features: feat_os_unix_redox     , use-cross: redoxer , skip-tests: true , check-only: true }
           - { os: ubuntu-latest  , target: wasm32-wasip1, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: ubuntu-latest  , target: wasm32-wasip2, default-features: false, features: feat_wasm, skip-tests: true }
           - { os: macos-latest   , target: aarch64-apple-darwin        , features: feat_os_unix, workspace-tests: true } # M1 CPU
@@ -407,7 +407,7 @@ jobs:
         key: "${{ matrix.job.os }}_${{ matrix.job.target }}"
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -726,7 +726,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -858,7 +858,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'

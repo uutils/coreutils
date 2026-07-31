@@ -489,10 +489,10 @@ pub enum ParseSizeError {
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
-            Self::InvalidSuffix(ref s) => s,
-            Self::ParseFailure(ref s) => s,
-            Self::SizeTooBig(ref s) => s,
-            Self::PhysicalMem(ref s) => s,
+            Self::InvalidSuffix(ref s)
+            | Self::ParseFailure(ref s)
+            | Self::SizeTooBig(ref s)
+            | Self::PhysicalMem(ref s) => s,
         }
     }
 }

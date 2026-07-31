@@ -340,6 +340,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Resolve an owner/group argument to a numeric id.
+///
+/// First looks the value up by name (or by id) via `lookup`. When no matching
+/// entry exists but the value is a plain integer, that integer is used as the
+/// id directly. This matches GNU, which accepts unused numeric ids such as
+/// `install -o 1100`. Returns `None` when the value is neither known nor numeric.
+fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Option<u32> {
+    lookup(value).ok().or_else(|| value.parse::<u32>().ok())
+}
+
 /// Determine behavior, given command line arguments.
 ///
 /// If successful, returns a filled-out Behavior struct.
@@ -424,17 +434,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let owner_id = if owner.is_empty() {
         None
     } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            // When using -o500 option and there's no user with uid 500 on the system
-            // usr2uid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with uid 500 in the same situation
-            // so just return the supplied owner as uid if it's an integer value
-            Err(_) => match owner.parse::<u32>() {
-                Ok(u) => Some(u),
-                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
-            },
-        }
+        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     };
 
     let group = matches
@@ -445,17 +445,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let group_id = if group.is_empty() {
         None
     } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            // When using -g500 option and there's no group with gid 500 on the system
-            // grp2gid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with gid 500 in the same situation
-            // so just return the supplied group as gid if it's an integer value
-            Err(_) => match group.parse::<u32>() {
-                Ok(g) => Some(g),
-                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
-            },
-        }
+        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -541,23 +531,30 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             }
         }
 
-        if mode::chmod(path, b.mode()).is_err() {
-            // Error messages are printed by the mode::chmod function!
+        // Ownership before mode; on failure skip the chmod.
+        // See set_ownership_and_permissions for why.
+        if b.privileged
+            && let Err(e) = chown_optional_user_group(path, b)
+        {
+            show!(e);
             uucore::error::set_exit_code(1);
             continue;
         }
 
+        // Set SELinux context for directory if needed
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if b.privileged {
-            show_if_err!(chown_optional_user_group(path, b));
-
-            // Set SELinux context for directory if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             if b.default_context {
                 show_if_err!(set_selinux_default_context(path));
             } else if b.context.is_some() {
                 let context = get_context_for_selinux(b);
                 show_if_err!(set_selinux_security_context(path, context));
             }
+        }
+
+        if mode::chmod(path, b.mode()).is_err() {
+            // Error messages are printed by the mode::chmod function!
+            uucore::error::set_exit_code(1);
         }
     }
     // If the exit code was set, or show! has been called at least once
@@ -1078,11 +1075,13 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
-    // Silent the warning as we want to the error message
-    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
+    // Ownership first, then mode, as GNU does: chown(2) clears setuid/setgid, and
+    // a failed chown must not leave a mode carrying them already applied.
     if b.privileged {
         chown_optional_user_group(to, b)?;
     }
+    // Silent the warning as we want to the error message
+    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
 
     Ok(())
 }

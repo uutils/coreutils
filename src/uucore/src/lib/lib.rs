@@ -40,6 +40,7 @@ pub use crate::features::backup_control;
 pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
+pub use crate::features::char_width;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
@@ -181,9 +182,7 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-        "dir" => "ls",  // dir is an alias for ls
-        "vdir" => "ls", // vdir is an alias for ls
-
+        "dir" | "vdir" => "ls", // aliases for ls
         // Default case - return the util name as is
         _ => util_name,
     }

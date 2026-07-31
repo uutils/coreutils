@@ -8,8 +8,6 @@
 use filetime::FileTime;
 use std::fs::{self, File};
 #[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader};
-#[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::PathBuf;
@@ -2656,6 +2654,65 @@ fn test_install_non_utf8_paths() {
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
 
+/// A failed ownership change must not leave the setuid/setgid mode applied.
+#[test]
+fn test_install_failed_chown_does_not_leave_setuid() {
+    // Only meaningful when the chown can actually fail.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene
+        .ucmd()
+        .args(&["-m", "4755", "-o", "root", "src", "dst"])
+        .fails();
+
+    if at.file_exists("dst") {
+        let mode = at.metadata("dst").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+
+    // The same for a directory created with -d.
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "4755", "-o", "root", "newdir"])
+        .fails();
+
+    if at.dir_exists("newdir") {
+        let mode = at.metadata("newdir").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install -d left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+}
+
+/// The mode must still be applied in full when no ownership change is requested.
+#[test]
+fn test_install_setuid_mode_applied_without_chown() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene.ucmd().args(&["-m", "4755", "src", "dst"]).succeeds();
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, 0o4755);
+
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "2755", "newdir"])
+        .succeeds();
+    assert_eq!(at.metadata("newdir").permissions().mode() & 0o7777, 0o2755);
+}
+
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
@@ -2829,61 +2886,33 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_install_set_owner_nonexistent_uid_and_gid() {
-    let file = File::open("/etc/login.defs").unwrap();
-    let reader = BufReader::new(file);
-    let mut uid_min: u32 = 0;
-    let mut uid_max: u32 = 0;
-    let mut gid_min: u32 = 0;
-    let mut gid_max: u32 = 0;
-    for line in reader.lines() {
-        let line = line.unwrap();
-        if line.starts_with("UID_MIN") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            uid_min = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("UID_MAX") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            uid_max = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("GID_MIN") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            gid_min = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("GID_MAX") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            gid_max = tokens[1].parse().unwrap();
+    use std::collections::HashSet;
+
+    // Collect the ids already present on the system so we can pick unused ones.
+    let mut used_uids: HashSet<u32> = HashSet::new();
+    let mut used_gids: HashSet<u32> = HashSet::new();
+    if let Ok(passwd) = fs::read_to_string("/etc/passwd") {
+        for line in passwd.lines() {
+            let fields: Vec<&str> = line.split(':').collect();
+            if fields.len() < 4 {
+                continue;
+            }
+            if let Ok(uid) = fields[2].parse::<u32>() {
+                used_uids.insert(uid);
+            }
+            if let Ok(gid) = fields[3].parse::<u32>() {
+                used_gids.insert(gid);
+            }
         }
     }
-    let file = File::open("/etc/passwd").unwrap();
-    let reader = BufReader::new(file);
 
-    let mut uids: Vec<u32> = vec![];
-    let mut gids: Vec<u32> = vec![];
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let tokens: Vec<&str> = line.split(':').collect();
-        let uid: u32 = tokens[2].parse().unwrap();
-        if (uid_min..=uid_max).contains(&uid) {
-            uids.push(uid);
-        }
-        let gid: u32 = tokens[3].parse().unwrap();
-        if (gid_min..=gid_max).contains(&gid) {
-            gids.push(gid);
-        }
-    }
-    uids.sort_unstable();
-
-    let next_uid = if let Some(uid) = uids.last() {
-        *uid + 1
-    } else {
-        uid_min
-    };
-
-    let next_gid = if let Some(gid) = gids.last() {
-        *gid + 1
-    } else {
-        gid_min
-    };
+    // Pick high ids that are not associated with any user/group.
+    let next_uid = (60_000..u32::MAX)
+        .find(|id| !used_uids.contains(id))
+        .expect("no unused uid found");
+    let next_gid = (60_000..u32::MAX)
+        .find(|id| !used_gids.contains(id))
+        .expect("no unused gid found");
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

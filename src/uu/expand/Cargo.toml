@@ -23,7 +23,6 @@ clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true }
 thiserror = { workspace = true }
-unicode-width = { workspace = true }
 uucore = { workspace = true }
 
 [dev-dependencies]
