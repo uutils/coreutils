@@ -43,6 +43,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .collect();
 
     for f in fifos {
+        // Label the FIFO at creation, as GNU does; relabelling after leaves a window.
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let _selinux_guard = {
+            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+            let context = matches.get_one::<String>(options::CONTEXT);
+            if set_security_context || context.is_some() {
+                let mode = uucore::libc::S_IFIFO | mode as uucore::libc::mode_t;
+                match uucore::selinux::FsCreateContext::new(
+                    std::path::Path::new(&f),
+                    Some(mode),
+                    context,
+                ) {
+                    Ok(guard) => Some(guard),
+                    Err(e) => return Err(USimpleError::new(1, e.to_string())),
+                }
+            } else {
+                None
+            }
+        };
+
         // Clear umask around mkfifo so the kernel applies the exact
         // requested mode atomically. Skipping the path-based chmod
         // that used to follow this call closes the TOCTOU window an
@@ -62,23 +82,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ),
             ));
         } else {
-            // Apply SELinux context if requested
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-            {
-                let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-                let context = matches.get_one::<String>(options::CONTEXT);
-
-                if set_security_context || context.is_some() {
-                    use std::path::Path;
-                    if let Err(e) =
-                        uucore::selinux::set_selinux_security_context(Path::new(&f), context)
-                    {
-                        let _ = std::fs::remove_file(f);
-                        return Err(USimpleError::new(1, e.to_string()));
-                    }
-                }
-            }
-
             // Apply SMACK context if requested
             #[cfg(all(feature = "smack", target_os = "linux"))]
             {
