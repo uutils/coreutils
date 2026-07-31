@@ -257,7 +257,7 @@ fn build_localizer_from_embedded(
         #[cfg(target_os = "wasi")]
         {
             let english_bundle = create_wasi_bundle_from_embedded(&default_locale, util_name)?;
-            if locale == default_locale {
+            if locale == &default_locale {
                 Localizer::new(english_bundle)
             } else if let Ok(localized) = create_wasi_bundle_from_embedded(locale, util_name) {
                 Localizer::new(localized).with_fallback(english_bundle)

@@ -17,7 +17,7 @@ use std::fs;
 use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
-use std::io::{Error, ErrorKind, Result as IOResult};
+use std::io::{Error, Result as IOResult};
 #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
@@ -451,10 +451,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::new(
-                            ErrorKind::InvalidInput,
-                            "Too many levels of symbolic links",
-                        )); // TODO use ErrorKind::FilesystemLoop when stable
+                        return Err(Error::other("Too many levels of symbolic links")); // TODO use ErrorKind::FilesystemLoop when stable
                     }
                 }
                 result.pop();

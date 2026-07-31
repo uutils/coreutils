@@ -411,43 +411,34 @@ impl Display for UIoError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         use std::io::ErrorKind::*;
 
-        let message = if self.inner.raw_os_error().is_some() {
-            // These are errors that come directly from the OS.
-            // We want to normalize their messages across systems,
-            // and we want to strip the "(os error X)" suffix.
-            match self.inner.kind() {
-                NotFound => translate!("uio-err-not-found"),
-                PermissionDenied => translate!("uio-err-permission-denied"),
-                ConnectionRefused => translate!("uio-err-conn-refused"),
-                ConnectionReset => translate!("uio-err-conn-reset"),
-                ConnectionAborted => translate!("uio-err-conn-abort"),
-                NotConnected => translate!("uio-err-not-connected"),
-                AddrInUse => translate!("uio-err-addr-in-use"),
-                AddrNotAvailable => translate!("uio-err-addr-not-avail"),
-                BrokenPipe => translate!("uio-err-broken-pipe"),
-                AlreadyExists => translate!("uio-err-already-exists"),
-                WouldBlock => translate!("uio-err-would-block"),
-                InvalidInput => translate!("uio-err-invalid-input"),
-                InvalidData => translate!("uio-err-invalid-data"),
-                TimedOut => translate!("uio-err-timed-out"),
-                WriteZero => translate!("uio-err-write-zero"),
-                Interrupted => translate!("uio-err-interrupted"),
-                UnexpectedEof => translate!("uio-err-unexpected-eof"),
-                IsADirectory => translate!("uio-err-is-a-directory"),
-                _ => {
-                    // TODO: When the new error variants
-                    // (https://github.com/rust-lang/rust/issues/86442)
-                    // are stabilized, we should add them to the match statement.
-                    strip_errno(&self.inner)
-                }
+        // These are errors that come directly from the OS.
+        // We want to normalize their messages across systems,
+        // and we want to strip the "(os error X)" suffix.
+        let message = match self.inner.kind() {
+            NotFound => translate!("uio-err-not-found"),
+            PermissionDenied => translate!("uio-err-permission-denied"),
+            ConnectionRefused => translate!("uio-err-conn-refused"),
+            ConnectionReset => translate!("uio-err-conn-reset"),
+            ConnectionAborted => translate!("uio-err-conn-abort"),
+            NotConnected => translate!("uio-err-not-connected"),
+            AddrInUse => translate!("uio-err-addr-in-use"),
+            AddrNotAvailable => translate!("uio-err-addr-not-avail"),
+            BrokenPipe => translate!("uio-err-broken-pipe"),
+            AlreadyExists => translate!("uio-err-already-exists"),
+            WouldBlock => translate!("uio-err-would-block"),
+            InvalidInput => translate!("uio-err-invalid-input"),
+            InvalidData => translate!("uio-err-invalid-data"),
+            TimedOut => translate!("uio-err-timed-out"),
+            WriteZero => translate!("uio-err-write-zero"),
+            Interrupted => translate!("uio-err-interrupted"),
+            UnexpectedEof => translate!("uio-err-unexpected-eof"),
+            IsADirectory => translate!("uio-err-is-a-directory"),
+            _ => {
+                // TODO: When the new error variants
+                // (https://github.com/rust-lang/rust/issues/86442)
+                // are stabilized, we should add them to the match statement.
+                strip_errno(&self.inner)
             }
-        } else {
-            // These messages don't need as much normalization, and the above
-            // messages wouldn't always be a good substitute.
-            // For example, ErrorKind::NotFound doesn't necessarily mean it was
-            // a file that was not found.
-            // There are also errors with entirely custom messages.
-            self.inner.to_string()
         };
         if let Some(ctx) = &self.context {
             write!(f, "{ctx}: {message}")
