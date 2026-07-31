@@ -61,3 +61,4 @@ install-verbose-creating-directory = creating directory { $path }
 install-verbose-creating-directory-step = install: creating directory { $path }
 install-verbose-removed = removed { $path }
 install-verbose-backup = (backup: { $backup })
+install-error-backing-up-destroy-source = backing up { $dest } might destroy source;  { $source } not copied
