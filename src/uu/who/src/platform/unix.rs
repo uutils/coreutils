@@ -8,8 +8,9 @@
 use crate::options;
 use crate::uu_app;
 
+use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UError, UResult, strip_errno};
 use uucore::libc::S_IWGRP;
 use uucore::translate;
 
@@ -24,6 +25,14 @@ use std::path::PathBuf;
 fn get_long_usage() -> String {
     translate!("who-long-usage", "default_file" => utmpx::DEFAULT_FILE)
 }
+
+#[derive(Debug, Error)]
+enum WhoError {
+    #[error("{}", translate!("who-error-write", "error" => strip_errno(.0)))]
+    Write(std::io::Error),
+}
+
+impl UError for WhoError {}
 
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
@@ -209,8 +218,16 @@ impl Who {
                 .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
-            println!("{}", users.join(" "));
-            println!("{}", translate!("who-user-count", "count" => users.len()));
+            let mut out = stdout().lock();
+            writeln!(out, "{}", users.join(" "))
+                .and_then(|()| {
+                    writeln!(
+                        out,
+                        "{}",
+                        translate!("who-user-count", "count" => users.len())
+                    )
+                })
+                .map_err(WhoError::Write)?;
         } else {
             let records = utmpx::Utmpx::iter_all_records_from(f);
 
@@ -450,7 +467,7 @@ impl Who {
         if self.include_exit {
             write!(buf, " {exit:<12}").unwrap();
         }
-        writeln!(stdout(), "{}", buf.trim_end())?;
+        writeln!(stdout(), "{}", buf.trim_end()).map_err(WhoError::Write)?;
         Ok(())
     }
 

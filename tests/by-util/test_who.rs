@@ -289,6 +289,23 @@ fn test_piped_to_dev_full() {
     ts.ucmd()
         .arg("--heading")
         .set_stdout(dev_full)
-        .fails()
-        .stderr_is("who: No space left on device\n");
+        .fails_with_code(1)
+        .stderr_is("who: write error: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_count_piped_to_dev_full() {
+    let ts = TestScenario::new(util_name!());
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .arg("-q")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("who: write error: No space left on device\n");
 }
