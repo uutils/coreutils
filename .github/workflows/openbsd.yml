@@ -221,10 +221,9 @@ jobs:
             cargo test --features '${{ matrix.job.features }}' || FAULT=1
             echo "::endgroup::"
           fi
-          # There is no systemd-logind on OpenBSD, so test all features except feat_systemd_logind
           if (test -z "\$FAULT"); then
             echo "::group::cargo test (uucore)"
-            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | grep -v "feat_systemd_logind" | paste -s -d "," -)
+            UUCORE_FEATURES=\$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "uucore") | .features | keys | .[]' | paste -s -d "," -)
             cargo test --features "\$UUCORE_FEATURES" -p uucore || FAULT=1
             echo "::endgroup::"
           fi
