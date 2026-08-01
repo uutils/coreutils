@@ -160,6 +160,7 @@ impl Add for ExtendedBigDecimal {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
+        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => Self::BigDecimal(m.add(n)),
             (Self::BigDecimal(_), Self::MinusInfinity) => Self::MinusInfinity,
@@ -184,6 +185,7 @@ impl Add for ExtendedBigDecimal {
 
 impl PartialEq for ExtendedBigDecimal {
     fn eq(&self, other: &Self) -> bool {
+        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.eq(n),
             (Self::BigDecimal(_), Self::MinusInfinity) => false,
@@ -211,6 +213,7 @@ impl PartialEq for ExtendedBigDecimal {
 
 impl PartialOrd for ExtendedBigDecimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.partial_cmp(n),
             (Self::BigDecimal(_), Self::MinusInfinity) => Some(Ordering::Greater),
