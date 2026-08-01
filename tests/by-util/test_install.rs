@@ -792,8 +792,12 @@ fn strip_source_file() -> PathBuf {
     BINARY
         .get_or_init(|| {
             let dir = std::env::temp_dir();
-            let source = dir.join("hello.rs");
-            let binary = dir.join("hello_bin");
+            // Include the PID so concurrent test processes (e.g. under `cargo
+            // nextest`, which runs each test in its own process) don't race
+            // on the same source/binary path.
+            let pid = process::id();
+            let source = dir.join(format!("hello-{pid}.rs"));
+            let binary = dir.join(format!("hello_bin-{pid}"));
             let mut file = File::create(&source).unwrap();
             file.write_all(b"fn main() {}").unwrap();
             process::Command::new("rustc")

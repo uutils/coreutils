@@ -33,7 +33,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Ok(()) => Ok(()),
         // On Windows and WASI, silently handle broken pipe since there's no SIGPIPE
         #[cfg(any(windows, target_os = "wasi"))]
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(err) if uucore::error::wasi_is_broken_pipe(&err) => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => strip_errno(&err)),

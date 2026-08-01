@@ -1130,7 +1130,23 @@ fn parse_date<S: AsRef<str>>(
     }
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(target_os = "wasi")]
+/// Returns the resolution of the system's realtime clock.
+///
+/// `rustix::time::clock_getres` excludes WASI, so call `libc::clock_getres`
+/// (available on WASI) directly instead.
+fn get_clock_resolution() -> Timestamp {
+    let timespec = unsafe {
+        let mut timespec: libc::timespec = std::mem::zeroed();
+        libc::clock_getres(libc::CLOCK_REALTIME, &raw mut timespec);
+        timespec
+    };
+
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
+}
+
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
@@ -1169,7 +1185,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(0, 100)
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
@@ -1188,6 +1204,15 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
         translate!("date-error-setting-date-not-supported-macos"),
+    ))
+}
+
+#[cfg(target_os = "wasi")]
+/// The WASI sandbox has no syscall for setting the wall clock.
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
+    Err(USimpleError::new(
+        1,
+        translate!("date-error-setting-date-not-supported-wasi"),
     ))
 }
 

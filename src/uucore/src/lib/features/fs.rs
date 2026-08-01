@@ -18,7 +18,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -52,15 +52,13 @@ macro_rules! has {
 /// Information to uniquely identify a file
 #[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(unix)] rustix::fs::Stat,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
-    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -78,7 +76,7 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -102,20 +100,10 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
-        #[cfg(target_os = "wasi")]
-        {
-            let metadata = if dereference {
-                fs::metadata(path.as_ref())
-            } else {
-                fs::symlink_metadata(path.as_ref())
-            };
-            Ok(Self(metadata?))
-        }
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -123,10 +111,6 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len()
         }
     }
 
@@ -178,34 +162,32 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
-        // WASI: nlink is not available in std::fs::Metadata, return 1
         #[cfg(target_os = "wasi")]
-        return 1;
+        #[allow(clippy::useless_conversion)]
+        return self.0.st_nlink.into();
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
-        #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
+        #[cfg(all(
+            not(any(target_os = "netbsd", target_os = "wasi")),
+            target_pointer_width = "64"
+        ))]
         return self.0.st_ino;
-        #[cfg(any(target_os = "netbsd", not(target_pointer_width = "64")))]
+        #[cfg(any(
+            target_os = "netbsd",
+            target_os = "wasi",
+            not(target_pointer_width = "64")
+        ))]
         #[allow(clippy::useless_conversion)]
         return self.0.st_ino.into();
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
-    }
-}
-
-// WASI: compare by file type and size as a basic heuristic since
-// device/inode numbers are not available through std::fs::Metadata.
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -221,7 +203,7 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -230,11 +212,6 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len().hash(state);
-            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -704,8 +681,8 @@ pub fn is_symlink_loop(path: &Path) -> bool {
     false
 }
 
-#[cfg(not(unix))]
-// Hard link comparison is not supported on non-Unix platforms
+#[cfg(not(any(unix, target_os = "wasi")))]
+// Hard link comparison is not supported on non-Unix, non-WASI platforms
 pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -731,7 +708,20 @@ pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
 }
 
-#[cfg(not(unix))]
+// `std::os::unix::fs::MetadataExt` is unavailable on WASI (`std::os::wasi` is
+// nightly-only). `rustix::fs::stat` exposes the same st_ino/st_dev fields and
+// works on stable for both wasip1 and wasip2.
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::lstat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
+}
+
+#[cfg(not(any(unix, target_os = "wasi")))]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &Path) -> bool {
     false
 }
@@ -755,6 +745,16 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
     };
 
     source_metadata.ino() == target_metadata.ino() && source_metadata.dev() == target_metadata.dev()
+}
+
+#[cfg(target_os = "wasi")]
+pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
+    let (Ok(source_stat), Ok(target_stat)) = (rustix::fs::stat(source), rustix::fs::lstat(target))
+    else {
+        return false;
+    };
+
+    source_stat.st_ino == target_stat.st_ino && source_stat.st_dev == target_stat.st_dev
 }
 
 /// Returns true if the passed `path` ends with a path terminator.

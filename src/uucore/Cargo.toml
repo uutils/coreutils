@@ -142,6 +142,9 @@ windows-sys = { workspace = true, optional = true, default-features = false, fea
 [target.'cfg(target_os = "openbsd")'.dependencies]
 utmp-classic = { workspace = true, optional = true }
 
+[target.'cfg(all(target_os = "wasi", target_env = "p2"))'.dependencies]
+wasip2 = { version = "1.0", optional = true }
+
 [features]
 default = ["signals"]
 # * non-default features
@@ -225,3 +228,10 @@ tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
 benchmark = ["divan", "itertools", "tempfile"]
+# Use the unstable `wasi:cli/exit#exit-with-code` function on wasm32-wasip2
+# so nonzero exit codes propagate correctly, instead of the stable
+# `wasi:cli/exit#exit` function (used by `std::process::exit`) which only
+# carries a success/failure bit and collapses every nonzero code to 1.
+# The WASI host must opt in to this unstable feature (e.g. wasmtime's
+# `-S cli-exit-with-code=y`) or the process traps instead of exiting.
+wasip2-exit-with-code = ["dep:wasip2"]

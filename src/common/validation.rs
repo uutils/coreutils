@@ -8,10 +8,10 @@
 use std::ffi::{OsStr, OsString};
 use std::io::{Write, stderr};
 use std::path::{Path, PathBuf};
-use std::process;
 
 use uucore::Args;
 use uucore::display::Quotable;
+use uucore::error::process_exit;
 use uucore::locale;
 
 /// Gets all available utilities including "coreutils"
@@ -31,7 +31,7 @@ pub fn not_found(util: &OsStr) -> ! {
         "coreutils: unknown program '{}'",
         util.maybe_quote()
     );
-    process::exit(1);
+    process_exit(1);
 }
 
 /// Prints an "unrecognized option" error and exits
@@ -41,7 +41,7 @@ pub fn unrecognized_option(binary_name: &str, option: &OsStr) -> ! {
         "{binary_name}: unrecognized option '{}'",
         option.to_string_lossy()
     );
-    process::exit(1);
+    process_exit(1);
 }
 
 /// Sets up localization for a utility with proper error handling
@@ -55,7 +55,7 @@ pub fn setup_localization_or_exit(util_name: &str) {
             } => eprintln!("Localization parse error at {snippet}: {err_msg}"),
             other => eprintln!("Could not init the localization system: {other}"),
         }
-        process::exit(99)
+        process_exit(99)
     });
 }
 

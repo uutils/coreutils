@@ -897,8 +897,9 @@ fn test_all_but_last_lines() {
         .stdout_is_fixture("lorem_ipsum_backwards_15_lines.expected");
 }
 
-#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[test]
+#[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasip2_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_write_to_dev_full() {
     use std::fs::OpenOptions;
 

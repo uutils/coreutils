@@ -78,6 +78,11 @@ feat_systemd_logind = [
 # NOTE:
 # * On linux, the posix-acl/acl-sys crate requires `libacl` headers and shared library to be accessible in the C toolchain at compile time.
 # * On FreeBSD and macOS this is not required.
+# "wasip2_exit_with_code" == use the unstable `wasi:cli/exit#exit-with-code`
+# function on wasm32-wasip2 so nonzero exit codes propagate correctly.
+# NOTE: requires a WASI host that opts in to the unstable feature (e.g.
+# wasmtime's `-S cli-exit-with-code=y`); otherwise the process traps.
+wasip2_exit_with_code = ["uucore/wasip2-exit-with-code"]
 feat_acl = ["cp/feat_acl"]
 # "feat_selinux" == enable support for SELinux Security Context (by using `--features feat_selinux`)
 # NOTE:
@@ -520,6 +525,7 @@ unexpected_cfgs = { level = "warn", check-cfg = [
   'cfg(fuzzing)',
   'cfg(target_os, values("cygwin"))',
   'cfg(wasi_runner)',
+  'cfg(wasip2_runner)',
 ] }
 unused_qualifications = "warn"
 

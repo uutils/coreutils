@@ -138,6 +138,7 @@ ENODATA
 ENOENT
 ENOSPC
 ENOSYS
+ENOTDIR
 ENOTEMPTY
 EOPNOTSUPP
 EPERM
@@ -197,8 +198,10 @@ addrlen
 blocksize
 canonname
 chroot
+cmdline
 dlsym
 execvp
+fchmod
 fdatasync
 freeaddrinfo
 getaddrinfo
@@ -218,6 +221,7 @@ inodes
 isatty
 lchown
 pathlen
+reflink
 setgid
 setgroups
 settime
@@ -232,6 +236,7 @@ strerror
 strlen
 syncfs
 umask
+unflushed
 waitpid
 
 # * vars/nix

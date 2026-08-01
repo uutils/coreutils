@@ -10,16 +10,18 @@ pub mod error;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-#[cfg(any(not(unix), target_os = "redox"))]
+use filetime::FileTime;
+#[cfg(any(not(any(unix, target_os = "wasi")), target_os = "redox"))]
 use filetime::set_file_times;
-use filetime::{FileTime, set_symlink_file_times};
+#[cfg(not(target_os = "wasi"))]
+use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 #[cfg(unix)]
 use libc::O_NONBLOCK;
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 use rustix::fs::Timestamps;
 #[cfg(unix)]
 use rustix::fs::futimens;
@@ -595,8 +597,26 @@ fn update_times(
     // sets the file access and modification times for a file or a symbolic link.
     // The filename, access time (atime), and modification time (mtime) are provided as inputs.
 
+    #[cfg(not(target_os = "wasi"))]
     if opts.no_deref && !is_stdout {
         return set_symlink_file_times(path, atime, mtime).map_err_context(
+            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
+        );
+    }
+    // `filetime::set_symlink_file_times` always fails on WASI (the crate has
+    // no WASI-specific backend), but `rustix::fs::utimensat` with
+    // `AT_SYMLINK_NOFOLLOW` works there on stable.
+    #[cfg(target_os = "wasi")]
+    if opts.no_deref && !is_stdout {
+        let timestamps = build_timestamps(atime, mtime);
+        return rustix::fs::utimensat(
+            rustix::fs::CWD,
+            path,
+            &timestamps,
+            rustix::fs::AtFlags::SYMLINK_NOFOLLOW,
+        )
+        .map_err(Error::from)
+        .map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         );
     }
@@ -629,7 +649,12 @@ fn update_times(
         set_times_by_path(path, atime, mtime)
     }
 
-    #[cfg(not(unix))]
+    #[cfg(target_os = "wasi")]
+    {
+        set_times_by_path(path, atime, mtime)
+    }
+
+    #[cfg(not(any(unix, target_os = "wasi")))]
     {
         set_file_times(path, atime, mtime).map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
@@ -637,7 +662,7 @@ fn update_times(
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 /// Build a rustix `Timestamps` from the access and modification `FileTime`s,
 /// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
 fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
@@ -653,11 +678,12 @@ fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
     }
 }
 
-#[cfg(all(unix, not(target_os = "redox")))]
-/// Set file times by path using `utimensat`, following symlinks.
+#[cfg(all(any(unix, target_os = "wasi"), not(target_os = "redox")))]
+/// Set file times by path using `utimensat`.
 ///
-/// This never opens the file, so it does not block on special files such as
-/// FIFOs.
+/// This never opens the file on Unix, avoiding blocks on FIFOs. On WASI, if
+/// `utimensat` fails on a non-symlink (e.g. unopenable mode 0 files), it retries
+/// with `SYMLINK_NOFOLLOW`.
 fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
     let timestamps = build_timestamps(atime, mtime);
     rustix::fs::utimensat(
@@ -666,6 +692,18 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
         &timestamps,
         rustix::fs::AtFlags::empty(),
     )
+    .or_else(|err| {
+        if cfg!(target_os = "wasi") && !path.is_symlink() {
+            rustix::fs::utimensat(
+                rustix::fs::CWD,
+                path,
+                &timestamps,
+                rustix::fs::AtFlags::SYMLINK_NOFOLLOW,
+            )
+        } else {
+            Err(err)
+        }
+    })
     .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
     .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
@@ -725,6 +763,16 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
         fs::symlink_metadata(path)?
     };
 
+    // `filetime::FileTime::from_last_{access,modification}_time` panics on
+    // WASI (the `filetime` crate has no WASI-specific backend and falls back
+    // to its unimplemented generic wasm one). `Metadata::accessed`/`modified`
+    // are stable and WASI-backed, so use those instead there.
+    #[cfg(target_os = "wasi")]
+    return Ok((
+        FileTime::from(metadata.accessed()?),
+        FileTime::from(metadata.modified()?),
+    ));
+    #[cfg(not(target_os = "wasi"))]
     Ok((
         FileTime::from_last_access_time(&metadata),
         FileTime::from_last_modification_time(&metadata),

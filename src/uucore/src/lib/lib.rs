@@ -209,14 +209,14 @@ macro_rules! bin_inner {
                         } => eprintln!("Localization parse error at {snippet}: {err_msg:?}"),
                         other => eprintln!("Could not init the localization system: {other}"),
                     }
-                    std::process::exit(99)
+                    uucore::error::process_exit(99)
                 });
 
             // execute utility code
             let code = $util::uumain(uucore::args_os());
             $post
 
-            std::process::exit(code);
+            uucore::error::process_exit(code);
         }
     };
 }
@@ -574,8 +574,12 @@ pub fn read_byte_lines<R: std::io::Read>(
 pub fn read_os_string_lines<R: std::io::Read>(
     buf_reader: BufReader<R>,
 ) -> impl Iterator<Item = std::io::Result<OsString>> {
-    read_byte_lines(buf_reader)
-        .map(|byte_line_res| byte_line_res.map(|bl| os_string_from_vec(bl).expect("UTF-8 error")))
+    read_byte_lines(buf_reader).map(|byte_line_res| {
+        byte_line_res.and_then(|bl| {
+            os_string_from_vec(bl)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e.to_string()))
+        })
+    })
 }
 
 /// Prompt the user with a formatted string and returns `true` if they reply `'y'` or `'Y'`

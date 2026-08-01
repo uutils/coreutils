@@ -98,6 +98,7 @@ date-error-expected-file-got-directory = fichier attendu, répertoire obtenu {$p
 date-error-date-overflow = débordement de date '{$date}'
 date-error-setting-date-not-supported-macos = la définition de la date n'est pas prise en charge par macOS
 date-error-setting-date-not-supported-redox = la définition de la date n'est pas prise en charge par Redox
+date-error-setting-date-not-supported-wasi = la définition de la date n'est pas prise en charge par WASI
 date-error-cannot-set-date = impossible de définir la date
 date-error-extra-operand = opérande supplémentaire '{$operand}'
 date-error-write = erreur d'écriture: {$error}

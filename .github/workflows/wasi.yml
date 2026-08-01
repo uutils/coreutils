@@ -25,7 +25,7 @@ jobs:
       matrix:
         job:
           - { target: wasm32-wasip1, rust-flags: "--cfg wasi_runner" }
-          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner"  }
+          - { target: wasm32-wasip2, rust-flags: "--cfg wasi_runner --cfg wasip2_runner" }
     steps:
     - uses: actions/checkout@v7.0.1
       with:
@@ -50,28 +50,29 @@ jobs:
         UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
         cargo test --target ${{ matrix.job.target }} --no-default-features $UTILS
     - name: Run integration tests via wasmtime
-      if:  matrix.job.target == 'wasm32-wasip1'
       env:
         RUSTFLAGS: ${{ matrix.job.rust-flags }}
       run: |
         # Build the WASI binary
-        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm
+        cargo build --target ${{ matrix.job.target }} --no-default-features --features feat_wasm,wasip2_exit_with_code
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
-        # TODO: add integration tests for these tools as WASI support is extended:
-        #   arch b2sum cat cksum cp csplit date dir dircolors fmt join
-        #   ls md5sum mkdir mv nproc pathchk pr printenv ptx pwd readlink
-        #   realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum
-        #   sha512sum shred sleep sort split tail touch tsort uname uniq
-        #   vdir
         UUTESTS_BINARY_PATH="$(pwd)/target/${{ matrix.job.target }}/debug/coreutils.wasm" \
         UUTESTS_WASM_RUNNER=wasmtime \
+        UUTESTS_WASM_RUNNER_ARGS="-S cli-exit-with-code=y" \
         cargo test --test tests -- \
-          test_base32:: test_base64:: test_basenc:: test_basename:: \
-          test_comm:: test_cut:: test_dirname:: test_echo:: \
-          test_expand:: test_factor:: test_false:: test_fold:: \
-          test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \
-          test_od:: test_paste:: test_printf:: test_shuf:: test_sum:: \
-          test_tee:: test_tr:: test_true:: test_truncate:: \
-          test_unexpand:: test_unlink:: test_wc:: test_yes::
+          test_arch:: test_b2sum:: test_base32:: test_base64:: test_basenc:: \
+          test_basename:: test_cat:: test_cksum:: test_comm:: test_cp:: \
+          test_csplit:: test_cut:: test_date:: test_dir:: test_dircolors:: \
+          test_dirname:: test_echo:: test_expand:: test_factor:: test_false:: \
+          test_fmt:: test_fold:: test_head:: test_join:: test_link:: test_ln:: \
+          test_ls:: test_md5sum:: test_mkdir:: test_mv:: test_nl:: test_nproc:: \
+          test_numfmt:: test_od:: test_paste:: test_pathchk:: test_pr:: \
+          test_printenv:: test_printf:: test_ptx:: test_pwd:: test_readlink:: \
+          test_realpath:: test_rm:: test_rmdir:: test_seq:: test_sha1sum:: \
+          test_sha224sum:: test_sha256sum:: test_sha384sum:: test_sha512sum:: \
+          test_shred:: test_shuf:: test_sleep:: test_sort:: test_split:: \
+          test_sum:: test_tail:: test_tee:: test_touch:: test_tr:: test_true:: \
+          test_truncate:: test_tsort:: test_uname:: test_unexpand:: test_uniq:: \
+          test_unlink:: test_vdir:: test_wc:: test_yes::

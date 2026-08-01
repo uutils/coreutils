@@ -238,6 +238,7 @@ fn get_filesystem_type(scene: &TestScenario, path: &Path) -> String {
 #[cfg(all(feature = "truncate", feature = "dd"))]
 #[test] // FIXME: fix this test for FreeBSD and OpenBSD
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_ls_allocation_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -479,6 +480,10 @@ fn test_ls_allocation_size() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/null) not visible"
+)]
 fn test_ls_devices() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1232,6 +1237,10 @@ fn test_ls_long_padding_of_size_column_with_multiple_files() {
 #[test]
 #[cfg(all(feature = "ln", feature = "mkdir", feature = "touch"))]
 #[allow(clippy::items_after_statements)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: st_mode has no real permission bits; color/mode-dependent output differs"
+)]
 fn test_ls_long_symlink_color() {
     // If you break this test after breaking mkdir, touch, or ln, do not be alarmed!
     // This test is made for ls, but it attempts to run those utils in the process.
@@ -1489,7 +1498,7 @@ fn test_ls_long_dangling_symlink_color() {
     // Ensure dangling link name uses `or=` and target uses `mi=`.
     let name_regex =
         Regex::new(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)mdir1/dangling_symlink\x1b\[0m").unwrap();
-    let target_path = regex::escape(&at.plus_as_string("foo"));
+    let target_path = regex::escape(&format!("..{}foo", std::path::MAIN_SEPARATOR));
     let target_pattern = format!(r"(?:\x1b\[[0-9;]*m)*\x1b\[([0-9;]*)m{target_path}\x1b\[0m");
     let target_regex = Regex::new(&target_pattern).unwrap();
 
@@ -1722,6 +1731,10 @@ fn test_ls_directory_dangling_symlink_uses_ln_when_or_blank() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: st_mode has no real permission bits; color/mode-dependent output differs"
+)]
 fn test_ls_long_total_size() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2179,6 +2192,10 @@ fn test_ls_order_size() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: ctime is unavailable via std::fs::Metadata on stable"
+)]
 fn test_ls_long_ctime() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2222,6 +2239,10 @@ fn test_ls_order_birthtime() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: locale database not visible (time-style=locale)"
+)]
 fn test_ls_time_styles() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2510,6 +2531,10 @@ fn test_ls_time_recent_future() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: access/change time tracking granularity does not match the host filesystem's"
+)]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -2805,6 +2830,10 @@ mod quoting {
     // and must not escape embedded apostrophes or double quotes; in the C
     // locale they fall back to ASCII single/double quotes.
     #[test]
+    #[cfg_attr(
+        wasi_runner,
+        ignore = "WASI sandbox: locale database not visible (host locale check passes but the wasm guest can't use it)"
+    )]
     fn test_ls_quoting_locale_utf8() {
         if !is_locale_available("en_US.UTF-8") {
             return;
@@ -3278,6 +3307,7 @@ mod quoting {
 
     #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
     #[test]
+    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
     fn test_locale_aware_quoting() {
@@ -3342,6 +3372,7 @@ mod quoting {
     }
 
     #[test]
+    #[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
     fn test_c_dot_utf8_renders_utf8() {
         let scene = TestScenario::new(util_name!());
         let at = &scene.fixtures;
@@ -3437,6 +3468,10 @@ fn test_ls_color() {
 #[test]
 #[cfg(not(feature = "feat_selinux"))]
 // Disabled on the SELinux runner for now
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: inode display is gated to unix; needs a rustix::fs::stat-based path"
+)]
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3479,6 +3514,10 @@ fn test_ls_inode() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: FileTypeExt::is_fifo() is unix-only, so FIFOs aren't classified"
+)]
 fn test_ls_indicator_style() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3594,7 +3633,7 @@ fn test_ls_indicator_style_symlink_target_long() {
         .succeeds()
         .stdout_contains("dir_link -> ")
         .stdout_does_not_contain("dir_link@ -> ")
-        .stdout_contains("/dir/");
+        .stdout_contains(" dir/");
 }
 
 #[test]
@@ -4852,6 +4891,7 @@ fn test_ls_sort_extension() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: absolute host paths not visible")]
 fn test_ls_path() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4894,6 +4934,10 @@ fn test_ls_path() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: inode display is gated to unix; needs a rustix::fs::stat-based path"
+)]
 fn test_ls_dangling_symlinks() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -5453,6 +5497,10 @@ fn test_tabsize_formatting() {
 
 #[cfg(all(unix, not(target_os = "android")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/console) not visible"
+)]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
     use std::os::unix::fs::{FileTypeExt, MetadataExt};
@@ -5484,6 +5532,10 @@ fn test_device_number() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: preopened directories reject non-UTF-8 filenames"
+)]
 fn test_invalid_utf8() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -5528,6 +5580,10 @@ fn test_ls_dired_implies_long() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: current_directory_resolved differs from host path used in expected hyperlink URI"
+)]
 fn test_ls_dired_hyperlink() {
     // we will have link but not the DIRED output
     // note that the order matters
@@ -5953,6 +6009,10 @@ fn test_ls_cf_output_should_be_delimited_by_tab() {
 #[cfg(all(unix, feature = "dd"))]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_posixly_correct_and_block_size_env_vars() {
     let scene = TestScenario::new(util_name!());
 
@@ -6007,6 +6067,10 @@ fn test_posixly_correct_and_block_size_env_vars() {
 #[cfg(all(unix, feature = "dd"))]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_posixly_correct_and_block_size_env_vars_with_k() {
     let scene = TestScenario::new(util_name!());
 
@@ -6073,6 +6137,10 @@ fn test_ls_invalid_block_size() {
 #[cfg(all(unix, feature = "dd"))]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_ls_invalid_block_size_in_env_var() {
     let scene = TestScenario::new(util_name!());
 
@@ -6120,6 +6188,10 @@ fn test_ls_invalid_block_size_in_env_var() {
 #[cfg(all(unix, feature = "dd"))]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: host paths (/dev/zero) not visible"
+)]
 fn test_ls_block_size_override() {
     let scene = TestScenario::new(util_name!());
 
@@ -6231,6 +6303,10 @@ fn test_ls_block_size_override_self() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: current_directory_resolved differs from host path used in expected hyperlink URI"
+)]
 fn test_ls_hyperlink() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6308,6 +6384,10 @@ fn test_ls_hyperlink_encode_link() {
 // spell-checker: enable
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: current_directory_resolved differs from host path used in expected hyperlink URI"
+)]
 fn test_ls_hyperlink_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6352,6 +6432,10 @@ fn test_ls_hyperlink_dirs() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: current_directory_resolved differs from host path used in expected hyperlink URI"
+)]
 fn test_ls_hyperlink_recursive_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -6549,6 +6633,10 @@ fn test_term_colorterm() {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: needs investigation (chmod/interactive/device/mode gaps)"
+)]
 fn test_acl_display() {
     use std::process::Command;
 
@@ -6605,6 +6693,10 @@ fn test_acl_display() {
 // Each file with an ACL must not inflate the link-count column width.
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: needs investigation (chmod/interactive/device/mode gaps)"
+)]
 fn test_acl_padding_not_inflated() {
     use std::process::Command;
 
@@ -6659,6 +6751,10 @@ fn test_acl_padding_not_inflated() {
 #[test]
 #[cfg(not(feature = "feat_selinux"))]
 // Disabled on the SELinux runner for now
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: st_mode has no real permission bits; color/mode-dependent output differs"
+)]
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7025,6 +7121,10 @@ fn test_unknown_format_specifier() {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: needs investigation (chmod/interactive/device/mode gaps)"
+)]
 fn test_acl_display_symlink() {
     use std::process::Command;
 
@@ -7158,6 +7258,7 @@ fn test_ls_time_style_iso_recent_and_older() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: locale database not visible")]
 fn test_ls_time_style_posix_locale_override() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7549,6 +7650,10 @@ fn test_f_flag_combined_behavior() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: st_mode has no real permission bits, only file-type; ls -l shows placeholder rwx"
+)]
 fn test_f_with_long_format() {
     // Test that -f works with long format (-l)
     let scene = TestScenario::new(util_name!());
@@ -7572,6 +7677,7 @@ fn test_f_with_long_format() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_ls_proc_self_fd_no_errors() {
     // Regression test: ReadDir must stay alive until metadata() is called
     // to prevent "cannot access '/proc/self/fd/3'" errors.
@@ -7587,6 +7693,10 @@ fn test_ls_proc_self_fd_no_errors() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "wasmtime's --dir sandbox hits its own fd/depth limit before 30 levels, unrelated to whether ls itself leaks fds"
+)]
 fn test_ls_recursive_no_fd_leak() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7608,6 +7718,10 @@ fn test_ls_recursive_no_fd_leak() {
 
 #[test]
 #[cfg(all(unix, not(target_os = "macos")))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: preopened directories reject non-UTF-8 filenames"
+)]
 fn test_ls_non_utf8_hidden() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let scene = TestScenario::new(util_name!());

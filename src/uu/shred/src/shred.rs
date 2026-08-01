@@ -17,7 +17,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, process_exit};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 use uucore::translate;
@@ -410,7 +410,7 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
                     translate!("shred-invalid-file-size", "size" => size.quote())
                 );
                 // TODO: replace with our error management
-                std::process::exit(1);
+                process_exit(1);
             }
             None
         })
@@ -820,7 +820,7 @@ fn wipe_name(orig_path: &Path, verbose: bool, remove_method: RemoveMethod) -> Pa
                     let msg = translate!("shred-couldnt-rename", "file" => last_path.maybe_quote(), "new_name" => new_path.quote(), "error" => e);
                     show_error!("{msg}");
                     // TODO: replace with our error management
-                    std::process::exit(1);
+                    process_exit(1);
                 }
             }
         }

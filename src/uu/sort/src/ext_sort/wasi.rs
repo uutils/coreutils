@@ -31,6 +31,13 @@ pub fn ext_sort(
     // moderately sized inputs; very large files may cause OOM.
     let mut input = Vec::new();
     for file in files {
+        // Insert the separator between files whose preceding content doesn't
+        // already end with one; otherwise the last line of one file would
+        // merge with the first line of the next, e.g. "a\nb" + "b" ->
+        // "a\nbb" instead of "a\nb" + '\n' + "b".
+        if !input.is_empty() && input.last() != Some(&separator) {
+            input.push(separator);
+        }
         file?.read_to_end(&mut input)?;
     }
     if input.is_empty() {

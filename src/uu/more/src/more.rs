@@ -22,7 +22,7 @@ use crossterm::{
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, process_exit};
 use uucore::format_usage;
 use uucore::{display::Quotable, show};
 
@@ -681,7 +681,7 @@ impl<'a> Pager<'a> {
                     },
                 ) => {
                     reset_term()?;
-                    std::process::exit(0);
+                    process_exit(0);
                 }
 
                 // --- Forward Navigation ---

@@ -16,7 +16,10 @@ use std::{
 use tempfile::TempDir;
 use uucore::error::UResult;
 #[cfg(not(any(target_os = "redox", target_os = "wasi")))]
-use uucore::{error::USimpleError, show_error, translate};
+use uucore::{
+    error::{USimpleError, process_exit},
+    show_error, translate,
+};
 
 use crate::SortError;
 
@@ -82,7 +85,7 @@ fn ensure_signal_handler_installed(state: Arc<Mutex<HandlerRegistration>>) -> UR
             }
         }
 
-        std::process::exit(2)
+        process_exit(2)
     }) {
         HANDLER_INSTALLED.store(false, Ordering::Release);
         return Err(USimpleError::new(

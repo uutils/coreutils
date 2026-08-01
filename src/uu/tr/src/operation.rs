@@ -763,7 +763,10 @@ where
             Ok(0) => break, // EOF reached
             Ok(len) => len,
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.map_err_context(|| translate!("tr-error-read-error"))),
+            Err(e) => {
+                let e = uucore::error::wasi_normalize_read_error(e);
+                return Err(e.map_err_context(|| translate!("tr-error-read-error")));
+            }
         };
 
         // Process the buffer and collect translated chars to output
@@ -794,7 +797,7 @@ pub fn flush_output<W: Write>(output: &mut W) -> UResult<()> {
     match output.flush() {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
-            std::process::exit(13);
+            uucore::error::process_exit(13);
         }
         Err(err) => Err(err.map_err_context(|| translate!("tr-error-write-error"))),
     }
