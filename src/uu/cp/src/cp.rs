@@ -1374,7 +1374,18 @@ fn is_enotsup_error(error: &CpError) -> bool {
     const EOPNOTSUPP: i32 = 95;
 
     match error {
-        CpError::IoErr(e) | CpError::IoErrContext(e, _) => e.raw_os_error() == Some(EOPNOTSUPP),
+        CpError::IoErr(e) | CpError::IoErrContext(e, _) => {
+            let raw = e.raw_os_error();
+            // WASI's sandbox has no chmod/chown syscalls at all (not merely an
+            // unsupported combination of flags), so `fs::set_permissions` and
+            // friends always fail with ENOSYS there. Treat that the same as
+            // EOPNOTSUPP for optional preservation.
+            #[cfg(target_os = "wasi")]
+            if raw == Some(libc::ENOSYS) {
+                return true;
+            }
+            raw == Some(EOPNOTSUPP)
+        }
         _ => false,
     }
 }
@@ -1709,6 +1720,40 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
+/// Returns the source's last access and modification times.
+///
+/// `filetime::FileTime::from_last_{access,modification}_time` panics on
+/// WASI (the `filetime` crate has no WASI-specific backend and falls back
+/// to its unimplemented generic wasm one). `Metadata::accessed`/`modified`
+/// are stable and WASI-backed, so use those instead there.
+// On non-wasi targets this can never fail, but the wasi branch below can.
+#[cfg_attr(not(target_os = "wasi"), allow(clippy::unnecessary_wraps))]
+fn source_times(source_metadata: &Metadata, context: &str) -> CopyResult<(FileTime, FileTime)> {
+    #[cfg(target_os = "wasi")]
+    {
+        Ok((
+            FileTime::from(
+                source_metadata
+                    .accessed()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            ),
+            FileTime::from(
+                source_metadata
+                    .modified()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            ),
+        ))
+    }
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let _ = context;
+        Ok((
+            FileTime::from_last_access_time(source_metadata),
+            FileTime::from_last_modification_time(source_metadata),
+        ))
+    }
+}
+
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
@@ -1903,8 +1948,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&source_metadata);
-        let mtime = FileTime::from_last_modification_time(&source_metadata);
+        let (atime, mtime) = source_times(&source_metadata, context)?;
         // `set_file_times` opens the destination (O_RDONLY) before calling
         // futimens; opening a FIFO or device with no peer blocks forever, and a
         // socket cannot be opened at all. For symlinks and these special files
@@ -1973,23 +2017,27 @@ pub(crate) fn copy_attributes(
 fn symlink_file(
     source: &Path,
     dest: &Path,
-    #[cfg(not(target_os = "wasi"))] symlinked_files: &mut HashSet<FileInformation>,
-    #[cfg(target_os = "wasi")] _symlinked_files: &mut HashSet<FileInformation>,
+    symlinked_files: &mut HashSet<FileInformation>,
 ) -> CopyResult<()> {
-    #[cfg(target_os = "wasi")]
-    {
-        Err(CpError::IoErrContext(
-            io::Error::new(io::ErrorKind::Unsupported, "symlinks not supported"),
-            translate!("cp-error-cannot-create-symlink",
-                       "dest" => get_filename(dest).unwrap_or("?").quote(),
-                       "source" => get_filename(source).unwrap_or("?").quote()),
-        ))
-    }
     #[cfg(not(any(windows, target_os = "wasi")))]
     {
         std::os::unix::fs::symlink(source, dest).map_err(|e| {
             CpError::IoErrContext(
                 e,
+                translate!("cp-error-cannot-create-symlink",
+                           "dest" => get_filename(dest).unwrap_or("?").quote(),
+                           "source" => get_filename(source).unwrap_or("?").quote()),
+            )
+        })?;
+    }
+    // `std::os::unix::fs::symlink` is unavailable on WASI (`std::os::wasi` is
+    // nightly-only), but `rustix::fs::symlink` works on stable for both
+    // wasip1 and wasip2 (same approach `ln` already uses).
+    #[cfg(target_os = "wasi")]
+    {
+        rustix::fs::symlink(source, dest).map_err(|e| {
+            CpError::IoErrContext(
+                io::Error::from(e),
                 translate!("cp-error-cannot-create-symlink",
                            "dest" => get_filename(dest).unwrap_or("?").quote(),
                            "source" => get_filename(source).unwrap_or("?").quote()),
@@ -2007,13 +2055,10 @@ fn symlink_file(
             )
         })?;
     }
-    #[cfg(not(target_os = "wasi"))]
-    {
-        if let Ok(file_info) = FileInformation::from_path(dest, false) {
-            symlinked_files.insert(file_info);
-        }
-        Ok(())
+    if let Ok(file_info) = FileInformation::from_path(dest, false) {
+        symlinked_files.insert(file_info);
     }
+    Ok(())
 }
 
 fn context_for(src: &Path, dest: &Path) -> String {
