@@ -48,6 +48,8 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
+/// Sector size used when applying the "flip first bit of every sector" variants.
+const SECTOR_SIZE: usize = 512;
 
 /// Optimal block size for the filesystem. This constant is used for data size alignment, similar
 /// to the behavior of GNU shred. Usually, optimal block size is a 4K block (2^12), which is why
@@ -55,41 +57,78 @@ const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
 const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
-/// Patterns that appear in order for the passes
-///
-/// A single-byte pattern is equivalent to a multi-byte pattern of that byte three times.
-const PATTERNS: [Pattern; 22] = [
-    Pattern::Single(b'\x00'),
-    Pattern::Single(b'\xFF'),
-    Pattern::Single(b'\x55'),
-    Pattern::Single(b'\xAA'),
-    Pattern::Multi(*b"\x24\x92\x49"),
-    Pattern::Multi(*b"\x49\x24\x92"),
-    Pattern::Multi(*b"\x6D\xB6\xDB"),
-    Pattern::Multi(*b"\x92\x49\x24"),
-    Pattern::Multi(*b"\xB6\xDB\x6D"),
-    Pattern::Multi(*b"\xDB\x6D\xB6"),
-    Pattern::Single(b'\x11'),
-    Pattern::Single(b'\x22'),
-    Pattern::Single(b'\x33'),
-    Pattern::Single(b'\x44'),
-    Pattern::Single(b'\x66'),
-    Pattern::Single(b'\x77'),
-    Pattern::Single(b'\x88'),
-    Pattern::Single(b'\x99'),
-    Pattern::Single(b'\xBB'),
-    Pattern::Single(b'\xCC'),
-    Pattern::Single(b'\xDD'),
-    Pattern::Single(b'\xEE'),
-];
-
-#[derive(Clone, Copy)]
-enum Pattern {
-    Single(u8),
-    Multi([u8; 3]),
+/// Three repeating bytes; `flip_sector` XOR-s the first byte of each 512B sector with 0x80.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Pattern {
+    bytes: [u8; 3],
+    flip_sector: bool,
 }
 
-#[derive(Clone)]
+impl Pattern {
+    const fn solid(b: u8) -> Self {
+        Self {
+            bytes: [b, b, b],
+            flip_sector: false,
+        }
+    }
+
+    const fn multi(bytes: [u8; 3]) -> Self {
+        Self {
+            bytes,
+            flip_sector: false,
+        }
+    }
+
+    /// Lower 12 bits: 3-byte pattern. Bit 0x1000: sector-phase flip.
+    fn from_code(code: i32) -> Self {
+        let mut bits = (code & 0xfff) as u32;
+        bits |= bits << 12;
+        Self {
+            bytes: [
+                ((bits >> 4) & 255) as u8,
+                ((bits >> 8) & 255) as u8,
+                (bits & 255) as u8,
+            ],
+            flip_sector: (code & 0x1000) != 0,
+        }
+    }
+
+    fn display_bytes(self) -> [u8; 3] {
+        let mut b = self.bytes;
+        if self.flip_sector {
+            b[0] ^= 0x80;
+        }
+        b
+    }
+}
+
+/// Patterns that appear in order for the passes (base only; no sector phase).
+const PATTERNS: [Pattern; 22] = [
+    Pattern::solid(0x00),
+    Pattern::solid(0xFF),
+    Pattern::solid(0x55),
+    Pattern::solid(0xAA),
+    Pattern::multi([0x24, 0x92, 0x49]),
+    Pattern::multi([0x49, 0x24, 0x92]),
+    Pattern::multi([0x6D, 0xB6, 0xDB]),
+    Pattern::multi([0x92, 0x49, 0x24]),
+    Pattern::multi([0xB6, 0xDB, 0x6D]),
+    Pattern::multi([0xDB, 0x6D, 0xB6]),
+    Pattern::solid(0x11),
+    Pattern::solid(0x22),
+    Pattern::solid(0x33),
+    Pattern::solid(0x44),
+    Pattern::solid(0x66),
+    Pattern::solid(0x77),
+    Pattern::solid(0x88),
+    Pattern::solid(0x99),
+    Pattern::solid(0xBB),
+    Pattern::solid(0xCC),
+    Pattern::solid(0xDD),
+    Pattern::solid(0xEE),
+];
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum PassType {
     Pattern(Pattern),
     Random,
@@ -178,6 +217,9 @@ enum BytesWriter {
     Pattern {
         offset: usize,
         buffer: [u8; PATTERN_BUFFER_SIZE],
+        /// When true, keep `offset` at 0 so sector-phase flips stay aligned
+        /// to the start of each write (matches the sector-relative design).
+        lock_offset: bool,
     },
 }
 
@@ -203,20 +245,31 @@ impl BytesWriter {
                 }
             },
             PassType::Pattern(pattern) => {
-                // Copy the pattern in chunks rather than simply one byte at a time
-                // We prefill the pattern so that the buffer can be reused at each
-                // iteration as a small optimization.
-                let buffer = match pattern {
-                    Pattern::Single(byte) => [*byte; PATTERN_BUFFER_SIZE],
-                    Pattern::Multi(bytes) => {
-                        let mut buf = [0; PATTERN_BUFFER_SIZE];
-                        for chunk in buf.chunks_exact_mut(PATTERN_LENGTH) {
-                            chunk.copy_from_slice(bytes);
-                        }
-                        buf
+                // Prefill the pattern so the buffer can be reused each iteration.
+                let mut buffer = [0_u8; PATTERN_BUFFER_SIZE];
+                if pattern.bytes[0] == pattern.bytes[1] && pattern.bytes[1] == pattern.bytes[2] {
+                    buffer.fill(pattern.bytes[0]);
+                } else {
+                    for chunk in buffer.chunks_exact_mut(PATTERN_LENGTH) {
+                        chunk.copy_from_slice(&pattern.bytes);
                     }
-                };
-                Ok(Self::Pattern { offset: 0, buffer })
+                    let filled = PATTERN_BUFFER_SIZE - PATTERN_BUFFER_SIZE % PATTERN_LENGTH;
+                    buffer[filled..]
+                        .copy_from_slice(&pattern.bytes[..PATTERN_BUFFER_SIZE - filled]);
+                }
+                // Phase-variant patterns: invert the first bit of every 512-byte sector.
+                if pattern.flip_sector {
+                    let mut i = 0;
+                    while i < PATTERN_BUFFER_SIZE {
+                        buffer[i] ^= 0x80;
+                        i += SECTOR_SIZE;
+                    }
+                }
+                Ok(Self::Pattern {
+                    offset: 0,
+                    buffer,
+                    lock_offset: pattern.flip_sector,
+                })
             }
         }
     }
@@ -233,9 +286,15 @@ impl BytesWriter {
                 rng_file.read_exact(bytes)?;
                 Ok(bytes)
             }
-            Self::Pattern { offset, buffer } => {
+            Self::Pattern {
+                offset,
+                buffer,
+                lock_offset,
+            } => {
                 let bytes = &buffer[*offset..size + *offset];
-                *offset = (*offset + size) % PATTERN_LENGTH;
+                if !*lock_offset {
+                    *offset = (*offset + size) % PATTERN_LENGTH;
+                }
                 Ok(bytes)
             }
         }
@@ -419,28 +478,16 @@ fn get_size(size_str_opt: Option<String>) -> Option<u64> {
 fn pass_name(pass_type: &PassType) -> String {
     match pass_type {
         PassType::Random => String::from("random"),
-        PassType::Pattern(Pattern::Single(byte)) => format!("{byte:02x}{byte:02x}{byte:02x}"),
-        PassType::Pattern(Pattern::Multi([a, b, c])) => format!("{a:02x}{b:02x}{c:02x}"),
+        PassType::Pattern(pattern) => {
+            let [a, b, c] = pattern.display_bytes();
+            format!("{a:02x}{b:02x}{c:02x}")
+        }
     }
 }
 
-/// Convert pattern value to our Pattern enum using standard fillpattern algorithm
+/// Convert a pattern code to [`Pattern`] (fillpattern + optional sector-phase bit).
 fn pattern_value_to_pattern(pattern: i32) -> Pattern {
-    // Standard fillpattern algorithm
-    let mut bits = (pattern & 0xfff) as u32; // Extract lower 12 bits
-    bits |= bits << 12; // Duplicate the 12-bit pattern
-
-    // Extract 3 bytes using standard formula
-    let b0 = ((bits >> 4) & 255) as u8;
-    let b1 = ((bits >> 8) & 255) as u8;
-    let b2 = (bits & 255) as u8;
-
-    // Check if it's a single byte pattern (all bytes the same)
-    if b0 == b1 && b1 == b2 {
-        Pattern::Single(b0)
-    } else {
-        Pattern::Multi([b0, b1, b2])
-    }
+    Pattern::from_code(pattern)
 }
 
 /// Generate patterns with middle randoms distributed according to standard algorithm
@@ -857,8 +904,51 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, SECTOR_SIZE, pass_name,
+        split_on_blocks,
+    };
 
-    use crate::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, split_on_blocks};
+    #[test]
+    fn test_pattern_from_code_flip() {
+        let p = Pattern::from_code(0x1000);
+        assert_eq!(p.bytes, [0, 0, 0]);
+        assert!(p.flip_sector);
+        assert_eq!(p.display_bytes(), [0x80, 0, 0]);
+        assert_eq!(pass_name(&PassType::Pattern(p)), "800000");
+
+        let p = Pattern::from_code(0x1111);
+        assert_eq!(p.display_bytes(), [0x91, 0x11, 0x11]);
+        assert_eq!(pass_name(&PassType::Pattern(p)), "911111");
+
+        let p = Pattern::from_code(0x000);
+        assert!(!p.flip_sector);
+        assert_eq!(p.display_bytes(), [0, 0, 0]);
+        assert_eq!(pass_name(&PassType::Pattern(p)), "000000");
+    }
+
+    #[test]
+    fn test_sector_phase_writer_flips_each_sector() {
+        let pass = PassType::Pattern(Pattern::from_code(0x1000));
+        let mut writer = BytesWriter::from_pass_type(&pass, None).unwrap();
+        let bytes = writer.bytes_for_pass(BLOCK_SIZE).unwrap();
+        // First byte of every 512-byte sector is XOR'd with 0x80.
+        for i in (0..BLOCK_SIZE).step_by(SECTOR_SIZE) {
+            assert_eq!(bytes[i], 0x80, "sector start at {i}");
+            if i + 1 < BLOCK_SIZE {
+                assert_eq!(bytes[i + 1], 0x00);
+            }
+        }
+        // Offset stays locked so the next block also starts at a sector boundary.
+        let bytes2 = writer.bytes_for_pass(SECTOR_SIZE).unwrap();
+        assert_eq!(bytes2[0], 0x80);
+
+        let plain = PassType::Pattern(Pattern::from_code(0x111));
+        let mut writer = BytesWriter::from_pass_type(&plain, None).unwrap();
+        let bytes = writer.bytes_for_pass(BLOCK_SIZE).unwrap();
+        assert_eq!(bytes[0], 0x11);
+        assert_eq!(bytes[SECTOR_SIZE], 0x11);
+    }
 
     #[test]
     fn test_align_non_exact_control_values() {
