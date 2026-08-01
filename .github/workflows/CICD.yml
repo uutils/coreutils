@@ -163,6 +163,8 @@ jobs:
   min_version:
     name: MinRustV # Minimum supported rust version (aka, MinSRV or MSRV)
     runs-on: ${{ matrix.job.os }}
+    env:
+      RUSTC_BOOTSTRAP: 1
     strategy:
       matrix:
         job:
@@ -197,6 +199,7 @@ jobs:
         unset CARGO_FEATURES_OPTION
         if [ -n "${{ matrix.job.features }}" ]; then CARGO_FEATURES_OPTION='--features "${{ matrix.job.features }}"' ; fi
         outputs CARGO_FEATURES_OPTION
+    - run: cargo update -Z direct-minimal-versions
     - name: Confirm MinSRV compatible '*/Cargo.lock'
       shell: bash
       run: |
