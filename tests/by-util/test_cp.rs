@@ -6695,8 +6695,8 @@ fn test_cp_parents_symlink_permissions_file() {
     );
 }
 
-/// The finalize chmod goes through a parent-fd + `NoFollow` chmod rather than a
-/// path-based `set_permissions`. Pin the modes it is responsible for, including
+/// The finalize chmod goes through a `NoFollow` chmod rather than a symlink
+/// following `set_permissions`. Pin the modes it is responsible for, including
 /// the setuid and read-only cases, so the no-follow path cannot silently stop
 /// applying them.
 #[test]

@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods FDCWD
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -298,118 +298,12 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        // --- fchmodat2 path (Linux 6.6+, asm-generic arches only) ---
-        // Uses the raw mode value directly; no nix::Mode conversion needed.
-        // Only enabled on asm-generic architectures where syscall number 452 is
-        // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
-        // use different numbering and are not supported until libc exposes
-        // SYS_fchmodat2 for them.
-        #[cfg(all(
-            target_os = "linux",
-            any(
-                target_arch = "x86_64",
-                target_arch = "x86",
-                target_arch = "arm",
-                target_arch = "aarch64",
-                target_arch = "riscv64",
-                target_arch = "riscv32",
-            ),
-        ))]
-        if matches!(symlink_behavior, SymlinkBehavior::NoFollow) {
-            use std::sync::atomic::{AtomicBool, Ordering};
-
-            // Cache: if fchmodat2 returned ENOSYS once, the kernel is too old
-            // and will never support it. Skip the syscall on subsequent calls.
-            static FCHMODAT2_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
-
-            if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
-                // Syscall number for fchmodat2 on asm-generic architectures.
-                const SYS_FCHMODAT2: core::ffi::c_long = 452;
-                // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
-                // - fd: valid open file descriptor
-                // - name: valid C string pointer (name_cstr lives for the duration)
-                // - mode: valid mode_t value
-                // - flags: AT_SYMLINK_NOFOLLOW (valid flag for fchmodat2)
-                let res = unsafe {
-                    libc::syscall(
-                        SYS_FCHMODAT2,
-                        self.fd.as_raw_fd(),
-                        name_cstr.as_ptr(),
-                        mode as libc::mode_t,
-                        libc::AT_SYMLINK_NOFOLLOW,
-                    )
-                };
-                if res == 0 {
-                    return Ok(());
-                }
-                let err = io::Error::last_os_error();
-                match err.raw_os_error() {
-                    Some(libc::ENOSYS) => {
-                        FCHMODAT2_UNAVAILABLE.store(true, Ordering::Relaxed);
-                        // Fall through to fchmodat
-                    }
-                    _ => return Err(err),
-                }
-            }
-        }
-
-        // --- fchmodat fallback path ---
-        // nix::Mode conversion is needed here because fchmodat() requires it.
-        let nix_mode = Mode::from_bits_truncate(mode as libc::mode_t);
-
-        let flags = if symlink_behavior.should_follow() {
-            FchmodatFlags::FollowSymlink
-        } else {
-            FchmodatFlags::NoFollowSymlink
-        };
-
-        match fchmodat(&self.fd, name_cstr.as_c_str(), nix_mode, flags) {
-            Ok(()) => Ok(()),
-            Err(e)
-                if !symlink_behavior.should_follow()
-                    && (e == nix::errno::Errno::EOPNOTSUPP || e == nix::errno::Errno::ENOTSUP) =>
-            {
-                // musl does not emulate AT_SYMLINK_NOFOLLOW via /proc/self/fd
-                // like glibc does, so fchmodat returns EOPNOTSUPP on old kernels.
-                // Fall back to O_PATH + /proc/self/fd/{fd} + fchmod.
-                #[cfg(target_os = "linux")]
-                {
-                    self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    Err(io::Error::from_raw_os_error(e as i32))
-                }
-            }
-            Err(e) => Err(io::Error::from_raw_os_error(e as i32)),
-        }
-    }
-
-    /// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
-    /// is not available (musl on kernel < 6.6).
-    ///
-    /// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
-    /// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
-    /// race because the fd pins the inode.
-    ///
-    #[cfg(target_os = "linux")]
-    fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
-        use rustix::fs::{Mode, OFlags, chmod, openat};
-
-        let fd = openat(
-            &self.fd,
-            name,
-            OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC,
-            Mode::empty(),
+        chmod_at_fd(
+            self.fd.as_fd(),
+            name_cstr.as_c_str(),
+            mode,
+            symlink_behavior,
         )
-        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
-
-        let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = core::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
-
-        chmod(proc_cstr, Mode::from_bits_truncate(mode))
-            .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
     }
 
     /// Change mode of this directory
@@ -473,6 +367,149 @@ impl DirFd {
         let owned_fd = unsafe { OwnedFd::from_raw_fd(fd) };
         Ok(Self { fd: owned_fd })
     }
+}
+
+/// Change the mode of `path` without following a symlink at its final component.
+///
+/// This is the `AT_FDCWD` counterpart of [`DirFd::chmod_at`]: the whole path is
+/// handed to a single `fchmodat2`/`fchmodat` call, so it costs the same as a plain
+/// `chmod(2)` instead of requiring the parent directory to be opened first.
+pub fn chmod_nofollow(path: &Path, mode: u32) -> io::Result<()> {
+    let path_cstr = CString::new(path.as_os_str().as_bytes())
+        .map_err(|_| SafeTraversalError::PathContainsNull)?;
+
+    // SAFETY: `AT_FDCWD` is the special descriptor the `*at` syscalls accept to
+    // resolve relative paths against the current working directory. It is not a
+    // real descriptor, so it is always valid and is never closed.
+    let cwd = unsafe { BorrowedFd::borrow_raw(libc::AT_FDCWD) };
+
+    chmod_at_fd(cwd, path_cstr.as_c_str(), mode, SymlinkBehavior::NoFollow)
+}
+
+/// Shared implementation of the `*at`-style chmod, used by both [`DirFd::chmod_at`]
+/// and [`chmod_nofollow`].
+fn chmod_at_fd(
+    dirfd: BorrowedFd<'_>,
+    name_cstr: &core::ffi::CStr,
+    mode: u32,
+    symlink_behavior: SymlinkBehavior,
+) -> io::Result<()> {
+    // --- fchmodat2 path (Linux 6.6+, asm-generic arches only) ---
+    // Uses the raw mode value directly; no nix::Mode conversion needed.
+    // Only enabled on asm-generic architectures where syscall number 452 is
+    // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
+    // use different numbering and are not supported until libc exposes
+    // SYS_fchmodat2 for them.
+    #[cfg(all(
+        target_os = "linux",
+        any(
+            target_arch = "x86_64",
+            target_arch = "x86",
+            target_arch = "arm",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "riscv32",
+        ),
+    ))]
+    if matches!(symlink_behavior, SymlinkBehavior::NoFollow) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        // Cache: if fchmodat2 returned ENOSYS once, the kernel is too old
+        // and will never support it. Skip the syscall on subsequent calls.
+        static FCHMODAT2_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+        if !FCHMODAT2_UNAVAILABLE.load(Ordering::Relaxed) {
+            // Syscall number for fchmodat2 on asm-generic architectures.
+            const SYS_FCHMODAT2: core::ffi::c_long = 452;
+            // SAFETY: syscall(2) is an FFI call. We pass valid arguments:
+            // - fd: valid open file descriptor (or AT_FDCWD)
+            // - name: valid C string pointer (name_cstr lives for the duration)
+            // - mode: valid mode_t value
+            // - flags: AT_SYMLINK_NOFOLLOW (valid flag for fchmodat2)
+            let res = unsafe {
+                libc::syscall(
+                    SYS_FCHMODAT2,
+                    dirfd.as_raw_fd(),
+                    name_cstr.as_ptr(),
+                    mode as libc::mode_t,
+                    libc::AT_SYMLINK_NOFOLLOW,
+                )
+            };
+            if res == 0 {
+                return Ok(());
+            }
+            let err = io::Error::last_os_error();
+            match err.raw_os_error() {
+                Some(libc::ENOSYS) => {
+                    FCHMODAT2_UNAVAILABLE.store(true, Ordering::Relaxed);
+                    // Fall through to fchmodat
+                }
+                _ => return Err(err),
+            }
+        }
+    }
+
+    // --- fchmodat fallback path ---
+    // nix::Mode conversion is needed here because fchmodat() requires it.
+    let nix_mode = Mode::from_bits_truncate(mode as libc::mode_t);
+
+    let flags = if symlink_behavior.should_follow() {
+        FchmodatFlags::FollowSymlink
+    } else {
+        FchmodatFlags::NoFollowSymlink
+    };
+
+    match fchmodat(dirfd, name_cstr, nix_mode, flags) {
+        Ok(()) => Ok(()),
+        Err(e)
+            if !symlink_behavior.should_follow()
+                && (e == nix::errno::Errno::EOPNOTSUPP || e == nix::errno::Errno::ENOTSUP) =>
+        {
+            // musl does not emulate AT_SYMLINK_NOFOLLOW via /proc/self/fd
+            // like glibc does, so fchmodat returns EOPNOTSUPP on old kernels.
+            // Fall back to O_PATH + /proc/self/fd/{fd} + fchmod.
+            #[cfg(target_os = "linux")]
+            {
+                chmod_at_fd_via_opath(dirfd, name_cstr, mode)
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                Err(io::Error::from_raw_os_error(e as i32))
+            }
+        }
+        Err(e) => Err(io::Error::from_raw_os_error(e as i32)),
+    }
+}
+
+/// O_PATH-based fallback for chmod when fchmodat with AT_SYMLINK_NOFOLLOW
+/// is not available (musl on kernel < 6.6).
+///
+/// Opens the file with O_PATH|O_NOFOLLOW to get an fd without following
+/// symlinks, then chmods via /proc/self/fd/{fd}. This avoids the TOCTOU
+/// race because the fd pins the inode.
+///
+#[cfg(target_os = "linux")]
+fn chmod_at_fd_via_opath(
+    dirfd: BorrowedFd<'_>,
+    name: &core::ffi::CStr,
+    mode: u32,
+) -> io::Result<()> {
+    use rustix::fs::{Mode, OFlags, chmod, openat};
+
+    let fd = openat(
+        dirfd,
+        name,
+        OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+        Mode::empty(),
+    )
+    .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
+
+    let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
+    let proc_cstr = core::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
+
+    chmod(proc_cstr, Mode::from_bits_truncate(mode))
+        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Find the deepest existing directory ancestor for a path.
@@ -933,6 +970,7 @@ mod tests {
     use super::*;
     use std::fs;
     use std::os::unix::fs::MetadataExt;
+    use std::os::unix::fs::PermissionsExt;
     use std::os::unix::fs::symlink;
     use std::os::unix::io::IntoRawFd;
     use tempfile::TempDir;
@@ -1442,6 +1480,39 @@ mod tests {
         }
         // If result is Err (EOPNOTSUPP on old kernels), the target is also unchanged,
         // which is the correct behavior — no silent modification.
+    }
+
+    /// Verify that the path-based `chmod_nofollow` does not change the symlink
+    /// target's mode, and that it does chmod a regular file.
+    #[test]
+    fn test_chmod_nofollow_preserves_target_mode() {
+        let temp_dir = TempDir::new().unwrap();
+
+        let sentinel = temp_dir.path().join("sentinel");
+        fs::write(&sentinel, "victim").unwrap();
+        fs::set_permissions(&sentinel, fs::Permissions::from_mode(0o644)).unwrap();
+        let sentinel_mode = fs::symlink_metadata(&sentinel).unwrap().mode();
+
+        let link = temp_dir.path().join("link");
+        symlink(&sentinel, &link).unwrap();
+
+        // Chmod'ing through the symlink must not touch the target: either it
+        // succeeds on the symlink itself (fchmodat2) or it reports EOPNOTSUPP.
+        let _ = chmod_nofollow(&link, 0o777);
+        assert_eq!(
+            fs::symlink_metadata(&sentinel).unwrap().mode(),
+            sentinel_mode,
+            "sentinel mode should not change when chmod'ing a symlink with NoFollow"
+        );
+
+        // A regular file is chmod'ed as usual.
+        let regular = temp_dir.path().join("regular");
+        fs::write(&regular, "data").unwrap();
+        chmod_nofollow(&regular, 0o600).unwrap();
+        assert_eq!(
+            fs::symlink_metadata(&regular).unwrap().mode() & 0o777,
+            0o600
+        );
     }
 
     #[test]

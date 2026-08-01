@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
-// spell-checker:ignore RDONLY futimens utimensat
+// spell-checker:ignore RDONLY futimens utimensat fchmodat FDCWD
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -2501,16 +2501,6 @@ fn calculate_dest_permissions(
     }
 }
 
-/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
-/// `options.dereference` is set to true. `dest` will be dereferenced only if
-/// the source was not a symlink.
-///
-/// Behavior when copying to existing files is contingent on the
-/// `options.overwrite` mode. If a file is skipped, the return type
-/// should be `Error:Skipped`
-///
-/// The original permissions of `source` will be copied to `dest`
-/// after a successful copy.
 /// Apply `permissions` to `dest` without following a symlink at the final component.
 ///
 /// Both callers test `dest` for being a symlink well before the chmod, so a symlink
@@ -2519,24 +2509,9 @@ fn calculate_dest_permissions(
 /// exactly the "do nothing" case the callers' guards describe.
 #[cfg(unix)]
 fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
-    use uucore::safe_traversal::{DirFd, SymlinkBehavior};
-
-    let (Some(parent), Some(name)) = (dest.parent(), dest.file_name()) else {
-        // `.`, `..` and `/` have no final component to anchor against. They are
-        // always directories and never a symlink themselves, so there is nothing
-        // to be redirected: chmod the directory through its own fd.
-        let dir_fd = DirFd::open(dest, SymlinkBehavior::NoFollow)?;
-        return dir_fd.fchmod(permissions.mode());
-    };
-    // `Path::parent()` yields "" for a bare filename.
-    let parent = if parent.as_os_str().is_empty() {
-        Path::new(".")
-    } else {
-        parent
-    };
-
-    let dir_fd = DirFd::open(parent, SymlinkBehavior::Follow)?;
-    match dir_fd.chmod_at(name, permissions.mode(), SymlinkBehavior::NoFollow) {
+    // A single `fchmodat(AT_FDCWD, dest, AT_SYMLINK_NOFOLLOW)`: it costs the same
+    // as the `chmod(2)` it replaces, no extra descriptor for the parent directory.
+    match uucore::safe_traversal::chmod_nofollow(dest, permissions.mode()) {
         Err(e) if matches!(e.raw_os_error(), Some(libc::EOPNOTSUPP) | Some(libc::ELOOP)) => Ok(()),
         other => other,
     }
@@ -2547,6 +2522,16 @@ fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
     fs::set_permissions(dest, permissions.clone())
 }
 
+/// Copy the a file from `source` to `dest`. `source` will be dereferenced if
+/// `options.dereference` is set to true. `dest` will be dereferenced only if
+/// the source was not a symlink.
+///
+/// Behavior when copying to existing files is contingent on the
+/// `options.overwrite` mode. If a file is skipped, the return type
+/// should be `Error:Skipped`
+///
+/// The original permissions of `source` will be copied to `dest`
+/// after a successful copy.
 #[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: Option<&ProgressBar>,
