@@ -1932,6 +1932,7 @@ fn test_separator_attached_equals_double() {
     new_ucmd!()
         .args(&["-t==", "-k", "2"])
         .pipe_in("")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_contains("separator must be exactly one character long: '=='");
 }
@@ -1942,6 +1943,7 @@ fn test_separator_attached_equals_multi_char() {
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
         .pipe_in("")
+        .ignore_stdin_write_error()
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }
