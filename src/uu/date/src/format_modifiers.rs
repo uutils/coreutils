@@ -113,14 +113,14 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
 
     // Flags: any of [_0^#+-], zero or more.
     let flags_start = pos;
-    while pos < bytes.len() && matches!(bytes[pos], b'_' | b'0' | b'^' | b'#' | b'+' | b'-') {
+    while bytes.get(pos).is_some_and(|c| b"_0^#+-".contains(c)) {
         pos += 1;
     }
     let flags = &s[flags_start..pos];
 
     // Width: zero or more ASCII digits.
     let width_start = pos;
-    while pos < bytes.len() && bytes[pos].is_ascii_digit() {
+    while bytes.get(pos).is_some_and(u8::is_ascii_digit) {
         pos += 1;
     }
     let width = if pos > width_start {
@@ -131,10 +131,10 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
 
     // Specifier: up to three `:` followed by a single ASCII letter.
     let spec_start = pos;
-    while pos < bytes.len() && bytes[pos] == b':' && pos - spec_start < 3 {
+    while bytes.get(pos) == Some(&b':') && pos - spec_start < 3 {
         pos += 1;
     }
-    if pos >= bytes.len() || !bytes[pos].is_ascii_alphabetic() {
+    if bytes.get(pos).is_none_or(|c| !c.is_ascii_alphabetic()) {
         return None;
     }
     pos += 1;
