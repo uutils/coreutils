@@ -19,7 +19,7 @@ pub(crate) fn copy_on_write(
     sparse_mode: SparseMode,
     context: &str,
 ) -> CopyResult<CopyDebug> {
-    if reflink_mode != ReflinkMode::Never {
+    if reflink_mode == ReflinkMode::Always {
         return Err(translate!("cp-error-reflink-not-supported")
             .to_string()
             .into());
