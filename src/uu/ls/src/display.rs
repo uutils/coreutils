@@ -1199,14 +1199,8 @@ fn indicator_char(path: &PathData, style: Option<IndicatorStyle>) -> Option<char
 
     match style {
         IndicatorStyle::Classify => sym,
-        IndicatorStyle::FileType => match sym {
-            Some('*') => None,
-            _ => sym,
-        },
-        IndicatorStyle::Slash => match sym {
-            Some('/') => Some('/'),
-            _ => None,
-        },
+        IndicatorStyle::FileType => sym.filter(|&c| c != '*'),
+        IndicatorStyle::Slash => sym.filter(|&c| c == '/'),
     }
 }
 
