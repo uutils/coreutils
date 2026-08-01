@@ -1386,7 +1386,16 @@ fn is_enotsup_error(error: &CpError) -> bool {
 
     match error {
         CpError::IoErr(e) | CpError::IoErrContext(e, _) | CpError::SelinuxContextIoErr(e, _) => {
-            e.raw_os_error() == Some(EOPNOTSUPP)
+            let raw = e.raw_os_error();
+            // WASI's sandbox has no chmod/chown syscalls at all (not merely an
+            // unsupported combination of flags), so `fs::set_permissions` and
+            // friends always fail with ENOSYS there. Treat that the same as
+            // EOPNOTSUPP for optional preservation.
+            #[cfg(target_os = "wasi")]
+            if raw == Some(libc::ENOSYS) {
+                return true;
+            }
+            raw == Some(EOPNOTSUPP)
         }
         _ => false,
     }
@@ -1713,6 +1722,40 @@ impl OverwriteMode {
 /// Note: ENOTSUP/EOPNOTSUPP errors are silently ignored when not required, as per GNU cp
 /// documentation: "Try to preserve SELinux security context and extended attributes (xattr),
 /// but ignore any failure to do that and print no corresponding diagnostic."
+/// Returns the source's last access and modification times.
+///
+/// `filetime::FileTime::from_last_{access,modification}_time` panics on
+/// WASI (the `filetime` crate has no WASI-specific backend and falls back
+/// to its unimplemented generic wasm one). `Metadata::accessed`/`modified`
+/// are stable and WASI-backed, so use those instead there.
+// On non-wasi targets this can never fail, but the wasi branch below can.
+#[cfg_attr(not(target_os = "wasi"), allow(clippy::unnecessary_wraps))]
+fn source_times(source_metadata: &Metadata, context: &str) -> CopyResult<(FileTime, FileTime)> {
+    #[cfg(target_os = "wasi")]
+    {
+        Ok((
+            FileTime::from(
+                source_metadata
+                    .accessed()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            ),
+            FileTime::from(
+                source_metadata
+                    .modified()
+                    .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?,
+            ),
+        ))
+    }
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let _ = context;
+        Ok((
+            FileTime::from_last_access_time(source_metadata),
+            FileTime::from_last_modification_time(source_metadata),
+        ))
+    }
+}
+
 fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<()> {
     match p {
         Preserve::No { .. } => {}
@@ -1913,8 +1956,7 @@ pub(crate) fn copy_attributes(
     })?;
 
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&source_metadata);
-        let mtime = FileTime::from_last_modification_time(&source_metadata);
+        let (atime, mtime) = source_times(&source_metadata, context)?;
         // `set_file_times` opens the destination (O_RDONLY) before calling
         // futimens; opening a FIFO or device with no peer blocks forever, and a
         // socket cannot be opened at all. For symlinks and these special files
