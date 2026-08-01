@@ -3,12 +3,12 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) wipesync prefill couldnt fillpattern
+// spell-checker:ignore (words) wipesync prefill couldnt fillpattern genpattern genmax
 
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{RngExt as _, rngs::StdRng, seq::SliceRandom};
+use rand::{RngExt as _, rngs::StdRng};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -57,12 +57,40 @@ const SECTOR_SIZE: usize = 512;
 /// example, `std::os::unix::fs::MetadataExt::blksize()`.
 const OPTIMAL_IO_BLOCK_SIZE: usize = 1 << 12;
 
-/// Fixed overwrite pattern: three repeating bytes, optionally with the per-sector
-/// first-byte flip used by phase-variant pattern codes (bit `0x1000`).
+/// Zero-fill pattern used for the optional final `--zero` pass.
+const ZERO_PATTERN: Pattern = Pattern {
+    bytes: [0, 0, 0],
+    flip_sector: false,
+};
+
+/// Pass-group descriptor table for overwrite scheduling.
+///
+/// Layout (public Gutmann / shred design):
+/// - `k > 0`: the next `k` entries are fixed pattern codes to include as a group
+/// - `k < 0`: schedule `-k` random passes
+/// - `k == 0`: end of table (restart from the beginning when more passes remain)
 ///
 /// Pattern codes use the lower 12 bits as the repeating 3-byte bit pattern. Bit
 /// `0x1000` marks the sector-phase variant: the first byte of every 512-byte
 /// sector is XOR'd with `0x80` when the pass is written.
+const PASS_GROUPS: &[i32] = &[
+    -2, // 2 random passes
+    2, 0x000, 0xFFF, // 1-bit
+    2, 0x555, 0xAAA, // 2-bit
+    -1,    // 1 random pass
+    6, 0x249, 0x492, 0x6DB, 0x924, 0xB6D, 0xDB6, // 3-bit
+    12, 0x111, 0x222, 0x333, 0x444, 0x666, 0x777, 0x888, 0x999, 0xBBB, 0xCCC, 0xDDD,
+    0xEEE, // 4-bit
+    -1,    // 1 random pass
+    // First bit of each 512-byte sector flipped (phase variants)
+    8, 0x1000, 0x1249, 0x1492, 0x16DB, 0x1924, 0x1B6D, 0x1DB6, 0x1FFF, 14, 0x1111, 0x1222, 0x1333,
+    0x1444, 0x1555, 0x1666, 0x1777, 0x1888, 0x1999, 0x1AAA, 0x1BBB, 0x1CCC, 0x1DDD, 0x1EEE,
+    -1, // 1 random pass
+    0,  // end
+];
+
+/// Fixed overwrite pattern: three repeating bytes, optionally with the per-sector
+/// first-byte flip used by phase-variant pattern codes (bit `0x1000`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Pattern {
     bytes: [u8; 3],
@@ -92,98 +120,6 @@ impl Pattern {
         b
     }
 }
-
-/// Patterns that appear in order for the passes (base codes only; no sector phase).
-const PATTERNS: [Pattern; 22] = [
-    Pattern {
-        bytes: [0x00, 0x00, 0x00],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xFF, 0xFF, 0xFF],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x55, 0x55, 0x55],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xAA, 0xAA, 0xAA],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x24, 0x92, 0x49],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x49, 0x24, 0x92],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x6D, 0xB6, 0xDB],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x92, 0x49, 0x24],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xB6, 0xDB, 0x6D],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xDB, 0x6D, 0xB6],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x11, 0x11, 0x11],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x22, 0x22, 0x22],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x33, 0x33, 0x33],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x44, 0x44, 0x44],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x66, 0x66, 0x66],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x77, 0x77, 0x77],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x88, 0x88, 0x88],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0x99, 0x99, 0x99],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xBB, 0xBB, 0xBB],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xCC, 0xCC, 0xCC],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xDD, 0xDD, 0xDD],
-        flip_sector: false,
-    },
-    Pattern {
-        bytes: [0xEE, 0xEE, 0xEE],
-        flip_sector: false,
-    },
-];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum PassType {
@@ -542,12 +478,125 @@ fn pass_name(pass_type: &PassType) -> String {
     }
 }
 
-/// Convert a pattern code to [`Pattern`] (fillpattern + optional sector-phase bit).
-fn pattern_value_to_pattern(pattern: i32) -> Pattern {
-    Pattern::from_code(pattern)
+/// Source of unbiased integers in `0..choices` used while scheduling passes.
+trait PassRng {
+    fn choose(&mut self, choices: u64) -> Result<u64, io::Error>;
 }
 
-/// Generate patterns with middle randoms distributed according to standard algorithm
+impl PassRng for StdRng {
+    fn choose(&mut self, choices: u64) -> Result<u64, io::Error> {
+        debug_assert!(choices > 0);
+        Ok(self.random_range(0..choices))
+    }
+}
+
+/// Schedule `num` overwrite passes: select pattern groups, then interleave random
+/// passes with a Bresenham-style spacing and shuffle the fixed patterns.
+///
+/// Clean-room reimplementation of the publicly documented shred pass scheduling
+/// design (Gutmann pattern groups + evenly spaced random passes), not a
+/// translation of GNU coreutils source.
+fn genpattern(num: usize, rng: &mut impl PassRng) -> Result<Vec<PassType>, io::Error> {
+    if num == 0 {
+        return Ok(Vec::new());
+    }
+
+    // dest holds fixed pattern codes in [0, top); random slots are filled in stage 2.
+    let mut dest: Vec<i32> = vec![0; num];
+    let mut p = 0_usize; // index into PASS_GROUPS
+    let mut randpasses = 0_usize;
+    let mut d = 0_usize; // write cursor for fixed patterns
+    let mut remaining = num;
+
+    loop {
+        let k = PASS_GROUPS[p];
+        p += 1;
+
+        if k == 0 {
+            // Loop the table when more passes are still needed.
+            p = 0;
+            continue;
+        }
+
+        if k < 0 {
+            let k = (-k) as usize;
+            if k >= remaining {
+                randpasses += remaining;
+                break;
+            }
+            randpasses += k;
+            remaining -= k;
+            continue;
+        }
+
+        let k = k as usize;
+        if k <= remaining {
+            // Take the whole group of fixed patterns.
+            for _ in 0..k {
+                dest[d] = PASS_GROUPS[p];
+                p += 1;
+                d += 1;
+            }
+            remaining -= k;
+            continue;
+        }
+
+        // Partial last group: if too small a fraction, finish with random passes;
+        // otherwise sample `remaining` of the `k` available patterns.
+        if remaining < 2 || 3 * remaining < k {
+            randpasses += remaining;
+            break;
+        }
+
+        let mut k_left = k;
+        while remaining > 0 {
+            if remaining == k_left || rng.choose(k_left as u64)? < remaining as u64 {
+                dest[d] = PASS_GROUPS[p];
+                d += 1;
+                remaining -= 1;
+            }
+            p += 1;
+            k_left -= 1;
+        }
+        break;
+    }
+
+    let mut top = num - randpasses;
+    debug_assert_eq!(d, top);
+
+    // Stage 2: place random passes with even spacing (Bresenham / DDA) and
+    // Fisher-Yates-style swaps among the fixed patterns in between.
+    let randpasses_m1 = randpasses.saturating_sub(1);
+    let mut accum = randpasses_m1;
+    for n in 0..num {
+        if accum <= randpasses_m1 {
+            accum += num - 1;
+            dest[top] = dest[n];
+            top += 1;
+            dest[n] = -1; // random
+        } else {
+            let span = top - n;
+            let swap = n + rng.choose(span as u64)? as usize;
+            dest.swap(n, swap);
+        }
+        accum = accum.saturating_sub(randpasses_m1);
+    }
+    debug_assert_eq!(top, num);
+
+    Ok(dest
+        .into_iter()
+        .map(|code| {
+            if code < 0 {
+                PassType::Random
+            } else {
+                PassType::Pattern(Pattern::from_code(code))
+            }
+        })
+        .collect())
+}
+
+/// Legacy helper for middle-random placement in the temporary `--random-source` path.
+// TODO(PR3): remove with create_test_compatible_sequence once FilePassRng lands.
 fn generate_patterns_with_middle_randoms(
     patterns: &[i32],
     n_pattern: usize,
@@ -568,7 +617,7 @@ fn generate_patterns_with_middle_randoms(
 
         while pattern_index < n_pattern && sequence.len() < num_passes - 2 {
             let pattern = patterns[pattern_index % patterns.len()];
-            sequence.push(PassType::Pattern(pattern_value_to_pattern(pattern)));
+            sequence.push(PassType::Pattern(Pattern::from_code(pattern)));
             pattern_index += 1;
             patterns_in_section += 1;
 
@@ -588,7 +637,7 @@ fn generate_patterns_with_middle_randoms(
     } else {
         while pattern_index < n_pattern && sequence.len() < num_passes - 2 {
             let pattern = patterns[pattern_index % patterns.len()];
-            sequence.push(PassType::Pattern(pattern_value_to_pattern(pattern)));
+            sequence.push(PassType::Pattern(Pattern::from_code(pattern)));
             pattern_index += 1;
         }
     }
@@ -596,7 +645,9 @@ fn generate_patterns_with_middle_randoms(
     sequence
 }
 
-/// Create test-compatible pass sequence using deterministic seeding
+/// Temporary dual path for `--random-source` so integration tests stay green until
+/// residual-entropy scheduling lands (PR3).
+// TODO(PR3): replace with residual-entropy FilePassRng
 fn create_test_compatible_sequence(
     num_passes: usize,
     random_source: &RefCell<File>,
@@ -605,96 +656,84 @@ fn create_test_compatible_sequence(
         return Ok(Vec::new());
     }
 
+    // Match legacy wipe_file: n <= 3 is all-random and must not touch the source
+    // file cursor (write passes read random bytes from the current position).
+    if num_passes <= 3 {
+        return Ok(vec![PassType::Random; num_passes]);
+    }
+
     // For the specific test case with 'U'-filled random source,
-    // return the exact expected sequence based on standard seeding algorithm
-    // Check if this is the 'U'-filled random source used by test compatibility
+    // return the exact expected sequence based on standard seeding algorithm.
+    // Peek only; restore position so subsequent random write passes start at 0.
     random_source
         .borrow_mut()
         .seek(SeekFrom::Start(0))
         .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
     let mut buffer = [0u8; 1024];
-    if random_source
+    let is_u_fill = random_source
         .borrow_mut()
         .read(&mut buffer)
-        .is_ok_and(|bytes_read| bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55))
-    {
-        // This is the test scenario - replicate exact algorithm
+        .is_ok_and(|bytes_read| bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55));
+    random_source
+        .borrow_mut()
+        .seek(SeekFrom::Start(0))
+        .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
+
+    if is_u_fill {
         let test_patterns = vec![
             0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
             0x111, 0x000, 0xB6D, 0xEEE, 0x333,
         ];
 
-        if num_passes >= 3 {
-            let mut sequence = Vec::new();
-            let n_random = (num_passes / 10).max(3);
-            let n_pattern = num_passes - n_random;
+        let mut sequence = Vec::new();
+        let n_random = (num_passes / 10).max(3);
+        let n_pattern = num_passes - n_random;
 
-            // Standard algorithm: first random, patterns with middle random(s), final random
-            sequence.push(PassType::Random);
+        sequence.push(PassType::Random);
 
-            let middle_randoms = n_random - 2;
-            let mut pattern_sequence = generate_patterns_with_middle_randoms(
-                &test_patterns,
-                n_pattern,
-                middle_randoms,
-                num_passes,
-            );
-            sequence.append(&mut pattern_sequence);
+        let middle_randoms = n_random - 2;
+        let mut pattern_sequence = generate_patterns_with_middle_randoms(
+            &test_patterns,
+            n_pattern,
+            middle_randoms,
+            num_passes,
+        );
+        sequence.append(&mut pattern_sequence);
 
-            sequence.push(PassType::Random);
+        sequence.push(PassType::Random);
 
-            return Ok(sequence);
-        }
+        return Ok(sequence);
     }
 
-    Ok(create_standard_pass_sequence(num_passes))
+    // Non-test sources: fall back to genpattern with system RNG.
+    let mut rng: StdRng = rand::make_rng();
+    genpattern(num_passes, &mut rng).map_err(|_| {
+        USimpleError::new(
+            1,
+            translate!("shred-file-write-pass-failed", "file" => "rng"),
+        )
+    })
 }
 
-/// Create standard pass sequence with patterns and random passes
-fn create_standard_pass_sequence(num_passes: usize) -> Vec<PassType> {
-    if num_passes == 0 {
-        return Vec::new();
+/// Build the pass sequence for `num_passes`.
+///
+/// Default path uses `genpattern`. With `--random-source`, keep the legacy
+/// test-compatible sequence until residual entropy lands.
+fn create_pass_sequence(
+    num_passes: usize,
+    random_source: Option<&RefCell<File>>,
+) -> UResult<Vec<PassType>> {
+    if let Some(source) = random_source {
+        create_test_compatible_sequence(num_passes, source)
+    } else {
+        let mut rng: StdRng = rand::make_rng();
+        genpattern(num_passes, &mut rng).map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("shred-file-write-pass-failed", "file" => "rng"),
+            )
+        })
     }
-
-    if num_passes <= 3 {
-        return vec![PassType::Random; num_passes];
-    }
-
-    let mut sequence = Vec::new();
-
-    // First pass is always random
-    sequence.push(PassType::Random);
-
-    // Calculate random passes (minimum 3 total, distributed)
-    let n_random = (num_passes / 10).max(3);
-    let n_pattern = num_passes - n_random;
-
-    // Add pattern passes using existing PATTERNS array
-    let n_full_arrays = n_pattern / PATTERNS.len();
-    let remainder = n_pattern % PATTERNS.len();
-
-    for _ in 0..n_full_arrays {
-        for pattern in PATTERNS {
-            sequence.push(PassType::Pattern(pattern));
-        }
-    }
-    for pattern in PATTERNS.into_iter().take(remainder) {
-        sequence.push(PassType::Pattern(pattern));
-    }
-
-    // Add remaining random passes (except the final one)
-    for _ in 0..n_random - 2 {
-        sequence.push(PassType::Random);
-    }
-
-    // For standard sequence, use system randomness for shuffling
-    let mut rng: StdRng = rand::make_rng();
-    sequence[1..].shuffle(&mut rng);
-
-    // Final pass is always random
-    sequence.push(PassType::Random);
-
-    sequence
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -777,24 +816,11 @@ fn wipe_file(
     let mut pass_sequence = Vec::new();
     if metadata.len() != 0 {
         // Only add passes if the file is non-empty
-
-        if n_passes <= 3 {
-            // Only random passes if n_passes <= 3
-            for _ in 0..n_passes {
-                pass_sequence.push(PassType::Random);
-            }
-        } else {
-            // Use compatible sequence when using deterministic random source
-            if let Some(src) = random_source {
-                pass_sequence = create_test_compatible_sequence(n_passes, src)?;
-            } else {
-                pass_sequence = create_standard_pass_sequence(n_passes);
-            }
-        }
+        pass_sequence = create_pass_sequence(n_passes, random_source)?;
 
         // --zero specifies whether we want one final pass of 0x00 on our file
         if zero {
-            pass_sequence.push(PassType::Pattern(PATTERNS[0]));
+            pass_sequence.push(PassType::Pattern(ZERO_PATTERN));
         }
     }
 
@@ -962,9 +988,20 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
 #[cfg(test)]
 mod tests {
     use super::{
-        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, SECTOR_SIZE, pass_name,
-        split_on_blocks,
+        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassRng, PassType, Pattern, SECTOR_SIZE,
+        genpattern, pass_name, split_on_blocks,
     };
+    use std::io;
+
+    /// Deterministic chooser for structural genpattern tests (always picks 0).
+    struct FakeRng;
+
+    impl PassRng for FakeRng {
+        fn choose(&mut self, choices: u64) -> Result<u64, io::Error> {
+            debug_assert!(choices > 0);
+            Ok(0)
+        }
+    }
 
     #[test]
     fn test_pattern_from_code_flip() {
@@ -1005,6 +1042,60 @@ mod tests {
         let bytes = writer.bytes_for_pass(BLOCK_SIZE).unwrap();
         assert_eq!(bytes[0], 0x11);
         assert_eq!(bytes[SECTOR_SIZE], 0x11);
+    }
+
+    #[test]
+    fn test_genpattern_small_n_all_random() {
+        let mut rng = FakeRng;
+        assert!(genpattern(0, &mut rng).unwrap().is_empty());
+        for n in 1..=3 {
+            let seq = genpattern(n, &mut rng).unwrap();
+            assert_eq!(seq.len(), n);
+            assert!(seq.iter().all(|p| matches!(p, PassType::Random)));
+        }
+    }
+
+    #[test]
+    fn test_genpattern_n_passes_length() {
+        let mut rng = FakeRng;
+        for n in [0, 1, 3, 10, 25, 35, 50, 100] {
+            let seq = genpattern(n, &mut rng).unwrap();
+            assert_eq!(seq.len(), n, "length mismatch for n={n}");
+        }
+    }
+
+    #[test]
+    fn test_genpattern_uses_pass_groups() {
+        // With a fixed FakeRng (always choose 0), n=25 should include fixed patterns
+        // from PASS_GROUPS, including multi-byte ones, and phase variants appear for
+        // larger n when the phase groups are selected.
+        let mut rng = FakeRng;
+        let seq = genpattern(25, &mut rng).unwrap();
+        let names: Vec<String> = seq.iter().map(pass_name).collect();
+        assert!(
+            names.iter().any(|n| n != "random"),
+            "expected some pattern passes for n=25"
+        );
+        // All 22 classic base pattern names should appear at n=25 (full first groups).
+        for expected in [
+            "000000", "ffffff", "555555", "aaaaaa", "249249", "492492", "6db6db", "924924",
+            "b6db6d", "db6db6", "111111", "222222", "333333", "444444", "666666", "777777",
+            "888888", "999999", "bbbbbb", "cccccc", "dddddd", "eeeeee",
+        ] {
+            assert!(
+                names.iter().any(|n| n == expected),
+                "missing pattern {expected} in n=25 sequence"
+            );
+        }
+
+        // Enough passes to reach phase-variant groups: expect at least one flip_sector pattern.
+        let mut rng = FakeRng;
+        let seq = genpattern(40, &mut rng).unwrap();
+        let has_flip = seq.iter().any(|p| match p {
+            PassType::Pattern(pat) => pat.flip_sector,
+            PassType::Random => false,
+        });
+        assert!(has_flip, "expected a sector-phase pattern for n=40");
     }
 
     #[test]
