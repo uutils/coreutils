@@ -1631,9 +1631,28 @@ fn test_follow_name_replaced_by_symlink_is_untailable() {
         .run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
 
+    // Wait until tail's *initial* read of "watched" has actually completed
+    // (i.e. the pre-existing content has been printed) before swapping it
+    // for a symlink. Otherwise, under scheduler contention, tail's initial
+    // open (which legitimately follows symlinks, like any other file open)
+    // could race with the swap and open the symlink's target on its very
+    // first read -- before the untailable-symlink guard (which only applies
+    // to the follow loop) is even active. That would be a test timing bug,
+    // not the vulnerability this test is meant to catch.
+    for _ in 0..50 {
+        if p.stdout_all().contains("visible") {
+            break;
+        }
+        p.delay(20);
+    }
+
     // Swap the watched file for a symlink pointing at a secret file.
-    at.remove("watched");
-    at.symlink_file("secret", "watched");
+    // Create the symlink under a temporary name and rename it into place
+    // atomically, so the poller never observes an intermediate state where
+    // "watched" is missing (which would race with the poll interval and be
+    // reported as "has become inaccessible" instead).
+    at.symlink_file("secret", "watched.tmp");
+    at.rename("watched.tmp", "watched");
     p.delay(1000);
 
     p.kill()
