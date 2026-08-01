@@ -2355,8 +2355,10 @@ fn test_follow_name_move_create1() {
 
     let mut p = ts.ucmd().args(&args).run_no_wait();
 
-    // Wait until the initial file content has been printed before renaming.
-    p.wait_until(WAIT_TIMEOUT, |stdout, _| !stdout.is_empty())
+    // Wait until the initial last-N lines have been fully printed before renaming.
+    // Waiting only for non-empty stdout races with the first write and can truncate
+    // the captured initial chunk on busy CI hosts.
+    p.wait_for_stdout_contains("END(25)", WAIT_TIMEOUT)
         .make_assertion()
         .is_alive();
 
@@ -2365,9 +2367,13 @@ fn test_follow_name_move_create1() {
 
     at.copy(backup, source);
     #[cfg(target_os = "linux")]
-    p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
+    {
+        // After re-open, tail emits the recreated file content (START…END).
+        p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT)
+            .wait_for_stdout_contains("START(0)", WAIT_TIMEOUT);
+    }
     #[cfg(not(target_os = "linux"))]
-    p.delay(100);
+    p.delay(500);
 
     p.make_assertion().is_alive();
     p.kill()
