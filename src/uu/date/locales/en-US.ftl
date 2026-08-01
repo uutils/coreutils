@@ -103,6 +103,7 @@ date-error-expected-file-got-directory = expected file, got directory {$path}
 date-error-date-overflow = date overflow '{$date}'
 date-error-setting-date-not-supported-macos = setting the date is not supported by macOS
 date-error-setting-date-not-supported-redox = setting the date is not supported by Redox
+date-error-setting-date-not-supported-wasi = setting the date is not supported by WASI
 date-error-cannot-set-date = cannot set date
 date-error-extra-operand = extra operand '{$operand}'
 date-error-write = write error: {$error}
