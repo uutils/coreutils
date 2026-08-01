@@ -37,6 +37,7 @@ mv-error-dangling-symlink = impossible de déterminer le type de lien symbolique
 mv-error-no-symlink-support = votre système d'exploitation ne prend pas en charge les liens symboliques
 mv-error-permission-denied = Permission refusée
 mv-error-inter-device-move-failed = échec du déplacement inter-périphérique : {$from} vers {$to} ; impossible de supprimer la cible : {$err}
+mv-error-cannot-move-not-directory = impossible de déplacer {$source} vers {$target} : N'est pas un répertoire
 
 # Messages d'aide
 mv-help-force = ne pas demander avant d'écraser
