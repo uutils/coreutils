@@ -595,10 +595,10 @@ impl NumOrStr {
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => String::from_utf8(str)
-                .map_err(|_| ExprError::NonIntegerArgument)?
-                .parse::<BigInt>()
-                .map_err(|_| ExprError::NonIntegerArgument),
+            Self::Str(str) => std::str::from_utf8(&str)
+                .ok()
+                .and_then(|s| s.parse::<BigInt>().ok())
+                .ok_or_else(|| ExprError::NonIntegerArgument(str.clone())),
         }
     }
 
@@ -646,8 +646,14 @@ impl AstNode {
         }
     }
 
-    pub fn parse(input: &[impl AsRef<MaybeNonUtf8Str>]) -> ExprResult<Self> {
-        Parser::new(input).parse()
+    /// Parse `input`, reporting on failure how many arguments the parser had
+    /// consumed. Together with the error kind that is enough to say which
+    /// argument is at fault.
+    pub fn parse_located(
+        input: &[impl AsRef<MaybeNonUtf8Str>],
+    ) -> Result<Self, (ExprError, usize)> {
+        let mut parser = Parser::new(input);
+        parser.parse().map_err(|e| (e, parser.index))
     }
 
     pub fn eval(&self) -> ExprResult<NumOrStr> {
@@ -1060,13 +1066,18 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::ExprError;
     use crate::syntax_tree::verify_range_quantifier;
+    use crate::{ExprError, ExprResult};
 
     use super::{
-        AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
-        get_next_id,
+        AstNode, AstNodeInner, BinOp, MaybeNonUtf8Str, NumericOp, RelationOp, StringOp,
+        check_posix_regex_errors, get_next_id,
     };
+
+    /// Parse an expression, discarding how far the parser got.
+    fn parse<S: AsRef<MaybeNonUtf8Str>>(input: &[S]) -> ExprResult<AstNode> {
+        AstNode::parse_located(input).map_err(|(e, _)| e)
+    }
 
     impl PartialEq for AstNode {
         fn eq(&self, other: &Self) -> bool {
@@ -1141,31 +1152,28 @@ mod test {
             (":", BinOp::String(StringOp::Match)),
         ];
         for (string, value) in cases {
-            assert_eq!(AstNode::parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
+            assert_eq!(parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
         }
     }
 
     #[test]
     fn other_operators() {
         assert_eq!(
-            AstNode::parse(&["match", "1", "2"]),
+            parse(&["match", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Match), "1", "2")),
         );
         assert_eq!(
-            AstNode::parse(&["index", "1", "2"]),
+            parse(&["index", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Index), "1", "2")),
         );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")));
-        assert_eq!(
-            AstNode::parse(&["substr", "1", "2", "3"]),
-            Ok(substr("1", "2", "3")),
-        );
+        assert_eq!(parse(&["length", "1"]), Ok(length("1")));
+        assert_eq!(parse(&["substr", "1", "2", "3"]), Ok(substr("1", "2", "3")),);
     }
 
     #[test]
     fn precedence() {
         assert_eq!(
-            AstNode::parse(&["1", "+", "2", "*", "3"]),
+            parse(&["1", "+", "2", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 "1",
@@ -1173,7 +1181,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
+            parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
                 op(BinOp::Numeric(NumericOp::Add), "1", "2"),
@@ -1181,7 +1189,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["1", "*", "2", "+", "3"]),
+            parse(&["1", "*", "2", "+", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
@@ -1198,23 +1206,23 @@ mod test {
         let mut input: Vec<&str> = vec!["("; depth];
         input.push("1");
         input.extend(std::iter::repeat_n(")", depth));
-        let result = AstNode::parse(&input).unwrap().eval().unwrap();
+        let result = parse(&input).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"1");
 
         let mut input: Vec<&str> = vec!["length"; depth];
         input.push("1");
-        let result = AstNode::parse(&input).unwrap().eval().unwrap();
+        let result = parse(&input).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"1");
     }
 
     #[test]
     fn missing_closing_parenthesis() {
         assert_eq!(
-            AstNode::parse(&["(", "42"]),
+            parse(&["(", "42"]),
             Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
         );
         assert_eq!(
-            AstNode::parse(&["(", "42", "a"]),
+            parse(&["(", "42", "a"]),
             Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
         );
     }
@@ -1222,34 +1230,22 @@ mod test {
     #[test]
     fn empty_substitution() {
         // causes a panic in 0.0.25
-        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["a", ":", r"\(b\)*"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"");
     }
 
     #[test]
     fn starting_stars_become_escaped() {
-        let result = AstNode::parse(&["cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
 
-        let result = AstNode::parse(&["*cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["*cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
     fn only_match_in_beginning() {
-        let result = AstNode::parse(&["budget", ":", r"get"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["budget", ":", r"get"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
     }
 
