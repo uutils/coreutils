@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/stty.rs"
 doctest = false
@@ -25,6 +22,9 @@ fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["ioctl", "term"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "stty"

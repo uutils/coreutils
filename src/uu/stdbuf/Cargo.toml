@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/stdbuf.rs"
 test = false
@@ -49,6 +46,9 @@ libstdbuf = { package = "uu_stdbuf_libstdbuf", version = "0.9.0", path = "src/li
 
 [features]
 feat_external_libstdbuf = []
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "stdbuf"
