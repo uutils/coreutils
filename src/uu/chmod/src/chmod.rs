@@ -307,7 +307,7 @@ impl Chmoder {
                         return if self.quiet {
                             Err(ExitCode::new(1))
                         } else {
-                            Err(USimpleError::new(1, f))
+                            Err(USimpleError::new(1, f.to_string()))
                         };
                     }
                 }

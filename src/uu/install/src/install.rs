@@ -375,7 +375,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             show_error!(
                 "{}",
-                translate!("install-error-invalid-mode", "error" => err)
+                translate!("install-error-invalid-mode", "error" => err.to_string())
             );
             1
         })?)

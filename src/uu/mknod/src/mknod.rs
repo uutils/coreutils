@@ -276,7 +276,7 @@ fn parse_mode(str_mode: &str) -> Result<u32, String> {
         .map_err(|e| {
             translate!(
                 "mknod-error-invalid-mode",
-                "error" => e
+                "error" => e.to_string()
             )
         })
         .and_then(|mode| {
