@@ -2039,3 +2039,130 @@ fn test_emoji_operations() {
         .succeeds()
         .stdout_only("1\n");
 }
+
+mod diagnostics {
+    use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unexpected_argument() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "+", "7", "spare"])
+            .fails_with_code(2);
+
+        // The whole report: the `expr: ` prefix of the plain form, the
+        // expression echoed back, a caret on `spare`, and the quoting advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: unexpected argument 'spare'
+   ╭─[ expr:1:7 ]
+   │
+ 1 │ 6 + 7 spare
+   │       ──┬──
+   │         ╰──── the expression was already complete here
+   │
+   │ Help: the shell may have expanded an operator; quote it as '*' or escape it as \\*
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_dangling_operator() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "*"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: missing argument after '*'
+   ╭─[ expr:1:3 ]
+   │
+ 1 │ 6 *
+   │   ┬
+   │   ╰── nothing follows this
+   │
+   │ Help: every operator needs a value on both sides
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_non_integer_operand() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["oops", "+", "4"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: non-integer argument
+   ╭─[ expr:1:1 ]
+   │
+ 1 │ oops + 4
+   │ ──┬─
+   │   ╰─── this is not an integer
+   │
+   │ Help: arithmetic operators need integers; use = or != to compare strings instead
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_unclosed_parenthesis_points_at_the_last_operand() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["(", "6", "+", "7"])
+            .fails_with_code(2);
+
+        // No help line here: the label alone says what should follow.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: syntax error: expecting ')' after '7'
+   ╭─[ expr:1:7 ]
+   │
+ 1 │ ( 6 + 7
+   │       ┬
+   │       ╰── a closing parenthesis should follow this
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_errors_without_a_position_stay_plain() {
+        // Division by zero is raised once the expression is already parsed and
+        // carries no operand, so there is nothing to point at. The terminal
+        // turns `\n` into `\r\n`, which is undone before comparing.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["6", "/", "0"])
+            .fails_with_code(2);
+        assert_eq!(
+            result.stderr_str().replace("\r\n", "\n"),
+            "expr: division by zero\n"
+        );
+        // An empty expression keeps its usage hint.
+        new_ucmd!()
+            .terminal_sim_stderr()
+            .fails_with_code(2)
+            .stderr_contains("missing operand")
+            .stderr_contains("for more information");
+    }
+
+    #[test]
+    fn test_plain_message_is_the_default() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["6", "+", "7", "spare"])
+            .fails_with_code(2)
+            .stderr_is("expr: syntax error: unexpected argument 'spare'\n");
+    }
+}
