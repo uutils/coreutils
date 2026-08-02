@@ -255,11 +255,117 @@ fn test_some_int_compares() {
 }
 
 #[test]
-#[ignore = "fixme: evaluation error (code 1); GNU returns 0"]
 fn test_values_greater_than_i64_allowed() {
     new_ucmd!()
         .args(&["9223372036854775808", "-gt", "0"])
         .succeeds();
+}
+
+/// The 71-digit operand reported in GNU compatibility issue #12874.
+const BIG: &str = "16267277278126277227728782172782882627278282882172762677623672762783782";
+/// `BIG` with its final digit incremented, so the two operands have the same
+/// width and differ only in the least significant digit.
+const BIG_PLUS_ONE: &str =
+    "16267277278126277227728782172782882627278282882172762677623672762783783";
+/// One digit shorter than `BIG`, so the two operands differ in width.
+const SMALLER: &str = "1626727727812627722772878217278288262727828288217276267762367276278378";
+
+#[test]
+fn test_values_greater_than_i128_allowed() {
+    // i128::MAX + 1
+    new_ucmd!()
+        .args(&["170141183460469231731687303715884105728", "-gt", "0"])
+        .succeeds();
+    // i128::MIN - 1
+    new_ucmd!()
+        .args(&["-170141183460469231731687303715884105729", "-lt", "0"])
+        .succeeds();
+}
+
+#[test]
+fn test_large_int_compares() {
+    let scenario = TestScenario::new(util_name!());
+
+    let tests = [
+        [BIG, "-eq", BIG],
+        [BIG, "-ge", BIG],
+        [BIG, "-le", BIG],
+        [BIG, "-ne", "1"],
+        ["1", "-lt", BIG],
+        [BIG, "-gt", "1"],
+        // Same width, differing only in the least significant digit.
+        [BIG_PLUS_ONE, "-gt", BIG],
+        [BIG, "-lt", BIG_PLUS_ONE],
+        // Differing widths.
+        [BIG, "-gt", SMALLER],
+        [SMALLER, "-lt", BIG],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
+    }
+}
+
+#[test]
+fn test_large_negative_int_compares() {
+    let scenario = TestScenario::new(util_name!());
+    let neg_big = format!("-{BIG}");
+    let neg_smaller = format!("-{SMALLER}");
+
+    let tests = [
+        [neg_big.as_str(), "-eq", neg_big.as_str()],
+        [neg_big.as_str(), "-lt", "0"],
+        [neg_big.as_str(), "-lt", BIG],
+        [BIG, "-gt", neg_big.as_str()],
+        // A wider negative number is the smaller of the two.
+        [neg_big.as_str(), "-lt", neg_smaller.as_str()],
+        [neg_smaller.as_str(), "-gt", neg_big.as_str()],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
+    }
+}
+
+#[test]
+fn test_int_compares_ignore_redundant_sign_and_leading_zeros() {
+    let scenario = TestScenario::new(util_name!());
+    let padded_big = format!("+00{BIG}");
+
+    let tests = [
+        // Zero carries no sign.
+        ["-0", "-eq", "0"],
+        ["+0", "-eq", "-0"],
+        ["0", "-eq", "0000000000"],
+        ["007", "-eq", "7"],
+        ["-007", "-eq", "-7"],
+        [padded_big.as_str(), "-eq", BIG],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+}
+
+#[test]
+fn test_malformed_integers_are_still_errors() {
+    // Accepting wider operands must not make any of these parse.
+    for operand in ["1_0", "0x10", "1e3", "++5", "5-", "-", "+", "", "4 2"] {
+        new_ucmd!()
+            .args(&[operand, "-eq", "0"])
+            .fails_with_code(2)
+            .stderr_is(format!("test: invalid integer '{operand}'\n"));
+    }
 }
 
 #[test]
