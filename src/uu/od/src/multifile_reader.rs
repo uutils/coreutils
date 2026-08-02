@@ -165,27 +165,28 @@ impl MultifileReader<'_> {
 /// the remainder if the file ended first).
 fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
     #[cfg(unix)]
-    if let CurrentReader::File(f) = curr {
-        if let Ok(meta) = f.metadata() {
-            let size = meta.len();
-            let blksize = uucore::fs::sane_blksize::sane_blksize_from_metadata(&meta);
+    if let CurrentReader::File(f) = curr
+        && let Ok(meta) = f.metadata()
+    {
+        let size = meta.len();
+        let blksize = uucore::fs::sane_blksize::sane_blksize_from_metadata(&meta);
 
-            // A regular file larger than a block reports a reliable size, so we
-            // can either drop the whole file or seek within it. Small or
-            // proc-like files lie about their size and fall through to reading.
-            if meta.is_file() && blksize < size {
-                if size < n_skip {
-                    return Ok(n_skip - size);
-                }
-                if seek_forward(f, n_skip)? {
-                    return Ok(0);
-                }
-            } else if !meta.is_file() {
-                // Seekable special files (character/block devices) can be
-                // skipped past their end without error.
-                if seek_forward(f, n_skip).unwrap_or(false) {
-                    return Ok(0);
-                }
+        // A regular file larger than a block reports a reliable size, so we
+        // can either drop the whole file or seek within it. Small or
+        // proc-like files lie about their size and fall through to reading.
+        let is_file = meta.is_file();
+        if is_file && blksize < size {
+            if size < n_skip {
+                return Ok(n_skip - size);
+            }
+            if seek_forward(f, n_skip)? {
+                return Ok(0);
+            }
+        } else if is_file {
+            // Seekable special files (character/block devices) can be
+            // skipped past their end without error.
+            if seek_forward(f, n_skip).unwrap_or(false) {
+                return Ok(0);
             }
         }
     }
