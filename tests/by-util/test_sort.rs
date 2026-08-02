@@ -3190,4 +3190,137 @@ fn test_sort_locale_punctuation() {
     }
 }
 
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_stray_character() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k2.3q", "/dev/null"])
+            .fails_with_code(2);
+
+        // The whole report: the `sort: ` prefix of the plain form, the key
+        // echoed back inside the option it was glued to, a caret on the `q`
+        // rather than on the whole `-k2.3q`, and the key syntax advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '2.3q'
+   ╭─[ sort:1:11 ]
+   │
+ 1 │ sort -k2.3q /dev/null
+   │           ┬
+   │           ╰── not part of a key
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_detached_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k", "1.4,2w", "/dev/null"])
+            .fails_with_code(2);
+
+        // `-k 1.4,2w` puts the key in its own argument; the caret still lands
+        // on the offending character.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '1.4,2w'
+   ╭─[ sort:1:14 ]
+   │
+ 1 │ sort -k 1.4,2w /dev/null
+   │              ┬
+   │              ╰── not part of a key
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_a_zero_character_offset() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k3.0", "/dev/null"])
+            .fails_with_code(2);
+
+        // No syntax advice here: the label already says where counting starts.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: character offset is zero: invalid field specification '3.0'
+   ╭─[ sort:1:10 ]
+   │
+ 1 │ sort -k3.0 /dev/null
+   │          ┬
+   │          ╰── counting starts at 1
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_a_missing_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-kw", "/dev/null"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid number at field start: invalid count at start of 'w'
+   ╭─[ sort:1:8 ]
+   │
+ 1 │ sort -kw /dev/null
+   │        ┬
+   │        ╰── expected a number here
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_reports_contradicting_ordering_options() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k1hV", "/dev/null"])
+            .fails_with_code(2);
+
+        // The caret covers the ordering options, not the field number.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: options '-hV' are incompatible
+   ╭─[ sort:1:9 ]
+   │
+ 1 │ sort -k1hV /dev/null
+   │         ─┬
+   │          ╰── these ordering options contradict each other
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_not_a_terminal() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["-k2.3q", "/dev/null"])
+            .fails_with_code(2)
+            .stderr_only(
+                "sort: stray character in field spec: invalid field specification '2.3q'\n",
+            );
+    }
+}
+
 /* spell-checker: enable */
