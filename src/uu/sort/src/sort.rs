@@ -14,6 +14,7 @@ mod buffer_hint;
 mod check;
 mod chunks;
 mod custom_str_cmp;
+mod diagnostics;
 mod ext_sort;
 mod merge;
 mod numeric_str_cmp;
@@ -46,7 +47,7 @@ use std::sync::OnceLock;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError};
+use uucore::error::{UError, UResult, USimpleError, UUsageError, quiet_if_reported};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
@@ -599,15 +600,16 @@ fn ordering_incompatible(
     false
 }
 
-fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        translate!(
-            "sort-options-incompatible",
-            "opt1" => opts,
-            "opt2" => ""
-        ),
+fn incompatible_options_message(opts: &str) -> String {
+    translate!(
+        "sort-options-incompatible",
+        "opt1" => opts,
+        "opt2" => ""
     )
+}
+
+fn incompatible_options_error(opts: &str) -> Box<dyn UError> {
+    USimpleError::new(2, incompatible_options_message(opts))
 }
 enum Selection<'a> {
     AsBigDecimal(GeneralBigDecimalParseResult),
@@ -960,44 +962,177 @@ impl Default for KeyPosition {
     }
 }
 
-fn bad_field_spec(spec: &str, msg_key: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        translate!(
+/// A `-k` spec that does not parse, and the part of it that is at fault.
+///
+/// The message is built here so that it reads exactly as it always has; `kind`
+/// exists only so the crate's `diagnostics` module can pick a label for the
+/// caret.
+pub struct KeyError {
+    message: String,
+    /// Byte range inside the key spec.
+    span: Range<usize>,
+    kind: KeyErrorKind,
+}
+
+pub enum KeyErrorKind {
+    /// A field or character number was expected, and there were no digits.
+    MissingCount,
+    /// A number was given where counting starts at one.
+    ZeroCount,
+    /// Something that is not a key option, past the end of the spec.
+    StrayCharacter,
+    /// Ordering options that contradict each other.
+    IncompatibleOptions,
+}
+
+impl From<KeyError> for Box<dyn UError> {
+    fn from(error: KeyError) -> Self {
+        USimpleError::new(2, error.message)
+    }
+}
+
+/// `msg_key` explains what was expected; `rest` is what was found instead.
+fn missing_count(span_start: usize, msg_key: &str, rest: &str) -> KeyError {
+    KeyError {
+        message: format!(
+            "{}: {}",
+            translate!(msg_key),
+            translate!("sort-invalid-count-at-start-of", "string" => rest.quote())
+        ),
+        span: span_start..span_start + rest.len(),
+        kind: KeyErrorKind::MissingCount,
+    }
+}
+
+/// Something past the end of the spec that is neither an ordering option nor a
+/// separator; the caret covers just that character.
+fn stray_character(key: &str, offset: usize) -> KeyError {
+    let width = key[offset..].chars().next().map_or(0, char::len_utf8);
+    bad_field_spec(
+        key,
+        offset..offset + width,
+        "sort-stray-character-field-spec",
+        KeyErrorKind::StrayCharacter,
+    )
+}
+
+fn bad_field_spec(spec: &str, span: Range<usize>, msg_key: &str, kind: KeyErrorKind) -> KeyError {
+    KeyError {
+        message: translate!(
             "sort-invalid-field-spec",
             "msg" => translate!(msg_key),
             "spec" => spec.quote()
         ),
-    )
+        span,
+        kind,
+    }
 }
 
-fn invalid_count_error(msg_key: &str, input: &str) -> Box<dyn UError> {
-    USimpleError::new(
-        2,
-        format!(
-            "{}: {}",
-            translate!(msg_key),
-            translate!("sort-invalid-count-at-start-of", "string" => input.quote())
-        ),
-    )
-}
-
-fn parse_field_count<'a>(input: &'a str, msg_key: &str) -> UResult<(usize, &'a str)> {
+/// Read the leading digits of `input`, returning them and what follows.
+///
+/// `offset` is where `input` starts inside the whole key spec, so that a failure
+/// can point back at it.
+fn parse_field_count<'a>(
+    input: &'a str,
+    offset: usize,
+    msg_key: &str,
+) -> Result<(usize, &'a str), KeyError> {
     let bytes = input.as_bytes();
     let mut idx = 0;
     while idx < bytes.len() && bytes[idx].is_ascii_digit() {
         idx += 1;
     }
     if idx == 0 {
-        return Err(invalid_count_error(msg_key, input));
+        return Err(missing_count(offset, msg_key, input));
     }
     let (num_str, rest) = input.split_at(idx);
     let value = match num_str.parse::<usize>() {
         Ok(v) => v,
         Err(e) if *e.kind() == IntErrorKind::PosOverflow => usize::MAX,
-        Err(_) => return Err(invalid_count_error(msg_key, input)),
+        Err(_) => return Err(missing_count(offset, msg_key, input)),
     };
     Ok((value, rest))
+}
+
+/// Which end of a key a `FIELD[.CHAR]` position belongs to.
+///
+/// The two ends read the same but do not mean the same: a key starts at a
+/// character, so `.0` is a mistake there, while it stands for the whole field
+/// at the end of a key.
+#[derive(Clone, Copy, PartialEq)]
+enum KeyEnd {
+    /// Before the comma, or the whole spec when there is none.
+    From,
+    /// After the comma.
+    To,
+}
+
+impl KeyEnd {
+    /// What to say when the field number is missing.
+    fn missing_field_key(self) -> &'static str {
+        match self {
+            Self::From => "sort-invalid-number-at-field-start",
+            Self::To => "sort-invalid-number-after-comma",
+        }
+    }
+
+    /// The character offset to assume when the spec gives none.
+    fn default_char(self) -> usize {
+        match self {
+            Self::From => 1,
+            Self::To => 0,
+        }
+    }
+}
+
+/// Read a `FIELD[.CHAR]` position from the head of `input`.
+///
+/// # Arguments
+///
+/// * `key` - The whole key spec, for the error message and for the offsets a
+///   caret is placed at.
+/// * `input` - What is left to parse, a suffix of `key`.
+/// * `end` - Which end of the key this position is.
+///
+/// # Returns
+///
+/// The field, the character offset inside it, and what follows the position.
+fn parse_position<'a>(
+    key: &str,
+    input: &'a str,
+    end: KeyEnd,
+) -> Result<(usize, usize, &'a str), KeyError> {
+    // Everything the parser hands around is a suffix of `key`, so how much is
+    // left is also where we are.
+    let at = |rest: &str| key.len() - rest.len();
+
+    let (field, mut rest) = parse_field_count(input, at(input), end.missing_field_key())?;
+    if field == 0 {
+        return Err(bad_field_spec(
+            key,
+            at(input)..at(rest),
+            "sort-field-number-is-zero",
+            KeyErrorKind::ZeroCount,
+        ));
+    }
+
+    let mut char = end.default_char();
+    if let Some(stripped) = rest.strip_prefix('.') {
+        let (char_idx, rest_after) =
+            parse_field_count(stripped, at(stripped), "sort-invalid-number-after-dot")?;
+        if char_idx == 0 && end == KeyEnd::From {
+            return Err(bad_field_spec(
+                key,
+                at(stripped)..at(rest_after),
+                "sort-character-offset-is-zero",
+                KeyErrorKind::ZeroCount,
+            ));
+        }
+        char = char_idx;
+        rest = rest_after;
+    }
+
+    Ok((field, char, rest))
 }
 
 fn is_ordering_option_char(byte: u8) -> bool {
@@ -1005,6 +1140,20 @@ fn is_ordering_option_char(byte: u8) -> bool {
         byte,
         b'b' | b'd' | b'f' | b'g' | b'h' | b'i' | b'M' | b'n' | b'R' | b'r' | b'V'
     )
+}
+
+/// The part of `key` that holds ordering options, from the first one to the
+/// last: what the caret should cover when they contradict each other. The
+/// field numbers around them are not at fault, so they stay outside the span.
+fn ordering_options_span(key: &str) -> Range<usize> {
+    let is_option = |(_, byte): &(usize, u8)| is_ordering_option_char(*byte);
+    let mut options = key.bytes().enumerate().filter(is_option);
+    let Some((first, _)) = options.next() else {
+        // Nothing to point at; fall back to the whole spec.
+        return 0..key.len();
+    };
+    let last = options.next_back().map_or(first, |(index, _)| index);
+    first..last + 1
 }
 
 fn parse_ordering_options<'a>(
@@ -1055,7 +1204,11 @@ struct FieldSelector {
 }
 
 impl FieldSelector {
-    fn parse(key: &str, global_settings: &GlobalSettings) -> UResult<Self> {
+    fn parse(key: &str, global_settings: &GlobalSettings) -> Result<Self, KeyError> {
+        // Everything the parser hands around is a suffix of `key`, so how much
+        // is left is also where we are.
+        let at = |rest: &str| key.len() - rest.len();
+
         let has_options = key.as_bytes().iter().copied().any(is_ordering_option_char);
         let mut settings = if has_options {
             KeySettings::default()
@@ -1079,21 +1232,7 @@ impl FieldSelector {
             settings.ignore_blanks
         };
 
-        let (from_field, mut rest) = parse_field_count(key, "sort-invalid-number-at-field-start")?;
-        if from_field == 0 {
-            return Err(bad_field_spec(key, "sort-field-number-is-zero"));
-        }
-
-        let mut from_char = 1;
-        if let Some(stripped) = rest.strip_prefix('.') {
-            let (char_idx, rest_after) =
-                parse_field_count(stripped, "sort-invalid-number-after-dot")?;
-            if char_idx == 0 {
-                return Err(bad_field_spec(key, "sort-character-offset-is-zero"));
-            }
-            from_char = char_idx;
-            rest = rest_after;
-        }
+        let (from_field, from_char, rest) = parse_position(key, key, KeyEnd::From)?;
 
         let (rest_after_opts, ignore_blanks) =
             parse_ordering_options(rest, &mut settings, &mut flags);
@@ -1103,26 +1242,14 @@ impl FieldSelector {
 
         let mut to = None;
         if let Some(rest_after_comma) = rest_after_opts.strip_prefix(',') {
-            let (to_field, mut rest) =
-                parse_field_count(rest_after_comma, "sort-invalid-number-after-comma")?;
-            if to_field == 0 {
-                return Err(bad_field_spec(key, "sort-field-number-is-zero"));
-            }
-
-            let mut to_char = 0;
-            if let Some(stripped) = rest.strip_prefix('.') {
-                let (char_idx, rest_after) =
-                    parse_field_count(stripped, "sort-invalid-number-after-dot")?;
-                to_char = char_idx;
-                rest = rest_after;
-            }
+            let (to_field, to_char, rest) = parse_position(key, rest_after_comma, KeyEnd::To)?;
 
             let (rest, ignore_blanks_end) = parse_ordering_options(rest, &mut settings, &mut flags);
             if ignore_blanks_end {
                 to_ignore_blanks = true;
             }
             if !rest.is_empty() {
-                return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+                return Err(stray_character(key, at(rest)));
             }
             to = Some(KeyPosition {
                 field: to_field,
@@ -1130,7 +1257,7 @@ impl FieldSelector {
                 ignore_blanks: to_ignore_blanks,
             });
         } else if !rest_after_opts.is_empty() {
-            return Err(bad_field_spec(key, "sort-stray-character-field-spec"));
+            return Err(stray_character(key, at(rest_after_opts)));
         }
 
         if ordering_incompatible(
@@ -1144,7 +1271,11 @@ impl FieldSelector {
                 settings.ignore_non_printing,
                 settings.ignore_case,
             );
-            return Err(incompatible_options_error(&opts));
+            return Err(KeyError {
+                message: incompatible_options_message(&opts),
+                span: ordering_options_span(key),
+                kind: KeyErrorKind::IncompatibleOptions,
+            });
         }
 
         settings.mode = flags.to_mode();
@@ -1154,7 +1285,11 @@ impl FieldSelector {
             char: from_char,
             ignore_blanks: from_ignore_blanks,
         };
-        Self::new(from, to, settings).map_err(|msg| USimpleError::new(2, msg))
+        Self::new(from, to, settings).map_err(|message| KeyError {
+            message,
+            span: 0..key.len(),
+            kind: KeyErrorKind::ZeroCount,
+        })
     }
 
     fn new(
@@ -1971,6 +2106,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !legacy_warnings.is_empty() {
         index_legacy_warnings(&processed_args, &mut legacy_warnings);
     }
+    // Kept for the caret in `-k` diagnostics, which needs the arguments as they
+    // reached the parser.
+    let key_args = uucore::diagnostics::capture(&processed_args);
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
@@ -2241,7 +2379,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(values) = matches.get_many::<String>(options::KEY) {
         for value in values {
-            let selector = FieldSelector::parse(value, &settings)?;
+            let selector = match FieldSelector::parse(value, &settings) {
+                Ok(selector) => selector,
+                Err(error) => {
+                    let reported = key_args
+                        .as_ref()
+                        .is_some_and(|args| diagnostics::render(args, value, &error));
+                    return Err(quiet_if_reported(reported, error));
+                }
+            };
             settings.selectors.push(selector);
         }
     }
