@@ -182,7 +182,7 @@ fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
             if seek_forward(f, n_skip)? {
                 return Ok(0);
             }
-        } else if is_file {
+        } else if !is_file {
             // Seekable special files (character/block devices) can be
             // skipped past their end without error.
             if seek_forward(f, n_skip).unwrap_or(false) {
