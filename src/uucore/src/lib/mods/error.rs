@@ -678,6 +678,42 @@ impl ExitCode {
     }
 }
 
+/// The error to return once its message may already have reached stderr.
+///
+/// A utility that renders its own report — a caret diagnostic, a warning it
+/// printed itself — has already said everything the error would say, and
+/// returning the error too would print the message twice. This keeps the exit
+/// code without the second message: the code is taken from the error itself,
+/// so both paths always agree on it.
+///
+/// # Arguments
+///
+/// * `reported` - Whether the message has already been written to stderr.
+/// * `error` - The error that would otherwise be printed.
+///
+/// # Returns
+///
+/// A bare [`ExitCode`] carrying `error`'s code when `reported`, and `error`
+/// itself otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::{USimpleError, quiet_if_reported};
+///
+/// let reported = false; // e.g. a caret diagnostic could not be rendered
+/// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
+/// assert_eq!(error.code(), 2);
+/// ```
+pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
+    let error = error.into();
+    if reported {
+        ExitCode::new(error.code())
+    } else {
+        error
+    }
+}
+
 impl Error for ExitCode {}
 
 impl Display for ExitCode {

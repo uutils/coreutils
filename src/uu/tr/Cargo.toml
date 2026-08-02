@@ -19,7 +19,7 @@ doctest = false
 [dependencies]
 nom = { workspace = true }
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "signals"] }
+uucore = { workspace = true, features = ["diagnostics", "fs", "signals"] }
 fluent = { workspace = true }
 bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 
