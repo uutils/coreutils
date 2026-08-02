@@ -147,16 +147,10 @@ impl WordFilter {
         };
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
-            match matches.get_one::<String>(options::WORD_REGEXP) {
-                Some(v) => {
-                    if v.is_empty() {
-                        None
-                    } else {
-                        Some(v.to_owned())
-                    }
-                }
-                None => None,
-            }
+            matches
+                .get_one::<String>(options::WORD_REGEXP)
+                .filter(|v| !v.is_empty())
+                .map(ToOwned::to_owned)
         } else {
             None
         };
