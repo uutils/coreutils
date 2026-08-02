@@ -166,7 +166,7 @@ fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
     let mode = 0o666; // Default mode for FIFOs
 
     if let Some(m) = mode_option {
-        uucore::mode::parse_chmod(mode, m, false, umask)
+        uucore::mode::parse_chmod(mode, m, false, umask).map_err(|e| e.to_string())
     } else {
         Ok(mode & !umask) // Apply umask if no mode is specified
     }

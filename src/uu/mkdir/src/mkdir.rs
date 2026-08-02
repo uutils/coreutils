@@ -61,7 +61,9 @@ fn get_mode(_matches: &ArgMatches) -> Result<Option<u32>, String> {
 fn get_mode(matches: &ArgMatches) -> Result<Option<u32>, String> {
     // Not tested on Windows
     if let Some(m) = matches.get_one::<String>(options::MODE) {
-        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask()).map(Some)
+        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
+            .map(Some)
+            .map_err(|e| e.to_string())
     } else {
         // If no mode argument, let the kernel apply umask and ACLs naturally.
         Ok(None)
