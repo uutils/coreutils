@@ -149,6 +149,10 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
   NOTE : votre shell peut avoir sa propre version de test et/ou {"["}, qui remplace généralement la version décrite ici.
   Veuillez vous référer à la documentation de votre shell pour les détails sur les options qu'il prend en charge.
 
+  Les erreurs sont signalées en réaffichant l'expression avec un caret sous
+  l'argument fautif dès que la sortie d'erreur est un terminal ; sinon, le
+  message habituel sur une seule ligne est conservé.
+
 # Messages d'erreur
 test-error-missing-closing-bracket = '{"]"}' manquant
 test-error-expected = { $value } attendu
@@ -158,3 +162,13 @@ test-error-extra-argument = argument supplémentaire { $argument }
 test-error-unknown-operator = opérateur inconnu { $operator }
 test-error-invalid-integer = entier invalide { $value }
 test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
+
+# Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
+test-diag-label-expected = c'est ici que la parenthèse fermante était attendue
+test-diag-label-missing-argument = rien ne suit
+test-diag-label-extra-argument = l'expression était déjà complète ici
+test-diag-label-unknown-operator = n'est pas un opérateur connu
+test-diag-label-invalid-integer = un entier était attendu ici
+test-diag-label-unary-operator-expected = nécessite une expression de chaque côté
+test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt et -ge comparent des entiers ; utilisez =, {"!"}=, {"<"} ou {">"} pour comparer des chaînes
+test-diag-help-unknown-operator = lancez « { $name } --help » pour la liste des opérateurs pris en charge
