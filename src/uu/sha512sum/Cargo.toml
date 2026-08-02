@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/sha512sum.rs"
 test = false
@@ -35,6 +32,9 @@ openssl = ["uucore/openssl"]
 
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "sha512sum"

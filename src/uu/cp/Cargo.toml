@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cp.rs"
 doctest = false
@@ -69,3 +66,6 @@ harness = false
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
 feat_acl = ["exacl"]
+
+[lints]
+workspace = true

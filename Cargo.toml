@@ -747,6 +747,9 @@ rustix.workspace = true
 [build-dependencies]
 phf_codegen.workspace = true
 
+[lints]
+workspace = true
+
 [[bin]]
 name = "coreutils"
 path = "src/bin/coreutils.rs"
@@ -773,6 +776,3 @@ strip = true
 inherits = "release"
 panic = "unwind"
 debug = true
-
-[lints]
-workspace = true

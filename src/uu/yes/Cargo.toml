@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/yes.rs"
 doctest = false
@@ -24,6 +21,9 @@ itertools = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["stdio", "pipe"] }
 uucore = { workspace = true, features = ["fs", "pipes"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "yes"

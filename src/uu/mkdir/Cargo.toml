@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mkdir.rs"
 test = false
@@ -30,6 +27,9 @@ rustix = { workspace = true, features = ["process", "fs"] }
 [features]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mkdir"

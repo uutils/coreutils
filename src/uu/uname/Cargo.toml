@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/uname.rs"
 test = false
@@ -24,6 +21,9 @@ platform-info = { workspace = true }
 clap = { workspace = true }
 uucore = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "uname"

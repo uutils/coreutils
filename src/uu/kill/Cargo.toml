@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/kill.rs"
 doctest = false
@@ -27,6 +24,9 @@ fluent = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 rustix = { workspace = true, features = ["process"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "kill"

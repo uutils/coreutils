@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/more.rs"
 doctest = false
@@ -36,3 +33,6 @@ path = "src/main.rs"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[lints]
+workspace = true

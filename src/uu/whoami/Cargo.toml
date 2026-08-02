@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/whoami.rs"
 test = false
@@ -30,6 +27,9 @@ windows-sys = { workspace = true, features = [
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",
 ] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "whoami"

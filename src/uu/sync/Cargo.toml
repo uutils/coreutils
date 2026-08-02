@@ -14,9 +14,6 @@ readme.workspace = true
 [package.metadata.cargo-udeps.ignore]
 normal = ["uucore_procs"]
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/sync.rs"
 test = false
@@ -36,6 +33,9 @@ windows-sys = { workspace = true, features = [
   "Win32_System_WindowsProgramming",
   "Win32_Foundation",
 ] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "sync"

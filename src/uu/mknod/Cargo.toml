@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 name = "uu_mknod"
 path = "src/mknod.rs"
@@ -29,6 +26,9 @@ nix = { workspace = true }
 [features]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mknod"
