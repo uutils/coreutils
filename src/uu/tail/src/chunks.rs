@@ -302,12 +302,10 @@ impl BytesChunkBuffer {
             }
         }
 
-        // quit early if there are no chunks for example in case the pipe was empty
-        if self.chunks.is_empty() {
+        let Some(chunk) = self.chunks.pop_front() else {
+            // quit if there are no chunks for example in case the pipe was empty
             return Ok(());
-        }
-
-        let chunk = self.chunks.pop_front().unwrap();
+        };
 
         // calculate the offset in the first chunk and put the calculated chunk as first element in
         // the self.chunks collection. The calculated offset must be in the range 0 to BUFFER_SIZE
