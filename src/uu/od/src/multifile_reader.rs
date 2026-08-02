@@ -19,7 +19,7 @@ const SKIP_BUFFER_SIZE: usize = 16 * 1024;
 pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
-    #[allow(dead_code)]
+    #[cfg(test)]
     Stream(Box<dyn io::Read>),
 }
 
@@ -28,6 +28,11 @@ pub enum InputSource<'a> {
 /// can only be advanced by reading.
 enum CurrentReader {
     File(File),
+    #[cfg(any(unix, target_os = "wasi"))]
+    Stdin(uucore::io::RawReader<rustix::fd::BorrowedFd<'static>>),
+    #[cfg(not(any(unix, target_os = "wasi")))]
+    Stdin(io::Stdin),
+    #[cfg(test)]
     Other(Box<dyn io::Read>),
 }
 
@@ -35,6 +40,8 @@ impl io::Read for CurrentReader {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self {
             Self::File(f) => f.read(buf),
+            Self::Stdin(r) => r.read(buf),
+            #[cfg(test)]
             Self::Other(r) => r.read(buf),
         }
     }
@@ -82,7 +89,7 @@ impl MultifileReader<'_> {
                     #[cfg(any(unix, target_os = "wasi"))]
                     {
                         let stdin = uucore::io::RawReader(rustix::stdio::stdin());
-                        self.curr_file = Some(CurrentReader::Other(Box::new(stdin)));
+                        self.curr_file = Some(CurrentReader::Stdin(stdin));
                     }
 
                     // For non-unix platforms we don't have GNU compatibility requirements, so
@@ -91,8 +98,7 @@ impl MultifileReader<'_> {
                     // doesn't seem worth worrying about at this time.
                     #[cfg(not(any(unix, target_os = "wasi")))]
                     {
-                        let stdin = io::stdin();
-                        self.curr_file = Some(CurrentReader::Other(Box::new(stdin)));
+                        self.curr_file = Some(CurrentReader::Stdin(io::stdin()));
                     }
                     break;
                 }
@@ -121,6 +127,7 @@ impl MultifileReader<'_> {
                         }
                     }
                 }
+                #[cfg(test)]
                 InputSource::Stream(s) => {
                     self.curr_file = Some(CurrentReader::Other(s));
                     break;
