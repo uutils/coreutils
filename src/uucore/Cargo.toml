@@ -15,9 +15,6 @@ version.workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/lib/lib.rs"
 
@@ -225,3 +222,6 @@ tty = []
 time = ["jiff"]
 uptime = ["jiff", "libc", "windows-sys", "utmpx", "utmp-classic"]
 benchmark = ["divan", "itertools", "tempfile"]
+
+[lints]
+workspace = true
