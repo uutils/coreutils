@@ -1524,3 +1524,138 @@ fn test_chmod_symlink_two_links_same_dir() {
         .stdout_contains("mode of 'base/link2/file'");
     // cSpell:enable
 }
+
+mod diagnostics {
+    use super::*;
+    /// Column of the caret in a report header such as `[ chmod:1:5 ]`.
+    #[cfg(unix)]
+    fn caret_column(stderr: &str) -> Option<usize> {
+        let header = stderr.lines().find(|line| line.contains("chmod:1:"))?;
+        let column = header.rsplit(':').next()?;
+        column.trim_end_matches(" ]").parse().ok()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["g+rw?x", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // The caret lands on `?`, the fifth character of the mode.
+        assert_eq!(caret_column(stderr), Some(5), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_the_second_clause() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["o=r,ug!w", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // Clauses are parsed one at a time, but the caret is placed in the
+        // whole mode: `!` is its seventh character.
+        assert_eq!(caret_column(stderr), Some(7), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_clause_with_no_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["go", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        assert_eq!(caret_column(stderr), Some(1), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_non_octal_mode() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        ucmd.terminal_sim_stderr()
+            .args(&["779", "probe"])
+            .fails_with_code(1)
+            .stderr_contains("779");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_a_negative_mode() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // A leading-dash mode is pulled out of the argument list before clap
+        // sees it, but the caret still lands on `%`, its fourth character.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-rw%x", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        assert_eq!(caret_column(stderr), Some(4), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_plain_message_when_negative_modes_are_joined() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // Several negative modes are joined into one mode that matches no
+        // single argument, so there is nothing to point at.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-w", "-r%x", "probe"])
+            .fails_with_code(1);
+
+        // The pseudo-terminal turns the newline into CRLF, hence the trim.
+        assert_eq!(
+            result.stderr_str().trim_end(),
+            "chmod: invalid operator (expected +, -, or =, but found %)"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // The test harness pipes stderr, so the report must not appear.
+        ucmd.args(&["g+rw?x", "probe"])
+            .fails_with_code(1)
+            .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_quiet_stays_quiet() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // -f suppresses the message entirely, report included.
+        ucmd.terminal_sim_stderr()
+            .args(&["-f", "g+rw?x", "probe"])
+            .fails_with_code(1)
+            .no_output();
+    }
+}

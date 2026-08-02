@@ -84,6 +84,7 @@ powi
 println
 repr
 rfind
+rsplit
 struct
 structs
 substr
