@@ -222,6 +222,26 @@ fn test_negative_zero_bytes() {
         .succeeds()
         .stdout_is("qwerty");
 }
+
+#[test]
+fn test_zero_bytes_with_suffix() {
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    new_ucmd!()
+        .args(&["--bytes=0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=00K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=+0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+}
 #[test]
 fn test_no_such_file_or_directory() {
     new_ucmd!()
