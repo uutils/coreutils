@@ -32,3 +32,9 @@ chmod-verbose-neither-changed = neither symbolic link {$file} nor referent has b
 chmod-verbose-mode-retained = mode of {$file} retained as {$mode_octal} ({$mode_display})
 chmod-verbose-failed-change = failed to change mode of file {$file} from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
 chmod-verbose-mode-changed = mode of {$file} changed from {$old_mode} ({$old_mode_display}) to {$new_mode} ({$new_mode_display})
+
+# Diagnostic labels: what the caret points at in a mode
+chmod-diag-label-invalid-operator = expected +, - or = here
+chmod-diag-label-missing-operator = this clause says who, but not what to change
+chmod-diag-label-invalid-number = not an octal mode
+chmod-diag-help-mode-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
