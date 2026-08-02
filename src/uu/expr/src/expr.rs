@@ -15,6 +15,7 @@ use uucore::{
     format_usage,
 };
 
+mod diagnostics;
 mod locale_aware;
 mod syntax_tree;
 
@@ -32,8 +33,11 @@ pub enum ExprError {
     UnexpectedArgument(String),
     #[error("{}", translate!("expr-error-missing-argument", "arg" => _0.quote()))]
     MissingArgument(String),
+    // The offending operand is carried for diagnostics only; GNU prints the bare
+    // message, so it is deliberately absent from `Display`. Raw bytes, so that a
+    // non-UTF-8 operand can still be matched back to its argument.
     #[error("{}", translate!("expr-error-non-integer-argument"))]
-    NonIntegerArgument,
+    NonIntegerArgument(Vec<u8>),
     #[error("{}", translate!("expr-error-missing-operand"))]
     MissingOperand,
     #[error("{}", translate!("expr-error-division-by-zero"))]
@@ -99,6 +103,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Parse and evaluate the expression.
+///
+/// On failure the second half of the error reports how many arguments the
+/// parser had consumed, which is `None` once parsing has succeeded.
+fn evaluate(args: &[Vec<u8>]) -> Result<Vec<u8>, (ExprError, Option<usize>)> {
+    let ast = AstNode::parse_located(args).map_err(|(e, at)| (e, Some(at)))?;
+    let value = ast.eval().map_err(|e| (e, None))?;
+    Ok(value.eval_as_string())
+}
+
 #[uucore::main(no_signals)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // For expr utility we do not want getopts.
@@ -120,7 +134,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &args
         };
 
-        let res = AstNode::parse(args)?.eval()?.eval_as_string();
+        let res = match evaluate(args) {
+            Ok(res) => res,
+            Err((e, stopped_at)) => {
+                if uucore::diagnostics::enabled() && diagnostics::render(args, &e, stopped_at) {
+                    // The diagnostic is already on stderr; exit quietly.
+                    return Err(uucore::error::ExitCode::new(e.code()));
+                }
+                return Err(e.into());
+            }
+        };
         let _ = stdout().write_all(&res);
         let _ = stdout().write_all(b"\n");
 
