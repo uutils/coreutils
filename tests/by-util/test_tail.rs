@@ -204,6 +204,27 @@ fn test_nc_0_wo_follow() {
 }
 
 #[test]
+fn test_zero_bytes_with_suffix() {
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["-c0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c00K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c+0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
     use std::os::unix::fs::PermissionsExt;
