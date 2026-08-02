@@ -7,7 +7,7 @@
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
-#[cfg(all(unix, not(feature = "feat_selinux")))]
+#[cfg(all(unix, not(feature = "selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
 #[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
@@ -1632,7 +1632,7 @@ fn test_nocache_file() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on SELinux for now
 fn test_skip_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
@@ -1657,7 +1657,7 @@ fn test_skip_past_dev() {
 
 #[test]
 #[cfg(unix)]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 fn test_seek_past_dev() {
     // NOTE: This test intends to trigger code which can only be reached with root permissions.
     let ts = TestScenario::new(util_name!());
