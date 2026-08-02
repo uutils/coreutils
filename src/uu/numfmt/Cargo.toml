@@ -17,6 +17,7 @@ path = "src/numfmt.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = [
+  "diagnostics",
   "parser",
   "ranges",
   "i18n-common",

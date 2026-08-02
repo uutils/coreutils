@@ -1697,3 +1697,130 @@ fn test_header_detached() {
         .succeeds()
         .stdout_is("1\n2\n");
 }
+
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%q", "1000"])
+            .fails_with_code(1);
+
+        // The whole report: the `numfmt: ` prefix of the plain form, the
+        // argument list echoed back, a caret on the `q` inside `--format=%q`,
+        // and the format syntax advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:18 ]
+   │
+ 1 │ numfmt --format=%q 1000
+   │                  ┬
+   │                  ╰── not allowed in a directive
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_stray_percent() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%f%", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: format '%f%' has too many % directives
+   ╭─[ numfmt:1:19 ]
+   │
+ 1 │ numfmt --format=%f% 1000
+   │                   ┬
+   │                   ╰── a literal % must be written %%
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_oversized_precision() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%.88888888888888888888f", "1000"])
+            .fails_with_code(1);
+
+        // The underline covers the whole run of digits, not one character.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid precision in format '%.88888888888888888888f'
+   ╭─[ numfmt:1:19 ]
+   │
+ 1 │ numfmt --format=%.88888888888888888888f 1000
+   │                   ──────────┬─────────
+   │                             ╰─────────── this number is too large
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_format_without_a_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=qwe", "1000"])
+            .fails_with_code(1);
+
+        // Nothing inside is wrong on its own, so the whole format is marked.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: format 'qwe' has no % directive
+   ╭─[ numfmt:1:17 ]
+   │
+ 1 │ numfmt --format=qwe 1000
+   │                 ─┬─
+   │                  ╰─── no %f directive here
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_other_option_errors_keep_their_plain_message() {
+        // The format is fine; the failure is elsewhere and must not be
+        // decorated with a caret into --format. The pseudo-terminal turns the
+        // newline into CRLF, hence the trim.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--format=%f", "--padding=0", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_str().trim_end(),
+            "numfmt: invalid padding value '0'"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["--format=%q", "1000"])
+            .fails_with_code(1)
+            .stderr_only("numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f\n");
+    }
+}

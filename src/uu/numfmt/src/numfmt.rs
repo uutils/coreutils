@@ -19,7 +19,7 @@ use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::UResult;
+use uucore::error::{ExitCode, UResult};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -30,6 +30,7 @@ pub mod errors;
 pub mod format;
 pub mod options;
 
+mod diagnostics;
 mod numeric;
 mod units;
 
@@ -391,8 +392,27 @@ fn print_debug_warnings(options: &NumfmtOptions, matches: &ArgMatches) {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in --format diagnostics.
+    let format_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let options = parse_options(&matches).map_err(NumfmtError::IllegalArgument)?;
+    let options = match parse_options(&matches) {
+        Ok(options) => options,
+        Err(message) => {
+            // Only the format is worth a caret, and only when it is the very
+            // error that was reported: other options are checked first.
+            if let Some(args) = &format_args
+                && let Some(format) = matches.get_one::<String>(FORMAT)
+                && let Err(error) = format.parse::<FormatOptions>()
+                && error.message == message
+                && diagnostics::render(args, format, &error)
+            {
+                // The diagnostic is already on stderr; exit quietly.
+                return Err(ExitCode::new(1));
+            }
+            return Err(NumfmtError::IllegalArgument(message).into());
+        }
+    };
 
     if options.debug {
         print_debug_warnings(&options, &matches);

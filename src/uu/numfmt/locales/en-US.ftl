@@ -83,3 +83,10 @@ numfmt-debug-no-conversion = no conversion option specified
 numfmt-debug-grouping-no-effect = grouping has no effect in this locale
 numfmt-debug-failed-to-convert = failed to convert some of the input numbers
 numfmt-debug-header-ignored = --header ignored with command-line input
+
+# Diagnostic labels: what the caret points at in a --format string
+numfmt-diag-label-missing-directive = no %f directive here
+numfmt-diag-label-unexpected-character = not allowed in a directive
+numfmt-diag-label-number-overflow = this number is too large
+numfmt-diag-label-stray-percent = a literal % must be written %%
+numfmt-diag-help-format-syntax = a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in "%'-10.2f"
