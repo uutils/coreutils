@@ -415,7 +415,7 @@ fn test_chmod_inaccessible_file_reports_permission_denied() {
     let at = &scene.fixtures;
 
     at.mkdir("locked");
-    make_file(&at.plus_as_string("locked/file"), 0o100644);
+    make_file(&at.plus_as_string("locked/file"), 0o100_644);
     set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
 
     scene
