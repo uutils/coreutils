@@ -3183,7 +3183,7 @@ fn test_positional_set_with_d_flag_format_error() {
 #[test]
 #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
 fn test_positional_set_valid_inputs_require_privilege() {
-    if geteuid() == 0 || uucore::os::is_wsl_1() {
+    if geteuid().is_root() || uucore::os::is_wsl_1() {
         return;
     }
     // Each entry covers a different valid input shape: 12 digits, 8 digits,
