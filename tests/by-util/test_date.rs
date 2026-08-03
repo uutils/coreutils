@@ -2066,7 +2066,6 @@ fn test_date_strftime_flag_on_composite() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
 fn test_date_strftime_o_modifier() {
     // In C locale the `O` modifier is a no-op (alternative numeric symbols).
     // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
