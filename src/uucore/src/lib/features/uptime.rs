@@ -96,12 +96,8 @@ fn get_macos_boot_time_sysctl() -> Option<time_t> {
 /// # Returns
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "fuchsia",
-    target_os = "openbsd"
-))]
+#[cfg(unix)]
+#[cfg(not(any(target_os = "cygwin", target_os = "netbsd", target_vendor = "apple")))]
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
     use rustix::time::{ClockId, clock_gettime};
@@ -120,13 +116,7 @@ pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
 /// # Returns
 ///
 /// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(unix)]
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "fuchsia",
-    target_os = "openbsd"
-)))]
+#[cfg(any(target_os = "cygwin", target_os = "netbsd", target_vendor = "apple"))]
 pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     use crate::utmpx::BOOT_TIME;
     use crate::utmpx::Utmpx;
