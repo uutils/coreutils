@@ -775,13 +775,13 @@ fn substitute_epoch_seconds(fmt: &str, date: &Zoned) -> String {
 ///
 /// In the C locale `%O` requests alternative numeric symbols that do not
 /// exist, so GNU `date` treats it as a no-op: `%Om` renders exactly like
-/// `%m`. jiff does not know the modifier and would emit it literally.
-/// Remove the `O` strftime modifier from `fmt`.
-///
-/// In the C locale `%O` requests alternative numeric symbols that do not
-/// exist, so GNU `date` treats it as a no-op: `%Om` renders exactly like
 /// `%m` (issue #11656). jiff does not know the modifier and would emit it
 /// literally, so strip it before jiff sees the format string.
+///
+/// The `O` is only dropped when it actually modifies something, that is,
+/// when a specifier letter follows it. A dangling `%O` (at the end of the
+/// string, or followed by a non-letter) stays literal, as does any `O`
+/// that merely follows the `%%` escape.
 fn strip_o_modifier(fmt: &str) -> String {
     if !fmt.contains("%O") {
         return fmt.to_string();
@@ -795,9 +795,12 @@ fn strip_o_modifier(fmt: &str) -> String {
             continue;
         }
         match chars.peek() {
-            // Drop the modifier but keep the specifier: `%Om` -> `%m`.
             Some('O') => {
-                chars.next();
+                let mut lookahead = chars.clone();
+                lookahead.next();
+                if lookahead.peek().is_some_and(char::is_ascii_alphabetic) {
+                    chars.next();
+                }
                 out.push('%');
             }
             // Keep `%%` intact: an `O` after a literal percent is plain text.
