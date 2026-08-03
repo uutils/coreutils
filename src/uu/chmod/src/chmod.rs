@@ -140,6 +140,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let modes = matches.get_one::<String>(options::MODE);
+    // Whether the mode reached us as an option-like operand ("chmod -w f") rather than as an
+    // ordinary positional operand ("chmod -- -w f"). This decides whether the umask diagnostic
+    // below is emitted; see the comment on `option_like_mode`.
+    let option_like_mode = parsed_cmode.is_some();
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
@@ -177,6 +181,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         recursive,
         fmode,
         cmode,
+        option_like_mode,
         traverse_symlinks,
         dereference,
         args: mode_args,
@@ -275,6 +280,11 @@ struct Chmoder {
     recursive: bool,
     fmode: Option<u32>,
     cmode: Option<String>,
+    /// Set when the mode was given as an option-like operand, e.g. `chmod -w f`, instead of as a
+    /// plain positional operand, e.g. `chmod -- -w f`. GNU only reports a mode whose effect was
+    /// curtailed by the umask for the first spelling: the second one is unambiguous, so there is
+    /// nothing to warn about.
+    option_like_mode: bool,
     traverse_symlinks: TraverseSymlinks,
     dereference: bool,
     /// The arguments as typed, kept only when a diagnostic may be rendered.
@@ -830,8 +840,12 @@ impl Chmoder {
             } else {
                 self.change_file(fperm, new_mode, file)?;
             }
-            // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
-            if (new_mode & !naively_expected_new_mode) != 0 {
+            // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
+            // the user asked to drop. GNU reports that as an error, but only when the mode was
+            // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
+            // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
+            // silent, so the diagnostic is suppressed here too.
+            if self.option_like_mode && (new_mode & !naively_expected_new_mode) != 0 {
                 return Err(ChmodError::NewPermissions(
                     file.into(),
                     display_permissions_unix(new_mode, false),
