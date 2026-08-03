@@ -29,6 +29,27 @@ fn cut_characters(bencher: Bencher) {
         .bench_values(|args| black_box(uumain(args)));
 }
 
+/// Benchmark cutting a range that both starts and ends inside long multi-byte
+/// lines. `cut_characters` uses short lines and a range running past their end,
+/// so it measures the fixed per-line cost; here the character walk dominates.
+#[divan::bench]
+fn cut_characters_long_lines(bencher: Bencher) {
+    let mut data = Vec::new();
+    for i in 0..40_000 {
+        // Roughly 100 characters a line, a third of them multi-byte, so that
+        // neither end of the range lands on a byte offset equal to its
+        // character position.
+        let line = format!("{}école-piñata-{i:05}-Straße-", "aéiöu".repeat(16));
+        data.extend_from_slice(line.as_bytes());
+        data.push(b'\n');
+    }
+    let file_path = setup_test_file(&data);
+
+    bencher
+        .with_inputs(|| get_bench_args(&[&"-c", &"20-70", &file_path]).into_iter())
+        .bench_values(|args| black_box(uumain(args)));
+}
+
 /// Benchmark cutting fields with tab delimiter
 #[divan::bench]
 fn cut_fields_tab(bencher: Bencher) {
