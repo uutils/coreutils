@@ -887,6 +887,141 @@ fn test_gnu_special_options() {
     scene.ucmd().arg("--").arg("--").fails();
 }
 
+/// Every row of the operand matrix from
+/// <https://github.com/uutils/coreutils/issues/3147>.
+///
+/// The left column is the argument list, the right column is the exact list of operands, in order,
+/// that must end up being changed. Three files named `f`, `--` and `-w` exist in every case, so a
+/// row that expects `[]` is asserting that the arguments are rejected outright rather than being
+/// resolved to some file that happens to exist. None of the rows are redundant: they only differ
+/// pairwise in where a `--` sits, which is precisely what decides whether a leading-hyphen argument
+/// is a mode or a file name.
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_gnu_usage_matrix() {
+    let matrix: &[(&[&str], &[&str])] = &[
+        (&["--"], &[]),
+        (&["--", "--"], &[]),
+        (&["--", "--", "--", "f"], &["--", "f"]),
+        (&["--", "--", "-w", "f"], &["-w", "f"]),
+        (&["--", "--", "f"], &["f"]),
+        (&["--", "-w"], &[]),
+        (&["--", "-w", "--", "f"], &["--", "f"]),
+        (&["--", "-w", "-w", "f"], &["-w", "f"]),
+        (&["--", "-w", "f"], &["f"]),
+        (&["--", "f"], &[]),
+        (&["-w"], &[]),
+        (&["-w", "--"], &[]),
+        (&["-w", "--", "--", "f"], &["--", "f"]),
+        (&["-w", "--", "-w", "f"], &["-w", "f"]),
+        (&["-w", "--", "f"], &["f"]),
+        (&["-w", "-w"], &[]),
+        (&["-w", "-w", "--", "f"], &["f"]),
+        (&["-w", "-w", "-w", "f"], &["f"]),
+        (&["-w", "-w", "f"], &["f"]),
+        (&["-w", "f"], &["f"]),
+        (&["f"], &[]),
+        (&["f", "--"], &[]),
+        (&["f", "-w"], &["f"]),
+        (&["f", "f"], &[]),
+        (&["u+gr", "f"], &[]),
+        (&["ug,+x", "f"], &[]),
+    ];
+
+    for (args, expected) in matrix {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        // 0o644 has no group or other write bit, so `-w` lands on 0o444 under any umask. This test
+        // is about which operands get picked, not about umask arithmetic.
+        for name in ["f", "--", "-w"] {
+            make_file(&at.plus_as_string(name), 0o644);
+        }
+
+        let result = scene.ucmd().arg("-v").args(args).run();
+        let context = format!("chmod -v {}", args.join(" "));
+
+        // `-v` names every operand it visits, whether or not the mode ends up changing anything.
+        let visited: Vec<&str> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|line| line.strip_prefix("mode of '"))
+            .filter_map(|rest| rest.split('\'').next())
+            .collect();
+        assert_eq!(visited, *expected, "{context}: acted on the wrong operands");
+
+        // A row that names no operand is an error (a missing or invalid mode), never a silent
+        // no-op.
+        assert_eq!(
+            result.succeeded(),
+            !expected.is_empty(),
+            "{context}: unexpected exit status"
+        );
+
+        // Independently of `-v`, nothing outside the expected list may be touched. This is what
+        // catches an implementation that mistakes the file named `--` for a separator.
+        for name in ["f", "--", "-w"] {
+            if !expected.contains(&name) {
+                assert_eq!(
+                    at.metadata(name).permissions().mode() & 0o7777,
+                    0o644,
+                    "{context}: {name} should have been left alone"
+                );
+            }
+        }
+    }
+}
+
+/// `chmod` warns that the umask kept bits the mode asked to remove only when the mode was written
+/// in the option-like form, i.e. as a leading-hyphen argument before any `--`. Once `--` has been
+/// seen the operand is unambiguously a mode, and the change is applied silently.
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_umask_conflict_reported_only_for_option_like_mode() {
+    // (arguments, resulting permission bits, whether the umask conflict is reported)
+    let cases: &[(&[&str], u32, bool)] = &[
+        (&["-w", "file"], 0o466, true),
+        // A `--` after the mode does not retroactively make it an ordinary operand.
+        (&["-w", "--", "file"], 0o466, true),
+        (&["file", "-w"], 0o466, true),
+        (&["-w", "-w", "--", "file"], 0o466, true),
+        (&["--", "-w", "file"], 0o466, false),
+        (&["--", "-rw", "file"], 0o022, false),
+        // What matters is whether the argument itself began with a hyphen, not whether the mode
+        // contains an umask-relative clause: these two modes do the same thing, and only the one
+        // that looks like an option is reported.
+        (&["u+x,-w", "file"], 0o566, false),
+        (&["-w,u+x", "file"], 0o566, true),
+        (&["--", "-w,u+x", "file"], 0o566, false),
+    ];
+
+    for (args, expected_mode, reported) in cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        // 0o666 is required: on 0o644 the umask has nothing left to keep, so the conflict never
+        // arises and every one of these cases would pass vacuously.
+        make_file(&at.plus_as_string("file"), 0o666);
+
+        let result = scene.ucmd().umask(0o022).args(args).run();
+        let context = format!("chmod {}", args.join(" "));
+
+        assert_eq!(
+            at.metadata("file").permissions().mode() & 0o7777,
+            *expected_mode,
+            "{context}: wrong resulting permissions"
+        );
+        if *reported {
+            result.code_is(1);
+            assert!(
+                result.stderr_str().contains("new permissions are"),
+                "{context}: expected the umask conflict to be reported, got {:?}",
+                result.stderr_str()
+            );
+        } else {
+            result.success().no_stderr();
+        }
+    }
+}
+
 #[test]
 fn test_chmod_dereference_symlink() {
     let scene = TestScenario::new(util_name!());
