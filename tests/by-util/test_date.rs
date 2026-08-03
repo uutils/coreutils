@@ -2074,9 +2074,9 @@ fn test_date_strftime_o_modifier() {
         .env("TZ", "UTC")
         .arg("-d")
         .arg("2024-06-15")
-        .arg("+%Om-%Oy-%Ol")
+        .arg("+%Om-%Oy-%Od")
         .succeeds()
-        .stdout_is("06-24-12\n");
+        .stdout_is("06-24-15\n");
 }
 
 #[test]
