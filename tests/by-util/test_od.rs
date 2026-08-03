@@ -934,6 +934,31 @@ fn test_skip_bytes_error() {
         .failure();
 }
 
+// A seekable special file such as /dev/null can be skipped past its (empty)
+// end without error, matching GNU od.
+#[cfg(unix)]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: /dev/null is not a seekable device"
+)]
+fn test_skip_bytes_past_end_of_seekable_device() {
+    new_ucmd!()
+        .arg("-j1")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+// Skipping past the end of a regular file is an error and must not print a
+// trailing offset line, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_no_offset() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.arg("-j10").arg("f").fails().no_stdout();
+}
+
 #[test]
 #[cfg_attr(
     wasi_runner,
@@ -1359,4 +1384,38 @@ fn test_hex_lowercase() {
                 00000a
             ",
         ));
+}
+
+#[test]
+#[cfg(not(target_os = "windows"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_is_a_directory() {
+    let scene = TestScenario::new(util_name!());
+    let fixtures = &scene.fixtures;
+
+    fixtures.mkdir("a");
+
+    scene
+        .ucmd()
+        .args(&["a"])
+        .fails_with_code(1)
+        .stderr_is("od: a: Is a directory\n");
+}
+
+// Regression: offset must be 4, not 3, and -N must be respected
+#[test]
+fn test_od_strings_with_n_flag() {
+    let input = b"foo\0bar\0";
+
+    new_ucmd!()
+        .args(&["--strings", "-N7"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
+
+    new_ucmd!()
+        .args(&["--strings", "-N8"])
+        .run_piped_stdin(&input[..])
+        .success()
+        .stdout_only("0000000 foo\n0000004 bar\n");
 }

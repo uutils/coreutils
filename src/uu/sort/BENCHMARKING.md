@@ -93,6 +93,27 @@ Example: Run `hyperfine './target/release/coreutils sort shuffled_wordlist.txt -
 - Sort each part by running `for f in shuffled_wordlist_slice_*; do sort $f -o $f; done`
 - Benchmark merging by running `hyperfine "target/release/coreutils sort -m shuffled_wordlist_slice_*"`
 
+The merge comparator compares lines lazily, so the locale matters a lot here: in a
+UTF-8 locale (locale-aware collation) merging must avoid computing a full collation sort
+key for every line, since a k-way merge only performs O(n log k) comparisons (and none at
+all when merging a single already-sorted file). Make sure to benchmark both the C locale
+and a UTF-8 locale, and the single-file case in particular:
+
+```
+# Single already-sorted file (worst case for eager sort-key computation)
+LC_ALL=en_US.UTF-8 hyperfine --warmup 3 \
+  'target/release/coreutils sort -m /usr/share/dict/words' \
+  'sort -m /usr/share/dict/words'
+
+# Several pre-sorted slices
+LC_ALL=en_US.UTF-8 hyperfine --warmup 3 \
+  'target/release/coreutils sort -m shuffled_wordlist_slice_*' \
+  'sort -m shuffled_wordlist_slice_*'
+```
+
+The same scenarios are covered by the `merge_single_file_utf8_locale` and
+`merge_pre_sorted_files_utf8_locale` cases in `benches/sort_locale_utf8_bench.rs`.
+
 ## Check
 
 When invoked with -c, we simply check if the input is already ordered. The input for benchmarking should be an already sorted file.

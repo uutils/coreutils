@@ -5,6 +5,7 @@
 
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
+use std::io::{Write as _, stdout};
 #[cfg(unix)]
 use uucore::display::print_verbatim;
 use uucore::error::{UResult, UUsageError};
@@ -122,20 +123,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         {
             use std::os::unix::ffi::OsStrExt;
             let result_os = std::ffi::OsStr::from_bytes(result);
-            print_verbatim(result_os).unwrap();
+            print_verbatim(result_os)?;
         }
         #[cfg(not(unix))]
         {
             // On non-Unix, fall back to lossy conversion
             if let Ok(s) = std::str::from_utf8(result) {
-                print!("{s}");
+                write!(stdout(), "{s}")?;
             } else {
                 // Fallback for non-UTF-8 paths on non-Unix systems
-                print!(".");
+                write!(stdout(), ".")?;
             }
         }
 
-        print!("{line_ending}");
+        write!(stdout(), "{line_ending}")?;
     }
 
     Ok(())

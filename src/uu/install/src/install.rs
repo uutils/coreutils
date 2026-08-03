@@ -20,11 +20,11 @@ use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
-use uucore::backup_control::{self, BackupMode};
-use uucore::buf_copy::copy_stream;
+use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
+use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::fs::dir_strip_dot_for_creation;
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
@@ -88,14 +88,20 @@ enum InstallError {
     #[error("{}", translate!("install-error-target-not-dir", "path" => .0.quote()))]
     TargetDirIsntDir(PathBuf),
 
-    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "to" => .1.quote()))]
-    BackupFailed(PathBuf, PathBuf, #[source] std::io::Error),
+    #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
+    BackupFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-backing-up-destroy-source", "dest" => .0.quote(), "source" => .1.quote()))]
+    BackupWouldDestroySource(PathBuf, PathBuf),
 
     #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
     InstallFailed(PathBuf, PathBuf, String),
 
     #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
     StripProgramFailed(String),
+
+    #[error("{}", translate!("install-error-strip-terminated"))]
+    StripTerminated,
 
     #[error("{}", translate!("install-error-metadata-failed"))]
     MetadataFailed(#[source] std::io::Error),
@@ -112,6 +118,9 @@ enum InstallError {
     #[error("{}", translate!("install-error-not-a-directory", "path" => .0.quote()))]
     NotADirectory(PathBuf),
 
+    #[error("{}", translate!("install-error-existing-file-not-directory", "path" => .0.quote()))]
+    ExistingFileNotADirectory(PathBuf),
+
     #[error("{}", translate!("install-error-override-directory-failed", "dir" => .0.quote(), "file" => .1.quote()))]
     OverrideDirectoryFailed(PathBuf, PathBuf),
 
@@ -124,6 +133,9 @@ enum InstallError {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[error("{}", .0)]
     SelinuxContextFailed(String),
+
+    #[error("{}", translate!("install-error-not-permitted", "path" => .0.quote()))]
+    NotPermitted(PathBuf),
 }
 
 impl UError for InstallError {
@@ -331,6 +343,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Resolve an owner/group argument to a numeric id.
+///
+/// First looks the value up by name (or by id) via `lookup`. When no matching
+/// entry exists but the value is a plain integer, that integer is used as the
+/// id directly. This matches GNU, which accepts unused numeric ids such as
+/// `install -o 1100`. Returns `None` when the value is neither known nor numeric.
+fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Option<u32> {
+    lookup(value).ok().or_else(|| value.parse::<u32>().ok())
+}
+
 /// Determine behavior, given command line arguments.
 ///
 /// If successful, returns a filled-out Behavior struct.
@@ -361,7 +383,8 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         None
     };
 
-    let backup_mode = backup_control::determine_backup_mode(matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)?;
     let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
@@ -372,13 +395,24 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let preserve_timestamps = matches.get_flag(OPT_PRESERVE_TIMESTAMPS);
     let compare = matches.get_flag(OPT_COMPARE);
     let strip = matches.get_flag(OPT_STRIP);
-    if preserve_timestamps && compare {
-        show_error!(
-            "{}",
-            translate!("install-error-mutually-exclusive-compare-preserve")
-        );
-        return Err(1.into());
+    let strip_program = match matches.get_one::<String>(OPT_STRIP_PROGRAM) {
+        Some(p) => {
+            if !strip
+                && writeln!(
+                    std::io::stderr(),
+                    "install: {}",
+                    translate!("install-warning-no-strip-with-program")
+                )
+                .is_err()
+            {
+                uucore::error::set_exit_code(1);
+            }
+            p
+        }
+        None => DEFAULT_STRIP_PROGRAM,
     }
+    .to_string();
+
     if compare && strip {
         show_error!(
             "{}",
@@ -403,10 +437,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let owner_id = if owner.is_empty() {
         None
     } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
-        }
+        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     };
 
     let group = matches
@@ -417,10 +448,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let group_id = if group.is_empty() {
         None
     } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
-        }
+        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -438,11 +466,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
         preserve_timestamps,
         compare,
         strip,
-        strip_program: String::from(
-            matches
-                .get_one::<String>(OPT_STRIP_PROGRAM)
-                .map_or(DEFAULT_STRIP_PROGRAM, |s| s.as_str()),
-        ),
+        strip_program,
         create_leading: matches.get_flag(OPT_CREATE_LEADING),
         target_dir,
         no_target_dir,
@@ -462,79 +486,93 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
 ///
 fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     if paths.is_empty() {
-        Err(InstallError::DirNeedsArg.into())
-    } else {
-        for path in paths.iter().map(Path::new) {
-            // if the path already exist, don't try to create it again
-            if !path.exists() {
-                // Special case to match GNU's behavior:
-                // install -d foo/. should work and just create foo/
-                // std::fs::create_dir("foo/."); fails in pure Rust
-                // See also mkdir.rs for another occurrence of this
-                let path_to_create = dir_strip_dot_for_creation(path);
-                // Differently than the primary functionality
-                // (MainFunction::Standard), the directory functionality should
-                // create all ancestors (or components) of a directory
-                // regardless of the presence of the "-D" flag.
-                //
-                // NOTE: the GNU "install" sets the expected mode only for the
-                // target directory. All created ancestor directories will have
-                // the default mode. Hence it is safe to use fs::create_dir_all
-                // and then only modify the target's dir mode.
-                if let Err(e) = fs::create_dir_all(path_to_create.as_path())
-                    .map_err_context(|| translate!("install-error-create-dir-failed", "path" => path_to_create.as_path().quote()))
-                {
-                    show!(e);
-                    continue;
-                }
+        return Err(InstallError::DirNeedsArg.into());
+    }
 
-                // Set SELinux context for all created directories if needed
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if should_set_selinux_context(b) {
-                    let context = get_context_for_selinux(b);
-                    set_selinux_context_for_directories_install(path_to_create.as_path(), context);
-                }
-
-                if b.verbose {
-                    writeln!(
-                        stdout(),
-                        "{}",
-                        translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
-                    )?;
-                }
+    for path in paths.iter().map(Path::new) {
+        // if the path already exist, check if it's a file
+        if path.exists() {
+            if !path.is_dir() {
+                show!(InstallError::ExistingFileNotADirectory(path.to_path_buf()));
+                continue;
             }
-
-            if mode::chmod(path, b.mode()).is_err() {
-                // Error messages are printed by the mode::chmod function!
-                uucore::error::set_exit_code(1);
+        } else {
+            // Special case to match GNU's behavior:
+            // install -d foo/. should work and just create foo/
+            // std::fs::create_dir("foo/."); fails in pure Rust
+            // See also mkdir.rs for another occurrence of this
+            let path_to_create = dir_strip_dot_for_creation(path);
+            // Differently than the primary functionality
+            // (MainFunction::Standard), the directory functionality should
+            // create all ancestors (or components) of a directory
+            // regardless of the presence of the "-D" flag.
+            //
+            // NOTE: the GNU "install" sets the expected mode only for the
+            // target directory. All created ancestor directories will have
+            // the default mode. Hence it is safe to use fs::create_dir_all
+            // and then only modify the target's dir mode.
+            if let Err(e) = fs::create_dir_all(&path_to_create).map_err_context(
+                || translate!("install-error-create-dir-failed", "path" => path_to_create.quote()),
+            ) {
+                show!(e);
                 continue;
             }
 
-            if b.privileged {
-                show_if_err!(chown_optional_user_group(path, b));
+            // Set SELinux context for all created directories if needed
+            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            if should_set_selinux_context(b) {
+                let context = get_context_for_selinux(b);
+                set_selinux_context_for_directories_install(path_to_create.as_path(), context);
+            }
 
-                // Set SELinux context for directory if needed
-                #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-                if b.default_context {
-                    show_if_err!(set_selinux_default_context(path));
-                } else if b.context.is_some() {
-                    let context = get_context_for_selinux(b);
-                    show_if_err!(set_selinux_security_context(path, context));
-                }
+            if b.verbose {
+                writeln!(
+                    stdout(),
+                    "{}",
+                    translate!("install-verbose-creating-directory", "path" => path_to_create.quote())
+                )?;
             }
         }
-        // If the exit code was set, or show! has been called at least once
-        // (which sets the exit code as well), function execution will end after
-        // this return.
-        Ok(())
+
+        // Ownership before mode; on failure skip the chmod.
+        // See set_ownership_and_permissions for why.
+        if b.privileged
+            && let Err(e) = chown_optional_user_group(path, b)
+        {
+            show!(e);
+            uucore::error::set_exit_code(1);
+            continue;
+        }
+
+        // Set SELinux context for directory if needed
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        if b.privileged {
+            if b.default_context {
+                show_if_err!(set_selinux_default_context(path));
+            } else if b.context.is_some() {
+                let context = get_context_for_selinux(b);
+                show_if_err!(set_selinux_security_context(path, context));
+            }
+        }
+
+        if mode::chmod(path, b.mode()).is_err() {
+            // Error messages are printed by the mode::chmod function!
+            uucore::error::set_exit_code(1);
+        }
     }
+    // If the exit code was set, or show! has been called at least once
+    // (which sets the exit code as well), function execution will end after
+    // this return.
+    Ok(())
 }
 
 /// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
     !path.exists()
-        && (path.parent().is_none_or(Path::is_dir) || path.parent().unwrap().as_os_str().is_empty()) // In case of a simple file
+        && path
+            .parent()
+            .is_none_or(|p| p.as_os_str().is_empty() || p.is_dir())
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -566,9 +604,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             translate!("install-error-missing-file-operand"),
         ));
     }
-    if b.no_target_dir && paths.len() > 2 {
+    if b.no_target_dir
+        && let Some(extra) = paths.get(2)
+    {
         return Err(InstallError::ExtraOperand(
-            paths[2].clone(),
+            extra.clone(),
             format_usage(&translate!("install-usage")),
         )
         .into());
@@ -630,24 +670,18 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                 _ => to_create,
             };
 
-            let dir_exists = if to_create.exists() {
-                metadata(to_create).is_ok_and(|m| m.is_dir())
-            } else {
-                false
-            };
+            let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
 
             if dir_exists {
                 #[cfg(unix)]
+                if b.target_dir.is_none()
+                    && sources.len() == 1
+                    && !is_potential_directory_path(&target)
+                    && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::Follow)
+                    && let Some(filename) = target.file_name()
                 {
-                    if b.target_dir.is_none()
-                        && sources.len() == 1
-                        && !is_potential_directory_path(&target)
-                        && let Ok(dir_fd) = DirFd::open(to_create, SymlinkBehavior::Follow)
-                        && let Some(filename) = target.file_name()
-                    {
-                        target_parent_fd = Some(dir_fd);
-                        target_filename = Some(filename.to_os_string());
-                    }
+                    target_parent_fd = Some(dir_fd);
+                    target_filename = Some(filename.to_os_string());
                 }
             } else {
                 if b.verbose {
@@ -709,25 +743,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                         }
                     }
                 }
-
                 #[cfg(not(unix))]
-                {
-                    if let Err(e) = fs::create_dir_all(to_create) {
-                        return Err(
-                            InstallError::CreateDirFailed(to_create.to_path_buf(), e).into()
-                        );
-                    }
-
-                    // Set SELinux context for all created directories if needed
-                    #[cfg(all(
-                        feature = "selinux",
-                        any(target_os = "linux", target_os = "android")
-                    ))]
-                    if should_set_selinux_context(b) {
-                        let context = get_context_for_selinux(b);
-                        set_selinux_context_for_directories_install(to_create, context);
-                    }
-                }
+                fs::create_dir_all(to_create)
+                    .map_err(|e| InstallError::CreateDirFailed(to_create.to_path_buf(), e))?;
             }
         }
     }
@@ -736,8 +754,9 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         copy_files_into_dir(sources, &target, b)
     } else {
         let source = sources.first().unwrap();
+        let source_metadata = metadata_for_source(source)?;
 
-        if source.is_dir() {
+        if source_metadata.is_dir() {
             return Err(InstallError::OmittingDirectory(source.clone()).into());
         }
 
@@ -751,6 +770,13 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return copy_files_into_dir(sources, &target, b);
         }
 
+        if b.backup_mode.ne(&BackupMode::None)
+            && let Ok(to_abs) = target.canonicalize()
+            && source.canonicalize()? == to_abs
+        {
+            return Err(InstallError::SameFile(source.clone(), target.clone()).into());
+        }
+
         if target.is_file() || is_new_file_path(&target) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
@@ -758,7 +784,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
                     return Ok(());
                 }
 
-                let backup_path = perform_backup(&target, b)?;
+                let backup_path = perform_backup(source, &target, b)?;
 
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
                     && e.kind() != std::io::ErrorKind::NotFound
@@ -785,6 +811,11 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
     }
 }
 
+fn metadata_for_source(path: &Path) -> UResult<fs::Metadata> {
+    path.metadata()
+        .map_err_context(|| format!("cannot stat {}", path.quote()))
+}
+
 /// Copy some files into a directory.
 ///
 /// Prints verbose information and error messages.
@@ -800,15 +831,15 @@ fn copy_files_into_dir(files: &[PathBuf], target_dir: &Path, b: &Behavior) -> UR
         return Err(InstallError::TargetDirIsntDir(target_dir.to_path_buf()).into());
     }
     for sourcepath in files {
-        if let Err(err) = sourcepath
-            .metadata()
-            .map_err_context(|| format!("cannot stat {}", sourcepath.quote()))
-        {
-            show!(err);
-            continue;
-        }
+        let source_metadata = match metadata_for_source(sourcepath) {
+            Ok(metadata) => metadata,
+            Err(err) => {
+                show!(err);
+                continue;
+            }
+        };
 
-        if sourcepath.is_dir() {
+        if source_metadata.is_dir() {
             let err = InstallError::OmittingDirectory(sourcepath.clone());
             show!(err);
             continue;
@@ -854,14 +885,11 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     };
 
-    let meta = match metadata(path) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-    match wrap_chown(path, &meta, owner_id, group_id, false, verbosity) {
-        Ok(msg) if b.verbose && !msg.is_empty() => writeln!(stdout(), "chown: {msg}")?,
-        Ok(_) => {}
-        Err(e) => return Err(InstallError::ChownFailed(path.to_path_buf(), e).into()),
+    let meta = metadata(path).map_err(InstallError::MetadataFailed)?;
+    let msg = wrap_chown(path, &meta, owner_id, group_id, false, verbosity)
+        .map_err(|e| InstallError::ChownFailed(path.to_path_buf(), e))?;
+    if b.verbose && !msg.is_empty() {
+        writeln!(stdout(), "chown: {msg}")?;
     }
 
     Ok(())
@@ -871,6 +899,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
+/// * `from` - The source file path, needed to refuse a backup that would
+///   destroy it.
 /// * `to` - The destination file path.
 /// * `b` - The behavior configuration.
 ///
@@ -878,7 +908,15 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// Returns an Option containing the backup path, or None if backup is not needed.
 ///
-fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+    // Renaming the destination over the source would leave nothing to install
+    // from, so refuse instead.
+    if backup_would_destroy_source(from, to, &b.suffix, b.backup_mode, true) {
+        return Err(
+            InstallError::BackupWouldDestroySource(to.to_path_buf(), from.to_path_buf()).into(),
+        );
+    }
+
     if to.exists() {
         if b.verbose {
             writeln!(
@@ -889,9 +927,8 @@ fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
         }
         let backup_path = backup_control::get_backup_path(b.backup_mode, to, &b.suffix);
         if let Some(ref backup_path) = backup_path {
-            fs::rename(to, backup_path).map_err(|err| {
-                InstallError::BackupFailed(to.to_path_buf(), backup_path.clone(), err)
-            })?;
+            fs::rename(to, backup_path)
+                .map_err(|err| InstallError::BackupFailed(to.to_path_buf(), err))?;
         }
         Ok(backup_path)
     } else {
@@ -926,7 +963,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
 
     let mut src = File::open(from)?;
     let mut dst = to_parent_fd.open_file_at(to_filename)?;
-    copy_stream(&mut src, &mut dst)?;
+    copy_fast(&mut src, &mut dst)?;
 
     Ok(())
 }
@@ -960,13 +997,17 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
-    if let Err(e) = fs::remove_file(to)
-        && e.kind() != std::io::ErrorKind::NotFound
-    {
-        show_error!(
-            "{}",
-            translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
-        );
+    if let Err(e) = fs::remove_file(to) {
+        match e.kind() {
+            std::io::ErrorKind::NotFound => {}
+            std::io::ErrorKind::PermissionDenied => {
+                return Err(InstallError::NotPermitted(to.to_path_buf()).into());
+            }
+            _ => show_error!(
+                "{}",
+                translate!("install-error-failed-to-remove", "path" => to.quote(), "error" => format!("{e:?}"))
+            ),
+        }
     }
 
     let mut handle = File::open(from)?;
@@ -977,7 +1018,12 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .mode(0o600)
         .open(to)?;
 
-    copy_stream(&mut handle, &mut dest).map_err(|err| {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if rustix::fs::ioctl_ficlone(&dest, &handle).is_ok() {
+        return Ok(());
+    }
+
+    copy_fast(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
 
@@ -1010,9 +1056,14 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
             if !status.success() {
                 // Follow GNU's behavior: if strip fails, removes the target
                 let _ = fs::remove_file(to);
-                return Err(InstallError::StripProgramFailed(
-                    translate!("install-error-strip-abnormal", "code" => status.code().unwrap()),
-                )
+                // A signal-terminated strip has no exit code; report GNU's
+                // "strip process terminated abnormally" instead of unwrapping None.
+                return Err(match status.code() {
+                    Some(code) => InstallError::StripProgramFailed(
+                        translate!("install-error-strip-abnormal", "code" => code),
+                    ),
+                    None => InstallError::StripTerminated,
+                }
                 .into());
             }
         }
@@ -1037,15 +1088,13 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
-    // Silent the warning as we want to the error message
-    #[allow(clippy::question_mark)]
-    if mode::chmod(to, b.mode()).is_err() {
-        return Err(InstallError::ChmodFailed(to.to_path_buf()).into());
-    }
-
+    // Ownership first, then mode, as GNU does: chown(2) clears setuid/setgid, and
+    // a failed chown must not leave a mode carrying them already applied.
     if b.privileged {
         chown_optional_user_group(to, b)?;
     }
+    // Silent the warning as we want to the error message
+    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
 
     Ok(())
 }
@@ -1062,11 +1111,7 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
-    let meta = match metadata(from) {
-        Ok(meta) => meta,
-        Err(e) => return Err(InstallError::MetadataFailed(e).into()),
-    };
-
+    let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
     let modified_time = FileTime::from_last_modification_time(&meta);
     let accessed_time = FileTime::from_last_access_time(&meta);
 
@@ -1084,7 +1129,6 @@ fn finalize_installed_file(
     b: &Behavior,
     backup_path: Option<PathBuf>,
 ) -> UResult<()> {
-    #[cfg(not(windows))]
     if b.strip {
         strip_file(to, b)?;
     }
@@ -1143,7 +1187,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
+    let backup_path = perform_backup(from, to, b)?;
 
     copy_file(from, to)?;
 
@@ -1254,6 +1298,12 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
         return true;
     }
 
+    // When preserving timestamps, a difference in modification time also
+    // requires a copy so the destination ends up with the source's timestamp.
+    if b.preserve_timestamps && from_meta.modified().ok() != to_meta.modified().ok() {
+        return true;
+    }
+
     if b.privileged {
         #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if b.preserve_context && contexts_differ(from, to) {
@@ -1346,13 +1396,12 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
     // Find the first existing parent directory to get its context
     let mut current_path = path;
     loop {
-        if current_path.exists() {
-            if let Ok(parent_context) = get_selinux_security_context(current_path, false) {
-                if !parent_context.is_empty() {
-                    // Found a context - derive the appropriate context for our target
-                    return Ok(Some(derive_context_from_parent(&parent_context)));
-                }
-            }
+        if current_path.exists()
+            && let Ok(parent_context) = get_selinux_security_context(current_path, false)
+            && !parent_context.is_empty()
+        {
+            // Found a context - derive the appropriate context for our target
+            return Ok(Some(derive_context_from_parent(&parent_context)));
         }
 
         // Move up to parent
@@ -1383,12 +1432,7 @@ fn get_default_context_for_path(path: &Path) -> Result<Option<String>, SeLinuxEr
 fn derive_context_from_parent(parent_context: &str) -> String {
     // Parse the parent context (format: user:role:type:level)
     let parts: Vec<&str> = parent_context.split(':').collect();
-    if parts.len() >= 3 {
-        let user = parts[0];
-        let role = parts[1];
-        let parent_type = parts[2];
-        let level = if parts.len() > 3 { parts[3] } else { "" };
-
+    if let [user, role, parent_type, ..] = parts.as_slice() {
         // Based on the GNU test expectations, when creating files in tmp-related directories,
         // `install -Z` should create files with user_home_t context (like restorecon would).
         // This is a specific policy behavior that the test expects.
@@ -1401,10 +1445,10 @@ fn derive_context_from_parent(parent_context: &str) -> String {
             parent_type
         };
 
-        if level.is_empty() {
-            format!("{user}:{role}:{derived_type}")
-        } else {
+        if let Some(level) = parts.get(3) {
             format!("{user}:{role}:{derived_type}:{level}")
+        } else {
+            format!("{user}:{role}:{derived_type}")
         }
     } else {
         // Fallback if we can't parse the parent context

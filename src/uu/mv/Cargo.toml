@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mv.rs"
 doctest = false
@@ -28,6 +25,7 @@ rustc-hash = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",
+  "buf-copy",
   "fs",
   "fsxattr",
   "perms",
@@ -47,7 +45,6 @@ windows-sys = { workspace = true, features = [
 libc = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
 
-
 [features]
 selinux = ["uucore/selinux"]
 
@@ -59,6 +56,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "mv_bench"

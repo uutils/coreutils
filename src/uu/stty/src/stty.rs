@@ -748,14 +748,14 @@ fn parse_baud_with_rounding(normalized: &str) -> Option<u32> {
         }
 
         match first_digit.cmp(&5) {
-            Ordering::Greater => value += 1,
+            Ordering::Greater => value = value.checked_add(1)?,
             Ordering::Equal => {
                 // Check if any non-zero digit follows
                 if rest.iter().any(|&c| c != '0') {
-                    value += 1;
+                    value = value.checked_add(1)?;
                 } else {
                     // Banker's rounding: round to nearest even
-                    value += value & 1;
+                    value = value.checked_add(value & 1)?;
                 }
             }
             Ordering::Less => {} // Round down, already validated
@@ -1120,6 +1120,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
 fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
     let mut flags = Vec::new();
     let mut ccs = Vec::new();
+    #[expect(clippy::match_same_arms)]
     match combo {
         "lcase" | "LCASE" => {
             flags = vec!["xcase", "iuclc", "olcuc"];
@@ -1486,6 +1487,14 @@ mod tests {
             assert_eq!(string_to_baud("", flags::BaudType::Both), None);
             assert_eq!(string_to_baud("abc", flags::BaudType::Both), None);
         }
+    }
+
+    #[test]
+    fn test_parse_baud_with_rounding_rejects_u32_overflow() {
+        assert_eq!(parse_baud_with_rounding("4294967295.4"), Some(u32::MAX));
+        assert_eq!(parse_baud_with_rounding("4294967295.6"), None);
+        assert_eq!(parse_baud_with_rounding("4294967295.5"), None);
+        assert_eq!(parse_baud_with_rounding("4294967295.5001"), None);
     }
 
     // Tests for string_to_combo

@@ -3,29 +3,22 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use std::ffi::OsStr;
-use std::process::ExitStatus;
-
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
 
 use uutests::new_ucmd;
-
-#[cfg(unix)]
-fn check_termination(result: ExitStatus) {
-    assert_eq!(result.signal(), Some(libc::SIGPIPE));
-}
-
-#[cfg(not(unix))]
-fn check_termination(result: ExitStatus) {
-    assert!(result.success(), "yes did not exit successfully");
-}
 
 const NO_ARGS: &[&str] = &[];
 
 /// Run `yes`, capture some of the output, then check exit status.
 fn run(args: &[impl AsRef<OsStr>], expected: &[u8]) {
     let result = new_ucmd!().args(args).run_stdout_starts_with(expected);
-    check_termination(result.exit_status());
+
+    // On Unix systems (not WASI), yes should be terminated by SIGPIPE when the pipe closes.
+    // On WASI and Windows, there are no signals, so just check the process succeeded.
+    #[cfg(all(unix, not(wasi_runner)))]
+    result.signal_name_is("PIPE");
+
+    #[cfg(any(not(unix), wasi_runner))]
+    result.success();
 }
 
 #[test]
@@ -76,6 +69,7 @@ fn test_long_input() {
 
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_piped_to_dev_full() {
     use std::fs::OpenOptions;
 
@@ -96,12 +90,11 @@ fn test_piped_to_dev_full() {
 }
 
 #[test]
-#[cfg(any(unix, target_os = "wasi"))]
+#[cfg(unix)]
+// WASI runners (wasmtime) require UTF-8 arguments, so skip this test when testing WASI binaries
+#[cfg_attr(wasi_runner, ignore = "WASI: argv must be valid UTF-8")]
 fn test_non_utf8() {
-    #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
-    #[cfg(target_os = "wasi")]
-    use std::os::wasi::ffi::OsStrExt;
 
     run(
         &[

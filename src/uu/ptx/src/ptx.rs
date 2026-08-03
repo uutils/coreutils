@@ -147,16 +147,10 @@ impl WordFilter {
         };
         // Ignore empty string regex from cmd-line-args
         let arg_reg: Option<String> = if matches.contains_id(options::WORD_REGEXP) {
-            match matches.get_one::<String>(options::WORD_REGEXP) {
-                Some(v) => {
-                    if v.is_empty() {
-                        None
-                    } else {
-                        Some(v.to_owned())
-                    }
-                }
-                None => None,
-            }
+            matches
+                .get_one::<String>(options::WORD_REGEXP)
+                .filter(|v| !v.is_empty())
+                .map(ToOwned::to_owned)
         } else {
             None
         };
@@ -217,10 +211,14 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
 
         // Verify regex is valid and doesn't match empty string
-        if let Ok(re) = Regex::new(&regex) {
-            if re.is_match("") {
-                return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
-            }
+        let re = Regex::new(&regex).map_err(|error| {
+            USimpleError::new(
+                1,
+                translate!("ptx-error-invalid-regexp", "error" => error.to_string()),
+            )
+        })?;
+        if re.is_match("") {
+            return Err(USimpleError::new(1, translate!("ptx-error-empty-regexp")));
         }
 
         config.sentence_regex = Some(regex);
@@ -281,7 +279,7 @@ struct FileContent {
 
 type FileMap = Vec<(OsString, FileContent)>;
 
-fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<FileMap> {
+fn read_input(input_files: &[OsString], config: &Config) -> UResult<FileMap> {
     let mut file_map: FileMap = FileMap::new();
     let mut offset: usize = 0;
 
@@ -294,11 +292,15 @@ fn read_input(input_files: &[OsString], config: &Config) -> std::io::Result<File
         let mut reader: BufReader<Box<dyn Read>> = BufReader::new(if filename == "-" {
             Box::new(stdin())
         } else {
-            let file = File::open(Path::new(filename))?;
+            // Attach the quoted filename to the error context if opening fails
+            let file =
+                File::open(Path::new(filename)).map_err_context(|| filename.quote().to_string())?;
             Box::new(file)
         });
 
-        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)?;
+        // Attach the quoted filename context if reading the contents fails
+        let lines = read_lines(sentence_splitter.as_ref(), &mut reader)
+            .map_err_context(|| filename.quote().to_string())?;
 
         // Indexing UTF-8 string requires walking from the beginning, which can hurts performance badly when the line is long.
         // Since we will be jumping around the line a lot, we dump the content into a Vec<char>, which can be indexed in constant time.
@@ -501,7 +503,7 @@ fn get_output_chunks(
     // and get the string.
     let before_str: String = all_before[before_beg..before_end].iter().collect();
     before.push_str(&before_str);
-    assert!(max_before_size >= before.len());
+    assert!(max_before_size >= before.chars().count());
 
     // the after chunk
 
@@ -522,7 +524,7 @@ fn get_output_chunks(
 
     // max size of the tail chunk = max size of left half - space taken by before chunk - gap size.
     let max_tail_size = cmp::max(
-        max_before_size as isize - before.len() as isize - config.gap_size as isize,
+        max_before_size as isize - before.chars().count() as isize - config.gap_size as isize,
         0,
     ) as usize;
 
@@ -947,7 +949,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let word_filter = WordFilter::new(&matches, &config)?;
-    let file_map = read_input(&input_files, &config).map_err_context(String::new)?;
+    let file_map = read_input(&input_files, &config)?;
     let word_set = create_word_set(&config, &word_filter, &file_map);
     write_traditional_output(&mut config, &file_map, &word_set, &output_file)
 }

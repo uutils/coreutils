@@ -431,7 +431,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // In cases 4 & 5, we want to try parsing the obsolete arguments, which corresponds to
     // checking whether clap succeeded or the first argument starts with '+'.
     let possible_obsolete_args = &args_vec[1];
-    if clap_result.is_ok() && !possible_obsolete_args.to_string_lossy().starts_with('+') {
+    if clap_result.is_ok() && possible_obsolete_args.as_encoded_bytes().first() != Some(&b'+') {
         return clap_result;
     }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {

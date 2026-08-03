@@ -5,7 +5,7 @@
 // spell-checker:ignore (words) dirfd subdirs openat FDCWD rwxr
 
 use std::fs::{OpenOptions, Permissions, metadata, set_permissions};
-use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use uutests::at_and_ucmd;
 use uutests::util::{AtPath, TestScenario, UCommand};
 
@@ -548,6 +548,26 @@ fn test_chmod_preserve_root_with_paths_that_resolve_to_root() {
         .arg("/../")
         .fails_with_code(1)
         .stderr_contains("chmod: it is dangerous to operate recursively on '/'");
+}
+
+#[test]
+fn test_chmod_preserve_root_symlink_during_recursion() {
+    // The failsafe must be re-checked during the descent, not only for the
+    // operands: with -L, a symlink met inside the tree that resolves to '/'
+    // would otherwise be recursed into.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("tree");
+    at.symlink_dir("/", "tree/link");
+
+    ucmd.arg("-R")
+        .arg("-L")
+        .arg("--preserve-root")
+        .arg("755")
+        .arg("tree")
+        .fails_with_code(1)
+        .stderr_contains(
+            "chmod: it is dangerous to operate recursively on 'tree/link' (same as '/')",
+        );
 }
 
 #[test]
@@ -1364,49 +1384,29 @@ fn test_chmod_non_utf8_paths() {
     );
 }
 
-#[cfg(all(target_os = "linux", feature = "chmod"))]
 #[test]
-#[ignore = "covered by util/check-safe-traversal.sh"]
-fn test_chmod_recursive_uses_dirfd_for_subdirs() {
-    use std::process::Command;
-    use uutests::get_tests_binary;
+fn test_chmod_operator_only_still_calls_syscall() {
+    use uucore::process::geteuid;
 
-    // strace is required; fail fast if it is missing or not runnable
-    let output = Command::new("strace")
-        .arg("-V")
-        .output()
-        .expect("strace not found; install strace to run this test");
-    assert!(
-        output.status.success(),
-        "strace -V failed; ensure strace is installed and usable"
-    );
+    // An operator with no permission letters ('+', '-', '=') leaves the mode
+    // bits unchanged, yet chmod must still issue the chmod(2) call so that a
+    // lack of permission is reported instead of silently succeeding. As a
+    // non-root user, '/' (owned by root) is a file we cannot chmod.
+    if geteuid() == 0 {
+        return;
+    }
+    if metadata("/").map_or(0, |m| m.uid()) != 0 {
+        return; // '/' is not root-owned in this environment
+    }
 
-    let (at, _ucmd) = at_and_ucmd!();
-    at.mkdir("x");
-    at.mkdir("x/y");
-    at.mkdir("x/y/z");
-
-    let log_path = at.plus_as_string("strace.log");
-
-    let status = Command::new("strace")
-        .arg("-e")
-        .arg("openat")
-        .arg("-o")
-        .arg(&log_path)
-        .arg(get_tests_binary!())
-        .args(["chmod", "-R", "+x", "x"])
-        .current_dir(&at.subdir)
-        .status()
-        .expect("failed to run strace");
-    assert!(status.success(), "strace run failed");
-
-    let log = at.read("strace.log");
-
-    // Regression guard: ensure recursion uses dirfd-relative openat instead of AT_FDCWD with a multi-component path
-    assert!(
-        !log.contains("openat(AT_FDCWD, \"x/y"),
-        "chmod recursed using AT_FDCWD with a multi-component path; expected dirfd-relative openat"
-    );
+    for op in ["+", "-", "="] {
+        new_ucmd!()
+            .arg(op)
+            .arg("/")
+            .fails()
+            .code_is(1)
+            .stderr_contains("changing permissions of '/'");
+    }
 }
 
 #[test]

@@ -62,6 +62,6 @@ fn test_full() {
             .arg(option)
             .set_stdout(dev_full)
             .fails()
-            .stderr_contains("No space left on device");
+            .stderr_is("true: No space left on device\n");
     }
 }

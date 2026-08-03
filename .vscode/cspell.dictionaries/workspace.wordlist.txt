@@ -100,7 +100,6 @@ chroot
 cksum
 csplit
 dircolors
-hashsum
 hostid
 logname
 mkdir
@@ -134,6 +133,7 @@ EBADF
 EBUSY
 EEXIST
 EINVAL
+EISDIR
 ENODATA
 ENOENT
 ENOSPC
@@ -361,8 +361,10 @@ uutests
 uutils
 
 # * function names
+sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat
@@ -375,6 +377,8 @@ weblate
 algs
 wasm
 wasip
+statx
+Statx
 
 # * stty terminal flags
 brkint

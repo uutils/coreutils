@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -38,11 +38,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
 use std::num::IntErrorKind;
-#[cfg(not(target_os = "wasi"))]
-use std::num::NonZero;
 use std::ops::Range;
-#[cfg(unix)]
-use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -286,7 +282,6 @@ pub struct GlobalSettings {
     random_source: Option<PathBuf>,
     selectors: Vec<FieldSelector>,
     separator: Option<u8>,
-    threads: String,
     line_ending: LineEnding,
     buffer_size: usize,
     buffer_size_is_explicit: bool,
@@ -460,7 +455,6 @@ impl Default for GlobalSettings {
             random_source: None,
             selectors: vec![],
             separator: None,
-            threads: String::new(),
             line_ending: LineEnding::Newline,
             buffer_size: FALLBACK_AUTOMATIC_BUF_SIZE,
             buffer_size_is_explicit: false,
@@ -765,19 +759,18 @@ impl<'a> Line<'a> {
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
-                        if selector.settings.mode == SortMode::HumanNumeric {
-                            if let Some(
-                                b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
-                                | b'Q',
-                            ) = self.line[selection.end..initial_selection.end].first()
-                            {
-                                selection.end += 1;
-                            }
+                        if selector.settings.mode == SortMode::HumanNumeric
+                            && self.line[selection.end..initial_selection.end]
+                                .first()
+                                .is_some_and(|c| b"kKMGTPEZYRQ".contains(c))
+                        {
+                            selection.end += 1;
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point
-                        while let Some(b'-' | b'0' | b'.') =
-                            self.line[initial_selection.start..selection.start].last()
+                        while self.line[initial_selection.start..selection.start]
+                            .last()
+                            .is_some_and(|c| b"-0.".contains(c))
                         {
                             selection.start -= 1;
                         }
@@ -926,15 +919,9 @@ fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool)
     }
 
     let next = line.get(idx + 1).copied();
-    match next {
-        Some(c) if c.is_ascii_digit() => true,
-        Some(b'K' | b'k' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R' | b'Q')
-            if allow_unit_after_blank =>
-        {
-            true
-        }
-        _ => false,
-    }
+    next.is_some_and(|c| {
+        c.is_ascii_digit() || (allow_unit_after_blank && b"kKMGTPEZYRQ".contains(&c))
+    })
 }
 
 /// Split between separators. These separators are not included in fields.
@@ -1434,7 +1421,7 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
 
     let mut count = 0usize;
     for fd in 0..limit {
-        let fd = fd as libc::c_int;
+        let fd = fd as core::ffi::c_int;
         // Probe with libc::fcntl because the fd may be invalid.
         if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
             count = count.saturating_add(1);
@@ -1629,59 +1616,46 @@ where
             break;
         }
 
-        if starts_with_plus(&arg) {
-            let as_str = arg.to_string_lossy();
-            if let Some(from_spec) = as_str.strip_prefix('+') {
-                if let Some(from) = parse_legacy_part(from_spec) {
-                    let mut to_part = None;
+        let as_str = arg.to_string_lossy();
+        if let Some(from_spec) = as_str.strip_prefix('+')
+            && let Some(from) = parse_legacy_part(from_spec)
+        {
+            let mut to_part = None;
 
-                    let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+            let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
 
-                    if let Some(next_str) = next_candidate {
-                        if let Some(stripped) = next_str.strip_prefix('-') {
-                            if stripped.starts_with(|c: char| c.is_ascii_digit()) {
-                                let next_arg = iter.next().unwrap();
-                                if let Some(parsed) = parse_legacy_part(stripped) {
-                                    to_part = Some(parsed);
-                                } else {
-                                    processed.push(arg);
-                                    processed.push(next_arg);
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    let keydef = legacy_key_to_k(&from, to_part.as_ref());
-                    let arg_index = processed.len();
-                    legacy_warnings.push(LegacyKeyWarning {
-                        arg_index,
-                        key_index: None,
-                        from_field: from.field,
-                        to_field: to_part.as_ref().map(|p| p.field),
-                        to_char: to_part.as_ref().map(|p| p.char_pos),
-                    });
-                    processed.push(OsString::from(format!("-k{keydef}")));
+            if let Some(next_str) = next_candidate
+                && let Some(stripped) = next_str
+                    .strip_prefix('-')
+                    .filter(|s| s.starts_with(|c: char| c.is_ascii_digit()))
+            {
+                let next_arg = iter.next().unwrap();
+                if let Some(parsed) = parse_legacy_part(stripped) {
+                    to_part = Some(parsed);
+                } else {
+                    processed.push(arg);
+                    processed.push(next_arg);
                     continue;
                 }
             }
+
+            let keydef = legacy_key_to_k(&from, to_part.as_ref());
+            let arg_index = processed.len();
+            legacy_warnings.push(LegacyKeyWarning {
+                arg_index,
+                key_index: None,
+                from_field: from.field,
+                to_field: to_part.as_ref().map(|p| p.field),
+                to_char: to_part.as_ref().map(|p| p.char_pos),
+            });
+            processed.push(OsString::from(format!("-k{keydef}")));
+            continue;
         }
 
         processed.push(arg);
     }
 
     (processed, legacy_warnings)
-}
-
-fn starts_with_plus(arg: &OsStr) -> bool {
-    #[cfg(unix)]
-    {
-        arg.as_bytes().first() == Some(&b'+')
-    }
-    #[cfg(not(unix))]
-    {
-        arg.to_string_lossy().starts_with('+')
-    }
 }
 
 fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [LegacyKeyWarning]) {
@@ -1713,24 +1687,21 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
             }
         } else {
             let as_str = arg.to_string_lossy();
-            if let Some(spec) = as_str.strip_prefix("-k") {
-                if !spec.is_empty() {
-                    key_index = key_index.saturating_add(1);
-                    matched_key = true;
-                }
-            } else if let Some(spec) = as_str.strip_prefix("--key=") {
-                if !spec.is_empty() {
-                    key_index = key_index.saturating_add(1);
-                    matched_key = true;
-                }
+            if as_str
+                .strip_prefix("-k")
+                .is_some_and(|spec| !spec.is_empty())
+                || as_str
+                    .strip_prefix("--key=")
+                    .is_some_and(|spec| !spec.is_empty())
+            {
+                key_index = key_index.saturating_add(1);
+                matched_key = true;
             }
             i += 1;
         }
 
-        if matched_key {
-            if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
-                legacy_warnings[warning_idx].key_index = Some(key_index);
-            }
+        if matched_key && let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
+            legacy_warnings[warning_idx].key_index = Some(key_index);
         }
     }
 }
@@ -2007,12 +1978,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
-        if let Some(first) = outputs.next() {
-            if outputs.any(|out| out != first) {
-                return Err(SortError::MultipleOutputFiles.into());
-            }
-        }
+    if matches
+        .get_many::<OsString>(options::OUTPUT)
+        .is_some_and(|mut outputs| {
+            outputs
+                .next()
+                .as_ref()
+                .is_some_and(|first| outputs.any(|out| out != *first))
+        })
+    {
+        return Err(SortError::MultipleOutputFiles.into());
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2042,27 +2017,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 path: files0_from.clone(),
                 error,
             })?;
-            let f = std::str::from_utf8(&line)
-                .expect("Could not parse string from zero terminated input.");
-            match f {
-                STDIN_FILE => {
-                    return Err(SortError::MinusInStdIn.into());
-                }
-                "" => {
-                    return Err(SortError::ZeroLengthFileName {
-                        file: files0_from,
-                        line_num: line_num + 1,
-                    }
-                    .into());
-                }
-                _ => {}
+            if line.as_slice() == STDIN_FILE.as_bytes() {
+                return Err(SortError::MinusInStdIn.into());
             }
-
-            files.push(OsString::from(
-                std::str::from_utf8(&line)
-                    .expect("Could not parse string from zero terminated input."),
-            ));
+            if line.is_empty() {
+                return Err(SortError::ZeroLengthFileName {
+                    file: files0_from,
+                    line_num: line_num + 1,
+                }
+                .into());
+            }
+            files.push(uucore::os_string_from_vec(line)?);
         }
+
         if files.is_empty() {
             return Err(SortError::EmptyInputFile { file: files0_from }.into());
         }
@@ -2118,21 +2085,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     settings.dictionary_order = dictionary_order;
     settings.ignore_non_printing = ignore_non_printing;
     settings.ignore_case = ignore_case;
-    if matches.contains_id(options::PARALLEL) {
-        // "0" is default - threads = num of cores
-        settings.threads = matches
-            .get_one::<String>(options::PARALLEL)
-            .map_or_else(|| "0".to_string(), String::from);
-        #[cfg(not(target_os = "wasi"))]
-        {
-            let num_threads = match settings.threads.parse::<usize>() {
-                Ok(0) | Err(_) => std::thread::available_parallelism().map_or(1, NonZero::get),
-                Ok(n) => n,
-            };
-            let _ = rayon::ThreadPoolBuilder::new()
-                .num_threads(num_threads)
-                .build_global();
-        }
+
+    // WASI doesn't support threads, so we ignore the corresponding option
+    #[cfg(not(target_os = "wasi"))]
+    {
+        let threads = matches
+            .get_one::<u64>(options::PARALLEL)
+            .copied()
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get() as u64));
+        let _ = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads as usize)
+            .build_global();
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
@@ -2195,13 +2158,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                         translate!(
                             "sort-maximum-batch-size-rlimit",
                             "rlimit" => {
-                                let Some(rlimit) = fd_soft_limit() else {
-                                    return Err(UUsageError::new(
-                                        2,
-                                        translate!("sort-failed-fetch-rlimit"),
-                                    ));
-                                };
-                                rlimit
+                                fd_soft_limit().ok_or_else(|| {
+                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
+                                })?
                             }
                         )
                     }
@@ -2540,6 +2499,7 @@ pub fn uu_app() -> Command {
         Arg::new(options::PARALLEL)
             .long(options::PARALLEL)
             .help(translate!("sort-help-parallel"))
+            .value_parser(clap::value_parser!(u64).range(1..))
             .value_name("NUM_THREADS"),
     )
     .arg(

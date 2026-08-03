@@ -458,8 +458,8 @@ where
             }
 
             show_if_err!(match mode {
-                Mode::Bytes(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
-                Mode::Characters(ranges, opts) => cut_bytes(stdin(), &mut out, ranges, opts),
+                Mode::Bytes(ranges, opts) | Mode::Characters(ranges, opts) =>
+                    cut_bytes(stdin(), &mut out, ranges, opts),
                 Mode::Fields(ranges, opts) => cut_fields(stdin(), &mut out, ranges, opts),
             });
 
@@ -759,6 +759,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::OUTPUT_DELIMITER)
+                .short('O')
                 .long(options::OUTPUT_DELIMITER)
                 .value_parser(ValueParser::os_string())
                 .help(translate!("cut-help-output-delimiter"))

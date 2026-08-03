@@ -268,10 +268,12 @@ impl SplitWriter<'_> {
     ///
     /// # Errors
     ///
-    /// The creation of the split file may fail with some [`io::Error`].
-    fn new_writer(&mut self) -> io::Result<()> {
+    /// Returns an error if creating the split file fails.
+    fn new_writer(&mut self) -> Result<(), CsplitError> {
         let file_name = self.options.split_name.get(self.counter);
-        let file = File::create(file_name)?;
+        let file = File::create(&file_name)
+            .map_err_context(|| file_name.clone())
+            .map_err(CsplitError::from)?;
         self.current_writer = Some(BufWriter::new(file));
         self.counter += 1;
         self.size = 0;

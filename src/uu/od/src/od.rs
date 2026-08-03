@@ -263,7 +263,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &od_options.input_strings,
             od_options.skip_bytes,
             od_options.read_bytes,
-        );
+        )?;
         let mut input_decoder = InputDecoder::new(
             &mut input,
             od_options.line_bytes,
@@ -591,9 +591,8 @@ fn extract_strings_from_input(
         let to_skip = cmp::min(8192, skip_bytes - skipped);
         let mut skip_buf = vec![0u8; to_skip as usize];
         match mf.read(&mut skip_buf) {
-            Ok(0) => break, // EOF reached
+            Ok(0) | Err(_) => break, // 0 is EOF
             Ok(n) => skipped += n as u64,
-            Err(_) => break,
         }
     }
 
@@ -763,17 +762,19 @@ fn open_input_peek_reader(
     input_strings: &[String],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<BufReader<PartialReader<MultifileReader<'_>>>> {
+) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = map_input_strings(input_strings);
-    let mf = MultifileReader::new(inputs);
-    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let mut mf = MultifileReader::new(inputs);
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    let pr = PartialReader::new(mf, read_bytes);
     // Add a BufReader over the top of the PartialReader. This will have the
     // effect of generating buffered reads to files/stdin, but since these reads
     // go through MultifileReader (which limits the maximum number of bytes read)
     // we won't ever read more bytes than were specified with the `-N` flag.
     let buf_pr = BufReader::new(pr);
-    PeekReader::new(buf_pr)
+    Ok(PeekReader::new(buf_pr))
 }
 
 impl<R: HasError> HasError for BufReader<R> {

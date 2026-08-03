@@ -162,6 +162,8 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
+    const FORMAT_DESCRIPTION_VERSION: usize = 2;
+
     let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
         .into_iter()
         .find_map(std::env::var_os)
@@ -169,11 +171,16 @@ fn time_string(ut: &UtmpxRecord) -> String {
         == Some(std::ffi::OsStr::new("C"))
     {
         // "%b %e %H:%M"
-        time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap()
+        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+            "[month repr:short] [day padding:space] [hour]:[minute]",
+        )
+        .unwrap()
     } else {
         // "%Y-%m-%d %H:%M"
-        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+            "[year]-[month]-[day] [hour]:[minute]",
+        )
+        .unwrap()
     };
     ut.login_time().format(&time_format).unwrap()
 }

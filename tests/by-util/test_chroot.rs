@@ -290,6 +290,15 @@ fn test_chroot_skip_chdir_not_root() {
 }
 
 #[test]
+fn test_chroot_skip_chdir_nonexistent() {
+    new_ucmd!()
+        .arg("--skip-chdir")
+        .arg("/nonexistent/sub")
+        .fails_with_code(125)
+        .stderr_contains("chroot: option --skip-chdir only permitted if NEWROOT is old '/'");
+}
+
+#[test]
 fn test_chroot_skip_chdir() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

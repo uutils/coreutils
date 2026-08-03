@@ -22,9 +22,13 @@ fn test_default() {
 }
 
 #[test]
-fn test_failed() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.arg("will-fail").fails();
+fn test_ignores_non_option_arguments() {
+    // GNU pwd ignores non-option operands, warning on stderr but exiting 0.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("will-fail")
+        .succeeds()
+        .stdout_is(at.root_dir_resolved() + "\n")
+        .stderr_is("pwd: ignoring non-option arguments\n");
 }
 
 #[cfg(unix)]

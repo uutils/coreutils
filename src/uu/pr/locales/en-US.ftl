@@ -101,4 +101,6 @@ pr-error-no-such-file = pr: cannot open {$file}, No such file or directory
 pr-error-column-merge-conflict = cannot specify number of columns when printing in parallel
 pr-error-across-merge-conflict = cannot specify both printing across and printing in parallel
 pr-error-invalid-pages-range = invalid --pages argument '{$start}:{$end}'
+pr-error-starting-page-exceeds-page-count = starting page number {$start} exceeds page count {$count}
 pr-error-invalid-expand-tab-argument ='-e' extra characters or invalid number in the argument: ‘{$arg}’
+pr-error-invalid-number-argument ='-n' extra characters or invalid number in the argument: ‘{$arg}’

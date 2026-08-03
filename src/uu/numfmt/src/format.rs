@@ -418,10 +418,8 @@ fn transform_from(
     })?;
     let had_no_suffix = suffix.is_none();
 
-    if had_no_suffix {
-        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
-            return Ok(scaled);
-        }
+    if had_no_suffix && let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+        return Ok(scaled);
     }
 
     let i = i.to_f64() * (opts.from_unit as f64);
@@ -478,6 +476,12 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
 /// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
+
+    // rounding is a no-op once the scale factor overflows f64;
+    // dividing by it would turn the value into NaN
+    if !p.is_finite() {
+        return n;
+    }
 
     method.round(p * n) / p
 }
@@ -542,8 +546,12 @@ fn consider_suffix(
 fn is_too_large_to_format(scaled: i128, precision: usize) -> bool {
     const MAX_FORMATTED: u128 = 10_000_000_000_000_000_000;
     let precision_factor = 10_u128.pow(precision.min(19) as u32);
+    // `.max(1)`: a zero value must still be bounded by precision, else any
+    // `--format` precision is accepted (0 * factor == 0), printing/allocating
+    // unboundedly. Treating 0 as magnitude 1 matches GNU's threshold.
     scaled
         .unsigned_abs()
+        .max(1)
         .checked_mul(precision_factor)
         .is_none_or(|v| v >= MAX_FORMATTED)
 }
@@ -624,16 +632,16 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None => localize(format!(
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
-        None if is_precision_specified => {
+        None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
             localize(format!("{i2:.precision$}"))
         }
         None => localize(format!("{i2:.0}")),
-        Some(s) if precision > 0 => localize(format!(
+        Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
@@ -841,7 +849,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
                 writer.write_all(b" ").unwrap();
-                &prefix[1..]
+                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
             };

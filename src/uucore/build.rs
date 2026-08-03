@@ -22,6 +22,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file)?;
 
     // Generate optimized lookup function instead of HashMap
+    writeln!(embedded_file, "#[expect(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"
@@ -84,18 +85,20 @@ fn detect_target_utility() -> Option<String> {
     println!("cargo:rerun-if-env-changed=UUCORE_TARGET_UTIL");
 
     // First check if an explicit environment variable was set
-    if let Ok(target_util) = env::var("UUCORE_TARGET_UTIL") {
-        if !target_util.is_empty() {
-            return Some(target_util);
-        }
+    if let Some(target_util) = env::var("UUCORE_TARGET_UTIL")
+        .ok()
+        .filter(|t| !t.is_empty())
+    {
+        return Some(target_util);
     }
 
     // Auto-detect utility name from CARGO_PKG_NAME if it's a uu_* package
-    if let Ok(pkg_name) = env::var("CARGO_PKG_NAME") {
-        if let Some(util_name) = pkg_name.strip_prefix("uu_") {
-            println!("cargo:warning=Auto-detected utility name: {util_name}");
-            return Some(util_name.to_string());
-        }
+    if let Some(util_name) = env::var("CARGO_PKG_NAME")
+        .ok()
+        .and_then(|pkg| pkg.strip_prefix("uu_").map(String::from))
+    {
+        println!("cargo:warning=Auto-detected utility name: {util_name}");
+        return Some(util_name);
     }
 
     // Check for a build configuration file in the target directory
@@ -186,10 +189,10 @@ fn embed_all_utility_locales(
     let mut util_dirs = Vec::new();
     for entry in fs::read_dir(&src_uu_dir)? {
         let entry = entry?;
-        if entry.file_type()?.is_dir() {
-            if let Some(dir_name) = entry.file_name().to_str() {
-                util_dirs.push(dir_name.to_string());
-            }
+        if entry.file_type()?.is_dir()
+            && let Some(dir_name) = entry.file_name().to_str()
+        {
+            util_dirs.push(dir_name.to_string());
         }
     }
     util_dirs.sort();
@@ -247,18 +250,14 @@ fn embed_static_utility_locales(
 
     for entry in entries {
         let file_name = entry.file_name();
-        if let Some(dir_name) = file_name.to_str() {
+        if let Some(dir_name) = file_name.to_str() &&
             // Match uu_<util>-<version>
-            if let Some((util_part, _)) = dir_name.split_once('-') {
-                if let Some(util_name) = util_part.strip_prefix("uu_") {
-                    embed_component_locales(
-                        embedded_file,
-                        locales_to_embed,
-                        util_name,
-                        |locale| entry.path().join(format!("locales/{locale}.ftl")),
-                    )?;
-                }
-            }
+            let Some((util_part, _)) = dir_name.split_once('-') &&
+                let Some(util_name) = util_part.strip_prefix("uu_")
+        {
+            embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
+                entry.path().join(format!("locales/{locale}.ftl"))
+            })?;
         }
     }
 
@@ -362,22 +361,20 @@ where
     F: Fn(&str) -> PathBuf,
 {
     let en_path = path_builder("en-US");
-    if let Some(locale_dir) = en_path.parent() {
-        if locale_dir.exists() {
-            for entry in std::fs::read_dir(locale_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "ftl") {
-                    if let Some(locale) = path.file_stem().and_then(|s| s.to_str()) {
-                        embed_locale_file(
-                            embedded_file,
-                            &path,
-                            &format!("{component_name}/{locale}.ftl"),
-                            locale,
-                            component_name,
-                        )?;
-                    }
-                }
+    if let Some(locale_dir) = en_path.parent().filter(|l| l.exists()) {
+        for entry in std::fs::read_dir(locale_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().is_some_and(|e| e == "ftl")
+                && let Some(locale) = path.file_stem().and_then(|s| s.to_str())
+            {
+                embed_locale_file(
+                    embedded_file,
+                    &path,
+                    &format!("{component_name}/{locale}.ftl"),
+                    locale,
+                    component_name,
+                )?;
             }
         }
     }

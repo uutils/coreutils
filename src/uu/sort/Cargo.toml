@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/sort.rs"
 doctest = false
@@ -67,6 +64,9 @@ uucore = { workspace = true, features = [
   "i18n-collator",
   "i18n-datetime",
 ] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "sort"

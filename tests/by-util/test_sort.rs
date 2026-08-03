@@ -184,6 +184,13 @@ fn test_version_empty_lines() {
 }
 
 #[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
+}
+
+#[test]
 fn test_version_sort_unstable() {
     new_ucmd!()
         .arg("--sort=version")
@@ -1130,6 +1137,41 @@ fn test_merge_preserves_long_lines() {
     assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
+// Regression test: a failing write must not take the merge reader thread down with it.
+// The write error used to propagate straight out of `write_all_to`, dropping the chunk
+// receivers while the reader was still sending, and `chunks::read` unwraps that send.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_write_error_does_not_panic() {
+    use std::fs::File;
+
+    // The inputs have to be long enough that the reader is still feeding us chunks when
+    // the write fails, otherwise it has already finished and there is nothing to race.
+    const LINES: usize = 100_000;
+    let mut input = String::with_capacity(LINES * 7);
+    for line in 0..LINES {
+        writeln!(input, "{line:06}").unwrap();
+    }
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("a.txt", &input);
+    ts.fixtures.write("b.txt", &input);
+
+    // Whether the reader is mid-send when the write fails is a race, so repeat: a single
+    // attempt reproduced the panic only about a quarter of the time. With the fix the
+    // reader is always shut down in an orderly fashion, so this cannot fail spuriously.
+    for _ in 0..20 {
+        let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+        ts.ucmd()
+            .args(&["-m", "a.txt", "b.txt"])
+            .set_stdout(dev_full)
+            .fails()
+            .code_is(1)
+            .stderr_contains("No space left on device")
+            .stderr_does_not_contain("panicked");
+    }
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()
@@ -1228,6 +1270,33 @@ fn test_check_silent() {
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_stops_early_without_panicking() {
+    // `--check` returns as soon as it finds the first disorder. That used to drop the
+    // channel while the reader thread was still sending chunks, so the reader panicked
+    // on a `SendError`. Under `panic = "abort"` (our release profile) that aborts the
+    // whole process instead of exiting 1.
+    //
+    // The disorder sits midway through an input that is large relative to the buffer
+    // size, so the reader is certain to be blocked on a full channel when we stop.
+    // Note this cannot fail spuriously: once the receiver outlives the reader, no
+    // panic is possible.
+    const LINES_BEFORE: usize = 20_000;
+    let mut input = "c\n".repeat(LINES_BEFORE);
+    input.push_str("a\n");
+    input.push_str(&"c\n".repeat(LINES_BEFORE));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("disorder.txt", &input);
+
+    ucmd.args(&["-c", "--buffer-size=1K", "disorder.txt"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "sort: disorder.txt:{}: disorder: a\n",
+            LINES_BEFORE + 1
+        ));
 }
 
 #[test]
@@ -1794,6 +1863,16 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
+fn test_files0_from_non_utf8_name() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in(vec![0xff_u8])
+        .fails_with_code(2)
+        .stderr_contains("sort: cannot read");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_files0_read_error() {
     new_ucmd!()
         .args(&["--files0-from", "."])
@@ -1801,7 +1880,7 @@ fn test_files0_read_error() {
         .stderr_only("sort: cannot read: .: Is a directory\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
 fn test_files0_from_empty_non_regular() {
@@ -1885,6 +1964,25 @@ fn test_files0_from_2a() {
         .pipe_in("file\0file\0")
         .succeeds()
         .stdout_only("a\na\n");
+}
+
+#[test]
+// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files0_from_non_utf8() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
 }
 
 #[test]
@@ -2358,62 +2456,62 @@ fn test_debug_key_annotations() {
 fn test_debug_key_annotations_locale() {
     let ts = TestScenario::new("sort");
 
-    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
-        if locale_fr_utf8 != "none" {
-            let probe = ts
-                .ucmd()
-                .args(&["-g", "--debug", "/dev/null"])
-                .env("LC_NUMERIC", &locale_fr_utf8)
-                .env("LC_MESSAGES", "C")
-                .run();
-            if probe
-                .stderr_str()
-                .contains("numbers use .*,.* as a decimal point")
-            {
-                let mut locale_output = String::new();
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", "C")
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&[
-                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
-                            "-k3,3n", "-k3,3g", "-k3,3h",
-                        ])
-                        .pipe_in("+1234 1234Gi 1,234M\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8")
+        && locale_fr_utf8 != "none"
+    {
+        let probe = ts
+            .ucmd()
+            .args(&["-g", "--debug", "/dev/null"])
+            .env("LC_NUMERIC", &locale_fr_utf8)
+            .env("LC_MESSAGES", "C")
+            .run();
+        if probe
+            .stderr_str()
+            .contains("numbers use .*,.* as a decimal point")
+        {
+            let mut locale_output = String::new();
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", "C")
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&[
+                        "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                        "-k3,3n", "-k3,3g", "-k3,3h",
+                    ])
+                    .pipe_in("+1234 1234Gi 1,234M\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
 
-                let normalized = locale_output
-                    .lines()
-                    .map(|line| {
-                        if line.starts_with("^^ ") {
-                            "^ no match for key".to_string()
-                        } else {
-                            line.to_string()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-                    + "\n";
+            let normalized = locale_output
+                .lines()
+                .map(|line| {
+                    if line.starts_with("^^ ") {
+                        "^ no match for key".to_string()
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
 
-                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
-            }
+            assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
         }
     }
 }
@@ -3015,6 +3113,49 @@ fn test_consistent_sorting_with_i18n_collate() {
         .arg("fix_i18n_collate_inconsistency_2.txt")
         .succeeds()
         .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation() {
+    // Punctuation gets a distinguishing collation weight, so lines differing
+    // only by punctuation sort in a stable order (issue #12542) and are never
+    // merged by -u. This holds across the plain, explicit-key and stable paths,
+    // and in both locales. The wildcard-domain case comes from dehydrated, which
+    // relied on -u keeping a `*.domain.com` alias distinct from the bare domain.
+    // (input, expected, [(locale, args)...])
+    let cases = [
+        (
+            "file10\nfile-10\n",
+            "file-10\nfile10\n",
+            &[("en_US.UTF-8", &[][..]), ("C", &[][..])][..],
+        ),
+        (
+            "EU\nE.U\nE-U\n",
+            "E-U\nE.U\nEU\n",
+            &[
+                ("en_US.UTF-8", &["-u"][..]),
+                ("C", &["-u"][..]),
+                ("en_US.UTF-8", &["-u", "-k1,1"][..]),
+                ("en_US.UTF-8", &["-s", "-k1,1"][..]),
+            ][..],
+        ),
+        (
+            "domain.com\n*.domain.com\ndomain.com\n",
+            "*.domain.com\ndomain.com\n",
+            &[("en_US.UTF-8", &["-u"][..]), ("C", &["-u"][..])][..],
+        ),
+    ];
+
+    for (input, expected, runs) in cases {
+        for (locale, args) in runs {
+            new_ucmd!()
+                .env("LC_ALL", *locale)
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
 }
 
 /* spell-checker: enable */

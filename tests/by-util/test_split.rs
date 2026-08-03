@@ -133,6 +133,18 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_split_to_non_seekable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/stdout", "xaa");
+
+    ucmd.args(&["-"])
+        .pipe_in("string")
+        .succeeds()
+        .stdout_is("string");
+}
+
+#[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
@@ -633,6 +645,22 @@ fn test_split_obs_lines_as_other_option_value() {
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
+#[test]
+fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["-n", "l/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "r/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+}
+
 /// Test for using more than one obsolete lines option (standalone)
 /// last one wins
 #[test]
@@ -912,6 +940,14 @@ fn test_suffix_length_req() {
         .args(&["-n", "100", "-a", "1", "asciilowercase.txt"])
         .fails()
         .stderr_only("split: the suffix length needs to be at least 2\n");
+}
+
+#[test]
+fn test_large_suffix_length_is_rejected() {
+    new_ucmd!()
+        .args(&["-a", "66542562175252"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '66542562175252'\n");
 }
 
 #[test]
@@ -2057,7 +2093,7 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+#[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2067,4 +2103,38 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_io_error() {
+    // /proc/self/mem causes EIO
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        //todo: add file path with proper distinction of input/output
+        .stderr_contains("Input/output error\n");
+}
+
+/// Writing a chunk to a full device must be reported and must stop the split.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_on_full_device() {
+    if !Path::new("/dev/full").exists() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The first chunk lands on /dev/full, so its write can never succeed.
+    at.symlink_file("/dev/full", "xaa");
+    at.write("input", "uv");
+
+    ucmd.args(&["-b", "1", "input"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("split: xaa: No space left on device");
+
+    // split must not have moved on to the next chunk.
+    assert!(!at.file_exists("xab"));
 }

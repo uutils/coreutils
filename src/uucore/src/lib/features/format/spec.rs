@@ -6,7 +6,7 @@
 // spell-checker:ignore (vars) intmax ptrdiff padlen
 
 use super::{
-    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing,
+    ExtendedBigDecimal, FormatChar, FormatError, OctalParsing, check_precision,
     num_format::{
         self, Case, FloatVariant, ForceDecimal, Formatter, NumberAlignment, PositiveSign, Prefix,
         UnsignedIntVariant,
@@ -158,9 +158,7 @@ impl Spec {
         let start = *rest;
 
         // Check for a positional specifier (%m$)
-        let Some(position) = eat_argument_position(rest, &mut index) else {
-            return Err(&start[..index]);
-        };
+        let position = eat_argument_position(rest, &mut index).ok_or(&start[..index])?;
 
         let flags = Flags::parse(rest, &mut index);
 
@@ -193,9 +191,7 @@ impl Spec {
         // We ignore the length. It's not really relevant to printf
         let _ = Self::parse_length(rest, &mut index);
 
-        let Some(type_spec) = rest.get(index) else {
-            return Err(&start[..index]);
-        };
+        let type_spec = rest.get(index).ok_or(&start[..index])?;
         index += 1;
         *rest = &start[index..];
 
@@ -418,11 +414,11 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args);
                 let i = args.next_i64(*position);
 
-                if precision as u64 > i32::MAX as u64 {
-                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::SignedInt {
@@ -446,11 +442,11 @@ impl Spec {
                 position,
             } => {
                 let (width, neg_width) = resolve_asterisk_width(*width, args).unwrap_or((0, false));
-                let precision = resolve_asterisk_precision(*precision, args).unwrap_or_default();
+                let precision = resolve_asterisk_precision(*precision, args);
                 let i = args.next_u64(*position);
 
-                if precision as u64 > i32::MAX as u64 {
-                    return Err(FormatError::InvalidPrecision(precision.to_string()));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::UnsignedInt {
@@ -480,10 +476,8 @@ impl Spec {
                 let precision = resolve_asterisk_precision(*precision, args);
                 let f: ExtendedBigDecimal = args.next_extended_big_decimal(*position);
 
-                if precision.is_some_and(|p| p as u64 > i32::MAX as u64) {
-                    return Err(FormatError::InvalidPrecision(
-                        precision.unwrap().to_string(),
-                    ));
+                if let Some(precision) = precision {
+                    check_precision(precision)?;
                 }
 
                 num_format::Float {
@@ -536,7 +530,7 @@ fn resolve_asterisk_precision(
         None => None,
         Some(CanAsterisk::Asterisk(loc)) => match args.next_i64(loc) {
             v if v >= 0 => usize::try_from(v).ok(),
-            v if v < 0 => Some(0usize),
+            // A negative precision is treated as if the precision were omitted.
             _ => None,
         },
         Some(CanAsterisk::Fixed(w)) => Some(w),
@@ -719,14 +713,14 @@ mod tests {
             );
 
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::SignedInt(-42)]),
                 )
             );
             assert_eq!(
-                Some(0),
+                None,
                 resolve_asterisk_precision(
                     Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
                     &mut FormatArguments::new(&[FormatArgument::Unparsed("-42".into())]),

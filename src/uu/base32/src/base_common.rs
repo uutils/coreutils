@@ -62,16 +62,7 @@ impl Config {
                 if name == "-" {
                     None
                 } else {
-                    let path = Path::new(name);
-
-                    if !path.exists() {
-                        return Err(USimpleError::new(
-                            BASE_CMD_PARSE_ERROR,
-                            translate!("base-common-no-such-file", "file" => path.maybe_quote()),
-                        ));
-                    }
-
-                    Some(path.to_owned())
+                    Some(Path::new(name).to_owned())
                 }
             }
             None => None,
@@ -152,6 +143,8 @@ pub fn get_input(config: &Config) -> UResult<Box<dyn BufRead>> {
         Some(path_buf) => {
             let file =
                 File::open(path_buf).map_err_context(|| path_buf.maybe_quote().to_string())?;
+            #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+            let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
             Ok(Box::new(BufReader::with_capacity(DEFAULT_BUF_SIZE, file)))
         }
         None => {

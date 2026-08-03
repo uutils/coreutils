@@ -872,6 +872,24 @@ fn test_value_too_large() {
 }
 
 #[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_all_but_last_lines() {
     new_ucmd!()
         .args(&["-n", "-15", "lorem_ipsum.txt"])
@@ -979,4 +997,70 @@ fn test_directory_header_with_multiple_files_zero_output() {
         .succeeds()
         .stdout_is("==> d <==\n\n==> f <==\n")
         .no_stderr();
+}
+
+/// GNU `head` prints the `==> name <==` header only after the file is
+/// successfully opened. A file that exists but cannot be opened (e.g. no read
+/// permission) must therefore produce only an error and no header.
+#[cfg(unix)]
+#[test]
+fn test_unreadable_file_prints_no_header() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("unreadable", "secret\n");
+    at.write("readable", "hello\n");
+    at.set_mode("unreadable", 0o000);
+
+    // Running as root bypasses permission checks, so the open would succeed.
+    if std::fs::File::open(at.plus("unreadable")).is_ok() {
+        return;
+    }
+
+    ts.ucmd()
+        .args(&["-c", "5", "unreadable", "readable"])
+        .fails_with_code(1)
+        .stdout_is("==> readable <==\nhello")
+        .stdout_does_not_contain("==> unreadable <==")
+        .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
+}
+
+/// Regression for #11972: head must reject directories detected on the
+/// open fd, not via a separate `Path::is_dir()` call. A symlink that
+/// resolves to a directory must still be rejected — verifying the fd
+/// check survives an indirection.
+#[test]
+#[cfg(unix)]
+fn test_head_rejects_directory_through_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("real_dir");
+    symlink("real_dir", at.plus("link_to_dir")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_dir")
+        .fails_with_code(1)
+        .stderr_contains("Is a directory");
+}
+
+/// Regression for #11972: a symlink that points to a regular file must
+/// still be readable by head (the fd-based check must distinguish the
+/// fd's mode, not the symlink's).
+#[test]
+#[cfg(unix)]
+fn test_head_follows_symlink_to_regular_file() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("regular", "hello\n");
+    symlink("regular", at.plus("link_to_regular")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_regular")
+        .succeeds()
+        .stdout_is("hello\n");
 }

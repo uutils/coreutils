@@ -1,6 +1,6 @@
 <!-- markdownlint-disable MD033 MD041 MD002 -->
 <!-- markdownlint-disable commands-show-output no-duplicate-heading -->
-<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang -->
+<!-- spell-checker:ignore markdownlint ; (options) DESTDIR UTILNAME manpages reimplementation oranda libclang libcrypto FIPS -->
 <div class="oranda-hide">
 <div align="center">
 
@@ -32,7 +32,7 @@ We provide prebuilt binaries, manpages, and shell completions from main branch a
 The latest stable tag https://github.com/uutils/coreutils/releases/latest also exists for reproducible products and packagers.
 Bug reporters should use binary from latest commit.
 
-Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-musl` is not compatible with your system.
+Minimal compatible glibc version is same with ubuntu-latest runner. Use `coreutils-*-musl` if `coreutils-*-gnu` is not compatible with your system.
 
 </div>
 
@@ -61,7 +61,7 @@ uutils coreutils ships by default on Ubuntu since version 25.10.
 ## Documentation
 uutils has both user and developer documentation available:
 
-- [User Manual](https://uutils.github.io/coreutils/docs/)
+- [User Manual](https://uutils.org/coreutils/docs/)
 - [Developer Documentation](https://docs.rs/crate/coreutils/)
 
 Both can also be generated locally, the instructions for that can be found in
@@ -70,7 +70,7 @@ the [coreutils docs](https://github.com/uutils/uutils.github.io) repository.
 Use [weblate/rust-coreutils](https://hosted.weblate.org/projects/rust-coreutils/) to translate the Rust coreutils into your language.
 
 You can try the utilities in your browser through the
-[WebAssembly playground](https://uutils.github.io/playground/), without
+[WebAssembly playground](https://uutils.org/playground/), without
 installing anything.
 
 <!-- ANCHOR: build (this mark is needed for mdbook) -->
@@ -131,6 +131,22 @@ and `libclang` are installed on your system. Then, run the following command:
 ```
 cargo build --release --features unix,feat_selinux
 ```
+
+To speed up the checksum utilities (`md5sum`, `sha1sum`, `sha224sum`, `sha256sum`,
+`sha384sum`, `sha512sum`, and `cksum`) by using OpenSSL's `libcrypto` instead of
+the pure-Rust digest crates, enable the `openssl` feature:
+```
+cargo build --release --features unix,openssl
+```
+By default OpenSSL is built from source and statically linked into the
+binary (mirroring how `expr` links `oniguruma`), so no runtime dependency
+on system libcrypto/libssl is added. To link dynamically against the system
+libcrypto instead, set `OPENSSL_NO_VENDOR=1` at build time.
+
+The speedup is largest on CPUs without SHA-NI hardware acceleration. The
+feature is a no-op on Windows (the pure-Rust implementations are always used
+there) and is automatically bypassed at runtime for any algorithm libcrypto
+refuses (for example, MD5 in strict FIPS mode).
 
 If you don't want to build every utility available on your platform into the
 final binary, you can also specify which ones you want to build manually. For
@@ -340,7 +356,7 @@ make PREFIX=/my/path uninstall
 
 Below is the evolution of how many GNU tests uutils passes. A more detailed
 breakdown of the GNU test results of the main branch can be found
-[in the user manual](https://uutils.github.io/coreutils/docs/test_coverage.html).
+[in the user manual](https://uutils.org/coreutils/docs/test_coverage.html).
 
 See <https://github.com/orgs/uutils/projects/1> for the main meta bugs
 (many are missing).

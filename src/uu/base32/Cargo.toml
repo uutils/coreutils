@@ -11,17 +11,18 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/base32.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
+rustix = { workspace = true }
 uucore = { workspace = true, features = ["encoding"] }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "base32"

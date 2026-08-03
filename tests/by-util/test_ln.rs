@@ -5,6 +5,8 @@
 #![allow(clippy::similar_names)]
 
 use std::path::PathBuf;
+#[cfg(all(unix, not(target_os = "android")))]
+use std::time::Duration;
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
@@ -379,6 +381,55 @@ fn test_symlink_target_dir() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: non-utf8 arguments cannot be passed through the spawned test harness"
+)]
+fn test_symlink_target_dir_non_utf8_source_name() {
+    use std::ffi::OsStr;
+    use std::fs;
+    use std::os::unix::ffi::OsStrExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let target_dir = "test_symlink_target_dir_non_utf8";
+    let source_bytes = b"source_\xFF\xFE";
+    let source_name = OsStr::from_bytes(source_bytes);
+
+    at.mkdir(target_dir);
+    at.touch(source_name);
+
+    scene
+        .ucmd()
+        .args(&["-s", "-t", target_dir])
+        .arg(source_name)
+        .succeeds()
+        .no_stderr();
+
+    let target_dir_path = at.plus(target_dir);
+    let mut dir_entries = fs::read_dir(&target_dir_path)
+        .expect("reading target directory entries after creating symlink");
+    let created_entry = dir_entries
+        .next()
+        .expect("finding created entry in target directory")
+        .expect("reading created target-directory entry");
+    assert!(
+        dir_entries.next().is_none(),
+        "expected only one created entry in target directory"
+    );
+    assert_eq!(
+        created_entry.file_name().as_os_str().as_bytes(),
+        source_bytes
+    );
+
+    let created_link_path = target_dir_path.join(source_name);
+    let created_link_target = fs::read_link(&created_link_path)
+        .expect("reading created symlink target in target directory");
+    assert_eq!(created_link_target.as_os_str().as_bytes(), source_bytes);
+}
+
+#[test]
 fn test_symlink_target_dir_from_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_ln_target_dir_dir";
@@ -528,6 +579,19 @@ fn test_symlink_missing_destination() {
 
     ucmd.args(&["-s", "-T", file]).fails().stderr_is(format!(
         "ln: missing destination file operand after '{file}'\n"
+    ));
+}
+
+#[test]
+fn test_symlink_error_includes_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_error_includes_destination";
+    let link = "no_such_dir/test_symlink_error_includes_destination";
+
+    at.touch(file);
+
+    ucmd.args(&["-s", file, link]).fails().stderr_is(format!(
+        "ln: failed to create symbolic link '{link}': No such file or directory\n"
     ));
 }
 
@@ -746,6 +810,13 @@ fn test_relative_requires_symbolic() {
 }
 
 #[test]
+fn test_relative_target_with_no_parent() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "data");
+    ucmd.args(&["-rsfT", "src", ""]).fails_with_code(1);
+}
+
+#[test]
 fn test_relative_dst_already_symlink() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("file1");
@@ -782,6 +853,38 @@ fn test_backup_same_file() {
     ucmd.args(&["--backup", "file1", "./file1"])
         .fails()
         .stderr_contains("n: 'file1' and './file1' are the same file");
+}
+
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_backup_existing_hard_linked_under_different_name() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+
+    ucmd.args(&["--backup", "a", "b"]).succeeds().no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(at.file_exists("b~"));
+}
+
+#[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_backup_existing_hard_linked_target_is_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("a");
+    at.hard_link("a", "b");
+    at.mkfifo("b~");
+
+    ucmd.args(&["--backup", "a", "b"])
+        .timeout(Duration::from_secs(10))
+        .succeeds()
+        .no_stderr();
+
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+    assert!(!at.is_fifo("b~"));
 }
 
 #[test]

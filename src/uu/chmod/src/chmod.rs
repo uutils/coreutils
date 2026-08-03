@@ -13,7 +13,9 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{
+    ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code, strip_errno,
+};
 use uucore::fs::{FileInformation, display_permissions_unix};
 use uucore::mode;
 use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
@@ -34,10 +36,14 @@ enum ChmodError {
     NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
     PreserveRoot(PathBuf),
+    #[error("{}", translate!("chmod-error-preserve-root-same-as", "file" => _0.quote()))]
+    PreserveRootSameAs(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
     NewPermissions(PathBuf, String, String),
+    #[error("{}", translate!("chmod-error-changing-permissions", "file" => _0.quote(), "err" => strip_errno(_1)))]
+    ChangingPermissions(PathBuf, std::io::Error),
 }
 
 impl UError for ChmodError {}
@@ -420,6 +426,17 @@ impl Chmoder {
         matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
     }
 
+    /// `--preserve-root` guard for the recursive descent.
+    ///
+    /// The operand loop in [`Self::chmod`] only checks the paths named on the
+    /// command line. With `-L`, a symlink met *inside* the tree can resolve to
+    /// `/`, so the failsafe has to be re-checked at every descent or the
+    /// recursion walks straight into the real root. Only symlinks are
+    /// canonicalized, so ordinary trees pay nothing for this.
+    fn descends_into_root(&self, path: &Path) -> bool {
+        self.preserve_root && path.is_symlink() && Self::is_root(path)
+    }
+
     // Non-safe traversal implementation for platforms without safe_traversal support
     #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(
@@ -428,6 +445,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -499,6 +522,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -540,10 +569,11 @@ impl Chmoder {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
-        if let Some(info) = &dir_info {
-            if !ancestors.insert(info.clone()) {
-                return r; // cycle: this directory is already an ancestor
-            }
+        if dir_info
+            .as_ref()
+            .is_some_and(|info| !ancestors.insert(info.clone()))
+        {
+            return r; // cycle: this directory is already an ancestor
         }
 
         let entries = dir_fd.read_dir()?;
@@ -772,13 +802,12 @@ impl Chmoder {
     }
 
     fn change_file(&self, fperm: u32, mode: u32, file: &Path) -> Result<(), i32> {
-        if fperm == mode {
-            // Use the helper method for consistent reporting
-            self.report_permission_change(file, fperm, mode);
-            Ok(())
-        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
+        // Always issue the chmod(2) call, even when the bits are unchanged: the
+        // syscall can still fail (e.g. lacking permission on the file) and that
+        // failure must be reported, matching GNU.
+        if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
             if !self.quiet {
-                show_error!("{err}");
+                show_error!("{}", ChmodError::ChangingPermissions(file.into(), err));
             }
             if self.verbose {
                 println!(

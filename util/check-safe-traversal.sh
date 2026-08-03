@@ -191,7 +191,7 @@ if [ "$USE_MULTICALL" -eq 1 ]; then
     AVAILABLE_UTILS=$($COREUTILS_BIN --list)
 else
     AVAILABLE_UTILS=""
-    for util in rm chmod chown chgrp du mv cp; do
+    for util in rm chmod chown chgrp du mv cp chcon split; do
         if [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
             AVAILABLE_UTILS="$AVAILABLE_UTILS $util"
         fi
@@ -241,6 +241,50 @@ if echo "$AVAILABLE_UTILS" | grep -q "chgrp"; then
     assert_descent_nofollow "chgrp" strace_chgrp_recursive_chgrp.log
 fi
 
+# chcon recursive relabel must resolve each target relative to the traversal
+# directory fd with O_NOFOLLOW and operate on the resulting fd (fd-based xattr,
+# or /proc/self/fd), never re-resolving the entry by path. Otherwise a
+# rename/symlink race could redirect a privileged recursive relabel off-tree
+# (issue #11402). This holds even without SELinux: the fd-anchored open happens
+# before the SELinux get/set, so the syscalls are observable regardless.
+if echo "$AVAILABLE_UTILS" | grep -q "chcon"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        chcon_cmd="$COREUTILS_BIN chcon"
+    else
+        chcon_cmd="$PROJECT_ROOT/target/${PROFILE}/chcon"
+    fi
+
+    mkdir -p chcon_tree/sub
+    echo a > chcon_tree/file
+    echo b > chcon_tree/sub/nested
+    strace -f -e trace=openat,getxattr,lgetxattr,fgetxattr,setxattr,lsetxattr,fsetxattr \
+        -o strace_chcon_recursive.log \
+        $chcon_cmd -R -t etc_t chcon_tree 2>/dev/null || true
+
+    # Each relabel target is opened relative to a numeric dirfd with O_NOFOLLOW.
+    if ! grep -qE 'openat\([0-9]+, "(file|sub|nested)", [^)]*O_NOFOLLOW' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R must open relabel targets relative to the traversal dirfd with O_NOFOLLOW (issue #11402)"
+    fi
+    # SELinux xattr ops must be fd-anchored: fgetxattr/fsetxattr on a numeric fd,
+    # or *xattr on /proc/self/fd. A path-based xattr on the traversal entry is the
+    # TOCTOU pattern the fix removes.
+    path_based_xattr=$(grep -E '\bl?(get|set)xattr\("' strace_chcon_recursive.log | grep -v '"/proc/self/fd/' || true)
+    if [ -n "$path_based_xattr" ]; then
+        echo "$path_based_xattr"
+        fail_immediately "chcon -R is using path-based SELinux xattr (TOCTOU; expected fd-anchored access, issue #11402)"
+    fi
+    # The relabel must actually reach SELinux through the anchored fd. Without
+    # this positive check, a chcon that aborts before the get/set (e.g. EBADF
+    # from f*filecon on an O_PATH fd) would still pass the assertions above.
+    if ! grep -qE '(get|set)xattr\("/proc/self/fd/|f(get|set)xattr\([0-9]+,' strace_chcon_recursive.log; then
+        cat strace_chcon_recursive.log
+        fail_immediately "chcon -R never reached an fd-anchored SELinux xattr op (relabel aborted before get/set?, issue #11402)"
+    fi
+    echo "✓ chcon -R anchors relabel to the traversal dirfd (O_NOFOLLOW, fd-based access)"
+    rm -rf chcon_tree
+fi
+
 # Test du - should use openat, newfstatat
 if echo "$AVAILABLE_UTILS" | grep -q "du"; then
     cp -r test_dir test_du
@@ -267,11 +311,12 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
 
     # #10011: destination created with mode 0600 so other users cannot open
     # the file through its umask-derived initial mode before cp narrows it.
+    # rustix may emit either open(2) or openat(2); accept both.
     echo "cp_perm_test" > test_cp_src_perm
     rm -f test_cp_dst_perm
-    strace -f -e trace=openat -o strace_cp_dest_perm.log \
+    strace -f -e trace=open,openat,openat2 -o strace_cp_dest_perm.log \
         $cp_cmd test_cp_src_perm test_cp_dst_perm 2>/dev/null || true
-    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
+    if ! grep -qE 'open(at)?2?\([^)]*"test_cp_dst_perm".*O_CREAT.*, 0600\)' strace_cp_dest_perm.log; then
         cat strace_cp_dest_perm.log
         fail_immediately "cp must create the destination with mode 0600 (issue #10011)"
     fi
@@ -281,14 +326,57 @@ if echo "$AVAILABLE_UTILS" | grep -q "cp"; then
     # #10017: -P opens source with O_NOFOLLOW so a path swap to a symlink
     # between the lstat check and the open cannot redirect the copy.
     echo "cp_nofollow_test" > test_cp_src
-    strace -f -e trace=openat -o strace_cp_nofollow.log \
+    strace -f -e trace=open,openat,openat2 -o strace_cp_nofollow.log \
         $cp_cmd -P test_cp_src test_cp_dst 2>/dev/null || true
-    if ! grep -qE 'openat\(AT_FDCWD, "test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
+    if ! grep -qE 'open(at)?2?\([^)]*"test_cp_src".*O_NOFOLLOW' strace_cp_nofollow.log; then
         cat strace_cp_nofollow.log
         fail_immediately "cp -P must open the source with O_NOFOLLOW (issue #10017)"
     fi
     echo "✓ cp -P opens source with O_NOFOLLOW"
     rm -f test_cp_src test_cp_dst
+fi
+
+# split must harden its output open against TOCTOU target swaps (issue #11401 /
+# CVE-2026-35374). The old code opened the output by path with O_TRUNC, so an
+# attacker could swap the just-validated output for a symlink and have split
+# truncate a different file. The fix creates outputs atomically with
+# O_CREAT|O_EXCL and only ever truncates via ftruncate after an fd-based check
+# that the opened output is not the input -- so a split that would overwrite its
+# own input is refused.
+if echo "$AVAILABLE_UTILS" | grep -q "split"; then
+    if [ "$USE_MULTICALL" -eq 1 ]; then
+        split_cmd="$COREUTILS_BIN split"
+    else
+        split_cmd="$PROJECT_ROOT/target/${PROFILE}/split"
+    fi
+
+    printf '0123456789abcdef' > split_input
+    strace -f -e trace=openat -o strace_split_output_open.log \
+        $split_cmd -b 4 split_input split_out_ 2>/dev/null || true
+
+    if ! grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_CREAT[^)]*O_EXCL' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must create output files with O_CREAT|O_EXCL (issue #11401)"
+    fi
+    if grep -qE 'openat\(AT_FDCWD, "split_out_[a-z]+", [^)]*O_TRUNC' strace_split_output_open.log; then
+        cat strace_split_output_open.log
+        fail_immediately "split must not open output files with a path-based O_TRUNC (TOCTOU truncation risk, issue #11401)"
+    fi
+    echo "✓ split creates outputs with O_CREAT|O_EXCL and no path-based O_TRUNC"
+    rm -f split_input split_out_*
+
+    # A split whose output already resolves (via a symlink) to the input must be
+    # refused, leaving the input untouched.
+    printf 'split_victim_payload' > split_victim
+    ln -s split_victim split_swap_aa
+    if $split_cmd -b 4 split_victim split_swap_ 2>/dev/null; then
+        fail_immediately "split must refuse when the output would overwrite the input (issue #11401)"
+    fi
+    if [ "$(cat split_victim)" != "split_victim_payload" ]; then
+        fail_immediately "split truncated its own input through a swapped output symlink (issue #11401)"
+    fi
+    echo "✓ split refuses to overwrite its input via a swapped output symlink"
+    rm -f split_victim split_swap_*
 fi
 
 # mv cross-device (EXDEV) must use fd-based *xattr ops (issue #10014).
@@ -335,6 +423,48 @@ if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
         rm -f "$shm_probe"
         echo "WARN: mv cross-device xattr check: /dev/shm does not support user xattrs; skipped"
     fi
+    fi
+fi
+
+# mv cross-device must open the destination with O_NOFOLLOW (issue #10015).
+# The EXDEV fallback unlinks the dest then opens with O_CREAT|O_TRUNC; an
+# attacker racing in a planted symlink would otherwise let the copy write
+# through to the symlink's target. rustix may emit either open(2) or
+# openat(2) depending on the path, so the check accepts both.
+if echo "$AVAILABLE_UTILS" | grep -q "mv" && [ -d /dev/shm ]; then
+    temp_fs_id=$(stat -f -c %i "$TEMP_DIR" 2>/dev/null || echo "")
+    shm_fs_id=$(stat -f -c %i /dev/shm 2>/dev/null || echo "")
+    if [ -z "$temp_fs_id" ] || [ -z "$shm_fs_id" ] || [ "$temp_fs_id" = "$shm_fs_id" ]; then
+        echo "WARN: mv cross-device O_NOFOLLOW check: TMPDIR and /dev/shm are on the same filesystem; skipped"
+    else
+        nofollow_src=$(mktemp -p "$TEMP_DIR" mv_nofollow_src.XXXXXX)
+        nofollow_dst=$(mktemp -u -p /dev/shm mv_nofollow_dst.XXXXXX)
+        echo "payload" > "$nofollow_src"
+        echo "existing" > "$nofollow_dst"
+
+        if [ "$USE_MULTICALL" -eq 1 ]; then
+            mv_cmd="$COREUTILS_BIN mv"
+        else
+            mv_cmd="$PROJECT_ROOT/target/${PROFILE}/mv"
+        fi
+        strace -f -e trace=open,openat,openat2 -o strace_mv_nofollow.log \
+            $mv_cmd -f "$nofollow_src" "$nofollow_dst" 2>/dev/null || true
+
+        nofollow_dst_base=$(basename "$nofollow_dst")
+        # Lines that open the dest with O_CREAT — the dest may appear as a
+        # full path (open) or basename (openat). Every such open must carry
+        # O_NOFOLLOW or the planted-symlink writethrough is possible.
+        dest_creates=$(grep -E "open(at)?2?\(.*\"[^\"]*${nofollow_dst_base}\".*O_CREAT" strace_mv_nofollow.log || true)
+        if [ -z "$dest_creates" ]; then
+            cat strace_mv_nofollow.log
+            fail_immediately "mv cross-device did not open dest with O_CREAT — strace check broken (issue #10015)"
+        fi
+        if echo "$dest_creates" | grep -vq "O_NOFOLLOW"; then
+            cat strace_mv_nofollow.log
+            fail_immediately "mv cross-device must open dest with O_NOFOLLOW (issue #10015)"
+        fi
+        echo "OK: mv cross-device opens dest with O_NOFOLLOW"
+        rm -f "$nofollow_dst"
     fi
 fi
 

@@ -4,12 +4,10 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use nix::sys::stat::Mode;
-use nix::unistd::mkfifo;
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
+use rustix::fs::Mode;
+use rustix::process::umask;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -37,58 +35,63 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ));
     }
 
-    let fifos: Vec<String> = match matches.get_many::<String>(options::FIFO) {
-        Some(v) => v.cloned().collect(),
-        None => {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-missing-operand"),
-            ));
-        }
-    };
+    #[allow(clippy::unwrap_used, reason = "set as required by clap")]
+    let fifos: Vec<String> = matches
+        .get_many::<String>(options::FIFO)
+        .unwrap()
+        .cloned()
+        .collect();
 
     for f in fifos {
-        if mkfifo(f.as_str(), Mode::from_bits_truncate(0o666)).is_err() {
+        // Label the FIFO at creation, as GNU does; relabelling after leaves a window.
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        let _selinux_guard = {
+            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+            let context = matches.get_one::<String>(options::CONTEXT);
+            if set_security_context || context.is_some() {
+                let mode = uucore::libc::S_IFIFO | mode as uucore::libc::mode_t;
+                match uucore::selinux::FsCreateContext::new(
+                    std::path::Path::new(&f),
+                    Some(mode),
+                    context,
+                ) {
+                    Ok(guard) => Some(guard),
+                    Err(e) => return Err(USimpleError::new(1, e.to_string())),
+                }
+            } else {
+                None
+            }
+        };
+
+        // Clear umask around mkfifo so the kernel applies the exact
+        // requested mode atomically. Skipping the path-based chmod
+        // that used to follow this call closes the TOCTOU window an
+        // attacker could use to swap the FIFO for a symlink between
+        // mkfifo and chmod (issue #10020).
+        let prev_umask = umask(Mode::empty());
+        let mkfifo_result = create_fifo(f.as_str(), mode);
+        umask(prev_umask);
+
+        if let Err(e) = mkfifo_result {
             show!(USimpleError::new(
                 1,
-                translate!("mkfifo-error-cannot-create-fifo", "path" => f.quote()),
+                translate!(
+                    "mkfifo-error-cannot-create-fifo",
+                    "path" => f.quote(),
+                    "error" => strip_errno(&e)
+                ),
             ));
-            continue;
-        }
-
-        // Explicitly set the permissions to ignore umask
-        if let Err(e) = fs::set_permissions(&f, fs::Permissions::from_mode(mode)) {
-            return Err(USimpleError::new(
-                1,
-                translate!("mkfifo-error-cannot-set-permissions", "path" => f.quote(), "error" => e),
-            ));
-        }
-
-        // Apply SELinux context if requested
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
-        {
-            // Extract the SELinux related flags and options
-            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-            let context = matches.get_one::<String>(options::CONTEXT);
-
-            if set_security_context || context.is_some() {
-                use std::path::Path;
-                if let Err(e) =
-                    uucore::selinux::set_selinux_security_context(Path::new(&f), context)
-                {
-                    let _ = fs::remove_file(f);
-                    return Err(USimpleError::new(1, e.to_string()));
+        } else {
+            // Apply SMACK context if requested
+            #[cfg(all(feature = "smack", target_os = "linux"))]
+            {
+                let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
+                let context = matches.get_one::<String>(options::CONTEXT);
+                if set_security_context || context.is_some() {
+                    uucore::smack::set_smack_label_and_cleanup(&f, context, |p| {
+                        std::fs::remove_file(p)
+                    })?;
                 }
-            }
-        }
-
-        // Apply SMACK context if requested
-        #[cfg(all(feature = "smack", target_os = "linux"))]
-        {
-            let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
-            let context = matches.get_one::<String>(options::CONTEXT);
-            if set_security_context || context.is_some() {
-                uucore::smack::set_smack_label_and_cleanup(&f, context, |p| fs::remove_file(p))?;
             }
         }
     }
@@ -129,8 +132,33 @@ pub fn uu_app() -> Command {
             Arg::new(options::FIFO)
                 .hide(true)
                 .action(ArgAction::Append)
+                .required(true)
                 .value_hint(clap::ValueHint::AnyPath),
         )
+}
+
+// `rustix::fs::mkfifoat` is unavailable on Apple targets, so fall back to
+// libc's path-based `mkfifo` there. Both rely on the caller having cleared
+// the umask so the requested mode is applied atomically (see issue #10020).
+#[cfg(not(target_vendor = "apple"))]
+fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
+    use rustix::fs::{CWD, mkfifoat};
+    mkfifoat(CWD, path, Mode::from_bits_truncate(mode)).map_err(std::io::Error::from)
+}
+
+#[cfg(target_vendor = "apple")]
+fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
+    use std::ffi::CString;
+    let c_path =
+        CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    // SAFETY: `c_path` is a valid NUL-terminated C string and `mode` is a
+    // standard mode_t bit pattern.
+    let rc = unsafe { libc::mkfifo(c_path.as_ptr(), mode as libc::mode_t) };
+    if rc == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {

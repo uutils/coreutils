@@ -128,7 +128,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         OverwriteMode::NoClobber
     };
 
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), &matches)?;
     let backup_suffix = backup_control::determine_backup_suffix(&matches);
 
     // When we have "-L" or "-L -P", false otherwise
@@ -315,27 +316,15 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
     for srcpath in files {
         let targetpath = if settings.no_dereference && target_dir.is_symlink() {
             let remove_target = || {
-                // In that case, we don't want to do link resolution
-                // We need to clean the target
-                if target_dir.is_file() {
-                    if let Err(e) = fs::remove_file(target_dir) {
-                        show_error!(
-                            "{}",
-                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                        );
-                    }
-                }
+                // Not sure why but on Windows, the symlink can be
+                // considered as a dir
+                // See test_ln::test_symlink_no_deref_dir
                 #[cfg(windows)]
-                if target_dir.is_dir() {
-                    // Not sure why but on Windows, the symlink can be
-                    // considered as a dir
-                    // See test_ln::test_symlink_no_deref_dir
-                    if let Err(e) = fs::remove_dir(target_dir) {
-                        show_error!(
-                            "{}",
-                            translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
-                        );
-                    }
+                if let Err(e) = fs::remove_dir(target_dir) {
+                    show_error!(
+                        "{}",
+                        translate!("ln-error-could-not-update", "target" => target_dir.quote(), "error" => e)
+                    );
                 }
             };
             match settings.overwrite {
@@ -353,22 +342,15 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
                 }
             }
             target_dir.to_path_buf()
-        } else if let Some(name) = srcpath.as_os_str().to_str() {
-            match Path::new(name).file_name() {
+        } else {
+            match srcpath.file_name() {
                 Some(basename) => target_dir.join(basename),
                 // This can be None only for "." or "..". Trying
                 // to create a link with such name will fail with
                 // EEXIST, which agrees with the behavior of GNU
                 // coreutils.
-                None => target_dir.join(name),
+                None => target_dir.join(srcpath),
             }
-        } else {
-            show_error!(
-                "{}",
-                translate!("ln-error-cannot-stat", "path" => srcpath.quote())
-            );
-            all_successful = false;
-            continue;
         };
 
         if linked_destinations.contains(&targetpath) {
@@ -393,16 +375,31 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
 }
 
 fn relative_path<'a>(src: &'a Path, dst: &Path) -> Cow<'a, Path> {
-    if let Ok(src_abs) = canonicalize(src, MissingHandling::Missing, ResolveMode::Physical) {
-        if let Ok(dst_abs) = canonicalize(
-            dst.parent().unwrap(),
-            MissingHandling::Missing,
-            ResolveMode::Physical,
-        ) {
-            return make_path_relative_to(src_abs, dst_abs).into();
-        }
+    // `dst.parent()` is None for a destination with no parent (`/`, `""`, or a
+    // bare Windows prefix). Fall through to the non-relative `src` rather than
+    // unwrapping it; the caller then reports the usual error.
+    let Some(dst_parent) = dst.parent() else {
+        return src.into();
+    };
+    let (Ok(src_abs), Ok(dst_abs)) = (
+        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+        canonicalize(dst_parent, MissingHandling::Missing, ResolveMode::Physical),
+    ) else {
+        return src.into();
+    };
+
+    make_path_relative_to(src_abs, dst_abs).into()
+}
+
+/// Decide whether `src` and `dst` are actually the same directory entry.
+fn is_same_entry(src: &Path, dst: &Path) -> bool {
+    match (
+        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
+        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
+    ) {
+        (Ok(src), Ok(dst)) => src == dst,
+        _ => true,
     }
-    src.into()
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -418,7 +415,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
         backup_path = backup_control::get_backup_path(settings.backup, dst, &settings.suffix);
         if settings.backup == BackupMode::Existing && !settings.symbolic {
             // when ln --backup f f, it should detect that it is the same file
-            if paths_refer_to_same_file(src, dst, true) {
+            if paths_refer_to_same_file(src, dst, true) && is_same_entry(src, dst) {
                 return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
             }
         }
@@ -441,18 +438,12 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
                 // In case of error, don't do anything
             }
             OverwriteMode::Force => {
-                if !dst.is_symlink() && paths_refer_to_same_file(src, dst, true) {
+                if !dst.is_symlink()
+                    && paths_refer_to_same_file(src, dst, true)
+                    && is_same_entry(src, dst)
+                {
                     // Even in force overwrite mode, verify we are not targeting the same entry and return a SameFile error if so
-                    let same_entry = match (
-                        canonicalize(src, MissingHandling::Missing, ResolveMode::Physical),
-                        canonicalize(dst, MissingHandling::Missing, ResolveMode::Physical),
-                    ) {
-                        (Ok(src), Ok(dst)) => src == dst,
-                        _ => true,
-                    };
-                    if same_entry {
-                        return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
-                    }
+                    return Err(LnError::SameFile(src.to_owned(), dst.to_owned()));
                 }
                 let _ = fs::remove_file(dst);
                 // In case of error, don't do anything
@@ -461,7 +452,15 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     }
 
     let res = if settings.symbolic {
-        symlink(&source, dst).map_err(Into::into)
+        symlink(&source, dst).map_err(|e| {
+            LnError::IoContext(
+                UIoError::from(e),
+                translate!(
+                    "ln-failed-to-create-symbolic-link",
+                    "dest" => dst.quote()
+                ),
+            )
+        })
     } else {
         let p = if settings.logical && source.is_symlink() {
             fs::canonicalize(&source).map_err(|e| {
