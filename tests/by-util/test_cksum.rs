@@ -3483,3 +3483,41 @@ fn test_check_blake3_untagged(
         .succeeds()
         .stdout_only("FILE: OK\n");
 }
+
+#[test]
+fn test_locale_aware_error_filename_escaping() {
+    // 'Ã' is valid UTF-8, invalid ASCII.
+    let filename = "file_Ã";
+
+    // The characted is valid and not escaped in UTF-8
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg(filename)
+        .fails_with_code(1)
+        .stderr_is("cksum: file_Ã: No such file or directory\n");
+
+    // In C locale, non-ASCII bytes are escaped
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg(filename)
+        .fails_with_code(1)
+        .stderr_is("cksum: 'file_'$'\\303\\203': No such file or directory\n");
+
+    // Same with a directory error
+    let dirname = "dir_Ã";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir(dirname);
+    ucmd.env("LC_ALL", "C")
+        .arg(dirname)
+        .fails_with_code(1)
+        .stderr_is("cksum: 'dir_'$'\\303\\203': Is a directory\n");
+
+    // A parenthesis is escaped in any case.
+    for locale in ["C", "en_US.UTF-8"] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("file_x(y")
+            .fails_with_code(1)
+            .stderr_is("cksum: 'file_x(y': No such file or directory\n");
+    }
+}
