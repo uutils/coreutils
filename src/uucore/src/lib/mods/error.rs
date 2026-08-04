@@ -804,6 +804,8 @@ mod tests {
         use nix::errno::Errno;
         use std::io::ErrorKind;
 
+        let _ = crate::locale::setup_localization("test");
+
         for (nix_error, expected_error_kind) in [
             (Errno::EACCES, ErrorKind::PermissionDenied),
             (Errno::ENOENT, ErrorKind::NotFound),

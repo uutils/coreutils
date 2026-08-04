@@ -477,6 +477,7 @@ terminal_size = "0.4.0"
 textwrap = { version = "0.16.1", features = ["terminal_size"] }
 thiserror = "2.0.3"
 time = { version = "0.3.36" }
+rusty-fork = { version = "0.3.0" }
 unicode-width = "0.2.0"
 unit-prefix = "0.5"
 utmp-classic = "0.1.6"

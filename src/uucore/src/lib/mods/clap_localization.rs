@@ -677,28 +677,31 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_french_localization() {
-        use crate::locale::{get_message, setup_localization};
-        use std::env;
+    use rusty_fork::rusty_fork_test;
+    rusty_fork_test! {
+        #[test]
+        fn test_french_localization() {
+            use crate::locale::{get_message, setup_localization};
+            use std::env;
 
-        let original_lang = env::var_os("LANG").unwrap_or_default();
+            let original_lang = env::var_os("LANG").unwrap_or_default();
 
-        unsafe {
-            env::set_var("LANG", "fr_FR.UTF-8");
-        }
+            unsafe {
+                env::set_var("LANG", "fr_FR.UTF-8");
+            }
 
-        if setup_localization("test").is_ok() {
-            assert_eq!(get_message("common-error"), "erreur");
-            assert_eq!(get_message("common-usage"), "Utilisation");
-            assert_eq!(get_message("common-tip"), "conseil");
-        }
+            if setup_localization("test").is_ok() {
+                assert_eq!(get_message("common-error"), "erreur");
+                assert_eq!(get_message("common-usage"), "Utilisation");
+                assert_eq!(get_message("common-tip"), "conseil");
+            }
 
-        unsafe {
-            if original_lang.is_empty() {
-                env::remove_var("LANG");
-            } else {
-                env::set_var("LANG", original_lang);
+            unsafe {
+                if original_lang.is_empty() {
+                    env::remove_var("LANG");
+                } else {
+                    env::set_var("LANG", original_lang);
+                }
             }
         }
     }
