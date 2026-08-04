@@ -3230,3 +3230,47 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     // compare to 4 because of \n
     assert_eq!(result.stdout().len(), 4);
 }
+
+#[test]
+fn test_positional_operand_with_set_requires_format() {
+    new_ucmd!()
+        .args(&["--set", "2025-01-01", "99999999"])
+        .fails_with_code(1)
+        .stderr_contains("lacks a leading '+'")
+        .stderr_does_not_contain("cannot set date");
+}
+
+#[test]
+fn test_positional_set_rejected_with_explicit_date_source() {
+    use std::io::Write;
+
+    const OPERAND: &str = "99999999";
+    const MISSING_PLUS: &str = "lacks a leading '+'";
+
+    let mut source = tempfile::NamedTempFile::new().unwrap();
+
+    writeln!(source, "2025-01-01").unwrap();
+
+    new_ucmd!()
+        .arg("--file")
+        .arg(source.path())
+        .arg(OPERAND)
+        .fails_with_code(1)
+        .stderr_contains(MISSING_PLUS)
+        .stderr_does_not_contain("cannot set date");
+
+    new_ucmd!()
+        .arg("--reference")
+        .arg(source.path())
+        .arg(OPERAND)
+        .fails_with_code(1)
+        .stderr_contains(MISSING_PLUS)
+        .stderr_does_not_contain("cannot set date");
+
+    new_ucmd!()
+        .arg("--resolution")
+        .arg(OPERAND)
+        .fails_with_code(1)
+        .stderr_contains(MISSING_PLUS)
+        .stderr_does_not_contain("cannot set date");
+}

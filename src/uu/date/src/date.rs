@@ -379,17 +379,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let format = if let Some(fmt) = matches.get_one::<String>(OPT_FORMAT) {
         if let Some(stripped) = fmt.strip_prefix('+') {
             Format::Custom(stripped.to_string())
-        } else if matches!(date_source, DateSource::Human(_)) {
-            // -d was given, positional must be +FORMAT
+        } else if !matches!(date_source, DateSource::Now)
+            || matches.get_one::<String>(OPT_SET).is_some()
+        {
+            // When an option supplies the date source, a positional operand
+            // must be a +FORMAT rather than a date-setting timestamp.
             return Err(USimpleError::new(
                 1,
                 translate!("date-error-format-missing-plus", "arg" => fmt),
-            ));
-        } else if matches.get_one::<String>(OPT_SET).is_some() {
-            // -s flag is present: positional must be +FORMAT
-            return Err(USimpleError::new(
-                1,
-                translate!("date-error-invalid-date", "date" => fmt),
             ));
         } else if let Some(zoned) = parse_positional_set_datetime(fmt, utc) {
             positional_set_to = Some(zoned);
