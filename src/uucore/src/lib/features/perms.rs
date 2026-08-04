@@ -633,7 +633,7 @@ impl ChownExecutor {
                             if let Some(error) = e.io_error() {
                                 strip_errno(error)
                             } else {
-                                "Too many levels of symbolic links".into()
+                                translate!("uio-err-too-many-symlinks")
                             }
                         );
                     } else {

@@ -38,6 +38,8 @@ use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
 use windows_sys::Win32::System::Ioctl::FSCTL_SET_SPARSE;
 
+use crate::translate;
+
 /// Used to check if the `mode` has its `perm` bit set.
 ///
 /// This macro expands to `mode & perm != 0`.
@@ -451,7 +453,7 @@ pub fn canonicalize<P: AsRef<Path>>(
                         path_to_follow.push(part.as_os_str());
                     }
                     if !visited_files.insert((file_info, path_to_follow)) {
-                        return Err(Error::other("Too many levels of symbolic links")); // TODO use ErrorKind::FilesystemLoop when stable
+                        return Err(Error::other(translate!("uio-err-too-many-symlinks"))); // TODO use ErrorKind::FilesystemLoop when stable
                     }
                 }
                 result.pop();

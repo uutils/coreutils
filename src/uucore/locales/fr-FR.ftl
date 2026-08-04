@@ -50,6 +50,7 @@ uio-err-not-connected = Déconnecté
 # uio-err-interrupted = ?
 # uio-err-unexpected-eof = ?
 uio-err-is-a-directory = Est un répertoire
+uio-err-too-many-symlinks = Trop de niveaux de liens symboliques
 
 # Actions communes
 action-copying = copie

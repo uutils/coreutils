@@ -93,7 +93,7 @@ enum CatError {
     NoSuchDeviceOrAddress,
     #[error("{}", translate!("cat-error-input-file-is-output-file"))]
     OutputIsInput,
-    #[error("{}", translate!("cat-error-too-many-symbolic-links"))]
+    #[error("{}", translate!("uio-err-too-many-symlinks"))]
     TooManySymlinks,
 }
 

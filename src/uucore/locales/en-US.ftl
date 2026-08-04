@@ -50,6 +50,7 @@ uio-err-write-zero = Write zero
 uio-err-interrupted = Interrupted
 uio-err-unexpected-eof = Unexpected end of file
 uio-err-is-a-directory = Is a directory
+uio-err-too-many-symlinks = Too many levels of symbolic links
 
 # Common actions
 action-copying = copying
