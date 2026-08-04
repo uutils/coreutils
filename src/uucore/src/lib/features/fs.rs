@@ -790,23 +790,10 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 /// * `path` - A reference to the path to be checked.
 #[cfg(any(unix, target_os = "wasi"))]
 pub fn path_ends_with_terminator(path: &Path) -> bool {
-    #[cfg(unix)]
-    use std::os::unix::prelude::OsStrExt;
-    #[cfg(all(target_os = "wasi", target_env = "p1"))]
-    use std::os::wasi::ffi::OsStrExt;
-
-    #[cfg(all(target_os = "wasi", target_env = "p2"))]
-    return path
-        .as_os_str()
+    path.as_os_str()
         .as_encoded_bytes()
         .last()
-        .is_some_and(|&byte| byte == b'/');
-    #[cfg(not(all(target_os = "wasi", target_env = "p2")))]
-    return path
-        .as_os_str()
-        .as_bytes()
-        .last()
-        .is_some_and(|&byte| byte == b'/');
+        .is_some_and(|&byte| byte == b'/')
 }
 
 #[cfg(windows)]
