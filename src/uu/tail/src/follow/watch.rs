@@ -133,7 +133,7 @@ impl Observer {
             settings.follow,
             settings.use_polling,
             FileHandling::from(settings),
-            settings.pid,
+            settings.pid.unwrap_or_default(),
         )
     }
 
