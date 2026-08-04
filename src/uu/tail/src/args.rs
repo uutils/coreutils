@@ -134,8 +134,7 @@ pub struct Settings {
     pub follow: Option<FollowMode>,
     pub max_unchanged_stats: u32,
     pub mode: FilterMode,
-    pub pid: platform::Pid,
-    pid_specified: bool,
+    pub pid: Option<platform::Pid>,
     pub retry: bool,
     pub sleep_sec: Duration,
     pub use_polling: bool,
@@ -153,8 +152,7 @@ impl Default for Settings {
             sleep_sec: Duration::from_secs_f32(1.0),
             follow: Option::default(),
             mode: FilterMode::default(),
-            pid: Default::default(),
-            pid_specified: false,
+            pid: Option::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
@@ -266,8 +264,7 @@ impl Settings {
                         ));
                     }
 
-                    settings.pid = pid;
-                    settings.pid_specified = true;
+                    settings.pid = Some(pid);
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -312,7 +309,7 @@ impl Settings {
             }
         }
 
-        if self.pid_specified {
+        if let Some(pid) = self.pid {
             if self.follow.is_none() {
                 writeln!(
                     std::io::stderr().lock(),
@@ -320,7 +317,7 @@ impl Settings {
                     uucore::util_name(),
                     translate!("tail-warning-pid-ignored")
                 )?;
-            } else if self.pid != 0 && !platform::supports_pid_checks(self.pid) {
+            } else if pid != 0 && !platform::supports_pid_checks(pid) {
                 show_warning!("{}", translate!("tail-warning-pid-not-supported"));
             }
         }
@@ -330,7 +327,7 @@ impl Settings {
         // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
-            let blocking_stdin = self.pid == 0
+            let blocking_stdin = self.pid.unwrap_or_default() == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
                 && Handle::stdin().is_ok_and(|handle| {

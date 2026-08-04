@@ -102,7 +102,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
             follow::follow(observer, settings)?;
         }
     }
@@ -162,7 +162,7 @@ fn tail_file(
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
+        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
