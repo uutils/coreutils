@@ -406,6 +406,30 @@ fn test_permission_denied() {
 }
 
 #[test]
+fn test_chmod_inaccessible_file_reports_permission_denied() {
+    // Non-recursive chmod of a file whose metadata cannot be read because its
+    // parent directory lacks search permission must report "Permission denied",
+    // not "No such file or directory" (issue #9789). `Path::exists()` collapses
+    // the permission error into `false`, so the fix relies on `try_exists()`.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("locked");
+    make_file(&at.plus_as_string("locked/file"), 0o100_644);
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
+
+    scene
+        .ucmd()
+        .arg("644")
+        .arg("locked/file")
+        .fails()
+        .stderr_is("chmod: cannot access 'locked/file': Permission denied\n");
+
+    // Restore search permission so the fixture directory can be cleaned up.
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
+}
+
+#[test]
 #[allow(clippy::unreadable_literal)]
 fn test_chmod_recursive_correct_exit_code() {
     let (at, mut ucmd) = at_and_ucmd!();
