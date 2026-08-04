@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore contenta edgecase behaviour
+// spell-checker:ignore contenta edgecase behaviour tcaf
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -168,6 +168,60 @@ fn unexpand_spaces_after_fields() {
 }
 
 #[test]
+fn unexpand_leading_spaces_before_multibyte() {
+    // Leading whitespace is converted even in the default (UTF-8) mode, and the
+    // multibyte tail is copied verbatim.
+    new_ucmd!()
+        .pipe_in("        caf\u{e9}\n")
+        .succeeds()
+        .stdout_is("\tcaf\u{e9}\n");
+}
+
+#[test]
+fn unexpand_deep_indent_stops_at_last_tabstop() {
+    // With several tab stops, conversion stops past the last one: the extra
+    // leading spaces beyond column 4 stay as spaces.
+    new_ucmd!()
+        .args(&["-t", "2,4"])
+        .pipe_in("            x\n")
+        .succeeds()
+        .stdout_is("\t\t        x\n");
+}
+
+#[test]
+fn unexpand_wide_char_width_before_tab() {
+    // A 3-byte, double-width character advances the column by two, so the
+    // following tab lands on the next tab stop.
+    new_ucmd!()
+        .args(&["-a", "-t", "4"])
+        .pipe_in("   \u{3000}X\ty\n")
+        .succeeds()
+        .stdout_is("   \u{3000}X\ty\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_absorbed_into_tab() {
+    // U+3000 is a width-2 blank: a run of them that reaches a tab stop is
+    // converted to a tab, just like a run of ASCII spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("\u{3000}\u{3000}\u{3000}\u{3000}Z\n")
+        .succeeds()
+        .stdout_is("\tZ\n");
+}
+
+#[test]
+fn unexpand_ideographic_space_preserved_when_not_converted() {
+    // A blank run that does not reach a tab stop is emitted verbatim, so the
+    // multibyte blank keeps its original bytes rather than becoming spaces.
+    new_ucmd!()
+        .arg("-a")
+        .pipe_in("a\u{3000}b\n")
+        .succeeds()
+        .stdout_is("a\u{3000}b\n");
+}
+
+#[test]
 fn unexpand_read_from_file() {
     new_ucmd!().arg("with_spaces.txt").arg("-t4").succeeds();
 }
@@ -319,14 +373,27 @@ fn test_non_utf8_filename() {
 
 #[test]
 fn unexpand_multibyte_utf8_gnu_compat() {
-    // Verifies GNU-compatible behavior: column position uses byte count, not display width
-    // "1ΔΔΔ5" is 8 bytes (1 + 2*3 + 1), already at tab stop 8
-    // So 3 spaces should NOT convert to tab (would need 8 more to reach tab stop 16)
+    // Column position uses display width, not byte count (matches GNU 9.11).
+    // "1ΔΔΔ5" is 5 columns wide (each Δ is a 2-byte char of display width 1),
+    // so the run of 3 spaces reaches tab stop 8 and collapses to a single tab.
     new_ucmd!()
         .args(&["-a"])
         .pipe_in("1ΔΔΔ5   99999\n")
         .succeeds()
-        .stdout_is("1ΔΔΔ5   99999\n");
+        .stdout_is("1ΔΔΔ5\t99999\n");
+}
+
+#[test]
+fn unexpand_wide_multibyte_char_width() {
+    // A 3-byte character of display width 2 must advance the column by 2, not by
+    // its byte length. U+FF0D (full-width hyphen, 3 bytes, width 2) at column 0
+    // reaches column 2; the following 6 spaces then collapse to one tab at
+    // column 8. Regression for the byte-length-as-width bug.
+    new_ucmd!()
+        .args(&["-a"])
+        .pipe_in("\u{FF0D}      X\n")
+        .succeeds()
+        .stdout_is("\u{FF0D}\tX\n");
 }
 
 #[test]

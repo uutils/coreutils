@@ -219,18 +219,26 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         !self.format.is_empty()
     }
 
-    /// Write the field or empty filler if the field is not set.
+    /// Resolve an output field to the bytes that should be printed for it.
+    ///
+    /// The `-e` filler stands in for output fields that are empty, which
+    /// covers both fields missing from the input line and fields that are
+    /// present but zero length. When `-e` is not given the filler is itself
+    /// empty, so this leaves the output unchanged.
+    fn field_or_empty<'b>(&'b self, field: Option<&'b [u8]>) -> &'b [u8] {
+        match field {
+            Some(field) if !field.is_empty() => field,
+            _ => self.empty,
+        }
+    }
+
+    /// Write the field or the empty filler if the field is empty or not set.
     fn write_field(
         &self,
         writer: &mut impl Write,
         field: Option<&[u8]>,
     ) -> Result<(), std::io::Error> {
-        let value = match field {
-            Some(field) => field,
-            None => self.empty,
-        };
-
-        writer.write_all(value)
+        writer.write_all(self.field_or_empty(field))
     }
 
     /// Write each field except the one at the index.
@@ -243,13 +251,13 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         for i in 0..line.field_ranges.len() {
             if i != index {
                 writer.write_all(self.separator.output_separator())?;
-                writer.write_all(line.get_field(i).unwrap())?;
+                writer.write_all(self.field_or_empty(line.get_field(i)))?;
             }
         }
         Ok(())
     }
 
-    /// Write each field or the empty filler if the field is not set.
+    /// Write each field or the empty filler if the field is empty or not set.
     fn write_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
     where
         F: Fn(&Spec) -> Option<&'a [u8]>,
@@ -259,12 +267,7 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
                 writer.write_all(self.separator.output_separator())?;
             }
 
-            let field = match f(&self.format[i]) {
-                Some(value) => value,
-                None => self.empty,
-            };
-
-            writer.write_all(field)?;
+            writer.write_all(self.field_or_empty(f(&self.format[i])))?;
         }
         Ok(())
     }

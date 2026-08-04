@@ -293,6 +293,18 @@ fn test_random_source_regular_file() {
 }
 
 #[test]
+fn test_random_source_open_error_includes_cause() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("target");
+
+    ucmd.arg("--random-source=missing")
+        .arg("target")
+        .fails()
+        .stderr_only("shred: missing: No such file or directory\n");
+}
+
+#[test]
 fn test_random_source_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -457,4 +469,32 @@ fn test_shred_trailing_slash_on_dir() {
         .arg("d/")
         .fails()
         .stderr_contains("Is a directory");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_shred_inaccessible_file_reports_real_error() {
+    // A file whose parent directory lacks search permission must not be
+    // misreported as "No such file or directory": `Path::exists()` and
+    // `Path::is_file()` collapse the permission error into `false`.
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("locked");
+    at.touch("locked/file");
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o000)).unwrap();
+
+    let result = scene.ucmd().arg("locked/file").fails();
+    result.stderr_contains("Permission denied");
+    assert!(
+        !result.stderr_str().contains("No such file"),
+        "shred misreported an inaccessible file as missing: {}",
+        result.stderr_str()
+    );
+
+    // Restore search permission so the fixture directory can be cleaned up.
+    set_permissions(at.plus_as_string("locked"), Permissions::from_mode(0o755)).unwrap();
 }

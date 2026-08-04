@@ -264,12 +264,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let random_source = match matches.get_one::<String>(options::RANDOM_SOURCE) {
-        Some(filepath) => Some(RefCell::new(File::open(filepath).map_err(|_| {
-            USimpleError::new(
-                1,
-                translate!("shred-cannot-open-random-source", "source" => filepath.quote()),
-            )
-        })?)),
+        Some(filepath) => Some(RefCell::new(
+            File::open(filepath).map_err_context(|| filepath.clone())?,
+        )),
         None => None,
     };
 
@@ -512,35 +509,37 @@ fn create_test_compatible_sequence(
         .seek(SeekFrom::Start(0))
         .map_err_context(|| translate!("shred-failed-to-seek-file"))?;
     let mut buffer = [0u8; 1024];
-    if let Ok(bytes_read) = random_source.borrow_mut().read(&mut buffer) {
-        if bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55) {
-            // This is the test scenario - replicate exact algorithm
-            let test_patterns = vec![
-                0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
-                0x111, 0x000, 0xB6D, 0xEEE, 0x333,
-            ];
+    if random_source
+        .borrow_mut()
+        .read(&mut buffer)
+        .is_ok_and(|bytes_read| bytes_read > 0 && buffer[..bytes_read].iter().all(|&b| b == 0x55))
+    {
+        // This is the test scenario - replicate exact algorithm
+        let test_patterns = vec![
+            0xFFF, 0x924, 0x888, 0xDB6, 0x777, 0x492, 0xBBB, 0x555, 0xAAA, 0x6DB, 0x249, 0x999,
+            0x111, 0x000, 0xB6D, 0xEEE, 0x333,
+        ];
 
-            if num_passes >= 3 {
-                let mut sequence = Vec::new();
-                let n_random = (num_passes / 10).max(3);
-                let n_pattern = num_passes - n_random;
+        if num_passes >= 3 {
+            let mut sequence = Vec::new();
+            let n_random = (num_passes / 10).max(3);
+            let n_pattern = num_passes - n_random;
 
-                // Standard algorithm: first random, patterns with middle random(s), final random
-                sequence.push(PassType::Random);
+            // Standard algorithm: first random, patterns with middle random(s), final random
+            sequence.push(PassType::Random);
 
-                let middle_randoms = n_random - 2;
-                let mut pattern_sequence = generate_patterns_with_middle_randoms(
-                    &test_patterns,
-                    n_pattern,
-                    middle_randoms,
-                    num_passes,
-                );
-                sequence.append(&mut pattern_sequence);
+            let middle_randoms = n_random - 2;
+            let mut pattern_sequence = generate_patterns_with_middle_randoms(
+                &test_patterns,
+                n_pattern,
+                middle_randoms,
+                num_passes,
+            );
+            sequence.append(&mut pattern_sequence);
 
-                sequence.push(PassType::Random);
+            sequence.push(PassType::Random);
 
-                return Ok(sequence);
-            }
+            return Ok(sequence);
         }
     }
 
@@ -625,17 +624,26 @@ fn wipe_file(
         }
     }
 
-    if !path.exists() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
-        ));
-    }
-    if !path.is_file() {
-        return Err(USimpleError::new(
-            1,
-            translate!("shred-not-a-file", "file" => path.maybe_quote()),
-        ));
+    // `Path::exists()` and `Path::is_file()` both collapse any metadata error
+    // (including a permission error) into `false`, which made shred report a
+    // file whose parent directory lacks search permission as "No such file or
+    // directory". Inspect the metadata directly so a genuine `ENOENT` stays a
+    // "no such file" error while a permission error falls through to the
+    // open-for-writing below, which surfaces the real reason.
+    match fs::metadata(path) {
+        Ok(md) if !md.is_file() => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-not-a-file", "file" => path.maybe_quote()),
+            ));
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            return Err(USimpleError::new(
+                1,
+                translate!("shred-no-such-file-or-directory", "file" => path.maybe_quote()),
+            ));
+        }
+        _ => {}
     }
 
     let metadata =

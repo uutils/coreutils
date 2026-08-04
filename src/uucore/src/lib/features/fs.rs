@@ -18,7 +18,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(unix)]
+#[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -329,11 +329,10 @@ enum OwningComponent {
 impl OwningComponent {
     fn as_os_str(&self) -> &OsStr {
         match self {
-            Self::Prefix(s) => s.as_os_str(),
+            Self::Prefix(s) | Self::Normal(s) => s.as_os_str(),
             Self::RootDir => Component::RootDir.as_os_str(),
             Self::CurDir => Component::CurDir.as_os_str(),
             Self::ParentDir => Component::ParentDir.as_os_str(),
-            Self::Normal(s) => s.as_os_str(),
         }
     }
 }
@@ -347,6 +346,22 @@ impl<'a> From<Component<'a>> for OwningComponent {
             Component::ParentDir => Self::ParentDir,
             Component::Normal(s) => Self::Normal(s.to_os_string()),
         }
+    }
+}
+
+/// Confirm that `path` (already known to exist) is a directory, without
+/// requiring permission to list its contents.
+///
+/// `read_dir` alone would raise the right error for a non-directory, but
+/// also requires listing permission on the target, which a plain "is this a
+/// directory" check should not need (e.g. `realpath /root/` succeeds for
+/// non-root users even though they can't list `/root`).
+fn ensure_is_directory(path: &Path) -> IOResult<()> {
+    if fs::metadata(path)?.is_dir() {
+        Ok(())
+    } else {
+        read_dir(path)?;
+        Ok(())
     }
 }
 
@@ -457,13 +472,13 @@ pub fn canonicalize<P: AsRef<Path>>(
     match miss_mode {
         MissingHandling::Existing => {
             if has_to_be_directory {
-                read_dir(&result)?;
+                ensure_is_directory(&result)?;
             }
         }
         MissingHandling::Normal => {
             if result.exists() {
                 if has_to_be_directory {
-                    read_dir(&result)?;
+                    ensure_is_directory(&result)?;
                 }
             } else if let Some(parent) = result.parent() {
                 read_dir(parent)?;
@@ -723,9 +738,12 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::symlink_metadata(source), fs::symlink_metadata(target))
-    else {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
         return false;
     };
 
@@ -749,9 +767,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::metadata(source), fs::symlink_metadata(target))
-    else {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
         return false;
     };
 
@@ -771,12 +792,21 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Pat
 pub fn path_ends_with_terminator(path: &Path) -> bool {
     #[cfg(unix)]
     use std::os::unix::prelude::OsStrExt;
-    #[cfg(target_os = "wasi")]
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
     use std::os::wasi::ffi::OsStrExt;
-    path.as_os_str()
+
+    #[cfg(all(target_os = "wasi", target_env = "p2"))]
+    return path
+        .as_os_str()
+        .as_encoded_bytes()
+        .last()
+        .is_some_and(|&byte| byte == b'/');
+    #[cfg(not(all(target_os = "wasi", target_env = "p2")))]
+    return path
+        .as_os_str()
         .as_bytes()
         .last()
-        .is_some_and(|&byte| byte == b'/')
+        .is_some_and(|&byte| byte == b'/');
 }
 
 #[cfg(windows)]
@@ -798,13 +828,17 @@ pub fn path_ends_with_terminator(path: &Path) -> bool {
 ///
 /// * `bool` - Returns `true` if stdin is a directory, `false` otherwise.
 pub fn is_stdin_directory(stdin: &Stdin) -> bool {
-    #[cfg(unix)]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
     {
         use mode::{S_IFDIR, S_IFMT};
-        let mode = rustix::fs::fstat(stdin).unwrap().st_mode as u32;
-        // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
-        // sockets for directories.
-        mode & S_IFMT == S_IFDIR
+        if let Ok(stat) = rustix::fs::fstat(stdin.as_fd()) {
+            #[allow(clippy::unnecessary_cast)]
+            let mode = stat.st_mode as u32;
+            // We use the S_IFMT mask ala S_ISDIR() to avoid mistaking
+            // sockets for directories.
+            return mode & S_IFMT == S_IFDIR;
+        }
+        false
     }
 
     #[cfg(windows)]
@@ -817,8 +851,8 @@ pub fn is_stdin_directory(stdin: &Stdin) -> bool {
         false
     }
 
-    // WASI: stdin is never a directory
-    #[cfg(target_os = "wasi")]
+    // WASI P1: stdin is never a directory
+    #[cfg(all(target_os = "wasi", target_env = "p1"))]
     {
         let _ = stdin;
         false
@@ -1005,17 +1039,17 @@ pub fn get_filename(file: &Path) -> Option<&str> {
 // Redox's libc appears not to include the following utilities
 
 #[cfg(target_os = "redox")]
-pub fn major(dev: libc::dev_t) -> libc::c_uint {
+pub fn major(dev: libc::dev_t) -> core::ffi::c_uint {
     (((dev >> 8) & 0xFFF) | ((dev >> 32) & 0xFFFFF000)) as _
 }
 
 #[cfg(target_os = "redox")]
-pub fn minor(dev: libc::dev_t) -> libc::c_uint {
+pub fn minor(dev: libc::dev_t) -> core::ffi::c_uint {
     ((dev & 0xFF) | ((dev >> 12) & 0xFFFFF00)) as _
 }
 
 #[cfg(target_os = "redox")]
-pub fn makedev(maj: libc::c_uint, min: libc::c_uint) -> libc::dev_t {
+pub fn makedev(maj: core::ffi::c_uint, min: core::ffi::c_uint) -> libc::dev_t {
     let [maj, min] = [maj as libc::dev_t, min as libc::dev_t];
     (min & 0xff) | ((maj & 0xfff) << 8) | ((min & !0xff) << 12) | ((maj & !0xfff) << 32)
 }

@@ -45,7 +45,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
@@ -53,7 +53,7 @@ jobs:
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -287,13 +287,13 @@ jobs:
         job:
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -373,13 +373,13 @@ jobs:
       run: |
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -459,13 +459,13 @@ jobs:
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'

@@ -29,7 +29,7 @@ use uucore::fsext::{FsUsage, MountInfo};
 /// [`Filesystem::usage`] field provides information on the amount of
 /// space available on the filesystem and the amount of space used.
 #[derive(Debug, Clone)]
-pub(crate) struct Filesystem {
+pub struct Filesystem {
     /// The file given on the command line if any.
     ///
     /// When invoking `df` with a positional argument, it displays

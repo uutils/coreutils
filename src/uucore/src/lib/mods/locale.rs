@@ -93,14 +93,13 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
-        #[expect(clippy::collapsible_if)]
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        if let Some(ref fallback) = self.fallback_bundle
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
         }
 
         // Return the key ID if not found anywhere
@@ -113,6 +112,13 @@ static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
 }
 
@@ -332,10 +338,10 @@ fn create_wasi_bundle_from_embedded(
     bundle.set_use_isolating(false);
 
     let mut try_add = |key: &str| {
-        if let Some(content) = get_embedded_locale(key) {
-            if let Ok(resource) = FluentResource::try_new(content.to_string()) {
-                bundle.add_resource_overriding(Box::leak(Box::new(resource)));
-            }
+        if let Some(content) = get_embedded_locale(key)
+            && let Ok(resource) = FluentResource::try_new(content.to_string())
+        {
+            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
         }
     };
 
@@ -477,6 +483,13 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
+        #[cfg_attr(
+            target_os = "android",
+            expect(
+                clippy::missing_const_for_thread_local,
+                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+            )
+        )]
         static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
     }
     if LOCALIZER_IS_SET.with(Cell::get) {

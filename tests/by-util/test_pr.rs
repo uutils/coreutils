@@ -221,6 +221,15 @@ fn test_with_valid_page_ranges() {
 }
 
 #[test]
+fn test_start_page_exceeds_page_count() {
+    new_ucmd!()
+        .args(&["--pages=2", "hosts.log"])
+        .succeeds()
+        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
+        .stdout_is("");
+}
+
+#[test]
 fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
@@ -1070,4 +1079,16 @@ fn test_merge_empty_input() {
         .args(&["-m", "/dev/null", "/dev/null"])
         .succeeds()
         .no_output();
+}
+
+#[test]
+fn test_missing_file_error_message() {
+    // A nonexistent operand must be reported as "pr: <file>: <message>", like
+    // GNU pr, with the raw "(os error N)" suffix stripped. The exact message
+    // text is platform dependent, so only assert the portable parts.
+    new_ucmd!()
+        .arg("nonexistent_file")
+        .fails_with_code(1)
+        .stderr_contains("pr: nonexistent_file: ")
+        .stderr_does_not_contain("(os error");
 }
