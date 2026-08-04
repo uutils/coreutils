@@ -17,9 +17,11 @@ doctest = false
 
 [dependencies]
 bstr = { workspace = true }
+bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
 clap = { workspace = true }
 fluent = { workspace = true }
 memchr = { workspace = true }
+simdutf8 = { workspace = true }
 uucore = { workspace = true, features = ["i18n-charmap", "parser", "ranges"] }
 
 [dev-dependencies]
