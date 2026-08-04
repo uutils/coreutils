@@ -763,6 +763,35 @@ mod tests {
         test_invalid_utf8_args_ignore(os_str);
     }
 
+    /// On byte-oriented platforms — unix and every WASI environment — the
+    /// `OsString` helpers must round-trip arbitrary bytes, including sequences
+    /// that are not valid UTF-8. This regressed on wasm32-wasip2 and
+    /// wasm32-wasip3, where the conversions fell back to the UTF-8-validating
+    /// path and returned an error instead.
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn os_string_from_vec_roundtrips_non_utf8() {
+        let source = vec![0x66, 0x6f, 0x80, 0x6f];
+
+        let os_string = os_string_from_vec(source.clone()).unwrap();
+        // The value really does hold bytes that are not valid UTF-8.
+        assert!(os_string.to_str().is_none());
+        assert_eq!(os_string_to_vec(os_string).unwrap(), source);
+    }
+
+    /// Same invariant for the borrowed `OsStr` conversions, which must agree
+    /// with `os_string_from_vec` on what is representable.
+    #[cfg(any(unix, target_os = "wasi"))]
+    #[test]
+    fn os_str_from_bytes_roundtrips_non_utf8() {
+        let source = [0x66, 0x6f, 0x80, 0x6f];
+
+        let os_str = os_str_from_bytes(&source).unwrap();
+        assert!(os_str.to_str().is_none());
+        assert_eq!(os_str_as_bytes(&os_str).unwrap(), &source);
+        assert_eq!(os_str_as_bytes_lossy(&os_str).into_owned(), source);
+    }
+
     #[test]
     fn test_format_usage() {
         assert_eq!(format_usage("expr EXPRESSION"), "expr EXPRESSION");
