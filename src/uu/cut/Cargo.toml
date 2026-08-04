@@ -20,6 +20,8 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["ranges", "i18n-charmap"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
+bytecount = { workspace = true, features = ["runtime-dispatch-simd"] }
+simdutf8 = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]

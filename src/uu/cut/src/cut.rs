@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) delim sourcefiles undelimited
 
+use bstr::ByteSlice;
 use bstr::io::BufReadExt;
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
 use std::ffi::OsString;
@@ -70,35 +71,50 @@ fn list_to_ranges(list: &str, complement: bool) -> Result<Vec<Range>, String> {
     }
 }
 
+/// Selected parts of lines are collected and flushed once this many bytes
+/// have piled up: per-line `write_all` through a `dyn Write` costs more than
+/// the extra copy. Small enough to stay resident in a 32 KiB L1 data cache.
+const OUT_FLUSH_AT: usize = 8 * 1024;
+
+/// Batch size to use for the output buffer: every line when stdout is a
+/// terminal, so output keeps appearing as input is consumed, and
+/// [`OUT_FLUSH_AT`] otherwise.
+fn out_flush_at() -> usize {
+    if stdout().is_terminal() {
+        0
+    } else {
+        OUT_FLUSH_AT
+    }
+}
+
 /// Write the parts of `line` selected by `ranges`, treating every byte as a
 /// character.
 ///
 /// Always inlined: it is the body of the per-line loop, and a call per line
 /// costs more than the work it does on short lines.
 #[inline(always)]
-fn write_line_bytes<W: Write>(
+fn write_line_bytes(
     line: &[u8],
-    out: &mut W,
+    out: &mut Vec<u8>,
     ranges: &[Range],
     out_delim: &[u8],
     explicit_delim: bool,
-) -> std::io::Result<()> {
+) {
     let mut print_delim = false;
     for &Range { low, high } in ranges {
         if low > line.len() {
             break;
         }
         if print_delim {
-            out.write_all(out_delim)?;
+            out.extend_from_slice(out_delim);
         } else if explicit_delim {
             print_delim = true;
         }
         // change `low` from 1-indexed value to 0-index value
         let low = low - 1;
         let high = high.min(line.len());
-        out.write_all(&line[low..high])?;
+        out.extend_from_slice(&line[low..high]);
     }
-    Ok(())
 }
 
 fn cut_bytes<R: Read, W: Write>(
@@ -111,42 +127,27 @@ fn cut_bytes<R: Read, W: Write>(
     let mut buf_in = BufReader::new(reader);
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
     let explicit_delim = opts.out_delimiter.is_some();
+    let flush_at = out_flush_at();
+    let mut buf = Vec::with_capacity(flush_at + 4096);
 
     let result = buf_in.for_byte_record(newline_char, |line| {
-        write_line_bytes(line, out, ranges, out_delim, explicit_delim)?;
-        out.write_all(&[newline_char])?;
+        write_line_bytes(line, &mut buf, ranges, out_delim, explicit_delim);
+        buf.push(newline_char);
+        if buf.len() >= flush_at {
+            out.write_all(&buf)?;
+            buf.clear();
+        }
         Ok(true)
     });
 
     if let Err(e) = result {
         return Err(USimpleError::new(1, e.to_string()));
     }
+    if let Err(e) = out.write_all(&buf) {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
 
     Ok(())
-}
-
-/// Offset of the first byte above `0x7F` in `bytes`, or `bytes.len()` if there
-/// is none.
-///
-/// Whole words are scanned at a time while at least one is left, then the tail
-/// byte by byte. Callers pass exactly the bytes they may consume, so the word
-/// loop never has to discount bytes reaching past the end.
-#[inline(always)]
-fn ascii_run(bytes: &[u8]) -> usize {
-    const HIGH_BITS: u64 = 0x8080_8080_8080_8080;
-
-    let mut idx = 0;
-    while let Some(chunk) = bytes[idx..].first_chunk::<8>() {
-        let high = u64::from_le_bytes(*chunk) & HIGH_BITS;
-        if high != 0 {
-            return idx + high.trailing_zeros() as usize / 8;
-        }
-        idx += 8;
-    }
-    while idx < bytes.len() && bytes[idx] < 0x80 {
-        idx += 1;
-    }
-    idx
 }
 
 /// Everything the character-mode line loop needs besides the line itself. It is
@@ -163,18 +164,103 @@ struct CharCut<'a> {
     encoding: Encoding,
 }
 
+/// Minimum walk length, in characters, for a line to get the validated `-c`
+/// fast path: below this the UTF-8 validation call costs more than stepping
+/// through the characters one by one.
+const WORD_WALK_MIN: usize = 8;
+
+/// The prefix of `line`, as validated UTF-8, that the `-c` walk may count
+/// characters in without decoding: in valid UTF-8 every non-continuation byte
+/// starts a character, a count the decoder disagrees with on invalid input.
+/// Validation is capped at the `4 * max_limit` bytes the walk can touch, and
+/// an empty prefix keeps the whole line on the scalar walk.
+fn validated_prefix(line: &[u8], max_limit: usize) -> &[u8] {
+    if max_limit < WORD_WALK_MIN {
+        return b"";
+    }
+    let mut cap = line
+        .len()
+        .min(max_limit.saturating_mul(4).saturating_add(3));
+    // Do not end the span inside a character: a split character would fail
+    // validation even on a fully valid line. A line opening with nothing but
+    // stray continuation bytes backs off to an empty prefix, which validates
+    // and leaves the whole line to the scalar walk.
+    while 0 < cap && cap < line.len() && line[cap] & 0xC0 == 0x80 {
+        cap -= 1;
+    }
+    match simdutf8::basic::from_utf8(&line[..cap]) {
+        Ok(_) => &line[..cap],
+        Err(_) => b"",
+    }
+}
+
+/// Byte offset just after the first `n` characters of `s`, and the number of
+/// characters actually there, whichever is reached first. `s` must be valid
+/// UTF-8 starting at a character boundary.
+///
+/// Rather than walking characters, whole spans are counted at once: `n`
+/// characters occupy at least `n` bytes, so a span that long can be consumed
+/// blindly, counting the character starts inside it with `bytecount` and going
+/// again for whatever is still missing. Each round at least halves the missing
+/// count, and no byte is counted twice.
+fn select_chars(s: &[u8], n: usize) -> (usize, usize) {
+    let (mut off, mut consumed) = (0, 0);
+    while consumed < n && off < s.len() {
+        let mut end = off + (n - consumed).min(s.len() - off);
+        // Do not split the last character: its continuation bytes hold no
+        // character start, so taking them cannot overshoot `n`.
+        while end < s.len() && s[end] & 0xC0 == 0x80 {
+            end += 1;
+        }
+        consumed += bytecount::num_chars(&s[off..end]);
+        off = end;
+    }
+    (off, consumed)
+}
+
 impl CharCut<'_> {
     /// Walk `line` from byte offset `idx` (at position `pos`) as long as the
     /// position of the last consumed character stays within `limit`, and return
     /// the byte offset and position reached.
+    ///
+    /// `valid` is the validated prefix of `line` (see [`validated_prefix`];
+    /// empty when unknown or not worth it): there characters are counted in
+    /// whole spans by [`select_chars`], with no decoding. The scalar walk
+    /// finishes the job past the end of the prefix. `idx` is always a
+    /// character boundary: every offset returned lies between two characters.
     #[inline(always)]
-    fn advance(&self, line: &[u8], mut idx: usize, mut pos: usize, limit: usize) -> (usize, usize) {
+    fn advance(
+        &self,
+        line: &[u8],
+        mut idx: usize,
+        mut pos: usize,
+        limit: usize,
+        valid: &[u8],
+    ) -> (usize, usize) {
+        if pos < limit && idx < valid.len() {
+            let (off, consumed) = select_chars(&valid[idx..], limit - pos);
+            idx += off;
+            pos += consumed;
+        }
+        self.advance_scalar(line, idx, pos, limit)
+    }
+
+    /// One character at a time version of the walk, used where the word loop
+    /// does not apply and to finish what it started.
+    #[inline(always)]
+    fn advance_scalar(
+        &self,
+        line: &[u8],
+        mut idx: usize,
+        mut pos: usize,
+        limit: usize,
+    ) -> (usize, usize) {
         while pos < limit && idx < line.len() {
             // ASCII bytes are single-byte characters in every encoding handled
             // here, so offset and position move together and a whole run of
             // them can be taken at once, without going through the decoder.
             let room = (limit - pos).min(line.len() - idx);
-            let run = ascii_run(&line[idx..idx + room]);
+            let run = line[idx..idx + room].find_non_ascii_byte().unwrap_or(room);
             idx += run;
             pos += run;
             if run == room {
@@ -191,6 +277,25 @@ impl CharCut<'_> {
         (idx, pos)
     }
 
+    /// Highest position [`Self::write_line`] can ask [`Self::advance`] to walk
+    /// to on a line of `line_len` bytes. It mirrors the loop there: a range
+    /// reaching past the end of the line is covered by a plain copy, so the
+    /// walk ends with that range's start.
+    fn max_walk_limit(&self, line_len: usize) -> usize {
+        let mut max = 0;
+        for &Range { low, high } in self.ranges {
+            if low > line_len {
+                break;
+            }
+            max = low - 1;
+            if high >= line_len {
+                break;
+            }
+            max = high;
+        }
+        max
+    }
+
     /// Write the parts of `line` selected by the ranges, keeping multi-byte
     /// characters whole. A character belongs to a range when its position is in
     /// `low..=high`.
@@ -199,7 +304,12 @@ impl CharCut<'_> {
     /// per-line loop, and the call costs more than the work done on a short
     /// line.
     #[inline(always)]
-    fn write_line<W: Write>(&self, line: &[u8], out: &mut W) -> std::io::Result<()> {
+    fn write_line(&self, line: &[u8], out: &mut Vec<u8>) {
+        let valid = if self.by_char && self.encoding == Encoding::Utf8 {
+            validated_prefix(line, self.max_walk_limit(line.len()))
+        } else {
+            b""
+        };
         let mut print_delim = false;
         // Byte offset of the next character to look at, and the position
         // already consumed. The ranges are sorted and disjoint, so one pass
@@ -213,12 +323,12 @@ impl CharCut<'_> {
                 break;
             }
             // Skip the characters located before the range.
-            (idx, pos) = self.advance(line, idx, pos, low - 1);
+            (idx, pos) = self.advance(line, idx, pos, low - 1, valid);
             if idx == line.len() {
                 break;
             }
             if print_delim {
-                out.write_all(self.out_delim)?;
+                out.extend_from_slice(self.out_delim);
             } else if self.explicit_delim {
                 print_delim = true;
             }
@@ -227,14 +337,14 @@ impl CharCut<'_> {
                 // The range reaches past the end of the line, so it covers
                 // every character left and none of them needs to be decoded.
                 // The ranges after it start further away still.
-                return out.write_all(&line[start..]);
+                out.extend_from_slice(&line[start..]);
+                return;
             }
             // At least one character is taken: `pos` is below `high` and there
             // are bytes left, so this always moves `idx` forward.
-            (idx, pos) = self.advance(line, idx, pos, high);
-            out.write_all(&line[start..idx])?;
+            (idx, pos) = self.advance(line, idx, pos, high, valid);
+            out.extend_from_slice(&line[start..idx]);
         }
-        Ok(())
     }
 }
 
@@ -266,13 +376,23 @@ fn cut_chars<R: Read, W: Write>(
         encoding,
     };
 
+    let flush_at = out_flush_at();
+    let mut buf = Vec::with_capacity(flush_at + 4096);
+
     let result = buf_in.for_byte_record(newline_char, |line| {
-        cut.write_line(line, out)?;
-        out.write_all(&[newline_char])?;
+        cut.write_line(line, &mut buf);
+        buf.push(newline_char);
+        if buf.len() >= flush_at {
+            out.write_all(&buf)?;
+            buf.clear();
+        }
         Ok(true)
     });
 
     if let Err(e) = result {
+        return Err(USimpleError::new(1, e.to_string()));
+    }
+    if let Err(e) = out.write_all(&buf) {
         return Err(USimpleError::new(1, e.to_string()));
     }
 
@@ -987,30 +1107,30 @@ mod tests {
     fn advance_counts_characters_for_c() {
         let cut = utf8_cut(true);
         // Inside the leading ASCII run, and stopping right on its last byte.
-        assert_eq!(cut.advance(LINE, 0, 0, 3), (3, 3));
-        assert_eq!(cut.advance(LINE, 0, 0, 5), (5, 5));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 3), (3, 3));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 5), (5, 5));
         // Taking the 2-byte character moves two bytes but one position.
-        assert_eq!(cut.advance(LINE, 0, 0, 6), (7, 6));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 6), (7, 6));
         // Through "brown": 12 bytes for 11 characters, the 2-byte one included.
-        assert_eq!(cut.advance(LINE, 0, 0, 11), (12, 11));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 11), (12, 11));
         // A limit past the end stops at the end: 25 bytes, 22 characters.
-        assert_eq!(cut.advance(LINE, 0, 0, 99), (LINE.len(), 22));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 99), (LINE.len(), 22));
         // Resuming mid-line, and a limit that is already reached.
-        assert_eq!(cut.advance(LINE, 7, 6, 9), (10, 9));
-        assert_eq!(cut.advance(LINE, 7, 6, 6), (7, 6));
+        assert_eq!(cut.advance_scalar(LINE, 7, 6, 9), (10, 9));
+        assert_eq!(cut.advance_scalar(LINE, 7, 6, 6), (7, 6));
     }
 
     #[test]
     fn advance_counts_bytes_for_b_n() {
         let cut = utf8_cut(false);
         // Positions are byte offsets here, so the ASCII head is unchanged.
-        assert_eq!(cut.advance(LINE, 0, 0, 5), (5, 5));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 5), (5, 5));
         // The 2-byte character only fits once the limit covers both bytes.
-        assert_eq!(cut.advance(LINE, 0, 0, 6), (5, 5));
-        assert_eq!(cut.advance(LINE, 0, 0, 7), (7, 7));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 6), (5, 5));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 7), (7, 7));
         // Likewise the 3-byte one: 12 and 13 are short, 14 takes it.
-        assert_eq!(cut.advance(LINE, 0, 0, 13), (12, 12));
-        assert_eq!(cut.advance(LINE, 0, 0, 15), (15, 15));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 13), (12, 12));
+        assert_eq!(cut.advance_scalar(LINE, 0, 0, 15), (15, 15));
     }
 
     #[test]
@@ -1019,12 +1139,12 @@ mod tests {
         // "foxjumping" is long enough for the word-at-a-time path, both
         // landing exactly on a word boundary and past one.
         let tail = &LINE[15..];
-        assert_eq!(cut.advance(tail, 0, 0, 8), (8, 8));
-        assert_eq!(cut.advance(tail, 0, 0, 10), (10, 10));
+        assert_eq!(cut.advance_scalar(tail, 0, 0, 8), (8, 8));
+        assert_eq!(cut.advance_scalar(tail, 0, 0, 10), (10, 10));
         // A high byte found by the word scan still yields to the decoder.
         let wide = b"abcdefghij\xc3\xa9kl";
-        assert_eq!(cut.advance(wide, 0, 0, 11), (12, 11));
+        assert_eq!(cut.advance_scalar(wide, 0, 0, 11), (12, 11));
         // An empty line has nothing to walk.
-        assert_eq!(cut.advance(b"", 0, 0, 4), (0, 0));
+        assert_eq!(cut.advance_scalar(b"", 0, 0, 4), (0, 0));
     }
 }
