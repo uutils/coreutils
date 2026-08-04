@@ -319,7 +319,7 @@ impl UError for USimpleError {
     }
 }
 
-/// Wrapper type around [`std::io::Error`].
+/// A usage error type with an exit code and a message that implements [`UError`].
 #[derive(Debug)]
 pub struct UUsageError {
     /// Exit code of the error.
