@@ -3937,6 +3937,7 @@ dependencies = [
  "half",
  "libc",
  "rustix",
+ "tempfile",
  "uucore",
 ]
 

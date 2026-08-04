@@ -23,6 +23,9 @@ uucore = { workspace = true, features = ["fs", "parser-size"] }
 fluent = { workspace = true }
 libc.workspace = true
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true
 
