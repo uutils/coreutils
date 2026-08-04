@@ -210,11 +210,13 @@ fn test_zero_bytes_with_suffix() {
     ts.ucmd()
         .args(&["-c0K"])
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     ts.ucmd()
         .args(&["-c00K"])
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     ts.ucmd()
