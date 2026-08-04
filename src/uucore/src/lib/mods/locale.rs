@@ -120,6 +120,15 @@ thread_local! {
         )
     )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
+    // Avoid duplicated and high-cost localizer setup
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -204,11 +213,11 @@ fn create_bundle(
 }
 
 /// Initialize localization with common strings in addition to utility-specific strings
-fn init_localization(
+fn build_localizer_from_locales_dir(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
     util_name: &str,
-) -> Result<(), LocalizationError> {
+) -> Result<Localizer, LocalizationError> {
     let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
 
@@ -233,11 +242,36 @@ fn init_localization(
         }
     };
 
-    LOCALIZER.with(|lock| {
-        lock.set(loc)
-            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-    })?;
-    Ok(())
+    Ok(loc)
+}
+
+fn build_localizer_from_embedded(
+    locale: &LanguageIdentifier,
+    util_name: &str,
+) -> Result<Localizer, LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    let localizer = {
+        #[cfg(target_os = "wasi")]
+        {
+            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, util_name)?;
+            if locale == default_locale {
+                Localizer::new(english_bundle)
+            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, util_name) {
+                Localizer::new(localized).with_fallback(english_bundle)
+            } else {
+                Localizer::new(english_bundle)
+            }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let _ = locale;
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, util_name)?;
+            Localizer::new(english_bundle)
+        }
+    };
+    Ok(localizer)
 }
 
 /// Helper function to parse FluentResource from content string
@@ -361,6 +395,7 @@ fn create_wasi_bundle_from_embedded(
 }
 
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
+    let _ = lazy_thread_setup_localization();
     LOCALIZER.with(|lock| {
         lock.get()
             .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
@@ -443,6 +478,13 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     })
 }
 
+#[inline(always)]
+fn detect_system_locale_or_default() -> LanguageIdentifier {
+    detect_system_locale().unwrap_or_else(|_| {
+        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
+    })
+}
+
 /// Sets up localization using the system locale with English fallback.
 /// Always loads common strings in addition to utility-specific strings.
 ///
@@ -480,58 +522,46 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 ///     Err(e) => eprintln!("Failed to initialize localization: {e}"),
 /// }
 /// ```
-pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
-    // Avoid duplicated and high-cost localizer setup
-    thread_local! {
-        #[cfg_attr(
-            target_os = "android",
-            expect(
-                clippy::missing_const_for_thread_local,
-                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-            )
-        )]
-        static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
-    }
+pub fn setup_localization(util_name: &str) -> Result<(), LocalizationError> {
+    setup_localization_inner(Some(util_name))
+}
+
+/// Called by precaution when trying to get a message, in case we are in
+/// a separate thread and the thread_local LOCALIZER is not created yet.
+pub fn lazy_thread_setup_localization() -> Result<(), LocalizationError> {
+    setup_localization_inner(None)
+}
+
+fn setup_localization_inner(util_name: Option<&str>) -> Result<(), LocalizationError> {
+    // Cache as much info as possible to avoid having to re-do the work when
+    // initializing data again for a thread.
+    static UTIL_NAME_AND_LOCALE_DIR: OnceLock<(String, Result<PathBuf, LocalizationError>)> =
+        OnceLock::new();
+    static LOCALE: OnceLock<LanguageIdentifier> = OnceLock::new();
+
     if LOCALIZER_IS_SET.with(Cell::get) {
         return Ok(());
     }
 
-    let locale = detect_system_locale().unwrap_or_else(|_| {
-        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
+    let (util_name, locales_dir) = UTIL_NAME_AND_LOCALE_DIR.get_or_init(|| {
+        let util_name = util_name.expect("First localization setup should pass util_name");
+        (util_name.to_string(), get_locales_dir(util_name))
     });
+    let locale = LOCALE.get_or_init(detect_system_locale_or_default);
 
     // Load common strings along with utility-specific strings
-    if let Ok(locales_dir) = get_locales_dir(p) {
+    let localizer = if let Ok(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
-        init_localization(&locale, &locales_dir, p)?;
+        build_localizer_from_locales_dir(locale, locales_dir, util_name)?
     } else {
         // No locales directory found, use embedded locales
-        let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-            .expect("Default locale should always be valid");
+        build_localizer_from_embedded(locale, util_name)?
+    };
 
-        #[cfg(target_os = "wasi")]
-        let localizer = {
-            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
-            if locale == default_locale {
-                Localizer::new(english_bundle)
-            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
-                Localizer::new(localized).with_fallback(english_bundle)
-            } else {
-                Localizer::new(english_bundle)
-            }
-        };
-
-        #[cfg(not(target_os = "wasi"))]
-        let localizer = {
-            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-            Localizer::new(english_bundle)
-        };
-
-        LOCALIZER.with(|lock| {
-            lock.set(localizer)
-                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-        })?;
-    }
+    LOCALIZER.with(|lock| {
+        lock.set(localizer)
+            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+    })?;
     LOCALIZER_IS_SET.with(|f| f.set(true));
     Ok(())
 }
