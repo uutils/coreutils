@@ -233,18 +233,21 @@ fn test_zero_bytes_with_suffix() {
         .args(&["--bytes=0K"])
         .ignore_stdin_write_error()
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     new_ucmd!()
         .args(&["--bytes=00K"])
         .ignore_stdin_write_error()
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     new_ucmd!()
         .args(&["--bytes=+0K"])
         .ignore_stdin_write_error()
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
 }
