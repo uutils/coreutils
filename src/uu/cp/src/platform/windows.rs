@@ -166,11 +166,7 @@ fn sparse_copy(src_file: &mut File, dest: &Path) -> Result<(), SparseCopyError> 
     // Detect holes at the destination volume's sparse allocation granularity.
     let mut buf = vec![0u8; sparse_block_size(dest)];
     let mut offset: u64 = 0;
-    loop {
-        let read = read_full(src_file, &mut buf)?;
-        if read == 0 {
-            break;
-        }
+    while let read @ 1.. = read_full(src_file, &mut buf)? {
         let chunk = &buf[..read];
         // Only write blocks that contain data; unwritten ranges remain holes.
         if chunk.iter().any(|&b| b != 0) {
