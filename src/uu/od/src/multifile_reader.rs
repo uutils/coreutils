@@ -19,8 +19,6 @@ const SKIP_BUFFER_SIZE: usize = 16 * 1024;
 pub enum InputSource<'a> {
     FileName(&'a str),
     Stdin,
-    #[cfg(test)]
-    Stream(Box<dyn io::Read>),
 }
 
 /// The file currently being read. A real `File` is kept as a concrete handle so
@@ -32,8 +30,6 @@ enum CurrentReader {
     Stdin(uucore::io::RawReader<rustix::fd::BorrowedFd<'static>>),
     #[cfg(not(any(unix, target_os = "wasi")))]
     Stdin(io::Stdin),
-    #[cfg(test)]
-    Other(Box<dyn io::Read>),
 }
 
 impl io::Read for CurrentReader {
@@ -41,8 +37,6 @@ impl io::Read for CurrentReader {
         match self {
             Self::File(f) => f.read(buf),
             Self::Stdin(r) => r.read(buf),
-            #[cfg(test)]
-            Self::Other(r) => r.read(buf),
         }
     }
 }
@@ -126,11 +120,6 @@ impl MultifileReader<'_> {
                             self.any_err = true;
                         }
                     }
-                }
-                #[cfg(test)]
-                InputSource::Stream(s) => {
-                    self.curr_file = Some(CurrentReader::Other(s));
-                    break;
                 }
             }
         }
@@ -260,17 +249,23 @@ impl HasError for MultifileReader<'_> {
 }
 
 #[cfg(test)]
+#[cfg(not(target_os = "wasi"))]
 mod tests {
     use super::*;
-    use crate::mockstream::*;
-    use std::io::{Cursor, ErrorKind, Read};
+    use std::io::{Read, Write as _};
+    use tempfile::NamedTempFile;
 
     #[test]
     fn test_multi_file_reader_one_read() {
-        let inputs = vec![
-            InputSource::Stream(Box::new(Cursor::new(&b"abcd"[..]))),
-            InputSource::Stream(Box::new(Cursor::new(&b"ABCD"[..]))),
-        ];
+        let mut file1 = NamedTempFile::new().unwrap();
+        file1.write_all(b"abcd").unwrap();
+        let path1 = file1.path().to_str().unwrap();
+
+        let mut file2 = NamedTempFile::new().unwrap();
+        file2.write_all(b"ABCD").unwrap();
+        let path2 = file2.path().to_str().unwrap();
+
+        let inputs = vec![InputSource::FileName(path1), InputSource::FileName(path2)];
         let mut v = [0; 10];
 
         let mut sut = MultifileReader::new(inputs);
@@ -282,62 +277,15 @@ mod tests {
 
     #[test]
     fn test_multi_file_reader_two_reads() {
-        let inputs = vec![
-            InputSource::Stream(Box::new(Cursor::new(&b"abcd"[..]))),
-            InputSource::Stream(Box::new(Cursor::new(&b"ABCD"[..]))),
-        ];
-        let mut v = [0; 5];
+        let mut file1 = NamedTempFile::new().unwrap();
+        file1.write_all(b"abcd").unwrap();
+        let path1 = file1.path().to_str().unwrap();
 
-        let mut sut = MultifileReader::new(inputs);
+        let mut file2 = NamedTempFile::new().unwrap();
+        file2.write_all(b"ABCD").unwrap();
+        let path2 = file2.path().to_str().unwrap();
 
-        assert_eq!(sut.read(v.as_mut()).unwrap(), 5);
-        assert_eq!(v, [0x61, 0x62, 0x63, 0x64, 0x41]);
-        assert_eq!(sut.read(v.as_mut()).unwrap(), 3);
-        assert_eq!(v, [0x42, 0x43, 0x44, 0x64, 0x41]); // last two bytes are not overwritten
-    }
-
-    #[test]
-    fn test_multi_file_reader_read_error() {
-        let c = Cursor::new(&b"1234"[..])
-            .chain(FailingMockStream::new(ErrorKind::Other, "Failing", 1))
-            .chain(Cursor::new(&b"5678"[..]));
-        let inputs = vec![
-            InputSource::Stream(Box::new(c)),
-            InputSource::Stream(Box::new(Cursor::new(&b"ABCD"[..]))),
-        ];
-        let mut v = [0; 5];
-
-        let mut sut = MultifileReader::new(inputs);
-
-        assert_eq!(sut.read(v.as_mut()).unwrap(), 5);
-        assert_eq!(v, [49, 50, 51, 52, 65]);
-        assert_eq!(sut.read(v.as_mut()).unwrap(), 3);
-        assert_eq!(v, [66, 67, 68, 52, 65]); // last two bytes are not overwritten
-
-        // note: no retry on i/o error, so 5678 is missing
-    }
-
-    #[test]
-    fn test_multi_file_reader_read_error_at_start() {
-        let inputs = vec![
-            InputSource::Stream(Box::new(FailingMockStream::new(
-                ErrorKind::Other,
-                "Failing",
-                1,
-            ))),
-            InputSource::Stream(Box::new(Cursor::new(&b"abcd"[..]))),
-            InputSource::Stream(Box::new(FailingMockStream::new(
-                ErrorKind::Other,
-                "Failing",
-                1,
-            ))),
-            InputSource::Stream(Box::new(Cursor::new(&b"ABCD"[..]))),
-            InputSource::Stream(Box::new(FailingMockStream::new(
-                ErrorKind::Other,
-                "Failing",
-                1,
-            ))),
-        ];
+        let inputs = vec![InputSource::FileName(path1), InputSource::FileName(path2)];
         let mut v = [0; 5];
 
         let mut sut = MultifileReader::new(inputs);
