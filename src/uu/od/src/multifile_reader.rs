@@ -39,6 +39,16 @@ impl io::Read for CurrentReader {
     }
 }
 
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl rustix::fd::AsFd for CurrentReader {
+    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+        match self {
+            Self::File(f) => f.as_fd(),
+            Self::Stdin(s) => s.0,
+        }
+    }
+}
+
 // MultifileReader - concatenate all our input, file or stdin.
 pub struct MultifileReader<'a> {
     ni: Vec<InputSource<'a>>,
@@ -182,8 +192,17 @@ fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
             }
         }
     }
-    let read = uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?;
-    Ok(n_skip - read)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    match uucore::pipes::discard_n_bytes(&curr, n_skip as usize) {
+        Ok(spliced) => Ok(n_skip - spliced as u64),
+        Err(spliced) => {
+            let read =
+                uucore::io::read_and_discard(curr, n_skip - spliced as u64, SKIP_BUFFER_SIZE)?;
+            Ok(n_skip - spliced as u64 - read)
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    Ok(n_skip - uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?)
 }
 
 /// Seek `f` forward by `n` bytes. Returns `Ok(true)` if the seek happened, or
