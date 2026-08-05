@@ -765,62 +765,46 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let suppress_split = matches.get_flag(options::NOTHING);
 
-    let _selected_mode_arg = get_selected_mode_arg(&matches)?;
+    let selected_mode_arg = get_selected_mode_arg(&matches)?;
+    let arg_value = matches
+        .get_one::<String>(selected_mode_arg)
+        .expect("should be ensured by get_selected_mode_arg");
+    let ranges = list_to_ranges(arg_value, complement).map_err(|e| USimpleError::new(1, e))?;
 
-    let mode_parse = match (
-        matches.get_one::<String>(options::BYTES),
-        matches.get_one::<String>(options::CHARACTERS),
-        matches.get_one::<String>(options::FIELDS),
-    ) {
-        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
-            Mode::Bytes(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                    suppress_split,
-                },
-            )
-        }),
-
-        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
-            Mode::Characters(
-                ranges,
-                Options {
-                    out_delimiter,
-                    line_ending,
-                    field_opts: None,
-                    suppress_split,
-                },
-            )
-        }),
-
-        (None, None, Some(field_ranges)) => {
-            list_to_ranges(field_ranges, complement).map(|ranges| {
-                Mode::Fields(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: Some(FieldOptions {
-                            delimiter,
-                            only_delimited,
-                        }),
-                        suppress_split,
-                    },
-                )
-            })
-        }
+    let mode = match selected_mode_arg {
+        options::BYTES => Mode::Bytes(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: None,
+                suppress_split,
+            },
+        ),
+        options::CHARACTERS => Mode::Characters(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: None,
+                suppress_split,
+            },
+        ),
+        options::FIELDS => Mode::Fields(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: Some(FieldOptions {
+                    delimiter,
+                    only_delimited,
+                }),
+                suppress_split,
+            },
+        ),
         _ => unreachable!(),
     };
 
-    let mode_parse = match mode_parse {
-        Err(_) => mode_parse,
-        Ok(mode) => Ok(mode),
-    };
-
-    let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
     #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
     let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
