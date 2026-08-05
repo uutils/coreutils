@@ -776,7 +776,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         })
         .collect();
 
-    let _selected_mode_arg = match mode_args_and_counts.as_slice() {
+    let selected_mode_arg = match mode_args_and_counts.as_slice() {
         [(arg, 1)] => *arg,
         [] => {
             return Err(USimpleError::new(
@@ -791,6 +791,29 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         }
     };
+
+    if matches!(selected_mode_arg, options::BYTES | options::CHARACTERS) {
+        let checks = [
+            (
+                matches.contains_id(options::DELIMITER),
+                "cut-error-delimiter-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::WHITESPACE_DELIMITED),
+                "cut-error-whitespace-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::ONLY_DELIMITED),
+                "cut-error-only-delimited-only-with-fields",
+            ),
+        ];
+
+        for (is_triggered, msg_key) in checks {
+            if is_triggered {
+                return Err(USimpleError::new(1, translate!(msg_key)));
+            }
+        }
+    }
 
     let mode_parse = match (
         matches.get_one::<String>(options::BYTES),
@@ -842,24 +865,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let mode_parse = match mode_parse {
         Err(_) => mode_parse,
-        Ok(mode) => match mode {
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.contains_id(options::DELIMITER) =>
-            {
-                Err(translate!("cut-error-delimiter-only-with-fields"))
-            }
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::WHITESPACE_DELIMITED) =>
-            {
-                Err(translate!("cut-error-whitespace-only-with-fields"))
-            }
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::ONLY_DELIMITED) =>
-            {
-                Err(translate!("cut-error-only-delimited-only-with-fields"))
-            }
-            _ => Ok(mode),
-        },
+        Ok(mode) => Ok(mode),
     };
 
     let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
