@@ -15,6 +15,25 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
+// linux-gated to match the `at_and_ucmd` import above; the check itself is not
+// platform-specific.
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[test]
+fn test_tmpdir_with_colon_is_rejected() {
+    // The preload variable is a colon-separated list with no escaping, so a
+    // libstdbuf path containing ':' would be split by the loader and its leading
+    // component loaded as a library of its own. With $TMPDIR under an attacker's
+    // control that component is attacker-chosen, so refuse instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("evil.so:x");
+
+    ucmd.env("TMPDIR", at.plus("evil.so:x"))
+        .arg("-o0")
+        .arg("true")
+        .fails_with_code(125)
+        .stderr_contains("contains ':'");
+}
+
 #[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 #[test]
 fn test_permission() {

@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/nohup.rs"
 test = false
@@ -26,6 +23,9 @@ rustix = { workspace = true, features = ["process", "stdio"] }
 uucore = { workspace = true, features = ["fs"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "nohup"

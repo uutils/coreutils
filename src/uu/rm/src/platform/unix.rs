@@ -22,8 +22,8 @@ use uucore::translate;
 
 use super::super::{
     InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
-    show_permission_denied_error, show_removal_error, verbose_removed_directory,
-    verbose_removed_file,
+    report_verbose_write_error, show_permission_denied_error, show_removal_error,
+    verbose_removed_directory, verbose_removed_file,
 };
 
 #[inline]
@@ -128,7 +128,7 @@ pub fn safe_remove_file(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            verbose_removed_file(path, options);
+            report_verbose_write_error(verbose_removed_file(path, options));
             Some(false)
         }
         Err(e) => {
@@ -159,7 +159,7 @@ pub fn safe_remove_empty_dir(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             Some(false)
         }
         Err(e) => {
@@ -206,7 +206,7 @@ fn handle_permission_denied(
         return true;
     }
     // Successfully removed empty directory
-    verbose_removed_directory(entry_path, options);
+    report_verbose_write_error(verbose_removed_directory(entry_path, options));
     false
 }
 
@@ -224,11 +224,11 @@ fn handle_unlink(
         show_error!("{e}");
         true
     } else {
-        if is_dir {
-            verbose_removed_directory(entry_path, options);
+        report_verbose_write_error(if is_dir {
+            verbose_removed_directory(entry_path, options)
         } else {
-            verbose_removed_file(entry_path, options);
-        }
+            verbose_removed_file(entry_path, options)
+        });
         false
     }
 }
@@ -258,7 +258,7 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
             error_occurred
         }
         Ok(_) => {
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             false
         }
     }
@@ -323,7 +323,7 @@ pub fn safe_remove_dir_recursive(
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 // Try to remove the directory directly if it's empty
                 if fs::remove_dir(path).is_ok() {
-                    verbose_removed_directory(path, options);
+                    report_verbose_write_error(verbose_removed_directory(path, options));
                     return false;
                 }
                 // If we can't read the directory AND can't remove it,

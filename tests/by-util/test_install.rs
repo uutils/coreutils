@@ -6,15 +6,11 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs::{self, File};
-#[cfg(target_os = "linux")]
-use std::io::{BufRead, BufReader};
+use std::env::current_exe;
+use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::PathBuf;
-use std::process;
-use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
@@ -804,27 +800,6 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
-fn strip_source_file() -> PathBuf {
-    use std::io::Write as _;
-    static BINARY: OnceLock<PathBuf> = OnceLock::new();
-    BINARY
-        .get_or_init(|| {
-            let dir = std::env::temp_dir();
-            let source = dir.join("hello.rs");
-            let binary = dir.join("hello_bin");
-            let mut file = File::create(&source).unwrap();
-            file.write_all(b"fn main() {}").unwrap();
-            process::Command::new("rustc")
-                .arg("-o")
-                .arg(&binary)
-                .arg(&source)
-                .status()
-                .unwrap();
-            binary
-        })
-        .clone()
-}
-
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
@@ -853,11 +828,12 @@ fn test_install_and_strip() {
 
 #[test]
 fn test_install_no_strip_with_program() {
+    let source = current_exe().unwrap();
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--strip-program")
         .arg("false")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .stderr_only(
@@ -985,13 +961,14 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
@@ -1021,13 +998,14 @@ fn test_install_and_strip_with_signal_terminated_program() {
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("No such file or directory");
@@ -2086,7 +2064,7 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = process::Command::new("id")
+    let user_group = std::process::Command::new("id")
         .arg("-nrg")
         .output()
         .map_or_else(
@@ -2672,6 +2650,65 @@ fn test_install_non_utf8_paths() {
     ucmd.arg("-D").arg(source_file).arg(&target_path).succeeds();
 }
 
+/// A failed ownership change must not leave the setuid/setgid mode applied.
+#[test]
+fn test_install_failed_chown_does_not_leave_setuid() {
+    // Only meaningful when the chown can actually fail.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene
+        .ucmd()
+        .args(&["-m", "4755", "-o", "root", "src", "dst"])
+        .fails();
+
+    if at.file_exists("dst") {
+        let mode = at.metadata("dst").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+
+    // The same for a directory created with -d.
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "4755", "-o", "root", "newdir"])
+        .fails();
+
+    if at.dir_exists("newdir") {
+        let mode = at.metadata("newdir").permissions().mode() & 0o7777;
+        assert_eq!(
+            mode & 0o6000,
+            0,
+            "install -d left setuid/setgid set ({mode:o}) after the chown failed"
+        );
+    }
+}
+
+/// The mode must still be applied in full when no ownership change is requested.
+#[test]
+fn test_install_setuid_mode_applied_without_chown() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("src");
+
+    scene.ucmd().args(&["-m", "4755", "src", "dst"]).succeeds();
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o7777, 0o4755);
+
+    scene
+        .ucmd()
+        .args(&["-d", "-m", "2755", "newdir"])
+        .succeeds();
+    assert_eq!(at.metadata("newdir").permissions().mode() & 0o7777, 0o2755);
+}
+
 #[test]
 fn test_install_unprivileged_option_u_skips_chown() {
     // This test only makes sense when not running as root.
@@ -2845,61 +2882,33 @@ fn test_install_d_dangling_symlink_in_path_errors() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_install_set_owner_nonexistent_uid_and_gid() {
-    let file = File::open("/etc/login.defs").unwrap();
-    let reader = BufReader::new(file);
-    let mut uid_min: u32 = 0;
-    let mut uid_max: u32 = 0;
-    let mut gid_min: u32 = 0;
-    let mut gid_max: u32 = 0;
-    for line in reader.lines() {
-        let line = line.unwrap();
-        if line.starts_with("UID_MIN") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            uid_min = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("UID_MAX") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            uid_max = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("GID_MIN") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            gid_min = tokens[1].parse().unwrap();
-        }
-        if line.starts_with("GID_MAX") {
-            let tokens: Vec<&str> = line.split_whitespace().collect();
-            gid_max = tokens[1].parse().unwrap();
+    use std::collections::HashSet;
+
+    // Collect the ids already present on the system so we can pick unused ones.
+    let mut used_uids: HashSet<u32> = HashSet::new();
+    let mut used_gids: HashSet<u32> = HashSet::new();
+    if let Ok(passwd) = fs::read_to_string("/etc/passwd") {
+        for line in passwd.lines() {
+            let fields: Vec<&str> = line.split(':').collect();
+            if fields.len() < 4 {
+                continue;
+            }
+            if let Ok(uid) = fields[2].parse::<u32>() {
+                used_uids.insert(uid);
+            }
+            if let Ok(gid) = fields[3].parse::<u32>() {
+                used_gids.insert(gid);
+            }
         }
     }
-    let file = File::open("/etc/passwd").unwrap();
-    let reader = BufReader::new(file);
 
-    let mut uids: Vec<u32> = vec![];
-    let mut gids: Vec<u32> = vec![];
-    for line in reader.lines() {
-        let line = line.unwrap();
-        let tokens: Vec<&str> = line.split(':').collect();
-        let uid: u32 = tokens[2].parse().unwrap();
-        if (uid_min..=uid_max).contains(&uid) {
-            uids.push(uid);
-        }
-        let gid: u32 = tokens[3].parse().unwrap();
-        if (gid_min..=gid_max).contains(&gid) {
-            gids.push(gid);
-        }
-    }
-    uids.sort_unstable();
-
-    let next_uid = if let Some(uid) = uids.last() {
-        *uid + 1
-    } else {
-        uid_min
-    };
-
-    let next_gid = if let Some(gid) = gids.last() {
-        *gid + 1
-    } else {
-        gid_min
-    };
+    // Pick high ids that are not associated with any user/group.
+    let next_uid = (60_000..u32::MAX)
+        .find(|id| !used_uids.contains(id))
+        .expect("no unused uid found");
+    let next_gid = (60_000..u32::MAX)
+        .find(|id| !used_gids.contains(id))
+        .expect("no unused gid found");
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2966,4 +2975,101 @@ fn test_install_backup_nil_same_file() {
             .stderr_contains("are the same file");
         assert_eq!(at.read(file), "content");
     }
+}
+
+#[test]
+fn test_install_backup_refuses_when_source_is_the_backup() {
+    // Installing `a~` over `a` renames `a` to `a~`, which would clobber the
+    // source before it is read. GNU refuses; so must we.
+    for mode in ["simple", "existing"] {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        at.touch("a");
+        at.write("a~", "source content");
+
+        scene
+            .ucmd()
+            .arg(format!("--backup={mode}"))
+            .arg("a~")
+            .arg("a")
+            .fails()
+            .stderr_is("install: backing up 'a' might destroy source;  'a~' not copied\n");
+
+        // The source must be intact.
+        assert_eq!(at.read("a~"), "source content");
+    }
+}
+
+#[test]
+fn test_install_backup_numbered_allows_source_named_like_backup() {
+    // A numbered backup never reuses an existing name, so it cannot destroy
+    // the source and must not be refused.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=numbered")
+        .arg("a~")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a~"), "source content");
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+// Android denies hard links on the filesystem backing the test directory, so
+// the setup cannot be built there; see the mv analogue.
+#[cfg(not(target_os = "android"))]
+fn test_install_backup_allows_hardlink_under_another_name() {
+    // `other` shares an inode with `a~` but its name is not `a` + suffix, so
+    // the backup rename cannot clobber it. GNU allows this.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+    at.hard_link("a~", "other");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("other")
+        .arg("a")
+        .succeeds();
+    assert_eq!(at.read("a"), "source content");
+}
+
+#[test]
+fn test_install_backup_refuses_regardless_of_spelling() {
+    // The guard compares files, not the strings naming them.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a~", "source content");
+
+    scene
+        .ucmd()
+        .arg("--backup=simple")
+        .arg("./a~")
+        .arg("a")
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a~"), "source content");
+}
+
+#[test]
+fn test_install_backup_custom_suffix_refuses() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("a");
+    at.write("a.bak", "source content");
+
+    scene
+        .ucmd()
+        .args(&["-b", "--suffix=.bak", "a.bak", "a"])
+        .fails()
+        .stderr_contains("might destroy source");
+    assert_eq!(at.read("a.bak"), "source content");
 }

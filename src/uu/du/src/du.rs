@@ -842,32 +842,27 @@ impl StatPrinter {
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
-        loop {
-            let received = rx.recv();
-
+        while let Ok(received) = rx.recv() {
             match received {
-                Ok(message) => match message {
-                    Ok(stat_info) => {
-                        let size = self.choose_size(&stat_info.stat);
+                Ok(stat_info) => {
+                    let size = self.choose_size(&stat_info.stat);
 
-                        if stat_info.depth == 0 {
-                            grand_total += size;
-                        }
-
-                        if !self
-                            .threshold
-                            .is_some_and(|threshold| threshold.should_exclude(size))
-                            && self
-                                .max_depth
-                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                            && (!self.summarize || stat_info.depth == 0)
-                        {
-                            self.print_stat(&stat_info.stat, size)?;
-                        }
+                    if stat_info.depth == 0 {
+                        grand_total += size;
                     }
-                    Err(e) => show!(e),
-                },
-                Err(_) => break,
+
+                    if !self
+                        .threshold
+                        .is_some_and(|threshold| threshold.should_exclude(size))
+                        && self
+                            .max_depth
+                            .is_none_or(|max_depth| stat_info.depth <= max_depth)
+                        && (!self.summarize || stat_info.depth == 0)
+                    {
+                        self.print_stat(&stat_info.stat, size)?;
+                    }
+                }
+                Err(e) => show!(e),
             }
         }
 

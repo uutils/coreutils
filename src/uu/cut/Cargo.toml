@@ -11,16 +11,13 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cut.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["ranges"] }
+uucore = { workspace = true, features = ["ranges", "i18n-charmap"] }
 memchr = { workspace = true }
 bstr = { workspace = true }
 fluent = { workspace = true }
@@ -28,6 +25,9 @@ fluent = { workspace = true }
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "cut"

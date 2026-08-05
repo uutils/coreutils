@@ -1137,6 +1137,41 @@ fn test_merge_preserves_long_lines() {
     assert_eq!(stdout.as_slice(), input.as_bytes());
 }
 
+// Regression test: a failing write must not take the merge reader thread down with it.
+// The write error used to propagate straight out of `write_all_to`, dropping the chunk
+// receivers while the reader was still sending, and `chunks::read` unwraps that send.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_write_error_does_not_panic() {
+    use std::fs::File;
+
+    // The inputs have to be long enough that the reader is still feeding us chunks when
+    // the write fails, otherwise it has already finished and there is nothing to race.
+    const LINES: usize = 100_000;
+    let mut input = String::with_capacity(LINES * 7);
+    for line in 0..LINES {
+        writeln!(input, "{line:06}").unwrap();
+    }
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("a.txt", &input);
+    ts.fixtures.write("b.txt", &input);
+
+    // Whether the reader is mid-send when the write fails is a race, so repeat: a single
+    // attempt reproduced the panic only about a quarter of the time. With the fix the
+    // reader is always shut down in an orderly fashion, so this cannot fail spuriously.
+    for _ in 0..20 {
+        let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+        ts.ucmd()
+            .args(&["-m", "a.txt", "b.txt"])
+            .set_stdout(dev_full)
+            .fails()
+            .code_is(1)
+            .stderr_contains("No space left on device")
+            .stderr_does_not_contain("panicked");
+    }
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()
@@ -1235,6 +1270,33 @@ fn test_check_silent() {
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_stops_early_without_panicking() {
+    // `--check` returns as soon as it finds the first disorder. That used to drop the
+    // channel while the reader thread was still sending chunks, so the reader panicked
+    // on a `SendError`. Under `panic = "abort"` (our release profile) that aborts the
+    // whole process instead of exiting 1.
+    //
+    // The disorder sits midway through an input that is large relative to the buffer
+    // size, so the reader is certain to be blocked on a full channel when we stop.
+    // Note this cannot fail spuriously: once the receiver outlives the reader, no
+    // panic is possible.
+    const LINES_BEFORE: usize = 20_000;
+    let mut input = "c\n".repeat(LINES_BEFORE);
+    input.push_str("a\n");
+    input.push_str(&"c\n".repeat(LINES_BEFORE));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("disorder.txt", &input);
+
+    ucmd.args(&["-c", "--buffer-size=1K", "disorder.txt"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "sort: disorder.txt:{}: disorder: a\n",
+            LINES_BEFORE + 1
+        ));
 }
 
 #[test]
@@ -1818,7 +1880,7 @@ fn test_files0_read_error() {
         .stderr_only("sort: cannot read: .: Is a directory\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
 // Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
 fn test_files0_from_empty_non_regular() {

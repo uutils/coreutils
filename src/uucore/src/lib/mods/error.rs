@@ -319,7 +319,7 @@ impl UError for USimpleError {
     }
 }
 
-/// Wrapper type around [`std::io::Error`].
+/// A usage error type with an exit code and a message that implements [`UError`].
 #[derive(Debug)]
 pub struct UUsageError {
     /// Exit code of the error.
@@ -459,6 +459,24 @@ impl Display for UIoError {
 }
 
 /// Strip the trailing " (os error XX)" from io error strings.
+///
+/// Rust renders OS errors as `"No such file or directory (os error 2)"`, while GNU
+/// coreutils only prints the `strerror` part. Use this when formatting a message
+/// that has to match GNU's output.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::{Error, ErrorKind};
+/// use uucore::error::strip_errno;
+///
+/// let err = Error::from_raw_os_error(2);
+/// assert_eq!(strip_errno(&err), "No such file or directory");
+///
+/// // Errors without an errno are returned unchanged.
+/// let err = Error::new(ErrorKind::Other, "custom failure");
+/// assert_eq!(strip_errno(&err), "custom failure");
+/// ```
 pub fn strip_errno(err: &std::io::Error) -> String {
     let mut msg = err.to_string();
     if let Some(pos) = msg.find(" (os error ") {

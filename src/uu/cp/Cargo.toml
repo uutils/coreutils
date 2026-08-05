@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cp.rs"
 doctest = false
@@ -44,7 +41,6 @@ rustix = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
-exacl = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -68,4 +64,6 @@ harness = false
 
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
-feat_acl = ["exacl"]
+
+[lints]
+workspace = true

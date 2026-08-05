@@ -133,7 +133,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "android")))]
 fn test_split_to_non_seekable() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("/dev/stdout", "xaa");
@@ -2093,7 +2093,7 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+#[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 

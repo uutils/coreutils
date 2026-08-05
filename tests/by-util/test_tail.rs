@@ -204,6 +204,27 @@ fn test_nc_0_wo_follow() {
 }
 
 #[test]
+fn test_zero_bytes_with_suffix() {
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["-c0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c00K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c+0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
     use std::os::unix::fs::PermissionsExt;
@@ -1631,9 +1652,28 @@ fn test_follow_name_replaced_by_symlink_is_untailable() {
         .run_no_wait();
     p.make_assertion_with_delay(500).is_alive();
 
+    // Wait until tail's *initial* read of "watched" has actually completed
+    // (i.e. the pre-existing content has been printed) before swapping it
+    // for a symlink. Otherwise, under scheduler contention, tail's initial
+    // open (which legitimately follows symlinks, like any other file open)
+    // could race with the swap and open the symlink's target on its very
+    // first read -- before the untailable-symlink guard (which only applies
+    // to the follow loop) is even active. That would be a test timing bug,
+    // not the vulnerability this test is meant to catch.
+    for _ in 0..50 {
+        if p.stdout_all().contains("visible") {
+            break;
+        }
+        p.delay(20);
+    }
+
     // Swap the watched file for a symlink pointing at a secret file.
-    at.remove("watched");
-    at.symlink_file("secret", "watched");
+    // Create the symlink under a temporary name and rename it into place
+    // atomically, so the poller never observes an intermediate state where
+    // "watched" is missing (which would race with the poll interval and be
+    // reported as "has become inaccessible" instead).
+    at.symlink_file("secret", "watched.tmp");
+    at.rename("watched.tmp", "watched");
     p.delay(1000);
 
     p.kill()
@@ -5019,10 +5059,10 @@ fn test_when_piped_input_then_no_broken_pipe() {
 
 #[test]
 #[cfg(unix)]
-fn test_when_output_closed_then_no_broken_pie() {
+fn test_when_output_closed_then_no_broken_pipe() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
-        .args(&["-c", "100000", "/dev/zero"])
+        .args(&["-c", "10000000", "/dev/zero"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
@@ -5074,7 +5114,7 @@ fn test_failed_write_is_reported_on_seekable_input() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_dev_zero() {
     new_ucmd!()
         .args(&["-c", "1", "/dev/zero"])

@@ -349,6 +349,22 @@ impl<'a> From<Component<'a>> for OwningComponent {
     }
 }
 
+/// Confirm that `path` (already known to exist) is a directory, without
+/// requiring permission to list its contents.
+///
+/// `read_dir` alone would raise the right error for a non-directory, but
+/// also requires listing permission on the target, which a plain "is this a
+/// directory" check should not need (e.g. `realpath /root/` succeeds for
+/// non-root users even though they can't list `/root`).
+fn ensure_is_directory(path: &Path) -> IOResult<()> {
+    if fs::metadata(path)?.is_dir() {
+        Ok(())
+    } else {
+        read_dir(path)?;
+        Ok(())
+    }
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -456,13 +472,13 @@ pub fn canonicalize<P: AsRef<Path>>(
     match miss_mode {
         MissingHandling::Existing => {
             if has_to_be_directory {
-                read_dir(&result)?;
+                ensure_is_directory(&result)?;
             }
         }
         MissingHandling::Normal => {
             if result.exists() {
                 if has_to_be_directory {
-                    read_dir(&result)?;
+                    ensure_is_directory(&result)?;
                 }
             } else if let Some(parent) = result.parent() {
                 read_dir(parent)?;
@@ -722,9 +738,12 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::symlink_metadata(source), fs::symlink_metadata(target))
-    else {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
         return false;
     };
 
@@ -748,9 +767,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::metadata(source), fs::symlink_metadata(target))
-    else {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
         return false;
     };
 

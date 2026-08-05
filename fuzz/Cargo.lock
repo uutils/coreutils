@@ -464,15 +464,15 @@ dependencies = [
 
 [[package]]
 name = "data-encoding"
-version = "2.11.0"
+version = "2.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
+checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "data-encoding-macro"
-version = "0.1.20"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3259c913752a86488b501ed8680446a5ed2d5aeac6e596cb23ba3800768ea32c"
+checksum = "c6a127ecbb3c4632e1525380e04c0c3fcf8dcb44d32a79ea290d8a36906edcd8"
 dependencies = [
  "data-encoding",
  "data-encoding-macro-internal",
@@ -480,12 +480,12 @@ dependencies = [
 
 [[package]]
 name = "data-encoding-macro-internal"
-version = "0.1.18"
+version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccc2776f0c61eca1ca32528f85548abd1a4be8fb53d1b21c013e4f18da1e7090"
+checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 2.0.117",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -1694,9 +1694,9 @@ checksum = "703d5c7ef118737c72f1af64ad2f6f8c5e1921f818cdcb97b8fe6fc69bf66214"
 
 [[package]]
 name = "similar"
-version = "3.1.1"
+version = "3.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6505efef05804732ed8a3f2d4f279429eb485bd69d5b0cc6b19cc02005cda16"
+checksum = "85ee016af5d736b69fc89e19254540fa4b5f5492853fb5503920f084011c78b6"
 dependencies = [
  "bstr",
 ]
@@ -1919,7 +1919,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uu_checksum_common"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1928,7 +1928,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cksum"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "uu_cut"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bstr",
  "clap",
@@ -1949,7 +1949,7 @@ dependencies = [
 
 [[package]]
 name = "uu_date"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "uu_dirname"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1975,7 +1975,7 @@ dependencies = [
 
 [[package]]
 name = "uu_echo"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1984,7 +1984,7 @@ dependencies = [
 
 [[package]]
 name = "uu_env"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "uu_expr"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -2009,7 +2009,7 @@ dependencies = [
 
 [[package]]
 name = "uu_printf"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -2018,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "uu_seq"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bigdecimal",
  "clap",
@@ -2031,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "uu_sort"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bigdecimal",
  "binary-heap-plus",
@@ -2054,7 +2054,7 @@ dependencies = [
 
 [[package]]
 name = "uu_split"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -2066,7 +2066,7 @@ dependencies = [
 
 [[package]]
 name = "uu_test"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
@@ -2077,7 +2077,7 @@ dependencies = [
 
 [[package]]
 name = "uu_tr"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -2088,7 +2088,7 @@ dependencies = [
 
 [[package]]
 name = "uu_wc"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "bytecount",
  "clap",
@@ -2102,7 +2102,7 @@ dependencies = [
 
 [[package]]
 name = "uucore"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "base64-simd",
  "bigdecimal",
@@ -2143,6 +2143,7 @@ dependencies = [
  "sm3",
  "thiserror",
  "unic-langid",
+ "unicode-width",
  "unit-prefix",
  "uucore_procs",
  "wild",
@@ -2177,7 +2178,7 @@ dependencies = [
 
 [[package]]
 name = "uucore_procs"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2185,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "uufuzz"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "console",
  "rand",

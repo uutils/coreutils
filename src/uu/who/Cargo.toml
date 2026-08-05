@@ -1,6 +1,5 @@
 # spell-checker:ignore logind
 
-
 [package]
 name = "uu_who"
 description = "who ~ (uutils) display information about currently logged-in users"
@@ -14,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [features]
 feat_systemd_logind = ["uucore/feat_systemd_logind"]
 
@@ -27,9 +23,12 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-rustix = { workspace = true }
+rustix = { workspace = true, features = ["termios"] }
 uucore = { workspace = true, features = ["utmpx"] }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "who"
