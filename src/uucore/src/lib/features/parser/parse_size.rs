@@ -255,7 +255,9 @@ impl<'parser> Parser<'parser> {
         if unit == "%" {
             let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
             return match total_physical_memory() {
-                Ok(total) => Ok((number / 100) * total),
+                Ok(total) => (number / 100)
+                    .checked_mul(total)
+                    .ok_or_else(|| ParseSizeError::size_too_big(size)),
                 Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
             };
         }
@@ -861,5 +863,16 @@ mod tests {
         assert!(parse_size_u64("-1%").is_err());
         assert!(parse_size_u64("1.0%").is_err());
         assert!(parse_size_u64("0x1%").is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent_overflow() {
+        // Any physical memory size fits in a u128, so a percentage this large
+        // must overflow rather than panic (see GH #13736).
+        assert!(variant_eq(
+            &parse_size_u128("100000000000000000000000000000000000000%").unwrap_err(),
+            &ParseSizeError::SizeTooBig(String::new())
+        ));
     }
 }
