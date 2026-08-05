@@ -594,6 +594,17 @@ fn test_invalid_directive_after_multibyte_char() {
 }
 
 #[test]
+fn test_precision_splits_multibyte_char_in_value() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch("é");
+    ts.ucmd()
+        .args(&["-c", "%.1n", "é"])
+        .succeeds()
+        .stdout_only_bytes([0xc3, b'\n']);
+}
+
+#[test]
 #[cfg(all(
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
