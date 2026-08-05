@@ -20,16 +20,16 @@
 //!
 //! assert_eq!("root", entries::uid2usr(0).unwrap());
 //! assert_eq!(0, entries::usr2uid("root").unwrap());
-//! assert!(entries::gid2grp(0).is_ok());
-//! assert!(entries::grp2gid(root_group).is_ok());
+//! entries::gid2grp(0).unwrap();
+//! entries::grp2gid(root_group).unwrap();
 //!
-//! assert!(entries::Passwd::locate(0).is_ok());
-//! assert!(entries::Passwd::locate("0").is_ok());
-//! assert!(entries::Passwd::locate("root").is_ok());
+//! entries::Passwd::locate(0).unwrap();
+//! entries::Passwd::locate("0").unwrap();
+//! entries::Passwd::locate("root").unwrap();
 //!
-//! assert!(entries::Group::locate(0).is_ok());
-//! assert!(entries::Group::locate("0").is_ok());
-//! assert!(entries::Group::locate(root_group).is_ok());
+//! entries::Group::locate(0).unwrap();
+//! entries::Group::locate("0").unwrap();
+//! entries::Group::locate(root_group).unwrap();
 //! ```
 
 use core::ffi::{CStr, c_char, c_int};

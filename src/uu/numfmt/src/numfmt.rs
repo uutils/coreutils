@@ -691,7 +691,7 @@ mod tests {
         let mut options = get_valid_options();
         options.invalid = InvalidModes::Abort;
         let result = handle_buffer(BufReader::new(&input_value[..]), &options);
-        assert!(result.is_err(), "did not return err for invalid input");
+        result.expect_err("did not return err for invalid input");
     }
 
     #[test]
@@ -720,11 +720,11 @@ mod tests {
     fn test_parse_unit_size() {
         assert_eq!(1, parse_unit_size("1").unwrap());
         assert_eq!(1, parse_unit_size("01").unwrap());
-        assert!(parse_unit_size("1.1").is_err());
-        assert!(parse_unit_size("0").is_err());
-        assert!(parse_unit_size("-1").is_err());
-        assert!(parse_unit_size("A").is_err());
-        assert!(parse_unit_size("18446744073709551616").is_err());
+        parse_unit_size("1.1").unwrap_err();
+        parse_unit_size("0").unwrap_err();
+        parse_unit_size("-1").unwrap_err();
+        parse_unit_size("A").unwrap_err();
+        parse_unit_size("18446744073709551616").unwrap_err();
     }
 
     #[test]
@@ -733,7 +733,7 @@ mod tests {
         assert_eq!(1024, parse_unit_size("Ki").unwrap());
         assert_eq!(2000, parse_unit_size("2K").unwrap());
         assert_eq!(2048, parse_unit_size("2Ki").unwrap());
-        assert!(parse_unit_size("0K").is_err());
+        parse_unit_size("0K").unwrap_err();
     }
 
     #[test]

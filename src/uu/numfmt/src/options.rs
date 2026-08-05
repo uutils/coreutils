@@ -276,20 +276,24 @@ mod tests {
     #[test]
     #[allow(clippy::cognitive_complexity)]
     fn test_parse_format_with_invalid_formats() {
-        assert!("".parse::<FormatOptions>().is_err());
-        assert!("hello".parse::<FormatOptions>().is_err());
-        assert!("hello%".parse::<FormatOptions>().is_err());
-        assert!("%-f".parse::<FormatOptions>().is_err());
-        assert!("%d".parse::<FormatOptions>().is_err());
-        assert!("%4 f".parse::<FormatOptions>().is_err());
-        assert!("%f%".parse::<FormatOptions>().is_err());
-        assert!("%f%%%".parse::<FormatOptions>().is_err());
-        assert!("%%f".parse::<FormatOptions>().is_err());
-        assert!("%%%%f".parse::<FormatOptions>().is_err());
-        assert!("%.-1f".parse::<FormatOptions>().is_err());
-        assert!("%. 1f".parse::<FormatOptions>().is_err());
-        assert!("%18446744073709551616f".parse::<FormatOptions>().is_err());
-        assert!("%.18446744073709551616f".parse::<FormatOptions>().is_err());
+        "".parse::<FormatOptions>().unwrap_err();
+        "hello".parse::<FormatOptions>().unwrap_err();
+        "hello%".parse::<FormatOptions>().unwrap_err();
+        "%-f".parse::<FormatOptions>().unwrap_err();
+        "%d".parse::<FormatOptions>().unwrap_err();
+        "%4 f".parse::<FormatOptions>().unwrap_err();
+        "%f%".parse::<FormatOptions>().unwrap_err();
+        "%f%%%".parse::<FormatOptions>().unwrap_err();
+        "%%f".parse::<FormatOptions>().unwrap_err();
+        "%%%%f".parse::<FormatOptions>().unwrap_err();
+        "%.-1f".parse::<FormatOptions>().unwrap_err();
+        "%. 1f".parse::<FormatOptions>().unwrap_err();
+        "%18446744073709551616f"
+            .parse::<FormatOptions>()
+            .unwrap_err();
+        "%.18446744073709551616f"
+            .parse::<FormatOptions>()
+            .unwrap_err();
     }
 
     #[test]
@@ -388,6 +392,6 @@ mod tests {
         assert_eq!(Ok(InvalidModes::Warn), InvalidModes::from_str("warn"));
         assert_eq!(Ok(InvalidModes::Warn), InvalidModes::from_str("WARN"));
 
-        assert!(InvalidModes::from_str("something unknown").is_err());
+        InvalidModes::from_str("something unknown").unwrap_err();
     }
 }

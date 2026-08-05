@@ -1371,9 +1371,9 @@ mod tests {
 
     #[test]
     fn test_string_to_control_char_overflow() {
-        assert!(string_to_control_char("256").is_err());
-        assert!(string_to_control_char("0x100").is_err());
-        assert!(string_to_control_char("0400").is_err());
+        string_to_control_char("256").unwrap_err();
+        string_to_control_char("0x100").unwrap_err();
+        string_to_control_char("0400").unwrap_err();
     }
 
     // Control character formatting tests
@@ -1610,8 +1610,8 @@ mod tests {
             "Expected overflow error, got: {err}"
         );
 
-        assert!(parse_u8_or_err("1000").is_err());
-        assert!(parse_u8_or_err("65536").is_err());
+        parse_u8_or_err("1000").unwrap_err();
+        parse_u8_or_err("65536").unwrap_err();
     }
 
     #[test]
@@ -1627,8 +1627,8 @@ mod tests {
             "Expected invalid argument error, got: {err}"
         );
 
-        assert!(parse_u8_or_err("abc").is_err());
-        assert!(parse_u8_or_err("").is_err());
-        assert!(parse_u8_or_err("12.5").is_err());
+        parse_u8_or_err("abc").unwrap_err();
+        parse_u8_or_err("").unwrap_err();
+        parse_u8_or_err("12.5").unwrap_err();
     }
 }

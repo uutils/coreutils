@@ -440,13 +440,11 @@ mod tests {
     #[test]
     fn test_parse_invalid_modes() {
         // Invalid numeric mode (too large)
-        assert!(parse("10000", false, 0).is_err());
-
+        parse("10000", false, 0).unwrap_err();
         // Invalid operator
-        assert!(parse("u*rw", false, 0).is_err());
-
+        parse("u*rw", false, 0).unwrap_err();
         // Invalid symbolic mode
-        assert!(parse("invalid", false, 0).is_err());
+        parse("invalid", false, 0).unwrap_err();
     }
 
     #[test]
