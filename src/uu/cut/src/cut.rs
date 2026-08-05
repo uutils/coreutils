@@ -765,55 +765,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let suppress_split = matches.get_flag(options::NOTHING);
 
-    // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
-    // is expected. The number of those arguments is used for parsing a cutting
-    // mode and handling the error cases.
-    let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
-        .into_iter()
-        .filter_map(|arg| {
-            let count = matches.indices_of(arg)?.count();
-            (count > 0).then(|| (arg, count))
-        })
-        .collect();
-
-    let selected_mode_arg = match mode_args_and_counts.as_slice() {
-        [(arg, 1)] => *arg,
-        [] => {
-            return Err(USimpleError::new(
-                1,
-                translate!("cut-error-missing-mode-arg"),
-            ));
-        }
-        _ => {
-            return Err(USimpleError::new(
-                1,
-                translate!("cut-error-multiple-mode-args"),
-            ));
-        }
-    };
-
-    if matches!(selected_mode_arg, options::BYTES | options::CHARACTERS) {
-        let checks = [
-            (
-                matches.contains_id(options::DELIMITER),
-                "cut-error-delimiter-only-with-fields",
-            ),
-            (
-                matches.get_flag(options::WHITESPACE_DELIMITED),
-                "cut-error-whitespace-only-with-fields",
-            ),
-            (
-                matches.get_flag(options::ONLY_DELIMITED),
-                "cut-error-only-delimited-only-with-fields",
-            ),
-        ];
-
-        for (is_triggered, msg_key) in checks {
-            if is_triggered {
-                return Err(USimpleError::new(1, translate!(msg_key)));
-            }
-        }
-    }
+    let _selected_mode_arg = get_selected_mode_arg(&matches)?;
 
     let mode_parse = match (
         matches.get_one::<String>(options::BYTES),
@@ -875,6 +827,61 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     cut_files(files, &mode);
 
     Ok(())
+}
+
+// Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
+// is expected.
+//
+// Returns `options::BYTES`, `options::CHARACTERS`, or `options::FIELDS`.
+fn get_selected_mode_arg(matches: &ArgMatches) -> UResult<&str> {
+    let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
+        .into_iter()
+        .filter_map(|arg| {
+            let count = matches.indices_of(arg)?.count();
+            (count > 0).then(|| (arg, count))
+        })
+        .collect();
+
+    let selected_mode_arg = match mode_args_and_counts.as_slice() {
+        [(arg, 1)] => *arg,
+        [] => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-missing-mode-arg"),
+            ));
+        }
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-multiple-mode-args"),
+            ));
+        }
+    };
+
+    if matches!(selected_mode_arg, options::BYTES | options::CHARACTERS) {
+        let checks = [
+            (
+                matches.contains_id(options::DELIMITER),
+                "cut-error-delimiter-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::WHITESPACE_DELIMITED),
+                "cut-error-whitespace-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::ONLY_DELIMITED),
+                "cut-error-only-delimited-only-with-fields",
+            ),
+        ];
+
+        for (is_triggered, msg_key) in checks {
+            if is_triggered {
+                return Err(USimpleError::new(1, translate!(msg_key)));
+            }
+        }
+    }
+
+    Ok(selected_mode_arg)
 }
 
 pub fn uu_app() -> Command {
