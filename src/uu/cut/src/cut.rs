@@ -765,13 +765,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let suppress_split = matches.get_flag(options::NOTHING);
 
-    let selected_mode_arg = get_selected_mode_arg(&matches)?;
-    let arg_value = matches
-        .get_one::<String>(selected_mode_arg)
-        .expect("should be ensured by get_selected_mode_arg");
-    let ranges = list_to_ranges(arg_value, complement).map_err(|e| USimpleError::new(1, e))?;
+    let mode_arg = get_mode_arg(&matches)?;
+    let list = matches
+        .get_one::<String>(mode_arg)
+        .expect("should be ensured by get_mode_arg");
+    let ranges = list_to_ranges(list, complement).map_err(|e| USimpleError::new(1, e))?;
 
-    let mode = match selected_mode_arg {
+    let mode = match mode_arg {
         options::BYTES => Mode::Bytes(
             ranges,
             Options {
@@ -817,7 +817,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 // is expected.
 //
 // Returns `options::BYTES`, `options::CHARACTERS`, or `options::FIELDS`.
-fn get_selected_mode_arg(matches: &ArgMatches) -> UResult<&str> {
+fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
     let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
         .into_iter()
         .filter_map(|arg| {
@@ -826,7 +826,7 @@ fn get_selected_mode_arg(matches: &ArgMatches) -> UResult<&str> {
         })
         .collect();
 
-    let selected_mode_arg = match mode_args_and_counts.as_slice() {
+    let mode_arg = match mode_args_and_counts.as_slice() {
         [(arg, 1)] => *arg,
         [] => {
             return Err(USimpleError::new(
@@ -842,7 +842,7 @@ fn get_selected_mode_arg(matches: &ArgMatches) -> UResult<&str> {
         }
     };
 
-    if matches!(selected_mode_arg, options::BYTES | options::CHARACTERS) {
+    if matches!(mode_arg, options::BYTES | options::CHARACTERS) {
         let checks = [
             (
                 matches.contains_id(options::DELIMITER),
@@ -865,7 +865,7 @@ fn get_selected_mode_arg(matches: &ArgMatches) -> UResult<&str> {
         }
     }
 
-    Ok(selected_mode_arg)
+    Ok(mode_arg)
 }
 
 pub fn uu_app() -> Command {
