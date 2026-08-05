@@ -154,6 +154,35 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
     Ok(bytes_written)
 }
 
+/// discard `n` bytes by splice
+/// return actually discarded bytes
+/// Err(b) means we discarded b bytes, but we should try to discarding remaining bytes by read
+#[inline]
+pub fn discard_n_bytes(fd: impl AsFd, n: usize) -> Result<usize, usize> {
+    let mut discarded = 0;
+    let dev_null = dev_null().ok_or(0_usize)?;
+    while discarded < n
+        && let Ok(s) = splice(&fd, &dev_null, n - discarded)
+    {
+        if s == 0 {
+            return Ok(discarded);
+        }
+        discarded += s;
+    }
+    // else, input is not a pipe
+    let (pipe_read, pipe_write) = pipe::<false>().map_err(|_| discarded)?;
+    while discarded < n
+        && let Ok(s @ 1..) = splice(&fd, &pipe_write, n - discarded)
+    {
+        discarded += s;
+        // pipe to null is not blocked. So this returns the same length at most cases
+        // next splice does not hang if we discarded 1+ pages
+        splice(&pipe_read, &dev_null, s).map_err(|_| discarded)?;
+    }
+
+    Ok(discarded)
+}
+
 /// Return verified /dev/null
 ///
 /// `splice` to /dev/null is faster than `read` when we skip or count the non-seekable input
