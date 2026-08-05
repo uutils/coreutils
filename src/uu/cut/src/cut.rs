@@ -768,50 +768,60 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
     // is expected. The number of those arguments is used for parsing a cutting
     // mode and handling the error cases.
-    let mode_args_count = [
-        matches.indices_of(options::BYTES),
-        matches.indices_of(options::CHARACTERS),
-        matches.indices_of(options::FIELDS),
-    ]
-    .into_iter()
-    .map(|indices| indices.unwrap_or_default().count())
-    .sum();
+    let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
+        .into_iter()
+        .filter_map(|arg| {
+            let count = matches.indices_of(arg)?.count();
+            (count > 0).then(|| (arg, count))
+        })
+        .collect();
+
+    let _selected_mode_arg = match mode_args_and_counts.as_slice() {
+        [(arg, 1)] => *arg,
+        [] => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-missing-mode-arg"),
+            ));
+        }
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-multiple-mode-args"),
+            ));
+        }
+    };
 
     let mode_parse = match (
-        mode_args_count,
         matches.get_one::<String>(options::BYTES),
         matches.get_one::<String>(options::CHARACTERS),
         matches.get_one::<String>(options::FIELDS),
     ) {
-        (1, Some(byte_ranges), None, None) => {
-            list_to_ranges(byte_ranges, complement).map(|ranges| {
-                Mode::Bytes(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: None,
-                        suppress_split,
-                    },
-                )
-            })
-        }
+        (Some(byte_ranges), None, None) => list_to_ranges(byte_ranges, complement).map(|ranges| {
+            Mode::Bytes(
+                ranges,
+                Options {
+                    out_delimiter,
+                    line_ending,
+                    field_opts: None,
+                    suppress_split,
+                },
+            )
+        }),
 
-        (1, None, Some(char_ranges), None) => {
-            list_to_ranges(char_ranges, complement).map(|ranges| {
-                Mode::Characters(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: None,
-                        suppress_split,
-                    },
-                )
-            })
-        }
+        (None, Some(char_ranges), None) => list_to_ranges(char_ranges, complement).map(|ranges| {
+            Mode::Characters(
+                ranges,
+                Options {
+                    out_delimiter,
+                    line_ending,
+                    field_opts: None,
+                    suppress_split,
+                },
+            )
+        }),
 
-        (1, None, None, Some(field_ranges)) => {
+        (None, None, Some(field_ranges)) => {
             list_to_ranges(field_ranges, complement).map(|ranges| {
                 Mode::Fields(
                     ranges,
@@ -827,9 +837,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 )
             })
         }
-
-        (2.., _, _, _) => Err(translate!("cut-error-multiple-mode-args")),
-        _ => Err(translate!("cut-error-missing-mode-arg")),
+        _ => unreachable!(),
     };
 
     let mode_parse = match mode_parse {
