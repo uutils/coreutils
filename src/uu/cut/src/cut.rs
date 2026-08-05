@@ -822,7 +822,7 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
         .into_iter()
         .filter_map(|arg| {
             let count = matches.indices_of(arg)?.count();
-            (count > 0).then(|| (arg, count))
+            (count > 0).then_some((arg, count))
         })
         .collect();
 
