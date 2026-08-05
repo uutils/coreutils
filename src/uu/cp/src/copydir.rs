@@ -277,10 +277,18 @@ fn copy_direntry(
         entry_is_dir_no_follow
     };
 
+    // `exists()` resolves symlinks, so a destination entry that is itself a
+    // symlink to a directory would look like an already-existing directory and
+    // be descended into -- writing the source subtree through the link and out
+    // of the destination tree. GNU refuses this ("cannot overwrite
+    // non-directory ... with directory"), so treat a symlink at the destination
+    // as the non-directory it is.
+    let dest_is_symlink = entry.local_to_target.is_symlink();
+
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_is_dir && !entry.local_to_target.exists() {
-        return if entry.target_is_file {
+    if source_is_dir && (dest_is_symlink || !entry.local_to_target.exists()) {
+        return if entry.target_is_file || dest_is_symlink {
             Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
             build_dir(

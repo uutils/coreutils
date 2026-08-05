@@ -479,13 +479,9 @@ pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>>
             )
         };
         match e {
-            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_)
+            | EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _)
+            | EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
                 USimpleError::new(125, e.to_string())
             }
             EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
@@ -758,11 +754,9 @@ impl EnvAppData {
         self.do_input_debug_printing = self
             .do_input_debug_printing
             .or(Some(matches.get_count("debug") >= 2));
-        if let Some(value) = self.do_input_debug_printing {
-            if value {
-                debug_print_args(&original_args);
-                self.do_input_debug_printing = Some(false);
-            }
+        if Some(true) == self.do_input_debug_printing {
+            debug_print_args(&original_args);
+            self.do_input_debug_printing = Some(false);
         }
 
         let mut opts = make_options(
@@ -982,11 +976,11 @@ fn make_options<'a>(
         .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let argv0 = matches
         .get_one::<OsString>("argv0")
@@ -1162,7 +1156,7 @@ fn ignore_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_IGN);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1179,7 +1173,7 @@ fn reset_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_DFL);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1208,9 +1202,9 @@ fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
         ));
     }
 
-    if let Err(err) =
-        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
-    {
+    if let Err(err) = unsafe {
+        nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as core::ffi::c_int))
+    } {
         return Err(USimpleError::new(
             125,
             translate!(

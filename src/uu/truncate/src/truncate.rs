@@ -360,6 +360,11 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
     // Get the modifier character from the size string, if any. For
     // example, if the argument is "+123", then the modifier is '+'.
     if let Some(c) = size_string.chars().next() {
+        // Check if there's a non-numerical string after the positive/negative sign
+        if (matches!(c, '+' | '-')) && !size_string.chars().nth(1).unwrap_or(c).is_ascii_digit() {
+            return Err(ParseSizeError::ParseFailure(format!("'{size_string}'")));
+        }
+
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
@@ -378,7 +383,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
                 _ => TruncateMode::Absolute,
             })
     } else {
-        Err(ParseSizeError::ParseFailure(size_string.to_string()))
+        Err(ParseSizeError::ParseFailure("''".to_string()))
     }
 }
 

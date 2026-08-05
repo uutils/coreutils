@@ -13,7 +13,7 @@ use std::num::IntErrorKind;
 use std::path::Path;
 use std::str::from_utf8;
 use thiserror::Error;
-use unicode_width::UnicodeWidthChar;
+use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::{format_usage, show, translate};
@@ -361,17 +361,8 @@ fn classify_char(buf: &[u8], byte: usize, utf8: bool) -> (CharType, usize, usize
     }
 
     if utf8 {
-        let nbytes = char::from(b).len_utf8();
-        let Some(slice) = buf.get(byte..byte + nbytes) else {
-            // don't overrun buffer because of invalid UTF-8
-            return (Other, 1, 1);
-        };
-
-        if let Ok(t) = from_utf8(slice)
-            && let Some(c) = t.chars().next()
-        {
-            return (Other, UnicodeWidthChar::width(c).unwrap_or(0), nbytes);
-        }
+        let (width, nbytes) = char_width_at(buf, byte);
+        return (Other, width, nbytes);
     }
     (Other, 1, 1) // implicit assumption: non-UTF-8 char is 1 col wide
 }

@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (flags) reflink (fs) tmpfs (linux) filefrag rlimit Rlim NOFILE clob btrfs neve ROOTDIR USERDIR outfile subvolume uufs xattrs ELOOP
-// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx
+// spell-checker:ignore bdfl hlsl IRWXO IRWXG nconfined matchpathcon libselinux-devel prwx doesnotexist reftests subdirs mksocket srwx dstlink
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
@@ -1244,6 +1244,27 @@ fn test_cp_backup_existing() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_backup_existing_target_is_fifo() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~"));
+
+    ucmd.arg("--backup=simple")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .timeout(Duration::from_secs(10))
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+    assert!(!at.is_fifo(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")));
+    assert_eq!(
+        at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+        "How are you?\n"
+    );
+}
+
+#[test]
 fn test_cp_backup_nil() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1332,6 +1353,59 @@ fn test_cp_backup_simple_protect_source() {
 
     assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "Hello, World!\n");
     assert_eq!(at.read(&source), "");
+}
+
+#[test]
+// Android denies hard links on the filesystem backing the test directory, so
+// the setup cannot be built there; see the mv analogue.
+#[cfg(not(target_os = "android"))]
+fn test_cp_backup_simple_allows_hardlink_under_another_name() {
+    // `other` shares an inode with the backup path but is not named after it,
+    // so the backup rename cannot clobber it. GNU copies this happily.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let backup = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&backup, "backup content");
+    at.hard_link(&backup, "other");
+
+    ucmd.arg("--backup=simple")
+        .arg("other")
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .succeeds()
+        .no_stderr();
+
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "backup content");
+}
+
+#[test]
+fn test_cp_backup_simple_protect_source_regardless_of_spelling() {
+    // The guard compares files, not the strings naming them.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&source, "source content");
+
+    ucmd.arg("--backup=simple")
+        .arg(format!("./{source}"))
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .fails()
+        .stderr_contains("might destroy source");
+
+    assert_eq!(at.read(&source), "source content");
+}
+
+#[test]
+fn test_cp_backup_numbered_allows_source_named_like_backup() {
+    // A numbered backup never reuses an existing name, so nothing is at risk.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = format!("{TEST_HELLO_WORLD_SOURCE}~");
+    at.write(&source, "source content");
+
+    ucmd.arg("--backup=numbered")
+        .arg(&source)
+        .arg(TEST_HELLO_WORLD_SOURCE)
+        .succeeds();
+
+    assert_eq!(at.read(&source), "source content");
+    assert_eq!(at.read(TEST_HELLO_WORLD_SOURCE), "source content");
 }
 
 #[test]
@@ -3378,6 +3452,24 @@ fn test_cp_fifo() {
     let metadata = std::fs::metadata(at.subdir.join("fifo2")).unwrap();
     let permission = uucore::fs::display_permissions(&metadata, true);
     assert_eq!(permission, "prwx-wx--x".to_string());
+}
+
+#[test]
+#[cfg(unix)]
+fn test_cp_fifo_preserve_timestamps() {
+    // Preserving timestamps must not open the FIFO: opening a FIFO with no
+    // writer blocks forever. If this regresses, the test hangs instead of
+    // completing. See the `-a`/`--preserve=timestamps` path in copy_attributes.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("pipe");
+    at.set_mode("pipe", 0o624);
+    ucmd.arg("--preserve=timestamps")
+        .arg("-r")
+        .arg("pipe")
+        .arg("pipe_dup")
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("pipe_dup"));
 }
 
 #[rstest]
@@ -6654,6 +6746,50 @@ fn test_cp_parents_symlink_permissions_file() {
         src_dir_metadata.permissions().mode(),
         dest_dir_metadata.permissions().mode()
     );
+}
+
+/// A destination subdirectory that is really a symlink must not be descended
+/// into: doing so writes the source subtree through the link and out of the
+/// destination tree. GNU refuses with "cannot overwrite non-directory ... with
+/// directory".
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_dest_subdir_symlink_not_followed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("src/hooks");
+    at.write("src/hooks/payload", "PAYLOAD");
+    at.mkdir("dst");
+    at.mkdir("outside");
+    at.symlink_dir("../outside", "dst/hooks");
+
+    scene
+        .ucmd()
+        .args(&["-a", "src/.", "dst"])
+        .fails()
+        .stderr_contains("cannot overwrite non-directory");
+
+    assert!(
+        !at.file_exists("outside/payload"),
+        "cp wrote through the destination symlink and escaped the target tree"
+    );
+}
+
+/// A symlinked directory named as the *target* is still a legitimate
+/// destination -- only entries discovered inside the tree are refused.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_target_dir_symlink_still_allowed() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir_all("srcdir");
+    at.write("srcdir/f", "X");
+    at.mkdir("real");
+    at.symlink_dir("real", "dstlink");
+
+    scene.ucmd().args(&["-r", "srcdir", "dstlink/"]).succeeds();
+
+    assert!(at.file_exists("real/srcdir/f"));
 }
 
 /// Test the behavior of preserving permissions of parents when copying through

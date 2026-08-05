@@ -601,18 +601,16 @@ fn extract_quoting_style(
 fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => None,
             "file-type" => Some(IndicatorStyle::FileType),
             "classify" => Some(IndicatorStyle::Classify),
             "slash" => Some(IndicatorStyle::Slash),
-            &_ => None,
+            "none" | &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => None,
             "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
             "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
-            &_ => None,
+            "never" | "no" | "none" | &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
         Some(IndicatorStyle::Slash)
@@ -726,13 +724,12 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
@@ -784,13 +781,11 @@ impl Config {
             let group = !options.get_flag(options::NO_GROUP)
                 && !options.get_flag(options::format::LONG_NO_GROUP);
             let owner = !options.get_flag(options::format::LONG_NO_OWNER);
-            #[cfg(unix)]
             let numeric_uid_gid = options.get_flag(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
-                #[cfg(unix)]
                 numeric_uid_gid,
             }
         };
@@ -926,20 +921,18 @@ impl Config {
             locale_quoting = None;
         }
 
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
+        if needs_color && let Err(err) = validate_ls_colors_env() {
+            if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "prefix" => prefix.quote()
+                    )
+                );
             }
+            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            needs_color = false;
         }
 
         let color = if needs_color {

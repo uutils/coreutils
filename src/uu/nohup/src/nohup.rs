@@ -178,5 +178,5 @@ fn try_open_nohup_file(path: &str) -> std::io::Result<File> {
 
 #[cfg(target_vendor = "apple")]
 unsafe extern "C" {
-    fn _vprocmgr_detach_from_console(flags: u32) -> *const libc::c_int;
+    fn _vprocmgr_detach_from_console(flags: u32) -> *const core::ffi::c_int;
 }

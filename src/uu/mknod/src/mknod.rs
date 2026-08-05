@@ -73,6 +73,25 @@ struct Config {
 }
 
 fn mknod(file_name: &str, config: Config) -> i32 {
+    // Label the node at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context {
+        let mode = config.file_type.as_sflag().bits() | config.mode.bits();
+        match uucore::selinux::FsCreateContext::new(
+            std::path::Path::new(file_name),
+            Some(mode),
+            config.context.as_ref(),
+        ) {
+            Ok(guard) => Some(guard),
+            Err(e) => {
+                let _ = writeln!(io::stderr(), "mknod: {e}");
+                return 1;
+            }
+        }
+    } else {
+        None
+    };
+
     // set umask to 0 and store previous umask
     let have_prev_umask = if config.use_umask {
         None
@@ -103,31 +122,16 @@ fn mknod(file_name: &str, config: Config) -> i32 {
         );
     }
 
-    // Apply SELinux context if requested
-    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-    if config.set_security_context {
-        if let Err(e) = uucore::selinux::set_selinux_security_context(
-            std::path::Path::new(file_name),
-            config.context.as_ref(),
-        ) {
-            // if it fails, delete the file
-            let _ = std::fs::remove_file(file_name);
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
-    }
-
     // Apply SMACK context if requested
     #[cfg(all(feature = "smack", target_os = "linux"))]
-    if config.set_security_context {
-        if let Err(e) =
+    if config.set_security_context
+        && let Err(e) =
             uucore::smack::set_smack_label_and_cleanup(file_name, config.context.as_ref(), |p| {
                 std::fs::remove_file(p)
             })
-        {
-            let _ = writeln!(io::stderr(), "mknod: {e}");
-            return 1;
-        }
+    {
+        let _ = writeln!(io::stderr(), "mknod: {e}");
+        return 1;
     }
 
     errno
