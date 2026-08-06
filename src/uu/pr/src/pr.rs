@@ -537,27 +537,26 @@ fn parse_usize(
     opt: &str,
     too_large_error_message: &str,
 ) -> Option<Result<usize, PrError>> {
-    let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
-        let i = value_to_parse.0;
-        let option = value_to_parse.1;
-        i.parse().map_err(|_e| PrError::EncounteredErrors {
-            msg: format!("invalid -{option} argument {}", i.quote()),
-        })
-    };
-    matches
-        .get_one::<String>(opt)
-        .map(|i| (i.to_owned(), format!("-{opt}")))
-        .map(from_parse_error_to_pr_error)
-        .map(|result| match result {
+    matches.get_one::<String>(opt).map(|i| {
+        let raw = i.as_str();
+        match raw.parse::<usize>() {
             Ok(n) if n <= MAX_INT_VALUE => Ok(n),
-            Ok(_) => {
-                let raw = matches.get_one::<String>(opt).map_or("", String::as_str);
+            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
                 Err(PrError::EncounteredErrors {
                     msg: value_too_large(too_large_error_message, raw),
                 })
             }
-            Err(e) => Err(e),
-        })
+            Ok(_) => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
+            Err(_) => {
+                let option = format!("-{opt}");
+                Err(PrError::EncounteredErrors {
+                    msg: format!("invalid -{option} argument {}", raw.quote()),
+                })
+            }
+        }
+    })
 }
 
 fn get_date_format(matches: &ArgMatches) -> String {
@@ -651,6 +650,13 @@ fn build_options(
 
             let parse_result = i.parse::<usize>();
 
+            if matches!(
+                &parse_result,
+                Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow)
+            ) {
+                return Err(invalid_too_large(i));
+            }
+
             let separator = if parse_result.is_err() {
                 match i.chars().next() {
                     Some(c) if c.is_ascii() => c.to_string(),
@@ -670,6 +676,9 @@ fn build_options(
                             return Err(invalid_too_large(digits));
                         }
                         Ok(res) => res,
+                        Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                            return Err(invalid_too_large(digits));
+                        }
                         Err(_) => NumberingMode::default().width,
                     }
                 }
@@ -935,6 +944,11 @@ fn build_options(
                 msg: value_too_large("invalid number of columns", unparsed_num),
             }),
             Ok(n) => Ok(n),
+            Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
+                Err(PrError::EncounteredErrors {
+                    msg: value_too_large("invalid number of columns", unparsed_num),
+                })
+            }
             Err(_e) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
             }),
