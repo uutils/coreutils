@@ -141,13 +141,13 @@ pub fn uu_app() -> Command {
 // libc's path-based `mkfifo` there. Both rely on the caller having cleared
 // the umask so the requested mode is applied atomically (see issue #10020).
 #[cfg(not(target_vendor = "apple"))]
-fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
-    use rustix::fs::{CWD, mkfifoat};
-    mkfifoat(CWD, path, Mode::from_bits_truncate(mode)).map_err(std::io::Error::from)
+fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
+    use rustix::fs;
+    fs::mkfifoat(fs::CWD, path, Mode::from_bits_truncate(mode)).map_err(Into::into)
 }
 
 #[cfg(target_vendor = "apple")]
-fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
+fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
     use std::ffi::CString;
     let c_path =
         CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
