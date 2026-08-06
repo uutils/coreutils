@@ -225,19 +225,25 @@ fn test_negative_zero_bytes() {
 
 #[test]
 fn test_zero_bytes_with_suffix() {
+    // --bytes=0K makes head stop before draining stdin, so the harness's write may fail
+    // with EPIPE. That is expected and must not fail the test.
+    //
     // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
     new_ucmd!()
         .args(&["--bytes=0K"])
+        .ignore_stdin_write_error()
         .pipe_in("qwerty")
         .succeeds()
         .no_output();
     new_ucmd!()
         .args(&["--bytes=00K"])
+        .ignore_stdin_write_error()
         .pipe_in("qwerty")
         .succeeds()
         .no_output();
     new_ucmd!()
         .args(&["--bytes=+0K"])
+        .ignore_stdin_write_error()
         .pipe_in("qwerty")
         .succeeds()
         .no_output();
