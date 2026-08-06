@@ -40,6 +40,7 @@ pub use crate::features::backup_control;
 pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
+pub use crate::features::char_width;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
@@ -100,13 +101,16 @@ pub use crate::features::perms;
     any(feature = "pipes", feature = "buf-copy")
 ))]
 pub use crate::features::pipes;
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(any(unix, windows), feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(
+    any(windows, all(unix, not(target_os = "fuchsia"))),
+    feature = "signals"
+))]
 pub use crate::features::signals;
 #[cfg(all(
     unix,
@@ -147,7 +151,7 @@ use std::io::{BufRead, BufReader};
 use std::iter;
 #[cfg(unix)]
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-#[cfg(target_os = "wasi")]
+#[cfg(all(target_os = "wasi", target_env = "p1"))]
 use std::os::wasi::ffi::{OsStrExt, OsStringExt};
 use std::str;
 use std::str::Utf8Chunk;
@@ -178,9 +182,7 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-        "dir" => "ls",  // dir is an alias for ls
-        "vdir" => "ls", // vdir is an alias for ls
-
+        "dir" | "vdir" => "ls", // aliases for ls
         // Default case - return the util name as is
         _ => util_name,
     }
@@ -424,10 +426,7 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
 pub fn read_yes() -> bool {
     let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
-        _ => false,
-    }
+    std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
 }
 
 #[derive(Debug)]
@@ -455,7 +454,7 @@ impl error::UError for NonUtf8OsStrError {}
 #[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
 pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
     #[cfg(any(unix, target_os = "wasi"))]
-    return Ok(os_string.as_bytes());
+    return Ok(os_string.as_encoded_bytes());
 
     #[cfg(not(any(unix, target_os = "wasi")))]
     os_string
@@ -472,7 +471,7 @@ pub fn os_str_as_bytes(os_string: &OsStr) -> Result<&[u8], NonUtf8OsStrError> {
 /// and wraps [`OsStr::to_string_lossy`] on non-unix platforms.
 pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
     #[cfg(any(unix, target_os = "wasi"))]
-    return Cow::from(os_string.as_bytes());
+    return Cow::from(os_string.as_encoded_bytes());
 
     #[cfg(not(any(unix, target_os = "wasi")))]
     match os_string.to_string_lossy() {
@@ -486,12 +485,15 @@ pub fn os_str_as_bytes_lossy(os_string: &OsStr) -> Cow<'_, [u8]> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     return Ok(Cow::Borrowed(OsStr::from_bytes(bytes)));
 
-    #[cfg(not(any(unix, target_os = "wasi")))]
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
     Ok(Cow::Owned(OsString::from(str::from_utf8(bytes).map_err(
         |_| error::UUsageError::new(1, "Unable to transform bytes into OsStr"),
     )?)))
@@ -501,12 +503,15 @@ pub fn os_str_from_bytes(bytes: &[u8]) -> error::UResult<Cow<'_, OsStr>> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     return Ok(OsString::from_vec(vec));
 
-    #[cfg(not(any(unix, target_os = "wasi")))]
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
     Ok(OsString::from(String::from_utf8(vec).map_err(|_| {
         error::UUsageError::new(1, "invalid UTF-8 was detected in one or more arguments")
     })?))
@@ -516,11 +521,14 @@ pub fn os_string_from_vec(vec: Vec<u8>) -> error::UResult<OsString> {
 ///
 /// This always succeeds on unix platforms,
 /// and fails on other platforms if the bytes can't be parsed as UTF-8.
-#[cfg_attr(any(unix, target_os = "wasi"), expect(clippy::unnecessary_wraps))]
+#[cfg_attr(
+    any(unix, all(target_os = "wasi", target_env = "p1")),
+    expect(clippy::unnecessary_wraps)
+)]
 pub fn os_string_to_vec(s: OsString) -> error::UResult<Vec<u8>> {
-    #[cfg(any(unix, target_os = "wasi"))]
+    #[cfg(any(unix, all(target_os = "wasi", target_env = "p1")))]
     let v = s.into_vec();
-    #[cfg(not(any(unix, target_os = "wasi")))]
+    #[cfg(not(any(unix, all(target_os = "wasi", target_env = "p1"))))]
     let v = s
         .into_string()
         .map_err(|_| {

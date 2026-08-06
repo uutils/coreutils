@@ -7,7 +7,7 @@
 // https://pubs.opengroup.org/onlinepubs/9699919799/utilities/sort.html
 // https://www.gnu.org/software/coreutils/manual/html_node/sort-invocation.html
 
-// spell-checker:ignore (misc) HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
+// spell-checker:ignore (misc) kKMGTPEZYRQ HFKJFK Mbdfhn getrlimit Nofile rlim bigdecimal extendedbigdecimal hexdigit behaviour keydef GETFD localeconv foldhash
 // spell-checker:ignore (misc) uppercased qsort getmonth juin juil
 
 mod buffer_hint;
@@ -759,19 +759,18 @@ impl<'a> Line<'a> {
                         selection.end += leading_whitespace;
                     } else {
                         // include a trailing si unit
-                        if selector.settings.mode == SortMode::HumanNumeric {
-                            if let Some(
-                                b'k' | b'K' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R'
-                                | b'Q',
-                            ) = self.line[selection.end..initial_selection.end].first()
-                            {
-                                selection.end += 1;
-                            }
+                        if selector.settings.mode == SortMode::HumanNumeric
+                            && self.line[selection.end..initial_selection.end]
+                                .first()
+                                .is_some_and(|c| b"kKMGTPEZYRQ".contains(c))
+                        {
+                            selection.end += 1;
                         }
 
                         // include leading zeroes, a leading minus or a leading decimal point
-                        while let Some(b'-' | b'0' | b'.') =
-                            self.line[initial_selection.start..selection.start].last()
+                        while self.line[initial_selection.start..selection.start]
+                            .last()
+                            .is_some_and(|c| b"-0.".contains(c))
                         {
                             selection.start -= 1;
                         }
@@ -920,15 +919,9 @@ fn is_blank_thousands_sep(line: &[u8], idx: usize, allow_unit_after_blank: bool)
     }
 
     let next = line.get(idx + 1).copied();
-    match next {
-        Some(c) if c.is_ascii_digit() => true,
-        Some(b'K' | b'k' | b'M' | b'G' | b'T' | b'P' | b'E' | b'Z' | b'Y' | b'R' | b'Q')
-            if allow_unit_after_blank =>
-        {
-            true
-        }
-        _ => false,
-    }
+    next.is_some_and(|c| {
+        c.is_ascii_digit() || (allow_unit_after_blank && b"kKMGTPEZYRQ".contains(&c))
+    })
 }
 
 /// Split between separators. These separators are not included in fields.
@@ -1421,14 +1414,11 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
         return Some(count);
     }
 
-    let limit = fd_soft_limit()?;
-    if limit > 16_384 {
-        return None;
-    }
+    let limit = fd_soft_limit().filter(|l| *l <= 16_384)?;
 
     let mut count = 0usize;
     for fd in 0..limit {
-        let fd = fd as libc::c_int;
+        let fd = fd as core::ffi::c_int;
         // Probe with libc::fcntl because the fd may be invalid.
         if unsafe { libc::fcntl(fd, libc::F_GETFD) } != -1 {
             count = count.saturating_add(1);
@@ -1623,42 +1613,40 @@ where
             break;
         }
 
-        if arg.as_encoded_bytes().first() == Some(&b'+') {
-            let as_str = arg.to_string_lossy();
-            if let Some(from_spec) = as_str.strip_prefix('+') {
-                if let Some(from) = parse_legacy_part(from_spec) {
-                    let mut to_part = None;
+        let as_str = arg.to_string_lossy();
+        if let Some(from_spec) = as_str.strip_prefix('+')
+            && let Some(from) = parse_legacy_part(from_spec)
+        {
+            let mut to_part = None;
 
-                    let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
+            let next_candidate = iter.peek().map(|next| next.to_string_lossy().to_string());
 
-                    if let Some(next_str) = next_candidate {
-                        if let Some(stripped) = next_str.strip_prefix('-') {
-                            if stripped.starts_with(|c: char| c.is_ascii_digit()) {
-                                let next_arg = iter.next().unwrap();
-                                if let Some(parsed) = parse_legacy_part(stripped) {
-                                    to_part = Some(parsed);
-                                } else {
-                                    processed.push(arg);
-                                    processed.push(next_arg);
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-
-                    let keydef = legacy_key_to_k(&from, to_part.as_ref());
-                    let arg_index = processed.len();
-                    legacy_warnings.push(LegacyKeyWarning {
-                        arg_index,
-                        key_index: None,
-                        from_field: from.field,
-                        to_field: to_part.as_ref().map(|p| p.field),
-                        to_char: to_part.as_ref().map(|p| p.char_pos),
-                    });
-                    processed.push(OsString::from(format!("-k{keydef}")));
+            if let Some(next_str) = next_candidate
+                && let Some(stripped) = next_str
+                    .strip_prefix('-')
+                    .filter(|s| s.starts_with(|c: char| c.is_ascii_digit()))
+            {
+                let next_arg = iter.next().unwrap();
+                if let Some(parsed) = parse_legacy_part(stripped) {
+                    to_part = Some(parsed);
+                } else {
+                    processed.push(arg);
+                    processed.push(next_arg);
                     continue;
                 }
             }
+
+            let keydef = legacy_key_to_k(&from, to_part.as_ref());
+            let arg_index = processed.len();
+            legacy_warnings.push(LegacyKeyWarning {
+                arg_index,
+                key_index: None,
+                from_field: from.field,
+                to_field: to_part.as_ref().map(|p| p.field),
+                to_char: to_part.as_ref().map(|p| p.char_pos),
+            });
+            processed.push(OsString::from(format!("-k{keydef}")));
+            continue;
         }
 
         processed.push(arg);
@@ -1696,24 +1684,21 @@ fn index_legacy_warnings(processed_args: &[OsString], legacy_warnings: &mut [Leg
             }
         } else {
             let as_str = arg.to_string_lossy();
-            if let Some(spec) = as_str.strip_prefix("-k") {
-                if !spec.is_empty() {
-                    key_index = key_index.saturating_add(1);
-                    matched_key = true;
-                }
-            } else if let Some(spec) = as_str.strip_prefix("--key=") {
-                if !spec.is_empty() {
-                    key_index = key_index.saturating_add(1);
-                    matched_key = true;
-                }
+            if as_str
+                .strip_prefix("-k")
+                .is_some_and(|spec| !spec.is_empty())
+                || as_str
+                    .strip_prefix("--key=")
+                    .is_some_and(|spec| !spec.is_empty())
+            {
+                key_index = key_index.saturating_add(1);
+                matched_key = true;
             }
             i += 1;
         }
 
-        if matched_key {
-            if let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
-                legacy_warnings[warning_idx].key_index = Some(key_index);
-            }
+        if matched_key && let Some(&warning_idx) = index_by_arg.get(&i.saturating_sub(1)) {
+            legacy_warnings[warning_idx].key_index = Some(key_index);
         }
     }
 }
@@ -1990,12 +1975,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 
     // Prevent -o/--output to be specified multiple times
-    if let Some(mut outputs) = matches.get_many::<OsString>(options::OUTPUT) {
-        if let Some(first) = outputs.next() {
-            if outputs.any(|out| out != first) {
-                return Err(SortError::MultipleOutputFiles.into());
-            }
-        }
+    if matches
+        .get_many::<OsString>(options::OUTPUT)
+        .is_some_and(|mut outputs| {
+            outputs
+                .next()
+                .as_ref()
+                .is_some_and(|first| outputs.any(|out| out != *first))
+        })
+    {
+        return Err(SortError::MultipleOutputFiles.into());
     }
 
     settings.debug = matches.get_flag(options::DEBUG);
@@ -2286,13 +2275,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         });
     }
 
-    // Verify that we can open all input files.
-    // It is the correct behavior to close all files afterwards,
-    // and to reopen them at a later point. This is different from how the output file is handled,
-    // probably to prevent running out of file descriptors.
-    for file in &files {
-        open(file)?;
-    }
+    let opened_inputs = if settings.merge || settings.check {
+        Vec::new()
+    } else {
+        files.iter().map(open).collect::<UResult<Vec<_>>>()?
+    };
 
     let output = Output::new(matches.get_one::<OsString>(options::OUTPUT))?;
 
@@ -2311,7 +2298,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     settings.init_precomputed(needs_locale_collation);
 
-    let result = exec(&mut files, &settings, output, &mut tmp_dir);
+    let result = exec(&mut files, opened_inputs, &settings, output, &mut tmp_dir);
     // Wait here if `SIGINT` was received,
     // for signal handler to do its work and terminate the program.
     tmp_dir.wait_if_signal();
@@ -2562,6 +2549,7 @@ pub fn uu_app() -> Command {
 
 fn exec(
     files: &mut [OsString],
+    opened_inputs: Vec<Box<dyn Read + Send>>,
     settings: &GlobalSettings,
     output: Output,
     tmp_dir: &mut TmpDirWrapper,
@@ -2578,7 +2566,7 @@ fn exec(
             check::check(files.first().unwrap(), settings)
         }
     } else {
-        let mut lines = files.iter().map(open);
+        let mut lines = opened_inputs.into_iter().map(Ok);
         ext_sort(&mut lines, settings, output, tmp_dir)
     }
 }

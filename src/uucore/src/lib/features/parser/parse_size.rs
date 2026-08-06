@@ -378,10 +378,11 @@ impl<'parser> Parser<'parser> {
 
         // Binary prefix: "0b" followed by at least one binary digit (0 or 1)
         // Note: "0b" alone is treated as decimal 0 with suffix "b"
-        if let Some(prefix) = size.strip_prefix("0b") {
-            if !prefix.is_empty() {
-                return NumberSystem::Binary;
-            }
+        if size
+            .strip_prefix("0b")
+            .is_some_and(|prefix| !prefix.is_empty())
+        {
+            return NumberSystem::Binary;
         }
 
         let num_digits: usize = size
@@ -488,10 +489,10 @@ pub enum ParseSizeError {
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
-            Self::InvalidSuffix(ref s) => s,
-            Self::ParseFailure(ref s) => s,
-            Self::SizeTooBig(ref s) => s,
-            Self::PhysicalMem(ref s) => s,
+            Self::InvalidSuffix(ref s)
+            | Self::ParseFailure(ref s)
+            | Self::SizeTooBig(ref s)
+            | Self::PhysicalMem(ref s) => s,
         }
     }
 }

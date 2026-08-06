@@ -491,3 +491,19 @@ fn test_truncate_non_utf8_paths() {
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
 }
+
+#[test]
+fn test_empty_size() {
+    new_ucmd!()
+        .args(&["-s", "", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: ''\n");
+}
+
+#[test]
+fn test_sign_as_a_size() {
+    new_ucmd!()
+        .args(&["-s", "+", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: '+'\n");
+}

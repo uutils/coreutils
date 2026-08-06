@@ -1120,6 +1120,7 @@ fn string_to_control_char(s: &str) -> Result<u8, ControlCharMappingError> {
 fn combo_to_flags(combo: &str) -> Vec<ArgOptions<'_>> {
     let mut flags = Vec::new();
     let mut ccs = Vec::new();
+    #[expect(clippy::match_same_arms)]
     match combo {
         "lcase" | "LCASE" => {
             flags = vec!["xcase", "iuclc", "olcuc"];

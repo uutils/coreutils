@@ -208,7 +208,7 @@ impl MetadataExtTail for Metadata {
 #[cfg(not(target_os = "wasi"))]
 pub trait PathExtTail {
     fn is_stdin(&self) -> bool;
-    fn is_orphan(&self) -> bool;
+    fn has_active_parent(&self) -> bool;
     fn is_tailable(&self) -> bool;
 }
 
@@ -220,9 +220,9 @@ impl PathExtTail for Path {
             || self.eq(Self::new(&translate!("tail-stdin-header")))
     }
 
-    /// Return true if `path` does not have an existing parent directory
-    fn is_orphan(&self) -> bool {
-        !matches!(self.parent(), Some(parent) if parent.is_dir())
+    /// Return true if `path` has an existing parent directory
+    fn has_active_parent(&self) -> bool {
+        self.parent().is_some_and(Self::is_dir)
     }
 
     /// Return true if `path` is a file type that can be tailed

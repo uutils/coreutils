@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/pr.rs"
 test = false
@@ -28,6 +25,9 @@ regex = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "pr"

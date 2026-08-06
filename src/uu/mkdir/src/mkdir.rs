@@ -75,6 +75,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // " of each created directory to CTX"),
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let mode = get_mode(&matches).map_err(|e| USimpleError::new(1, e))?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -85,20 +86,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches) {
-        Ok(mode) => {
-            let config = Config {
-                recursive,
-                mode,
-                verbose,
-                set_security_context: set_security_context || context.is_some(),
-                context,
-            };
-            exec(dirs, &config);
-            Ok(())
-        }
-        Err(f) => Err(USimpleError::new(1, f)),
-    }
+    let config = Config {
+        recursive,
+        mode,
+        verbose,
+        set_security_context: set_security_context || context.is_some(),
+        context,
+    };
+
+    exec(dirs, &config);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -309,6 +307,18 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     #[cfg(not(unix))]
     let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
 
+    // Label the directory at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context && uucore::selinux::is_selinux_enabled() {
+        let mode = uucore::libc::S_IFDIR | mkdir_mode as uucore::libc::mode_t;
+        match uucore::selinux::FsCreateContext::new(path, Some(mode), config.context) {
+            Ok(guard) => Some(guard),
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        }
+    } else {
+        None
+    };
+
     match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
             if config.verbose {
@@ -317,16 +327,6 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => "mkdir", "path" => path.quote())
                 )?;
-            }
-
-            // Apply SELinux context if requested
-            #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
-                if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
-                {
-                    let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(1, e.to_string()));
-                }
             }
 
             // Apply SMACK context if requested
