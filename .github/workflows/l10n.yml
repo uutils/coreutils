@@ -69,10 +69,6 @@ jobs:
             sudo locale-gen --keep-existing hu_HU.UTF-8 # Hungary
             sudo update-locale
           ;;
-          macos-*)
-            # needed for testing
-            brew install coreutils
-          ;;
         esac
     - name: Test l10n functionality
       shell: bash

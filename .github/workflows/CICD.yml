@@ -545,9 +545,6 @@ jobs:
           ;;
         esac
         case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
-        case '${{ matrix.job.os }}' in
           ubuntu-*)
             # selinux and systemd headers needed to build tests
             sudo apt-get -y update
@@ -766,9 +763,6 @@ jobs:
       shell: bash
       run: |
         ## Install/setup prerequisites
-        case '${{ matrix.job.os }}' in
-          macos-latest) brew install coreutils ;; # needed for testing
-        esac
 
         case '${{ matrix.job.os }}' in
           ubuntu-latest)
