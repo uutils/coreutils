@@ -395,6 +395,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    # Remove once https://github.com/actions/runner-images/issues/14232 is resolved.
+    - name: Trust preinstalled Homebrew taps
+      run: brew trust aws/tap
+      if: runner.os == 'macOS'
     - name: Avoid no space left on device
       shell: bash
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android &
@@ -720,6 +724,10 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
+    # Remove once https://github.com/actions/runner-images/issues/14232 is resolved.
+    - name: Trust preinstalled Homebrew taps
+      run: brew trust aws/tap
+      if: runner.os == 'macOS'
     - uses: taiki-e/install-action@v2
       with:
         tool: nextest,grcov@0.8.24
