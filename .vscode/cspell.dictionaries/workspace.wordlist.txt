@@ -4,6 +4,7 @@ doctest
 
 # * crates
 aho-corasick
+ariadne
 blake2b_simd
 rustix
 

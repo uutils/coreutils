@@ -17,6 +17,8 @@ pub mod char_width;
 pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
+#[cfg(feature = "diagnostics")]
+pub mod diagnostics;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]

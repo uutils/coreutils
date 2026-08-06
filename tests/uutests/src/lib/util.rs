@@ -1723,6 +1723,21 @@ impl UCommand {
         self
     }
 
+    /// Attach stderr (and only stderr) to a simulated terminal, with colors
+    /// disabled through `NO_COLOR`.
+    ///
+    /// This is useful to test output that is only rendered when
+    /// `stderr.is_terminal()` is `true`, such as the rich error reports of
+    /// `chmod` or `test`, while letting assertions see plain text.
+    #[cfg(unix)]
+    pub fn terminal_sim_stderr(&mut self) -> &mut Self {
+        self.terminal_sim_stdio(TerminalSimulation {
+            stderr: true,
+            ..Default::default()
+        })
+        .env("NO_COLOR", "1")
+    }
+
     #[cfg(unix)]
     fn read_from_pty(pty_fd: OwnedFd, out: File) {
         let read_file = File::from(pty_fd);
