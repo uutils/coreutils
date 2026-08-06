@@ -36,6 +36,7 @@ const DEFAULT_COLUMN_WIDTH_WITH_S_OPTION: usize = 512;
 const DEFAULT_COLUMN_SEPARATOR: &char = &TAB;
 const FF: u8 = 0x0C_u8;
 const NL: u8 = b'\n';
+const MAX_INT_VALUE: usize = i32::MAX as usize;
 
 mod options {
     pub const HEADER: &str = "header";
@@ -524,7 +525,18 @@ fn print_error(matches: &ArgMatches, err: &PrError) {
     }
 }
 
-fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>> {
+fn value_too_large(option_message: &str, raw: &str) -> String {
+    format!(
+        "{option_message}: {}: Value too large for defined data type",
+        raw.quote()
+    )
+}
+
+fn parse_usize(
+    matches: &ArgMatches,
+    opt: &str,
+    too_large_error_message: &str,
+) -> Option<Result<usize, PrError>> {
     let from_parse_error_to_pr_error = |value_to_parse: (String, String)| {
         let i = value_to_parse.0;
         let option = value_to_parse.1;
@@ -536,6 +548,16 @@ fn parse_usize(matches: &ArgMatches, opt: &str) -> Option<Result<usize, PrError>
         .get_one::<String>(opt)
         .map(|i| (i.to_owned(), format!("-{opt}")))
         .map(from_parse_error_to_pr_error)
+        .map(|result| match result {
+            Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(_) => {
+                let raw = matches.get_one::<String>(opt).map_or("", String::as_str);
+                Err(PrError::EncounteredErrors {
+                    msg: value_too_large(too_large_error_message, raw),
+                })
+            }
+            Err(e) => Err(e),
+        })
 }
 
 fn get_date_format(matches: &ArgMatches) -> String {
@@ -598,8 +620,12 @@ fn build_options(
         .to_string();
 
     let default_first_number = NumberingMode::default().first_number;
-    let first_number =
-        parse_usize(matches, options::FIRST_LINE_NUMBER).unwrap_or(Ok(default_first_number))?;
+    let first_number = parse_usize(
+        matches,
+        options::FIRST_LINE_NUMBER,
+        "'-N NUMBER' invalid starting line number",
+    )
+    .unwrap_or(Ok(default_first_number))?;
 
     let number = matches
         .get_one::<String>(options::NUMBER_LINES)
@@ -608,6 +634,17 @@ fn build_options(
                 msg: format!(
                     "{}\n{}",
                     translate!("pr-error-invalid-number-argument", "arg" => arg),
+                    translate!("pr-try-help-message")
+                ),
+            };
+
+            let invalid_too_large = |arg: &str| PrError::EncounteredErrors {
+                msg: format!(
+                    "{}\n{}",
+                    value_too_large(
+                        "'-n' extra characters or invalid number in the argument",
+                        arg
+                    ),
                     translate!("pr-try-help-message")
                 ),
             };
@@ -624,12 +661,18 @@ fn build_options(
             };
 
             let width = match parse_result {
+                Ok(res) if res > MAX_INT_VALUE => return Err(invalid_too_large(i)),
                 Ok(res) => res,
-                Err(_) => i
-                    .get(1..)
-                    .unwrap_or_default()
-                    .parse::<usize>()
-                    .unwrap_or(NumberingMode::default().width),
+                Err(_) => {
+                    let digits = i.get(1..).unwrap_or_default();
+                    match digits.parse::<usize>() {
+                        Ok(res) if res > MAX_INT_VALUE => {
+                            return Err(invalid_too_large(digits));
+                        }
+                        Ok(res) => res,
+                        Err(_) => NumberingMode::default().width,
+                    }
+                }
             };
 
             Ok(NumberingMode {
@@ -804,8 +847,12 @@ fn build_options(
         LINES_PER_PAGE
     };
 
-    let page_length =
-        parse_usize(matches, options::PAGE_LENGTH).unwrap_or(Ok(default_lines_per_page))?;
+    let page_length = parse_usize(
+        matches,
+        options::PAGE_LENGTH,
+        "'-l PAGE_LENGTH' invalid number of lines",
+    )
+    .unwrap_or(Ok(default_lines_per_page))?;
 
     if page_length == 0 {
         return Err(PrError::EncounteredErrors {
@@ -848,8 +895,12 @@ fn build_options(
         DEFAULT_COLUMN_WIDTH
     };
 
-    let column_width =
-        parse_usize(matches, options::COLUMN_WIDTH).unwrap_or(Ok(default_column_width))?;
+    let column_width = parse_usize(
+        matches,
+        options::COLUMN_WIDTH,
+        "'-w PAGE_WIDTH' invalid number of characters",
+    )
+    .unwrap_or(Ok(default_column_width))?;
 
     if column_width == 0 {
         return Err(PrError::EncounteredErrors {
@@ -860,7 +911,11 @@ fn build_options(
     let page_width = if matches.get_flag(options::JOIN_LINES) {
         None
     } else {
-        match parse_usize(matches, options::PAGE_WIDTH) {
+        match parse_usize(
+            matches,
+            options::PAGE_WIDTH,
+            "'-W PAGE_WIDTH' invalid number of characters",
+        ) {
             Some(res) => Some(res?),
             None => None,
         }
@@ -872,13 +927,18 @@ fn build_options(
         });
     }
 
-    let res = operands.column.as_deref().map(|unparsed_num| {
-        unparsed_num
-            .parse::<usize>()
-            .map_err(|_e| PrError::EncounteredErrors {
+    let res = operands
+        .column
+        .as_deref()
+        .map(|unparsed_num| match unparsed_num.parse::<usize>() {
+            Ok(n) if n > MAX_INT_VALUE => Err(PrError::EncounteredErrors {
+                msg: value_too_large("invalid number of columns", unparsed_num),
+            }),
+            Ok(n) => Ok(n),
+            Err(_e) => Err(PrError::EncounteredErrors {
                 msg: format!("invalid {} argument {}", "-", unparsed_num.quote()),
-            })
-    });
+            }),
+        });
     let start_column_option = match res {
         Some(Ok(0)) => {
             return Err(PrError::EncounteredErrors {
@@ -891,15 +951,16 @@ fn build_options(
 
     // --column has more priority than -column
 
-    let column_option_value = match parse_usize(matches, options::COLUMN) {
-        Some(Ok(0)) => {
-            return Err(PrError::EncounteredErrors {
-                msg: "invalid --column argument '0'".to_string(),
-            });
-        }
-        Some(res) => Some(res?),
-        None => start_column_option,
-    };
+    let column_option_value =
+        match parse_usize(matches, options::COLUMN, "invalid number of columns") {
+            Some(Ok(0)) => {
+                return Err(PrError::EncounteredErrors {
+                    msg: "invalid --column argument '0'".to_string(),
+                });
+            }
+            Some(res) => Some(res?),
+            None => start_column_option,
+        };
 
     let column_mode_options = column_option_value.map(|columns| ColumnModeOptions {
         columns,
@@ -916,10 +977,7 @@ fn build_options(
             Ok(n) if n >= 0 => n as usize,
             Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
                 return Err(PrError::EncounteredErrors {
-                    msg: format!(
-                        "'-o MARGIN' invalid line offset: {}: Value too large for defined data type",
-                        raw.quote()
-                    ),
+                    msg: value_too_large("'-o MARGIN' invalid line offset", raw),
                 });
             }
             _ => {
@@ -1470,7 +1528,7 @@ fn get_line_for_printing(
         "{}{sep}",
         line_width
             .map(|i| {
-                let min_width = (i - (columns - 1)) / columns;
+                let min_width = i.saturating_sub(columns - 1) / columns;
                 if display_length < min_width {
                     for _i in 0..(min_width - display_length) {
                         complete_line.push(' ');
@@ -1490,12 +1548,12 @@ fn get_formatted_line_number(opts: &OutputOptions, line_number: usize, index: us
         let line_str = line_number.to_string();
         let num_opt = opts.number.as_ref().unwrap();
         let width = num_opt.width;
-        let separator = &num_opt.separator;
-        if line_str.len() >= width {
-            format!("{:>width$}{separator}", &line_str[line_str.len() - width..])
-        } else {
-            format!("{line_str:>width$}{separator}")
-        }
+        let digits = &line_str[line_str.len().saturating_sub(width)..];
+        let mut output = String::with_capacity(width + num_opt.separator.len());
+        output.extend(std::iter::repeat_n(' ', width - digits.len()));
+        output.push_str(digits);
+        output.push_str(&num_opt.separator);
+        output
     } else {
         String::new()
     }
@@ -1529,10 +1587,13 @@ fn header_content(options: &OutputOptions, page: usize) -> Vec<String> {
         let padding_before_filename = (space_for_filename - filename_len) / 2;
         let padding_after_filename = space_for_filename - filename_len - padding_before_filename;
 
-        format!(
-            "{date_part}{:padding_before_filename$}{filename}{:padding_after_filename$}{page_part}",
-            "", ""
-        )
+        let mut line = String::with_capacity(total_width);
+        line.push_str(date_part);
+        line.extend(std::iter::repeat_n(' ', padding_before_filename));
+        line.push_str(filename);
+        line.extend(std::iter::repeat_n(' ', padding_after_filename));
+        line.push_str(&page_part);
+        line
     } else {
         // If content is too long, just use single spaces
         format!("{date_part} {filename} {page_part}")
