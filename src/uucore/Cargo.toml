@@ -19,6 +19,7 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
 bstr = { workspace = true, optional = true }
 clap = { workspace = true }
@@ -143,6 +144,7 @@ default = ["signals"]
 # * non-default features
 backup-control = []
 colors = []
+diagnostics = ["dep:ariadne"]
 checksum = ["quoting-style", "sum", "base64-simd"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
