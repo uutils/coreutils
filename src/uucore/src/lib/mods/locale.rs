@@ -40,6 +40,8 @@ pub enum LocalizationError {
     LocalesDirNotFound(String),
     #[error("Path resolution error: {0}")]
     PathResolution(String),
+    #[error("No util provided")]
+    NoUtilProvided,
 }
 
 impl From<std::io::Error> for LocalizationError {
@@ -120,6 +122,15 @@ thread_local! {
         )
     )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
+    // Avoid duplicated and high-cost localizer setup
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -204,11 +215,11 @@ fn create_bundle(
 }
 
 /// Initialize localization with common strings in addition to utility-specific strings
-fn init_localization(
+fn build_localizer_from_locales_dir(
     locale: &LanguageIdentifier,
     locales_dir: &Path,
     util_name: &str,
-) -> Result<(), LocalizationError> {
+) -> Result<Localizer, LocalizationError> {
     let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
 
@@ -233,11 +244,36 @@ fn init_localization(
         }
     };
 
-    LOCALIZER.with(|lock| {
-        lock.set(loc)
-            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-    })?;
-    Ok(())
+    Ok(loc)
+}
+
+fn build_localizer_from_embedded(
+    locale: &LanguageIdentifier,
+    util_name: &str,
+) -> Result<Localizer, LocalizationError> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    let localizer = {
+        #[cfg(target_os = "wasi")]
+        {
+            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, util_name)?;
+            if locale == &default_locale {
+                Localizer::new(english_bundle)
+            } else if let Ok(localized) = create_wasi_bundle_from_embedded(locale, util_name) {
+                Localizer::new(localized).with_fallback(english_bundle)
+            } else {
+                Localizer::new(english_bundle)
+            }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            let _ = locale;
+            let english_bundle = create_english_bundle_from_embedded(&default_locale, util_name)?;
+            Localizer::new(english_bundle)
+        }
+    };
+    Ok(localizer)
 }
 
 /// Helper function to parse FluentResource from content string
@@ -361,6 +397,9 @@ fn create_wasi_bundle_from_embedded(
 }
 
 fn get_message_internal(id: &str, args: Option<FluentArgs>) -> String {
+    // Disable lazy setup evaluation for tests.
+    #[cfg(not(test))]
+    let _ = lazy_thread_setup_localization();
     LOCALIZER.with(|lock| {
         lock.get()
             .map_or_else(|| id.to_string(), |loc| loc.format(id, args.as_ref())) // Return the key ID if localizer not initialized
@@ -443,6 +482,13 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
     })
 }
 
+#[inline(always)]
+fn detect_system_locale_or_default() -> LanguageIdentifier {
+    detect_system_locale().unwrap_or_else(|_| {
+        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
+    })
+}
+
 /// Sets up localization using the system locale with English fallback.
 /// Always loads common strings in addition to utility-specific strings.
 ///
@@ -480,58 +526,49 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 ///     Err(e) => eprintln!("Failed to initialize localization: {e}"),
 /// }
 /// ```
-pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
-    // Avoid duplicated and high-cost localizer setup
-    thread_local! {
-        #[cfg_attr(
-            target_os = "android",
-            expect(
-                clippy::missing_const_for_thread_local,
-                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
-            )
-        )]
-        static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
-    }
+pub fn setup_localization(util_name: &str) -> Result<(), LocalizationError> {
+    setup_localization_inner(Some(util_name))
+}
+
+/// Called by precaution when trying to get a message, in case we are in
+/// a separate thread and the thread_local LOCALIZER is not created yet.
+pub fn lazy_thread_setup_localization() -> Result<(), LocalizationError> {
+    setup_localization_inner(None)
+}
+
+fn setup_localization_inner(util_name: Option<&str>) -> Result<(), LocalizationError> {
+    // Cache as much info as possible to avoid having to re-do the work when
+    // initializing data again for a thread.
+    static UTIL_NAME_AND_LOCALE_DIR: OnceLock<(String, Result<PathBuf, LocalizationError>)> =
+        OnceLock::new();
+    static LOCALE: OnceLock<LanguageIdentifier> = OnceLock::new();
+
     if LOCALIZER_IS_SET.with(Cell::get) {
         return Ok(());
     }
 
-    let locale = detect_system_locale().unwrap_or_else(|_| {
-        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
-    });
+    let (util_name, locales_dir) = if let Some(util_name) = util_name {
+        UTIL_NAME_AND_LOCALE_DIR.get_or_init(|| (util_name.to_string(), get_locales_dir(util_name)))
+    } else {
+        UTIL_NAME_AND_LOCALE_DIR
+            .get()
+            .ok_or(LocalizationError::NoUtilProvided)?
+    };
+    let locale = LOCALE.get_or_init(detect_system_locale_or_default);
 
     // Load common strings along with utility-specific strings
-    if let Ok(locales_dir) = get_locales_dir(p) {
+    let localizer = if let Ok(locales_dir) = locales_dir {
         // Load both utility-specific and common strings
-        init_localization(&locale, &locales_dir, p)?;
+        build_localizer_from_locales_dir(locale, locales_dir, util_name)?
     } else {
         // No locales directory found, use embedded locales
-        let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-            .expect("Default locale should always be valid");
+        build_localizer_from_embedded(locale, util_name)?
+    };
 
-        #[cfg(target_os = "wasi")]
-        let localizer = {
-            let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
-            if locale == default_locale {
-                Localizer::new(english_bundle)
-            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
-                Localizer::new(localized).with_fallback(english_bundle)
-            } else {
-                Localizer::new(english_bundle)
-            }
-        };
-
-        #[cfg(not(target_os = "wasi"))]
-        let localizer = {
-            let english_bundle = create_english_bundle_from_embedded(&default_locale, p)?;
-            Localizer::new(english_bundle)
-        };
-
-        LOCALIZER.with(|lock| {
-            lock.set(localizer)
-                .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
-        })?;
-    }
+    LOCALIZER.with(|lock| {
+        lock.set(localizer)
+            .map_err(|_| LocalizationError::Bundle("Localizer already initialized".into()))
+    })?;
     LOCALIZER_IS_SET.with(|f| f.set(true));
     Ok(())
 }
@@ -679,13 +716,13 @@ pub use translate;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusty_fork::rusty_fork_test;
     use std::env;
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// Test-specific helper function to create a bundle from test directory only
-    #[cfg(test)]
     fn create_test_bundle(
         locale: &LanguageIdentifier,
         test_locales_dir: &Path,
@@ -709,7 +746,6 @@ mod tests {
     }
 
     /// Test-specific initialization function for test directories
-    #[cfg(test)]
     fn init_test_localization(
         locale: &LanguageIdentifier,
         test_locales_dir: &Path,
@@ -806,653 +842,679 @@ invalid-syntax = This is { $missing
         temp_dir
     }
 
-    #[test]
-    fn test_create_bundle_success() {
-        let temp_dir = create_test_locales_dir();
-        let locale = LanguageIdentifier::from_str("en-US").unwrap();
-
-        let result = create_test_bundle(&locale, temp_dir.path());
-        assert!(result.is_ok());
-
-        let bundle = result.unwrap();
-        assert!(bundle.get_message("greeting").is_some());
-    }
-
-    #[test]
-    fn test_create_bundle_file_not_found() {
-        let temp_dir = TempDir::new().unwrap();
-        let locale = LanguageIdentifier::from_str("de-DE").unwrap();
-
-        let result = create_test_bundle(&locale, temp_dir.path());
-        assert!(result.is_err());
-
-        if let Err(LocalizationError::LocalesDirNotFound(_)) = result {
-            // Expected - no localization strings found
-        } else {
-            panic!("Expected LocalesDirNotFound error");
-        }
-    }
-
-    #[test]
-    fn test_create_bundle_invalid_syntax() {
-        let temp_dir = create_test_locales_dir();
-        let locale = LanguageIdentifier::from_str("es-ES").unwrap();
-
-        let result = create_test_bundle(&locale, temp_dir.path());
-
-        // The result should be an error due to invalid syntax
-        match result {
-            Err(LocalizationError::ParseResource {
-                error: _parser_err,
-                snippet: _,
-            }) => {
-                // Expected ParseResource variant - test passes
-            }
-            Ok(_) => {
-                panic!("Expected ParseResource error, but bundle was created successfully");
-            }
-            Err(other) => {
-                panic!("Expected ParseResource error, but got: {other:?}");
-            }
-        }
-    }
-
-    /// Regression test: fallback bundle is correctly constructed on missing
-    /// utility-specific locales.
-    ///
-    /// Before the fix, `create_bundle` returned `Ok` whenever common uucore
-    /// strings were loaded — even if the utility-specific locale file was
-    /// missing.  This prevented `init_localization` from falling back to
-    /// embedded locales, so utility-specific message keys (e.g.
-    /// `wc-error-failed-to-print-result`) were returned verbatim instead of
-    /// being translated.
-    ///
-    /// After the fix, `create_bundle` requires the utility locale file to
-    /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
-    /// the embedded-locale fallback path to kick in.
-    ///
-    /// https://github.com/uutils/coreutils/issues/11854
-    #[test]
-    fn test_create_bundle_returns_err_when_util_locale_missing() {
-        // Build a temporary directory structure that mimics the repo layout
-        // so `find_uucore_locales_dir` can walk up and find common strings:
-        //
-        //   <temp>/uu/fake_util/locales/    <- locales_dir passed to create_bundle
-        //   <temp>/uucore/locales/en-US.ftl <- common strings (common-error)
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let temp_root = temp_dir.path();
-
-        fs::create_dir_all(temp_root.join("uu").join("fake_util").join("locales"))
-            .expect("Failed to create fake util locales dir");
-        fs::create_dir_all(temp_root.join("uucore").join("locales"))
-            .expect("Failed to create fake uucore locales dir");
-
-        fs::write(
-            temp_root.join("uucore").join("locales").join("en-US.ftl"),
-            "common-error = error\n",
-        )
-        .expect("Failed to write en-US.ftl");
-
-        let locales_dir = temp_root.join("uu").join("fake_util").join("locales");
-        let locale = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
-
-        // "fake_util" doesn't exist under src/uu/, so get_locales_dir fails
-        // and no utility-specific strings are loaded.  Common strings ARE
-        // loaded from the temp uucore locales dir above.
-        let result = create_bundle(&locale, &locales_dir, "fake_util");
-
-        assert!(
-            result.is_err(),
-            "create_bundle should return Err when the utility locale file is missing, \
-             even if common strings were loaded"
-        );
-
-        match result {
-            Err(LocalizationError::LocalesDirNotFound(msg)) => {
-                assert!(
-                    msg.contains("fake_util"),
-                    "error message should mention the utility name, got: {msg}"
-                );
-            }
-            Err(other) => panic!("Expected LocalesDirNotFound error, got: {other:?}"),
-            Ok(_) => panic!("Expected error, but create_bundle returned Ok"),
-        }
-    }
-
-    #[test]
-    fn test_localizer_format_primary_bundle() {
-        let temp_dir = create_test_locales_dir();
-        let en_bundle: FluentBundle<&'static FluentResource> = create_test_bundle(
-            &LanguageIdentifier::from_str("en-US").unwrap(),
-            temp_dir.path(),
-        )
-        .unwrap();
-
-        let localizer = Localizer::new(en_bundle);
-        let result = localizer.format("greeting", None);
-        assert_eq!(result, "Hello, world!");
-    }
-
-    #[test]
-    fn test_localizer_format_with_args() {
-        use fluent::FluentArgs;
-        let temp_dir = create_test_locales_dir();
-        let en_bundle = create_test_bundle(
-            &LanguageIdentifier::from_str("en-US").unwrap(),
-            temp_dir.path(),
-        )
-        .unwrap();
-
-        let localizer = Localizer::new(en_bundle);
-        let mut args = FluentArgs::new();
-        args.set("name", "Alice");
-
-        let result = localizer.format("welcome", Some(&args));
-        assert_eq!(result, "Welcome, Alice!");
-    }
-
-    #[test]
-    fn test_localizer_fallback_to_english() {
-        let temp_dir = create_test_locales_dir();
-        let fr_bundle = create_test_bundle(
-            &LanguageIdentifier::from_str("fr-FR").unwrap(),
-            temp_dir.path(),
-        )
-        .unwrap();
-        let en_bundle = create_test_bundle(
-            &LanguageIdentifier::from_str("en-US").unwrap(),
-            temp_dir.path(),
-        )
-        .unwrap();
-
-        let localizer = Localizer::new(fr_bundle).with_fallback(en_bundle);
-
-        // This message exists in French
-        let result1 = localizer.format("greeting", None);
-        assert_eq!(result1, "Bonjour, le monde!");
-
-        // This message only exists in English, should fallback
-        let result2 = localizer.format("missing-in-other", None);
-        assert_eq!(result2, "This message only exists in English");
-    }
-
-    #[test]
-    fn test_localizer_format_message_not_found() {
-        let temp_dir = create_test_locales_dir();
-        let en_bundle = create_test_bundle(
-            &LanguageIdentifier::from_str("en-US").unwrap(),
-            temp_dir.path(),
-        )
-        .unwrap();
-
-        let localizer = Localizer::new(en_bundle);
-        let result = localizer.format("nonexistent-message", None);
-        assert_eq!(result, "nonexistent-message");
-    }
-
-    #[test]
-    fn test_init_localization_english_only() {
-        // Run in a separate thread to avoid conflicts with other tests
-        std::thread::spawn(|| {
+    rusty_fork_test! {
+        #[test]
+        fn test_create_bundle_success() {
             let temp_dir = create_test_locales_dir();
             let locale = LanguageIdentifier::from_str("en-US").unwrap();
 
-            let result = init_test_localization(&locale, temp_dir.path());
+            let result = create_test_bundle(&locale, temp_dir.path());
             assert!(result.is_ok());
 
-            // Test that we can get messages
-            let message = get_message("greeting");
-            assert_eq!(message, "Hello, world!");
-        })
-        .join()
-        .unwrap();
+            let bundle = result.unwrap();
+            assert!(bundle.get_message("greeting").is_some());
+        }
     }
 
-    #[test]
-    fn test_init_localization_with_fallback() {
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+    rusty_fork_test! {
+        #[test]
+        fn test_create_bundle_file_not_found() {
+            let temp_dir = TempDir::new().unwrap();
+            let locale = LanguageIdentifier::from_str("de-DE").unwrap();
 
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
+            let result = create_test_bundle(&locale, temp_dir.path());
+            assert!(result.is_err());
 
-            // Test French message
-            let message1 = get_message("greeting");
-            assert_eq!(message1, "Bonjour, le monde!");
-
-            // Test fallback to English
-            let message2 = get_message("missing-in-other");
-            assert_eq!(message2, "This message only exists in English");
-        })
-        .join()
-        .unwrap();
+            if let Err(LocalizationError::LocalesDirNotFound(_)) = result {
+                // Expected - no localization strings found
+            } else {
+                panic!("Expected LocalesDirNotFound error");
+            }
+        }
     }
 
-    #[test]
-    fn test_init_localization_invalid_locale_falls_back_to_english() {
-        std::thread::spawn(|| {
+    rusty_fork_test! {
+        #[test]
+        fn test_create_bundle_invalid_syntax() {
             let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("de-DE").unwrap(); // No German file
+            let locale = LanguageIdentifier::from_str("es-ES").unwrap();
 
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
+            let result = create_test_bundle(&locale, temp_dir.path());
 
-            // Should use English as primary since German failed to load
-            let message = get_message("greeting");
-            assert_eq!(message, "Hello, world!");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_init_localization_already_initialized() {
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("en-US").unwrap();
-
-            // Initialize once
-            let result1 = init_test_localization(&locale, temp_dir.path());
-            assert!(result1.is_ok());
-
-            // Try to initialize again - should fail
-            let result2 = init_test_localization(&locale, temp_dir.path());
-            assert!(result2.is_err());
-
-            match result2 {
-                Err(LocalizationError::Bundle(msg)) => {
-                    assert!(msg.contains("already initialized"));
+            // The result should be an error due to invalid syntax
+            match result {
+                Err(LocalizationError::ParseResource {
+                    error: _parser_err,
+                    snippet: _,
+                }) => {
+                    // Expected ParseResource variant - test passes
                 }
-                _ => panic!("Expected Bundle error"),
+                Ok(_) => {
+                    panic!("Expected ParseResource error, but bundle was created successfully");
+                }
+                Err(other) => {
+                    panic!("Expected ParseResource error, but got: {other:?}");
+                }
             }
-        })
-        .join()
-        .unwrap();
+        }
     }
 
-    #[test]
-    fn test_get_message() {
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+    rusty_fork_test! {
+        /// Regression test: fallback bundle is correctly constructed on missing
+        /// utility-specific locales.
+        ///
+        /// Before the fix, `create_bundle` returned `Ok` whenever common uucore
+        /// strings were loaded — even if the utility-specific locale file was
+        /// missing.  This prevented `init_localization` from falling back to
+        /// embedded locales, so utility-specific message keys (e.g.
+        /// `wc-error-failed-to-print-result`) were returned verbatim instead of
+        /// being translated.
+        ///
+        /// After the fix, `create_bundle` requires the utility locale file to
+        /// have been loaded (`util_loaded`) and returns `Err` otherwise, allowing
+        /// the embedded-locale fallback path to kick in.
+        ///
+        /// https://github.com/uutils/coreutils/issues/11854
+        #[test]
+        fn test_create_bundle_returns_err_when_util_locale_missing() {
+            // Build a temporary directory structure that mimics the repo layout
+            // so `find_uucore_locales_dir` can walk up and find common strings:
+            //
+            //   <temp>/uu/fake_util/locales/    <- locales_dir passed to create_bundle
+            //   <temp>/uucore/locales/en-US.ftl <- common strings (common-error)
+            let temp_dir = TempDir::new().expect("Failed to create temp directory");
+            let temp_root = temp_dir.path();
 
-            init_test_localization(&locale, temp_dir.path()).unwrap();
+            fs::create_dir_all(temp_root.join("uu").join("fake_util").join("locales"))
+                .expect("Failed to create fake util locales dir");
+            fs::create_dir_all(temp_root.join("uucore").join("locales"))
+                .expect("Failed to create fake uucore locales dir");
 
-            let message = get_message("greeting");
-            assert_eq!(message, "Bonjour, le monde!");
-        })
-        .join()
-        .unwrap();
-    }
+            fs::write(
+                temp_root.join("uucore").join("locales").join("en-US.ftl"),
+                "common-error = error\n",
+            )
+            .expect("Failed to write en-US.ftl");
 
-    #[test]
-    fn test_get_message_with_args() {
-        use fluent::FluentArgs;
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("en-US").unwrap();
+            let locales_dir = temp_root.join("uu").join("fake_util").join("locales");
+            let locale = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
 
-            init_test_localization(&locale, temp_dir.path()).unwrap();
+            // "fake_util" doesn't exist under src/uu/, so get_locales_dir fails
+            // and no utility-specific strings are loaded.  Common strings ARE
+            // loaded from the temp uucore locales dir above.
+            let result = create_bundle(&locale, &locales_dir, "fake_util");
 
-            let mut args = FluentArgs::new();
-            args.set("name".to_string(), "Bob".to_string());
-
-            let message = get_message_with_args("welcome", args);
-            assert_eq!(message, "Welcome, Bob!");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_get_message_with_args_pluralization() {
-        use fluent::FluentArgs;
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("en-US").unwrap();
-
-            init_test_localization(&locale, temp_dir.path()).unwrap();
-
-            // Test singular
-            let mut args1 = FluentArgs::new();
-            args1.set("count", 1);
-            let message1 = get_message_with_args("count-items", args1);
-            assert_eq!(message1, "You have 1 item");
-
-            // Test plural
-            let mut args2 = FluentArgs::new();
-            args2.set("count", 5);
-            let message2 = get_message_with_args("count-items", args2);
-            assert_eq!(message2, "You have 5 items");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_thread_local_isolation() {
-        use std::thread;
-
-        let temp_dir = create_test_locales_dir();
-
-        // Initialize in main thread with French
-        let temp_path_main = temp_dir.path().to_path_buf();
-        let main_handle = thread::spawn(move || {
-            let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
-            init_test_localization(&locale, &temp_path_main).unwrap();
-            let main_message = get_message("greeting");
-            assert_eq!(main_message, "Bonjour, le monde!");
-        });
-        main_handle.join().unwrap();
-
-        // Test in a different thread - should not be initialized
-        let temp_path = temp_dir.path().to_path_buf();
-        let handle = thread::spawn(move || {
-            // This thread should have its own uninitialized LOCALIZER
-            let thread_message = get_message("greeting");
-            assert_eq!(thread_message, "greeting"); // Returns ID since not initialized
-
-            // Initialize in this thread with English
-            let en_locale = LanguageIdentifier::from_str("en-US").unwrap();
-            init_test_localization(&en_locale, &temp_path).unwrap();
-            let thread_message_after_init = get_message("greeting");
-            assert_eq!(thread_message_after_init, "Hello, world!");
-        });
-
-        handle.join().unwrap();
-
-        // Test another thread to verify French doesn't persist across threads
-        let final_handle = thread::spawn(move || {
-            // Should be uninitialized again
-            let final_message = get_message("greeting");
-            assert_eq!(final_message, "greeting");
-        });
-        final_handle.join().unwrap();
-    }
-
-    #[test]
-    fn test_japanese_localization() {
-        use fluent::FluentArgs;
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("ja-JP").unwrap();
-
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
-
-            // Test Japanese greeting
-            let message = get_message("greeting");
-            assert_eq!(message, "こんにちは、世界！");
-
-            // Test Japanese with arguments
-            let mut args = FluentArgs::new();
-            args.set("name".to_string(), "田中".to_string());
-            let welcome = get_message_with_args("welcome", args);
-            assert_eq!(welcome, "ようこそ、田中さん！");
-
-            // Test Japanese count (no pluralization)
-            let mut count_args = FluentArgs::new();
-            count_args.set("count".to_string(), "5".to_string());
-            let count_message = get_message_with_args("count-items", count_args);
-            assert_eq!(count_message, "5個のアイテムがあります");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_arabic_localization() {
-        use fluent::FluentArgs;
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
-
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
-
-            // Test Arabic greeting (RTL text)
-            let message = get_message("greeting");
-            assert_eq!(message, "أهلاً بالعالم！");
-
-            // Test Arabic with arguments
-            let mut args = FluentArgs::new();
-            args.set("name", "أحمد".to_string());
-            let welcome = get_message_with_args("welcome", args);
-            assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
-
-            // Test Arabic pluralization (zero case)
-            let mut args_zero = FluentArgs::new();
-            args_zero.set("count", 0);
-            let message_zero = get_message_with_args("count-items", args_zero);
-            assert_eq!(message_zero, "لديك لا عناصر");
-
-            // Test Arabic pluralization (one case)
-            let mut args_one = FluentArgs::new();
-            args_one.set("count", 1);
-            let message_one = get_message_with_args("count-items", args_one);
-            assert_eq!(message_one, "لديك عنصر واحد");
-
-            // Test Arabic pluralization (two case)
-            let mut args_two = FluentArgs::new();
-            args_two.set("count", 2);
-            let message_two = get_message_with_args("count-items", args_two);
-            assert_eq!(message_two, "لديك عنصران");
-
-            // Test Arabic pluralization (few case - 3-10)
-            let mut args_few = FluentArgs::new();
-            args_few.set("count", 5);
-            let message_few = get_message_with_args("count-items", args_few);
-            assert_eq!(message_few, "لديك 5 عناصر");
-
-            // Test Arabic pluralization (other case - 11+)
-            let mut args_many = FluentArgs::new();
-            args_many.set("count", 15);
-            let message_many = get_message_with_args("count-items", args_many);
-            assert_eq!(message_many, "لديك 15 عنصر");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_arabic_localization_with_macro() {
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
-
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
-
-            // Test Arabic greeting (RTL text)
-            let message = translate!("greeting");
-            assert_eq!(message, "أهلاً بالعالم！");
-
-            // Test Arabic with arguments
-            let welcome = translate!("welcome", "name" => "أحمد");
-            assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
-
-            // Test Arabic pluralization (zero case)
-            let message_zero = translate!("count-items", "count" => 0);
-            assert_eq!(message_zero, "لديك لا عناصر");
-
-            // Test Arabic pluralization (one case)
-            let message_one = translate!("count-items", "count" => 1);
-            assert_eq!(message_one, "لديك عنصر واحد");
-
-            // Test Arabic pluralization (two case)
-            let message_two = translate!("count-items", "count" => 2);
-            assert_eq!(message_two, "لديك عنصران");
-
-            // Test Arabic pluralization (few case - 3-10)
-            let message_few = translate!("count-items", "count" => 5);
-            assert_eq!(message_few, "لديك 5 عناصر");
-
-            // Test Arabic pluralization (other case - 11+)
-            let message_many = translate!("count-items", "count" => 15);
-            assert_eq!(message_many, "لديك 15 عنصر");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_mixed_script_fallback() {
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
-
-            let result = init_test_localization(&locale, temp_dir.path());
-            assert!(result.is_ok());
-
-            // Test Arabic message exists
-            let arabic_message = get_message("greeting");
-            assert_eq!(arabic_message, "أهلاً بالعالم！");
-
-            // Test fallback to English for missing message
-            let fallback_message = get_message("missing-in-other");
-            assert_eq!(fallback_message, "This message only exists in English");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_unicode_directional_isolation_disabled() {
-        use fluent::FluentArgs;
-        std::thread::spawn(|| {
-            let temp_dir = create_test_locales_dir();
-            let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
-
-            init_test_localization(&locale, temp_dir.path()).unwrap();
-
-            // Test that Latin script names are NOT isolated in RTL context
-            // since we disabled Unicode directional isolation
-            let mut args = FluentArgs::new();
-            args.set("name".to_string(), "John Smith".to_string());
-            let message = get_message_with_args("welcome", args);
-
-            // The Latin name should NOT be wrapped in directional isolate characters
-            assert!(!message.contains("\u{2068}John Smith\u{2069}"));
-            assert_eq!(message, "أهلاً وسهلاً، John Smith！");
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_parse_resource_error_includes_snippet() {
-        let temp_dir = create_test_locales_dir();
-        let locale = LanguageIdentifier::from_str("es-ES").unwrap();
-
-        let result = create_test_bundle(&locale, temp_dir.path());
-        assert!(result.is_err());
-
-        if let Err(LocalizationError::ParseResource {
-            error: _err,
-            snippet,
-        }) = result
-        {
-            // The snippet should contain exactly the invalid text from es-ES.ftl
             assert!(
-                snippet.contains("This is { $missing"),
-                "snippet was `{snippet}` but did not include the invalid text"
+                result.is_err(),
+                "create_bundle should return Err when the utility locale file is missing, \
+                even if common strings were loaded"
             );
-        } else {
-            panic!("Expected LocalizationError::ParseResource with snippet");
-        }
-    }
 
-    #[test]
-    fn test_localization_error_from_io_error() {
-        let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
-        let loc_error = LocalizationError::from(io_error);
-
-        match loc_error {
-            LocalizationError::Io { source: _, path } => {
-                assert_eq!(path, PathBuf::from("<unknown>"));
+            match result {
+                Err(LocalizationError::LocalesDirNotFound(msg)) => {
+                    assert!(
+                        msg.contains("fake_util"),
+                        "error message should mention the utility name, got: {msg}"
+                    );
+                }
+                Err(other) => panic!("Expected LocalesDirNotFound error, got: {other:?}"),
+                Ok(_) => panic!("Expected error, but create_bundle returned Ok"),
             }
-            _ => panic!("Expected IO error variant"),
         }
     }
 
-    #[test]
-    fn test_localization_error_uerror_impl() {
-        let error = LocalizationError::Bundle("some error".to_string());
-        assert_eq!(error.code(), 1);
-    }
+    rusty_fork_test! {
+        #[test]
+        fn test_localizer_format_primary_bundle() {
+            let temp_dir = create_test_locales_dir();
+            let en_bundle: FluentBundle<&'static FluentResource> = create_test_bundle(
+                &LanguageIdentifier::from_str("en-US").unwrap(),
+                temp_dir.path(),
+            )
+            .unwrap();
 
-    #[test]
-    fn test_get_message_not_initialized() {
-        std::thread::spawn(|| {
-            let message = get_message("greeting");
-            assert_eq!(message, "greeting"); // Should return the ID itself
-        })
-        .join()
-        .unwrap();
-    }
-
-    #[test]
-    fn test_detect_system_locale_from_lang_env() {
-        // Test locale parsing logic directly instead of relying on environment variables
-        // which can have race conditions in multi-threaded test environments
-
-        // Test parsing logic with UTF-8 encoding
-        let locale_with_encoding = "fr-FR.UTF-8";
-        let parsed = locale_with_encoding.split('.').next().unwrap();
-        let lang_id = LanguageIdentifier::from_str(parsed).unwrap();
-        assert_eq!(lang_id.to_string(), "fr-FR");
-
-        // Test parsing logic without encoding
-        let locale_without_encoding = "es-ES";
-        let lang_id = LanguageIdentifier::from_str(locale_without_encoding).unwrap();
-        assert_eq!(lang_id.to_string(), "es-ES");
-
-        // Test that DEFAULT_LOCALE is valid
-        let default_lang_id = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
-        assert_eq!(default_lang_id.to_string(), "en-US");
-    }
-
-    #[test]
-    fn test_detect_system_locale_no_lang_env() {
-        // Save current LANG value
-        let original_lang = env::var("LANG").ok();
-
-        // Remove LANG environment variable
-        unsafe {
-            env::remove_var("LANG");
+            let localizer = Localizer::new(en_bundle);
+            let result = localizer.format("greeting", None);
+            assert_eq!(result, "Hello, world!");
         }
+    }
 
-        let result = detect_system_locale();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_string(), "en-US");
+    rusty_fork_test! {
+        #[test]
+        fn test_localizer_format_with_args() {
+            use fluent::FluentArgs;
+            let temp_dir = create_test_locales_dir();
+            let en_bundle = create_test_bundle(
+                &LanguageIdentifier::from_str("en-US").unwrap(),
+                temp_dir.path(),
+            )
+            .unwrap();
 
-        // Restore original LANG value
-        if let Some(val) = original_lang {
-            unsafe {
-                env::set_var("LANG", val);
+            let localizer = Localizer::new(en_bundle);
+            let mut args = FluentArgs::new();
+            args.set("name", "Alice");
+
+            let result = localizer.format("welcome", Some(&args));
+            assert_eq!(result, "Welcome, Alice!");
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_localizer_fallback_to_english() {
+            let temp_dir = create_test_locales_dir();
+            let fr_bundle = create_test_bundle(
+                &LanguageIdentifier::from_str("fr-FR").unwrap(),
+                temp_dir.path(),
+            )
+            .unwrap();
+            let en_bundle = create_test_bundle(
+                &LanguageIdentifier::from_str("en-US").unwrap(),
+                temp_dir.path(),
+            )
+            .unwrap();
+
+            let localizer = Localizer::new(fr_bundle).with_fallback(en_bundle);
+
+            // This message exists in French
+            let result1 = localizer.format("greeting", None);
+            assert_eq!(result1, "Bonjour, le monde!");
+
+            // This message only exists in English, should fallback
+            let result2 = localizer.format("missing-in-other", None);
+            assert_eq!(result2, "This message only exists in English");
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_localizer_format_message_not_found() {
+            let temp_dir = create_test_locales_dir();
+            let en_bundle = create_test_bundle(
+                &LanguageIdentifier::from_str("en-US").unwrap(),
+                temp_dir.path(),
+            )
+            .unwrap();
+
+            let localizer = Localizer::new(en_bundle);
+            let result = localizer.format("nonexistent-message", None);
+            assert_eq!(result, "nonexistent-message");
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_init_localization_english_only() {
+            // Run in a separate thread to avoid conflicts with other tests
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test that we can get messages
+                let message = get_message("greeting");
+                assert_eq!(message, "Hello, world!");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_init_localization_with_fallback() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test French message
+                let message1 = get_message("greeting");
+                assert_eq!(message1, "Bonjour, le monde!");
+
+                // Test fallback to English
+                let message2 = get_message("missing-in-other");
+                assert_eq!(message2, "This message only exists in English");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_init_localization_invalid_locale_falls_back_to_english() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("de-DE").unwrap(); // No German file
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Should use English as primary since German failed to load
+                let message = get_message("greeting");
+                assert_eq!(message, "Hello, world!");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_init_localization_already_initialized() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+                // Initialize once
+                let result1 = init_test_localization(&locale, temp_dir.path());
+                assert!(result1.is_ok());
+
+                // Try to initialize again - should fail
+                let result2 = init_test_localization(&locale, temp_dir.path());
+                assert!(result2.is_err());
+
+                match result2 {
+                    Err(LocalizationError::Bundle(msg)) => {
+                        assert!(msg.contains("already initialized"));
+                    }
+                    _ => panic!("Expected Bundle error"),
+                }
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_get_message() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+
+                init_test_localization(&locale, temp_dir.path()).unwrap();
+
+                let message = get_message("greeting");
+                assert_eq!(message, "Bonjour, le monde!");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_get_message_with_args() {
+            use fluent::FluentArgs;
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+                init_test_localization(&locale, temp_dir.path()).unwrap();
+
+                let mut args = FluentArgs::new();
+                args.set("name".to_string(), "Bob".to_string());
+
+                let message = get_message_with_args("welcome", args);
+                assert_eq!(message, "Welcome, Bob!");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_get_message_with_args_pluralization() {
+            use fluent::FluentArgs;
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("en-US").unwrap();
+
+                init_test_localization(&locale, temp_dir.path()).unwrap();
+
+                // Test singular
+                let mut args1 = FluentArgs::new();
+                args1.set("count", 1);
+                let message1 = get_message_with_args("count-items", args1);
+                assert_eq!(message1, "You have 1 item");
+
+                // Test plural
+                let mut args2 = FluentArgs::new();
+                args2.set("count", 5);
+                let message2 = get_message_with_args("count-items", args2);
+                assert_eq!(message2, "You have 5 items");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_thread_local_isolation() {
+            use std::thread;
+
+            let temp_dir = create_test_locales_dir();
+
+            // Initialize in main thread with French
+            let temp_path_main = temp_dir.path().to_path_buf();
+            let main_handle = thread::spawn(move || {
+                let locale = LanguageIdentifier::from_str("fr-FR").unwrap();
+                init_test_localization(&locale, &temp_path_main).unwrap();
+                let main_message = get_message("greeting");
+                assert_eq!(main_message, "Bonjour, le monde!");
+            });
+            main_handle.join().unwrap();
+
+            // Test in a different thread - should not be initialized
+            let temp_path = temp_dir.path().to_path_buf();
+            let handle = thread::spawn(move || {
+                // This thread should have its own uninitialized LOCALIZER
+                let thread_message = get_message("greeting");
+                assert_eq!(thread_message, "greeting"); // Returns ID since not initialized
+
+                // Initialize in this thread with English
+                let en_locale = LanguageIdentifier::from_str("en-US").unwrap();
+                init_test_localization(&en_locale, &temp_path).unwrap();
+                let thread_message_after_init = get_message("greeting");
+                assert_eq!(thread_message_after_init, "Hello, world!");
+            });
+
+            handle.join().unwrap();
+
+            // Test another thread to verify French doesn't persist across threads
+            let final_handle = thread::spawn(move || {
+                // Should be uninitialized again
+                let final_message = get_message("greeting");
+                assert_eq!(final_message, "greeting");
+            });
+            final_handle.join().unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_japanese_localization() {
+            use fluent::FluentArgs;
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("ja-JP").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test Japanese greeting
+                let message = get_message("greeting");
+                assert_eq!(message, "こんにちは、世界！");
+
+                // Test Japanese with arguments
+                let mut args = FluentArgs::new();
+                args.set("name".to_string(), "田中".to_string());
+                let welcome = get_message_with_args("welcome", args);
+                assert_eq!(welcome, "ようこそ、田中さん！");
+
+                // Test Japanese count (no pluralization)
+                let mut count_args = FluentArgs::new();
+                count_args.set("count".to_string(), "5".to_string());
+                let count_message = get_message_with_args("count-items", count_args);
+                assert_eq!(count_message, "5個のアイテムがあります");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_arabic_localization() {
+            use fluent::FluentArgs;
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test Arabic greeting (RTL text)
+                let message = get_message("greeting");
+                assert_eq!(message, "أهلاً بالعالم！");
+
+                // Test Arabic with arguments
+                let mut args = FluentArgs::new();
+                args.set("name", "أحمد".to_string());
+                let welcome = get_message_with_args("welcome", args);
+                assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
+
+                // Test Arabic pluralization (zero case)
+                let mut args_zero = FluentArgs::new();
+                args_zero.set("count", 0);
+                let message_zero = get_message_with_args("count-items", args_zero);
+                assert_eq!(message_zero, "لديك لا عناصر");
+
+                // Test Arabic pluralization (one case)
+                let mut args_one = FluentArgs::new();
+                args_one.set("count", 1);
+                let message_one = get_message_with_args("count-items", args_one);
+                assert_eq!(message_one, "لديك عنصر واحد");
+
+                // Test Arabic pluralization (two case)
+                let mut args_two = FluentArgs::new();
+                args_two.set("count", 2);
+                let message_two = get_message_with_args("count-items", args_two);
+                assert_eq!(message_two, "لديك عنصران");
+
+                // Test Arabic pluralization (few case - 3-10)
+                let mut args_few = FluentArgs::new();
+                args_few.set("count", 5);
+                let message_few = get_message_with_args("count-items", args_few);
+                assert_eq!(message_few, "لديك 5 عناصر");
+
+                // Test Arabic pluralization (other case - 11+)
+                let mut args_many = FluentArgs::new();
+                args_many.set("count", 15);
+                let message_many = get_message_with_args("count-items", args_many);
+                assert_eq!(message_many, "لديك 15 عنصر");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_arabic_localization_with_macro() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test Arabic greeting (RTL text)
+                let message = translate!("greeting");
+                assert_eq!(message, "أهلاً بالعالم！");
+
+                // Test Arabic with arguments
+                let welcome = translate!("welcome", "name" => "أحمد");
+                assert_eq!(welcome, "أهلاً وسهلاً، أحمد！");
+
+                // Test Arabic pluralization (zero case)
+                let message_zero = translate!("count-items", "count" => 0);
+                assert_eq!(message_zero, "لديك لا عناصر");
+
+                // Test Arabic pluralization (one case)
+                let message_one = translate!("count-items", "count" => 1);
+                assert_eq!(message_one, "لديك عنصر واحد");
+
+                // Test Arabic pluralization (two case)
+                let message_two = translate!("count-items", "count" => 2);
+                assert_eq!(message_two, "لديك عنصران");
+
+                // Test Arabic pluralization (few case - 3-10)
+                let message_few = translate!("count-items", "count" => 5);
+                assert_eq!(message_few, "لديك 5 عناصر");
+
+                // Test Arabic pluralization (other case - 11+)
+                let message_many = translate!("count-items", "count" => 15);
+                assert_eq!(message_many, "لديك 15 عنصر");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_mixed_script_fallback() {
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
+
+                let result = init_test_localization(&locale, temp_dir.path());
+                assert!(result.is_ok());
+
+                // Test Arabic message exists
+                let arabic_message = get_message("greeting");
+                assert_eq!(arabic_message, "أهلاً بالعالم！");
+
+                // Test fallback to English for missing message
+                let fallback_message = get_message("missing-in-other");
+                assert_eq!(fallback_message, "This message only exists in English");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_unicode_directional_isolation_disabled() {
+            use fluent::FluentArgs;
+            std::thread::spawn(|| {
+                let temp_dir = create_test_locales_dir();
+                let locale = LanguageIdentifier::from_str("ar-SA").unwrap();
+
+                init_test_localization(&locale, temp_dir.path()).unwrap();
+
+                // Test that Latin script names are NOT isolated in RTL context
+                // since we disabled Unicode directional isolation
+                let mut args = FluentArgs::new();
+                args.set("name".to_string(), "John Smith".to_string());
+                let message = get_message_with_args("welcome", args);
+
+                // The Latin name should NOT be wrapped in directional isolate characters
+                assert!(!message.contains("\u{2068}John Smith\u{2069}"));
+                assert_eq!(message, "أهلاً وسهلاً، John Smith！");
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_parse_resource_error_includes_snippet() {
+            let temp_dir = create_test_locales_dir();
+            let locale = LanguageIdentifier::from_str("es-ES").unwrap();
+
+            let result = create_test_bundle(&locale, temp_dir.path());
+            assert!(result.is_err());
+
+            if let Err(LocalizationError::ParseResource {
+                error: _err,
+                snippet,
+            }) = result
+            {
+                // The snippet should contain exactly the invalid text from es-ES.ftl
+                assert!(
+                    snippet.contains("This is { $missing"),
+                    "snippet was `{snippet}` but did not include the invalid text"
+                );
+            } else {
+                panic!("Expected LocalizationError::ParseResource with snippet");
             }
-        } else {
-            {} // Was already unset
         }
     }
 
-    #[test]
-    fn test_setup_localization_success() {
-        std::thread::spawn(|| {
+    rusty_fork_test! {
+        #[test]
+        fn test_localization_error_from_io_error() {
+            let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+            let loc_error = LocalizationError::from(io_error);
+
+            match loc_error {
+                LocalizationError::Io { source: _, path } => {
+                    assert_eq!(path, PathBuf::from("<unknown>"));
+                }
+                _ => panic!("Expected IO error variant"),
+            }
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_localization_error_uerror_impl() {
+            let error = LocalizationError::Bundle("some error".to_string());
+            assert_eq!(error.code(), 1);
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_get_message_not_initialized() {
+            std::thread::spawn(|| {
+                let message = get_message("greeting");
+                assert_eq!(message, "greeting"); // Should return the ID itself
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_detect_system_locale_from_lang_env() {
+            // Test locale parsing logic directly instead of relying on environment variables
+            // which can have race conditions in multi-threaded test environments
+
+            // Test parsing logic with UTF-8 encoding
+            let locale_with_encoding = "fr-FR.UTF-8";
+            let parsed = locale_with_encoding.split('.').next().unwrap();
+            let lang_id = LanguageIdentifier::from_str(parsed).unwrap();
+            assert_eq!(lang_id.to_string(), "fr-FR");
+
+            // Test parsing logic without encoding
+            let locale_without_encoding = "es-ES";
+            let lang_id = LanguageIdentifier::from_str(locale_without_encoding).unwrap();
+            assert_eq!(lang_id.to_string(), "es-ES");
+
+            // Test that DEFAULT_LOCALE is valid
+            let default_lang_id = LanguageIdentifier::from_str(DEFAULT_LOCALE).unwrap();
+            assert_eq!(default_lang_id.to_string(), "en-US");
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_detect_system_locale_no_lang_env() {
             // Save current LANG value
             let original_lang = env::var("LANG").ok();
+
+            // Remove LANG environment variable
             unsafe {
-                env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
+                env::remove_var("LANG");
             }
 
-            let result = setup_localization("test");
+            let result = detect_system_locale();
             assert!(result.is_ok());
-
-            // Test that we can get messages (should use embedded English for "test" utility)
-            let message = get_message("test-about");
-            // Since we're using embedded resources, we should get the expected message
-            assert!(!message.is_empty());
+            assert_eq!(result.unwrap().to_string(), "en-US");
 
             // Restore original LANG value
             if let Some(val) = original_lang {
@@ -1460,123 +1522,161 @@ invalid-syntax = This is { $missing
                     env::set_var("LANG", val);
                 }
             } else {
+                {} // Was already unset
+            }
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_setup_localization_success() {
+            std::thread::spawn(|| {
+                // Save current LANG value
+                let original_lang = env::var("LANG").ok();
                 unsafe {
-                    env::remove_var("LANG");
+                    env::set_var("LANG", "en-US.UTF-8"); // Use English since we have embedded resources for "test"
                 }
-            }
-        })
-        .join()
-        .unwrap();
+
+                let result = setup_localization("test");
+                assert!(result.is_ok());
+
+                // Test that we can get messages (should use embedded English for "test" utility)
+                let message = get_message("test-about");
+                // Since we're using embedded resources, we should get the expected message
+                assert!(!message.is_empty());
+
+                // Restore original LANG value
+                if let Some(val) = original_lang {
+                    unsafe {
+                        env::set_var("LANG", val);
+                    }
+                } else {
+                    unsafe {
+                        env::remove_var("LANG");
+                    }
+                }
+            })
+            .join()
+            .unwrap();
+        }
     }
 
-    #[test]
-    fn test_setup_localization_falls_back_to_english() {
-        std::thread::spawn(|| {
-            // Save current LANG value
-            let original_lang = env::var("LANG").ok();
-            unsafe {
-                env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
-            }
-
-            let result = setup_localization("test");
-            assert!(result.is_ok());
-
-            // Should fall back to English embedded resources
-            let message = get_message("test-about");
-            assert!(!message.is_empty()); // Should get something, not just the key
-
-            // Restore original LANG value
-            if let Some(val) = original_lang {
+    rusty_fork_test! {
+        #[test]
+        fn test_setup_localization_falls_back_to_english() {
+            std::thread::spawn(|| {
+                // Save current LANG value
+                let original_lang = env::var("LANG").ok();
                 unsafe {
-                    env::set_var("LANG", val);
+                    env::set_var("LANG", "de-DE.UTF-8"); // German file doesn't exist, should fallback
                 }
-            } else {
+
+                let result = setup_localization("test");
+                assert!(result.is_ok());
+
+                // Should fall back to English embedded resources
+                let message = get_message("test-about");
+                assert!(!message.is_empty()); // Should get something, not just the key
+
+                // Restore original LANG value
+                if let Some(val) = original_lang {
+                    unsafe {
+                        env::set_var("LANG", val);
+                    }
+                } else {
+                    unsafe {
+                        env::remove_var("LANG");
+                    }
+                }
+            })
+            .join()
+            .unwrap();
+        }
+    }
+
+    rusty_fork_test! {
+        #[test]
+        fn test_setup_localization_fallback_to_embedded() {
+            std::thread::spawn(|| {
+                // Force English locale for this test
                 unsafe {
-                    env::remove_var("LANG");
+                    env::set_var("LANG", "en-US");
                 }
-            }
-        })
-        .join()
-        .unwrap();
+
+                // Test with a utility name that has embedded locales
+                // This should fall back to embedded English when filesystem files aren't found
+                let result = setup_localization("test");
+                if let Err(e) = &result {
+                    eprintln!("Setup localization failed: {e}");
+                }
+                assert!(result.is_ok());
+
+                // Verify we can get messages (using embedded English)
+                let message = get_message("test-about");
+                assert_eq!(message, "Check file types and compare values."); // Should use embedded English
+            })
+            .join()
+            .unwrap();
+        }
     }
 
-    #[test]
-    fn test_setup_localization_fallback_to_embedded() {
-        std::thread::spawn(|| {
-            // Force English locale for this test
-            unsafe {
-                env::set_var("LANG", "en-US");
-            }
+    rusty_fork_test! {
+        #[test]
+        fn test_error_display() {
+            let io_error = LocalizationError::Io {
+                source: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
+                path: PathBuf::from("/test/path.ftl"),
+            };
+            let error_string = format!("{io_error}");
+            assert!(error_string.contains("I/O error loading"));
+            assert!(error_string.contains("/test/path.ftl"));
 
-            // Test with a utility name that has embedded locales
-            // This should fall back to embedded English when filesystem files aren't found
-            let result = setup_localization("test");
-            if let Err(e) = &result {
-                eprintln!("Setup localization failed: {e}");
-            }
-            assert!(result.is_ok());
-
-            // Verify we can get messages (using embedded English)
-            let message = get_message("test-about");
-            assert_eq!(message, "Check file types and compare values."); // Should use embedded English
-        })
-        .join()
-        .unwrap();
+            let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
+            let bundle_string = format!("{bundle_error}");
+            assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
+        }
     }
 
-    #[test]
-    fn test_error_display() {
-        let io_error = LocalizationError::Io {
-            source: std::io::Error::new(std::io::ErrorKind::NotFound, "File not found"),
-            path: PathBuf::from("/test/path.ftl"),
-        };
-        let error_string = format!("{io_error}");
-        assert!(error_string.contains("I/O error loading"));
-        assert!(error_string.contains("/test/path.ftl"));
+    rusty_fork_test! {
+        #[test]
+        fn test_clap_localization_fallbacks() {
+            std::thread::spawn(|| {
+                // Test the scenario where localization isn't properly initialized
+                // and we need fallbacks for clap error handling
 
-        let bundle_error = LocalizationError::Bundle("Bundle creation failed".to_string());
-        let bundle_string = format!("{bundle_error}");
-        assert!(bundle_string.contains("Bundle error: Bundle creation failed"));
-    }
+                // First, test when localizer is not initialized
+                let error_msg = get_message("common-error");
+                assert_eq!(error_msg, "common-error"); // Should return key when not initialized
 
-    #[test]
-    fn test_clap_localization_fallbacks() {
-        std::thread::spawn(|| {
-            // Test the scenario where localization isn't properly initialized
-            // and we need fallbacks for clap error handling
+                let tip_msg = get_message("common-tip");
+                assert_eq!(tip_msg, "common-tip"); // Should return key when not initialized
 
-            // First, test when localizer is not initialized
-            let error_msg = get_message("common-error");
-            assert_eq!(error_msg, "common-error"); // Should return key when not initialized
+                // Now initialize with setup_localization
+                let result = setup_localization("comm");
+                if result.is_err() {
+                    // If setup fails (e.g., no embedded locales for comm), try with a known utility
+                    let _ = setup_localization("test");
+                }
 
-            let tip_msg = get_message("common-tip");
-            assert_eq!(tip_msg, "common-tip"); // Should return key when not initialized
+                // Test that common strings are available after initialization
+                let error_after_init = get_message("common-error");
+                // Should either be translated or return the key (but not panic)
+                assert!(!error_after_init.is_empty());
 
-            // Now initialize with setup_localization
-            let result = setup_localization("comm");
-            if result.is_err() {
-                // If setup fails (e.g., no embedded locales for comm), try with a known utility
-                let _ = setup_localization("test");
-            }
+                let tip_after_init = get_message("common-tip");
+                assert!(!tip_after_init.is_empty());
 
-            // Test that common strings are available after initialization
-            let error_after_init = get_message("common-error");
-            // Should either be translated or return the key (but not panic)
-            assert!(!error_after_init.is_empty());
+                // Test that clap error keys work with fallbacks
+                let unknown_arg_key = get_message("clap-error-unexpected-argument");
+                assert!(!unknown_arg_key.is_empty());
 
-            let tip_after_init = get_message("common-tip");
-            assert!(!tip_after_init.is_empty());
-
-            // Test that clap error keys work with fallbacks
-            let unknown_arg_key = get_message("clap-error-unexpected-argument");
-            assert!(!unknown_arg_key.is_empty());
-
-            // Test usage key fallback
-            let usage_key = get_message("common-usage");
-            assert!(!usage_key.is_empty());
-        })
-        .join()
-        .unwrap();
+                // Test usage key fallback
+                let usage_key = get_message("common-usage");
+                assert!(!usage_key.is_empty());
+            })
+            .join()
+            .unwrap();
+        }
     }
 }
 

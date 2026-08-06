@@ -595,20 +595,14 @@ fn get_input_file(filename: &OsStr) -> UResult<Box<dyn Read>> {
     match File::open(filename) {
         Ok(f) => {
             if f.metadata()?.is_dir() {
-                Err(io::Error::other(
-                    translate!("error-is-a-directory", "file" => filename.maybe_quote()),
-                )
-                .into())
+                Err(io::Error::from(io::ErrorKind::IsADirectory)
+                    .map_err_context(|| filename.maybe_quote().to_string()))
             } else {
                 Ok(Box::new(f))
             }
         }
-        Err(_) => Err(io::Error::other(format!(
-            "{}: {}",
-            filename.maybe_quote(),
-            translate!("error-file-not-found")
-        ))
-        .into()),
+        Err(_) => Err(io::Error::from(io::ErrorKind::NotFound)
+            .map_err_context(|| filename.maybe_quote().to_string())),
     }
 }
 

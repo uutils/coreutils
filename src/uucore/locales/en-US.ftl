@@ -32,6 +32,26 @@ error-file-not-found = No such file or directory
 error-invalid-argument = Invalid argument
 error-is-a-directory = { $file }: Is a directory
 
+uio-err-not-found = No such file or directory
+uio-err-permission-denied = Permission denied
+uio-err-conn-refused = Connection refused
+uio-err-conn-reset = Connection reset
+uio-err-conn-abort = Connection aborted
+uio-err-not-connected = Not connected
+uio-err-addr-in-use = Address in use
+uio-err-addr-not-avail = Address not available
+uio-err-broken-pipe = Broken pipe
+uio-err-already-exists = Already exists
+uio-err-would-block = Would block
+uio-err-invalid-input = Invalid input
+uio-err-invalid-data = Invalid data
+uio-err-timed-out = Timed out
+uio-err-write-zero = Write zero
+uio-err-interrupted = Interrupted
+uio-err-unexpected-eof = Unexpected end of file
+uio-err-is-a-directory = Is a directory
+uio-err-too-many-symlinks = Too many levels of symbolic links
+
 # Common actions
 action-copying = copying
 action-moving = moving

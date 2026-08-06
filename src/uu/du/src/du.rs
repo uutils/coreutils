@@ -642,9 +642,8 @@ fn du_regular(
 
                         // Check symlink depth limit
                         if current_symlink_depth > MAX_SYMLINK_DEPTH {
-                            print_tx.send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                "Too many levels of symbolic links",
+                            print_tx.send(Err(std::io::Error::other(
+                                translate!("uio-err-too-many-symlinks")
                             ).map_err_context(
                                 || translate!("du-error-cannot-access", "path" => entry_path.quote()),
                             )))?;
