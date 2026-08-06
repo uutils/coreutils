@@ -1414,10 +1414,7 @@ pub(crate) fn current_open_fd_count() -> Option<usize> {
         return Some(count);
     }
 
-    let limit = fd_soft_limit()?;
-    if limit > 16_384 {
-        return None;
-    }
+    let limit = fd_soft_limit().filter(|l| *l <= 16_384)?;
 
     let mut count = 0usize;
     for fd in 0..limit {
