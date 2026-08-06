@@ -1191,6 +1191,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
+    // A failure ends the loop, so the statistics gathered so far still get reported.
+    let mut copy_error = None;
     while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
@@ -1198,7 +1200,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let Ok(rstat_update) =
+            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        else {
+            break;
+        };
         if rstat_update.is_empty() {
             if input_nocache {
                 i.discard_cache(read_offset, 0);
@@ -1208,7 +1214,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let Ok(wstat_update) = o.write_blocks(&buf).map_err(|e| copy_error = Some(e)) else {
+            break;
+        };
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1253,6 +1261,16 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         };
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
         prog_tx.send(prog_update).unwrap_or(());
+    }
+
+    if let Some(e) = copy_error {
+        // Flushing and syncing are pointless now, but the caller still wants the statistics.
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
+        prog_tx.send(prog_update).unwrap_or(());
+        output_thread
+            .join()
+            .expect("Failed to join with the output thread.");
+        return Err(e);
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
