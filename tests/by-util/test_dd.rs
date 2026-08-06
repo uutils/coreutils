@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ sighandler
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -2211,4 +2211,41 @@ fn test_count_bytes_with_expanding_block_conv() {
     let output = at.read_bytes("output.bin");
     assert_eq!(bytecount::count(&output, b'a'), 1000);
     assert!(!output.contains(&b'Z'));
+}
+
+// A failed copy still has to report what it transferred, including complete
+// and partial records.
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_stats_are_reported_when_a_write_fails() {
+    use rlimit::Resource;
+
+    // Restores the previous SIGXFSZ disposition even if an assertion panics.
+    struct SigxfszGuard(libc::sighandler_t);
+    impl Drop for SigxfszGuard {
+        fn drop(&mut self) {
+            // SAFETY: restoring the disposition saved below.
+            unsafe { libc::signal(libc::SIGXFSZ, self.0) };
+        }
+    }
+
+    const CAP: u64 = 768 * 1024;
+
+    // The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
+    // up as a short write() instead of killing the process.
+    // SAFETY: signal() with SIG_IGN is async-signal-safe and the guard puts
+    // the old handler back.
+    let _sigxfsz = SigxfszGuard(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) });
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
+        .limit(Resource::FSIZE, CAP, CAP)
+        .fails();
+
+    // Under a 768 KiB cap, the first 512 KiB block is written in full, the
+    // second one is cut short at 256 KiB, and the third write fails.
+    result.stderr_contains("1+1 records out");
+    result.stderr_contains("786432 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
