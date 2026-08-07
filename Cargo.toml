@@ -216,6 +216,7 @@ feat_wasm = [
   "dirname",
   "echo",
   "expand",
+  "expr",
   "factor",
   "false",
   "fmt",
