@@ -18,7 +18,12 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
+uucore = { workspace = true, features = [
+  "diagnostics",
+  "fs",
+  "fsxattr",
+  "mode",
+] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
