@@ -541,6 +541,20 @@ fn test_very_wide_hex_byte_output() {
 }
 
 #[test]
+fn test_very_wide_hex_byte_ascii_dump() {
+    const WIDTH: usize = 100_000;
+    let expected = format!(" 41{}  >A<\n", " ".repeat(WIDTH * 3 - 3));
+
+    new_ucmd!()
+        .arg("-An")
+        .arg(format!("-w{WIDTH}"))
+        .arg("-tx1z")
+        .pipe_in("A")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_suppress_duplicates() {
     let input: [u8; 41] = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
