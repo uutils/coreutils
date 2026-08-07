@@ -7679,3 +7679,36 @@ fn test_long_options_detached() {
     new_ucmd!().arg("--time").arg("mtime").succeeds();
     new_ucmd!().arg("--block-size").arg("512").succeeds();
 }
+
+// Without -R a directory can never be revisited, so ls should not spend a stat
+// recording it for the loop detection that only recursion consults.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_extra_stat_without_recursion() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("some-dir");
+
+    let stats_of_some_dir = |args: &[&str]| -> Option<usize> {
+        let output = Command::new("strace")
+            .args(["-qq", "-e", "trace=stat,statx,lstat,newfstatat"])
+            .arg(&scene.bin_path)
+            .arg(scene.util_name.as_str())
+            .args(args)
+            .current_dir(scene.fixtures.as_string())
+            .output()
+            .ok()?;
+        let trace = String::from_utf8_lossy(&output.stderr);
+        // No syscalls traced at all means strace could not do its job here.
+        if !trace.contains("(") {
+            return None;
+        }
+        Some(trace.lines().filter(|l| l.contains("\"some-dir\"")).count())
+    };
+
+    let Some(count) = stats_of_some_dir(&["-F", "--color=always", "some-dir"]) else {
+        return; // strace unavailable, e.g. restricted ptrace in a container
+    };
+    assert_eq!(count, 1, "expected a single stat of the directory operand");
+}

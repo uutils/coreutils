@@ -1236,11 +1236,15 @@ pub fn list_with_output<O: LsOutput>(
             output.write_dir_header(path_data, config, is_first)?;
         }
 
+        // Only recursion can revisit a directory, so only then is it worth a
+        // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        listed_ancestors.insert(FileInformation::from_path(
-            path_data.path(),
-            path_data.must_dereference,
-        )?);
+        if config.recursive {
+            listed_ancestors.insert(FileInformation::from_path(
+                path_data.path(),
+                path_data.must_dereference,
+            )?);
+        }
         enter_directory(
             path_data,
             read_dir,
