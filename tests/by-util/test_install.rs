@@ -2935,6 +2935,19 @@ fn test_install_proc_self_mem_as_dst() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_install_dev_full_as_dst() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("/dev/null")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("cannot remove '/dev/full'");
+}
+
+#[test]
 fn test_install_backup_nil_same_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
