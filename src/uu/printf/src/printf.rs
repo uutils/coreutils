@@ -4,10 +4,10 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{Write, stdout};
 use std::ops::ControlFlow;
 use uucore::display::Quotable;
-use uucore::error::{UResult, UUsageError};
+use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::format::{FormatArgument, FormatArguments, FormatItem, parse_spec_and_escape};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, show_warning};
@@ -22,6 +22,23 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let result = print_formatted(args);
+
+    // A format without a trailing newline leaves the output sitting in the
+    // buffer, so a failed write is only visible once it is flushed. Without
+    // this the data would be dropped while printf still reported success.
+    // A broken pipe is how a downstream reader normally ends a stream, so it
+    // is left alone; and a failure already reported is not repeated.
+    if result.is_ok()
+        && let Err(e) = stdout().flush()
+        && e.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        return Err(e).map_err_context(|| translate!("common-write-error"));
+    }
+    result
+}
+
+fn print_formatted(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let format = matches
