@@ -575,6 +575,15 @@ fn is_new_file_path(path: &Path) -> bool {
             .is_none_or(|p| p.as_os_str().is_empty() || p.is_dir())
 }
 
+/// Test if the path is a valid target for a single-file install.
+///
+/// A valid target is a regular file, a path that can be created as a new file,
+/// or any existing non-directory entry (including device files, FIFOs, sockets
+/// and symlinks). Directories are handled by `copy_files_into_dir`.
+fn is_valid_target(path: &Path) -> bool {
+    path.is_file() || is_new_file_path(path) || path.symlink_metadata().is_ok_and(|m| !m.is_dir())
+}
+
 /// Test if the path is an existing directory or ends with a trailing separator.
 ///
 /// Returns true, if one of the conditions above is met; else false.
@@ -777,7 +786,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        if is_valid_target(&target) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
