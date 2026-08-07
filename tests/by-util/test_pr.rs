@@ -526,12 +526,13 @@ fn test_column_count_too_large() {
 fn test_large_number_width_does_not_panic() {
     // Widths above u16::MAX used to panic with "Formatting argument out
     // of range"; GNU pads the number out to the full width instead.
-    // The page is padded to its full length, hence the trailing newlines.
+    // With -t (no page headers/footers) GNU emits no page padding, so the
+    // output is exactly the numbered line.
     new_ucmd!()
         .args(&["-t", "-n", "70000"])
         .pipe_in("x\n")
         .succeeds()
-        .stdout_is(format!("{}1\tx\n{}", " ".repeat(69999), "\n".repeat(56)));
+        .stdout_is(format!("{}1\tx\n", " ".repeat(69999)));
 }
 
 #[test]
