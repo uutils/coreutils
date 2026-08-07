@@ -22,6 +22,7 @@ thiserror = { workspace = true }
 uucore = { workspace = true, default-features = true, features = [
   "backup-control",
   "buf-copy",
+  "diagnostics",
   "fs",
   "mode",
   "perms",
