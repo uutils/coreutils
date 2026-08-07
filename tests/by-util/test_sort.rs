@@ -89,6 +89,18 @@ fn test_invalid_buffer_size() {
         .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
+    // A percentage can fit in a u128 while its product with the total
+    // physical memory does not; the parser must report it as too large
+    // rather than panicking or silently wrapping.
+    #[cfg(target_os = "linux")]
+    new_ucmd!()
+        .arg("-S")
+        .arg("340282366920938463463374607431768211455%")
+        .fails_with_code(2)
+        .stderr_only(
+            "sort: --buffer-size argument '340282366920938463463374607431768211455%' too large\n",
+        );
+
     new_ucmd!()
         .arg("-n")
         .arg("-S")
@@ -1547,6 +1559,30 @@ fn test_sigpipe_panic() {
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
     child.wait().unwrap().no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_without_trailing_newline() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut child = ucmd.arg("FIFO").run_no_wait();
+    let fifo = at.plus("FIFO");
+    let writer = std::thread::spawn(move || std::fs::write(fifo, "hello").unwrap());
+    writer.join().unwrap();
+
+    for _ in 0..50 {
+        if child.is_not_alive() {
+            break;
+        }
+        child.delay(100);
+    }
+    if child.is_alive() {
+        child.kill();
+        panic!("sort did not exit after the FIFO writer closed");
+    }
+    child.wait().unwrap().success().stdout_is("hello\n");
 }
 
 #[test]

@@ -85,3 +85,7 @@ checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $a
 # uudoc tldr examples messages
 uudoc-tldr-attribution = The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
 uudoc-tldr-disclaimer = Please note that, as uutils is a work in progress, some examples might fail.
+
+# Symbolic mode parsing messages
+mode-error-unexpected-end = unexpected end of mode
+mode-error-invalid-operator = invalid operator (expected +, -, or =, but found { $operator })

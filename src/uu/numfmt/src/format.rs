@@ -43,9 +43,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
             continue;
         }
         let num_str = s[..i].replace(dec_sep, ".");
-        if num_str.parse::<f64>().is_err() {
-            return None;
-        }
+        num_str.parse::<f64>().ok()?;
         return Some(&s[..i]);
     }
 

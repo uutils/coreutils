@@ -765,102 +765,107 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let suppress_split = matches.get_flag(options::NOTHING);
 
-    // Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
-    // is expected. The number of those arguments is used for parsing a cutting
-    // mode and handling the error cases.
-    let mode_args_count = [
-        matches.indices_of(options::BYTES),
-        matches.indices_of(options::CHARACTERS),
-        matches.indices_of(options::FIELDS),
-    ]
-    .into_iter()
-    .map(|indices| indices.unwrap_or_default().count())
-    .sum();
+    let mode_arg = get_mode_arg(&matches)?;
+    let list = matches
+        .get_one::<String>(mode_arg)
+        .expect("should be ensured by get_mode_arg");
+    let ranges = list_to_ranges(list, complement).map_err(|e| USimpleError::new(1, e))?;
 
-    let mode_parse = match (
-        mode_args_count,
-        matches.get_one::<String>(options::BYTES),
-        matches.get_one::<String>(options::CHARACTERS),
-        matches.get_one::<String>(options::FIELDS),
-    ) {
-        (1, Some(byte_ranges), None, None) => {
-            list_to_ranges(byte_ranges, complement).map(|ranges| {
-                Mode::Bytes(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: None,
-                        suppress_split,
-                    },
-                )
-            })
-        }
-
-        (1, None, Some(char_ranges), None) => {
-            list_to_ranges(char_ranges, complement).map(|ranges| {
-                Mode::Characters(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: None,
-                        suppress_split,
-                    },
-                )
-            })
-        }
-
-        (1, None, None, Some(field_ranges)) => {
-            list_to_ranges(field_ranges, complement).map(|ranges| {
-                Mode::Fields(
-                    ranges,
-                    Options {
-                        out_delimiter,
-                        line_ending,
-                        field_opts: Some(FieldOptions {
-                            delimiter,
-                            only_delimited,
-                        }),
-                        suppress_split,
-                    },
-                )
-            })
-        }
-
-        (2.., _, _, _) => Err(translate!("cut-error-multiple-mode-args")),
-        _ => Err(translate!("cut-error-missing-mode-arg")),
+    let mode = match mode_arg {
+        options::BYTES => Mode::Bytes(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: None,
+                suppress_split,
+            },
+        ),
+        options::CHARACTERS => Mode::Characters(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: None,
+                suppress_split,
+            },
+        ),
+        options::FIELDS => Mode::Fields(
+            ranges,
+            Options {
+                out_delimiter,
+                line_ending,
+                field_opts: Some(FieldOptions {
+                    delimiter,
+                    only_delimited,
+                }),
+                suppress_split,
+            },
+        ),
+        _ => unreachable!(),
     };
 
-    let mode_parse = match mode_parse {
-        Err(_) => mode_parse,
-        Ok(mode) => match mode {
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.contains_id(options::DELIMITER) =>
-            {
-                Err(translate!("cut-error-delimiter-only-with-fields"))
-            }
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::WHITESPACE_DELIMITED) =>
-            {
-                Err(translate!("cut-error-whitespace-only-with-fields"))
-            }
-            Mode::Bytes(_, _) | Mode::Characters(_, _)
-                if matches.get_flag(options::ONLY_DELIMITED) =>
-            {
-                Err(translate!("cut-error-only-delimited-only-with-fields"))
-            }
-            _ => Ok(mode),
-        },
-    };
-
-    let mode = mode_parse.map_err(|e| USimpleError::new(1, e))?;
     #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")]
     let files = matches.get_many::<OsString>(options::FILE).unwrap();
 
     cut_files(files, &mode);
 
     Ok(())
+}
+
+// Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
+// is expected.
+//
+// Returns `options::BYTES`, `options::CHARACTERS`, or `options::FIELDS`.
+fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
+    let mode_args_and_counts: Vec<_> = [options::BYTES, options::CHARACTERS, options::FIELDS]
+        .into_iter()
+        .filter_map(|arg| {
+            let count = matches.indices_of(arg)?.count();
+            (count > 0).then_some((arg, count))
+        })
+        .collect();
+
+    let mode_arg = match mode_args_and_counts.as_slice() {
+        [(arg, 1)] => *arg,
+        [] => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-missing-mode-arg"),
+            ));
+        }
+        _ => {
+            return Err(USimpleError::new(
+                1,
+                translate!("cut-error-multiple-mode-args"),
+            ));
+        }
+    };
+
+    if matches!(mode_arg, options::BYTES | options::CHARACTERS) {
+        let checks = [
+            (
+                matches.contains_id(options::DELIMITER),
+                "cut-error-delimiter-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::WHITESPACE_DELIMITED),
+                "cut-error-whitespace-only-with-fields",
+            ),
+            (
+                matches.get_flag(options::ONLY_DELIMITED),
+                "cut-error-only-delimited-only-with-fields",
+            ),
+        ];
+
+        for (is_triggered, msg_key) in checks {
+            if is_triggered {
+                return Err(USimpleError::new(1, translate!(msg_key)));
+            }
+        }
+    }
+
+    Ok(mode_arg)
 }
 
 pub fn uu_app() -> Command {

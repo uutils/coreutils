@@ -930,3 +930,13 @@ fn test_repeated_section_delimiter_flag() {
         .succeeds()
         .stdout_is("\n       a\n       b\n       c\n");
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_is("     1\thello\n");
+}
