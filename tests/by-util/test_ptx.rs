@@ -9,6 +9,8 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
 }
 #[test]
 fn test_reference_format_for_stdin() {

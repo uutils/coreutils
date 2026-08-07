@@ -12,14 +12,12 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
-use std::num::ParseIntError;
 use std::path::Path;
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use regex::Regex;
-use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -189,14 +187,6 @@ struct WordRef {
     filename: OsString,
 }
 
-#[derive(Debug, Error)]
-enum PtxError {
-    #[error("{0}")]
-    ParseError(ParseIntError),
-}
-
-impl UError for PtxError {}
-
 fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
     let mut config = Config::default();
     let err_msg = "parsing options failed";
@@ -240,20 +230,12 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
             .clone_into(&mut config.trunc_str);
     }
     if matches.contains_id(options::WIDTH) {
-        config.line_width = matches
-            .get_one::<String>(options::WIDTH)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        config.line_width = *matches.get_one::<u64>(options::WIDTH).unwrap() as usize;
     } else if matches.get_flag(options::TYPESET_MODE) {
         config.line_width = 100;
     }
     if matches.contains_id(options::GAP_SIZE) {
-        config.gap_size = matches
-            .get_one::<String>(options::GAP_SIZE)
-            .expect(err_msg)
-            .parse()
-            .map_err(PtxError::ParseError)?;
+        config.gap_size = *matches.get_one::<u64>(options::GAP_SIZE).unwrap() as usize;
     }
     if let Some(format) = matches.get_one::<String>(options::FORMAT) {
         config.format = match format.as_str() {
@@ -1058,6 +1040,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::GAP_SIZE)
                 .short('g')
                 .long(options::GAP_SIZE)
+                .value_parser(value_parser!(u64).range(1..))
                 .help(translate!("ptx-help-gap-size"))
                 .value_name("NUMBER"),
         )
@@ -1098,6 +1081,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::WIDTH)
                 .short('w')
                 .long(options::WIDTH)
+                .value_parser(value_parser!(u64).range(1..))
                 .help(translate!("ptx-help-width"))
                 .value_name("NUMBER"),
         )
