@@ -1340,7 +1340,9 @@ fn write_page(
             writer.write_all(line_separator)?;
         }
     }
-    writer.write_all(page_separator)?;
+    if options.display_header_and_trailer || options.form_feed_used {
+        writer.write_all(page_separator)?;
+    }
     writer.flush()?;
     Ok(())
 }
@@ -1504,7 +1506,7 @@ fn write_columns(
                     .as_bytes(),
             )?;
         }
-        if not_found_break && feed_line_present {
+        if not_found_break && (feed_line_present || !options.display_header_and_trailer) {
             break;
         }
         writer.write_all(line_separator)?;
