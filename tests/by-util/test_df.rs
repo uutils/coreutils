@@ -1099,13 +1099,11 @@ fn run_df_with_masked_proc(args: &str) -> Option<(bool, String, String)> {
     use std::process::Command;
 
     // Check if user namespaces are available
-    if !Command::new("unshare")
+    Command::new("unshare")
         .args(["-rm", "true"])
         .status()
-        .is_ok_and(|s| s.success())
-    {
-        return None;
-    }
+        .ok()
+        .filter(std::process::ExitStatus::success)?;
 
     let df_path = TestScenario::new("df").bin_path.clone();
     let output = Command::new("unshare")
