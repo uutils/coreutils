@@ -511,7 +511,7 @@ fn resolve_asterisk_width(
         Some(CanAsterisk::Asterisk(loc)) => {
             let nb = args.next_i64(loc);
             if nb < 0 {
-                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+                Some((usize::try_from(nb.unsigned_abs()).ok().unwrap_or(0), true))
             } else {
                 Some((usize::try_from(nb).ok().unwrap_or(0), false))
             }
@@ -667,6 +667,17 @@ mod tests {
                         FormatArgument::Unparsed("2".into()),
                         FormatArgument::Unparsed("3".into())
                     ]),
+                )
+            );
+        }
+
+        #[test]
+        fn asterisk_with_i64_min_width() {
+            assert_eq!(
+                Some((1usize.checked_shl(63).unwrap_or(0), true)),
+                resolve_asterisk_width(
+                    Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                    &mut FormatArguments::new(&[FormatArgument::SignedInt(i64::MIN)]),
                 )
             );
         }
