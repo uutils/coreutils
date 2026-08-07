@@ -104,3 +104,4 @@ pr-error-invalid-pages-range = invalid --pages argument '{$start}:{$end}'
 pr-error-starting-page-exceeds-page-count = starting page number {$start} exceeds page count {$count}
 pr-error-invalid-expand-tab-argument ='-e' extra characters or invalid number in the argument: ‘{$arg}’
 pr-error-invalid-number-argument ='-n' extra characters or invalid number in the argument: ‘{$arg}’
+pr-error-page-width-too-large = '{$flag} PAGE_WIDTH' invalid number of characters: {$value}: Value too large for defined data type
