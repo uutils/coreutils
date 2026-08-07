@@ -312,8 +312,6 @@ fn get_default_width(specifier: &str) -> usize {
         Some('g') => 2,
         // Epoch seconds: typically 10 digits (but variable)
         Some('s') => 0,
-        // Nanoseconds: 9 digits
-        Some('N') => 9,
         // Quarter: 1 digit
         Some('q') => 1,
         // Timezone offset: varies
@@ -359,6 +357,14 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;
+
+    // `%N` is a fraction, not an integer: it is left-aligned, its width is a
+    // precision rather than a minimum size, and it pads on the right. None of
+    // that fits the logic below, so it gets its own routine.
+    if specifier.ends_with('N') {
+        return format_nanoseconds(value, flags, width);
+    }
+
     let mut result = value.to_string();
 
     // Determine default pad character based on specifier type
@@ -498,11 +504,6 @@ fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, Forma
             padded.push_str(&result);
             result = padded;
         }
-    } else if specifier.ends_with('N')
-        && effective_width <= get_default_width(specifier)
-        && effective_width != 0
-    {
-        result.truncate(effective_width);
     }
 
     Ok(result)
@@ -527,6 +528,61 @@ fn try_alloc_padded(
     s.try_reserve(target_len)
         .map_err(|_| field_width_too_large(width, specifier))?;
     Ok(s)
+}
+
+/// Format `%N` (nanoseconds) the way GNU does.
+///
+/// `%N` prints the fractional part of the second, so its rules are the mirror
+/// image of every other numeric specifier:
+///
+/// * the width is a **precision** — narrower than the native 9 digits truncates
+///   (`%3N` is milliseconds), wider appends zeros on the right;
+/// * `-` and `_` drop *trailing* zeros, because a trailing zero in a fraction
+///   carries no information, whereas a leading one does (`0004` != `4`);
+/// * padding goes on the right.
+///
+/// `value` is the zero-padded 9-digit nanosecond count produced by jiff.
+fn format_nanoseconds(
+    value: &str,
+    flags: &str,
+    width: Option<usize>,
+) -> Result<String, FormatError> {
+    // GNU's date(1) never lets a bare `%-N` reach strftime: `adjust_resolution`
+    // in coreutils' src/date.c rewrites the literal three bytes `%-N` into
+    // `%<digits>N`, where <digits> is what the hardware clock can resolve. The
+    // `-` flag is replaced, not honoured. CLOCK_REALTIME reports full nanosecond
+    // resolution on the platforms uutils targets, so the rewrite is `%9N`.
+    // Anything else — `%_-N`, `%-9N` — misses the pattern and keeps its flags.
+    let (flags, width) = if flags == "-" && width.is_none() {
+        ("", Some(value.len()))
+    } else {
+        (flags, width)
+    };
+    let target = width.filter(|&w| w > 0).unwrap_or(value.len());
+    if target > MAX_FORMAT_WIDTH {
+        return Err(field_width_too_large(target, "N"));
+    }
+
+    // The last padding flag wins, matching gnulib.
+    let pad = flags.chars().rev().find(|c| "-_0+".contains(*c));
+
+    // Bring the digits to the requested precision.
+    let kept_digits = value.len().min(target);
+    let extra_zeros = target.saturating_sub(value.len());
+    let mut result = try_alloc_padded(kept_digits, extra_zeros, target, "N")?;
+    result.push_str(&value[..kept_digits]);
+    result.extend(std::iter::repeat_n('0', extra_zeros));
+
+    let strips_zeros = matches!(pad, Some('_' | '-'));
+    if strips_zeros {
+        let significant = result.trim_end_matches('0').len().max(1);
+        result.truncate(significant);
+        if pad == Some('_') {
+            result.extend(std::iter::repeat_n(' ', target - significant));
+        }
+    }
+
+    Ok(result)
 }
 
 #[cfg(test)]

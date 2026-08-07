@@ -2027,7 +2027,6 @@ fn test_date_strftime_case_flag_on_alt_ampm() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11658 — GNU date applies flags/widths to `%N` (nanoseconds); uutils ignores/mishandles them."]
 fn test_date_strftime_n_width_and_flags() {
     // `%_3N` should space-pad nanoseconds to width 3. GNU outputs `0  `; uutils outputs `0`.
     new_ucmd!()
@@ -2048,6 +2047,43 @@ fn test_date_strftime_n_width_and_flags() {
         .arg("+%-N")
         .succeeds()
         .stdout_is("000000000\n");
+}
+
+#[test]
+fn test_date_strftime_n_precision_and_padding() {
+    // Values checked against `date (GNU coreutils) 9.10`.
+    for (input, format, expected) in [
+        // Width is a precision: it truncates or appends zeros on the right.
+        ("@0.123456", "+%3N", "123\n"),
+        ("@0.123456", "+%12N", "123456000000\n"),
+        // `_` and `-` drop trailing zeros; leading zeros are significant.
+        ("@0.123456", "+%_N", "123456   \n"),
+        ("@0.000456", "+%_4N", "0004\n"),
+        ("@0.000456", "+%-9N", "000456\n"),
+        // At least one digit always survives.
+        ("@0", "+%-6N", "0\n"),
+        ("@0", "+%_6N", "0     \n"),
+        // `0` and `+` behave like no flag at all.
+        ("@0.123456", "+%09N", "123456000\n"),
+        ("@0.123456", "+%+9N", "123456000\n"),
+        // The last padding flag wins.
+        ("@0", "+%_-3N", "0\n"),
+        ("@0", "+%-0N", "000000000\n"),
+        // Only a literal `%-N` is rewritten to the clock resolution by
+        // date(1); `%_-N` and `%-9N` keep the `-` flag and drop trailing zeros.
+        ("@0.123456", "+%-N", "123456000\n"),
+        ("@0.123456", "+%_-N", "123456\n"),
+        ("@0.123456", "+%-9N", "123456\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
