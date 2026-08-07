@@ -9,6 +9,6 @@ backport=(
   cat/splice.sh # split tests
   nproc/nproc-quota.sh # remove LD_PRELOAD
 )
- for f in "${backport[@]}"
+for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
- done
+done
