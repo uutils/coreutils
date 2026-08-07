@@ -789,7 +789,15 @@ fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip", STRIP_PROGRAM);
+    // Write the strip script and sync to disk to avoid ETXTBSY race on some
+    // platforms (observed on ARM64 Linux CI runners).
+    let strip_path = at.plus("strip");
+    {
+        use std::io::Write;
+        let mut f = fs::File::create(&strip_path).unwrap();
+        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
+        f.sync_all().unwrap();
+    }
     at.set_mode("strip", 0o755);
     at.write("source", "file contents");
     let path = format!(
@@ -830,7 +838,15 @@ fn test_install_and_strip_with_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    at.write("strip-program", STRIP_PROGRAM);
+    // Write the strip script and sync to disk to avoid ETXTBSY race on some
+    // platforms (observed on ARM64 Linux CI runners).
+    let strip_path = at.plus("strip-program");
+    {
+        use std::io::Write;
+        let mut f = fs::File::create(&strip_path).unwrap();
+        f.write_all(STRIP_PROGRAM.as_bytes()).unwrap();
+        f.sync_all().unwrap();
+    }
     at.set_mode("strip-program", 0o755);
     at.write("source", "file contents");
 

@@ -143,7 +143,13 @@ impl Options {
                 } else if matches.get_flag(OPT_T) || matches.contains_id(OPT_TMPDIR) {
                     // If --tmpdir is given without an argument, or -t is given
                     // export in TMPDIR
-                    Some(env::temp_dir())
+                    #[cfg(target_os = "wasi")]
+                    // WASI's `std::env::temp_dir()` unconditionally panics
+                    let default_tmp_dir = env::var_os(TMPDIR_ENV_VAR)
+                        .map_or_else(|| PathBuf::from(FALLBACK_TMPDIR), PathBuf::from);
+                    #[cfg(not(target_os = "wasi"))]
+                    let default_tmp_dir = env::temp_dir();
+                    Some(default_tmp_dir)
                 } else {
                     None
                 };
@@ -629,6 +635,13 @@ fn exec(dir: &Path, prefix: &str, rand: usize, suffix: &str, make_dir: bool) -> 
 fn get_tmpdir_env_or_default() -> PathBuf {
     match env::var_os(TMPDIR_ENV_VAR) {
         Some(val) if val.is_empty() => PathBuf::from(FALLBACK_TMPDIR),
+        // WASI's `std::env::temp_dir()` unconditionally panics,
+        // so read `TMPDIR` directly.
+        #[cfg(target_os = "wasi")]
+        Some(val) => PathBuf::from(val),
+        #[cfg(target_os = "wasi")]
+        None => PathBuf::from(FALLBACK_TMPDIR),
+        #[cfg(not(target_os = "wasi"))]
         _ => env::temp_dir(),
     }
 }
