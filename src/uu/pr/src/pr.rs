@@ -1268,7 +1268,10 @@ fn write_page(
             writer.write_all(line_separator)?;
         }
     }
-    writer.write_all(page_separator)?;
+    // Only paginated output gets a page separator; under -F/-f it is the form feed.
+    if options.display_header_and_trailer || options.form_feed_used {
+        writer.write_all(page_separator)?;
+    }
     writer.flush()?;
     Ok(())
 }
@@ -1432,7 +1435,8 @@ fn write_columns(
                     .as_bytes(),
             )?;
         }
-        if not_found_break && feed_line_present {
+        // Stop at the last content line: a form feed ended the page, or there is none.
+        if not_found_break && (feed_line_present || !options.display_header_and_trailer) {
             break;
         }
         writer.write_all(line_separator)?;
