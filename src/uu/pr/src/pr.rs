@@ -541,14 +541,14 @@ fn parse_usize(
         let raw = i.as_str();
         match raw.parse::<usize>() {
             Ok(n) if n <= MAX_INT_VALUE => Ok(n),
+            Ok(_) => Err(PrError::EncounteredErrors {
+                msg: value_too_large(too_large_error_message, raw),
+            }),
             Err(e) if matches!(e.kind(), IntErrorKind::PosOverflow) => {
                 Err(PrError::EncounteredErrors {
                     msg: value_too_large(too_large_error_message, raw),
                 })
             }
-            Ok(_) => Err(PrError::EncounteredErrors {
-                msg: value_too_large(too_large_error_message, raw),
-            }),
             Err(_) => {
                 let option = format!("-{opt}");
                 Err(PrError::EncounteredErrors {
