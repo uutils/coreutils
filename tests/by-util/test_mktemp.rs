@@ -1209,3 +1209,41 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len()
     );
 }
+
+// When the name cannot be printed the caller never learns it, so the file must
+// not be left behind for nothing to clean up.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_removes_the_temporary_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.arg("keep-none-XXXX")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("mktemp: write error: No space left on device\n");
+
+    let leftovers: Vec<_> = std::fs::read_dir(at.as_string())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("keep-none-"))
+        .collect();
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_removes_the_temporary_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-d", "keep-none-XXXX"])
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("mktemp: write error: No space left on device\n");
+
+    let leftovers: Vec<_> = std::fs::read_dir(at.as_string())
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with("keep-none-"))
+        .collect();
+    assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+}
