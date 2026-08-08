@@ -1037,7 +1037,7 @@ impl Stater {
 
     fn exec(&self) -> i32 {
         #[cfg(unix)]
-        let stdin_is_fifo = rustix::fs::fstat(std::io::stdin())
+        let stdin_is_fifo = rustix::fs::fstat(io::stdin())
             .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
