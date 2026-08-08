@@ -1539,6 +1539,22 @@ fn test_extreme_field_width_overflow() {
 }
 
 #[test]
+fn test_asterisk_width_i64_min_no_panic() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13766
+    // An `i64::MIN` '*' width used to panic with "attempt to negate with overflow".
+    // It must not panic: on 64-bit it fails with a write error, on 32-bit the
+    // width is clamped to 0 and printf succeeds.
+    let result = new_ucmd!()
+        .args(&["|%*d|", &i64::MIN.to_string(), "1"])
+        .run();
+    assert!(
+        result.succeeded() || result.code() == 1,
+        "printf must not panic on an i64::MIN '*' width (got exit code {})",
+        result.code()
+    );
+}
+
+#[test]
 fn test_q_string_control_chars_with_quotes() {
     // Test %q with control characters and single quotes combined.
     // This tests the fix for the GNU compatibility issue where control
