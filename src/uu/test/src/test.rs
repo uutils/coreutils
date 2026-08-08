@@ -7,6 +7,8 @@
 
 pub(crate) mod error;
 mod parser;
+#[cfg(windows)]
+mod platform;
 
 use clap::Command;
 use error::{ParseError, ParseResult};
@@ -318,6 +320,16 @@ enum PathCondition {
     Executable,
 }
 
+/// Whether the file was modified more recently than it was last read, the
+/// condition behind `-N`. A timestamp the platform cannot report counts as
+/// "not modified since read" rather than aborting.
+fn modified_since_read(metadata: &fs::Metadata) -> bool {
+    matches!(
+        (metadata.accessed(), metadata.modified()),
+        (Ok(read), Ok(modified)) if read < modified
+    )
+}
+
 #[cfg(not(windows))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
@@ -360,9 +372,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => {
-            metadata.accessed().unwrap() < metadata.modified().unwrap()
-        }
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
@@ -381,6 +391,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
+    use crate::platform::owned_by_current_token;
     use std::fs::metadata;
 
     let Ok(stat) = metadata(path) else {
@@ -390,9 +401,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     match condition {
         PathCondition::Directory => stat.is_dir(),
         PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead
-        | PathCondition::GroupOwns
-        | PathCondition::UserOwns => unimplemented!(),
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&stat),
+        PathCondition::GroupOwns => owned_by_current_token(path, true),
+        PathCondition::UserOwns => owned_by_current_token(path, false),
         PathCondition::Regular => stat.is_file(),
         PathCondition::NonEmpty => stat.len() > 0,
         PathCondition::Writable => !stat.permissions().readonly(),
