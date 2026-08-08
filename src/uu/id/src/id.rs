@@ -187,15 +187,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // SELinux context
         #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if state.selinux_supported {
-            if let Ok(context) = selinux::SecurityContext::current(false) {
-                let bytes = context.as_bytes();
-                write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes))?;
-                return Ok(());
-            }
-            return Err(USimpleError::new(
-                1,
-                translate!("id-error-cannot-get-context"),
-            ));
+            let context = selinux::SecurityContext::current(false)
+                .map_err(|_| USimpleError::new(1, translate!("id-error-cannot-get-context")))?;
+            let bytes = context.as_bytes();
+            write!(lock, "{}{line_ending}", String::from_utf8_lossy(bytes))?;
+            return Ok(());
         }
 
         // SMACK label
