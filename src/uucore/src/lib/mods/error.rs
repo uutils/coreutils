@@ -798,6 +798,15 @@ impl Display for ClapErrorWrapper {
 #[cfg(test)]
 mod tests {
     #[test]
+    fn test_strip_errno_removes_trailing_os_error() {
+        use super::strip_errno;
+        use std::io::Error;
+
+        let err = Error::from_raw_os_error(2);
+        assert_eq!(strip_errno(&err), "No such file or directory");
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {
         use super::{FromIo, UIoError};
