@@ -82,7 +82,7 @@ enum CatError {
     Io(#[from] io::Error),
     /// A write error to the output; unlike [`Self::Io`] it is reported
     /// without the input filename.
-    #[error("write error: {}", strip_errno(.0))]
+    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
     WriteIo(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]

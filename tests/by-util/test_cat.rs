@@ -856,6 +856,24 @@ fn test_write_error_handling() {
         .stderr_contains("No space left on device");
 }
 
+/// Write errors must be diagnosed as "cat: write error: …" without naming
+/// the input file.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_splice_write_error_message() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    new_ucmd!()
+        .pipe_in("test content that should cause write error to /dev/full")
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("cat: write error: No space left on device");
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 fn test_version_help_dev_full() {
