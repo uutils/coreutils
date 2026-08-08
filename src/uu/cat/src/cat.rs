@@ -502,22 +502,82 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    match uucore::pipes::splice_unbounded_diagnose(&handle.reader, &stdout) {
-        // splice() copied the whole input.
-        Ok(uucore::pipes::SpliceOutcome::Done) => return Ok(()),
-        // splice() is not usable here; fall back on slower writing.
-        Ok(uucore::pipes::SpliceOutcome::Fallback) => {}
-        // Once data was copied, a splice error is diagnosed: input errors
-        // name the file, output errors are generic write errors.
-        Err((uucore::pipes::SpliceErrorSide::Input, errno)) => {
-            return Err(CatError::Io(io::Error::from(errno)));
-        }
-        Err((uucore::pipes::SpliceErrorSide::Output, errno)) => {
-            return Err(write_err(io::Error::from(errno)));
-        }
+    if splice_cat(handle, &stdout)? {
+        return Ok(());
     }
 
     print_unbuffered(handle, stdout)
+}
+
+/// Copy the input to `stdout` with the `splice(2)` syscall.
+///
+/// Returns `Ok(true)` if the whole input was copied, `Ok(false)` if the
+/// caller should fall back on ordinary read/write, and `Err(..)` for a
+/// diagnosed error.
+///
+/// The first splice of a file may fail for
+/// innocent reasons (unsupported source or sink, interruption, descriptor
+/// exhaustion), so a failure while copying the first chunk merely selects
+/// the read/write fallback. Once splice is known to work, every error is
+/// fatal, reported either as an input error (naming the file) or as a
+/// write error. Move this into `uucore::pipes` once the shared splice
+/// helpers support the same error distinction.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn splice_cat<R: FdReadable>(handle: &mut InputHandle<R>, stdout: &io::Stdout) -> CatResult<bool> {
+    use uucore::pipes::{MAX_ROOTLESS_PIPE_SIZE, pipe, splice};
+
+    // Create a broker pipe, since splice(2) needs a pipe on one side and we
+    // want to distinguish read errors from write errors. If the pipe cannot
+    // be created (e.g. file descriptor exhaustion), fall back on read/write.
+    let Ok((pipe_rd, pipe_wr)) = pipe::<false>() else {
+        return Ok(false);
+    };
+
+    // First input splice: any failure just selects read/write.
+    let mut remaining = match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+        // End of input: splice handled the whole file.
+        Ok(0) => return Ok(true),
+        Ok(bytes_read) => bytes_read,
+        Err(_) => return Ok(false),
+    };
+
+    // First output splice: if stdout cannot accept splice data, drain the
+    // broker pipe with plain read/write, then let the caller continue
+    // likewise.
+    while remaining > 0 {
+        match splice(&pipe_rd, stdout, remaining) {
+            // No progress; stop splicing.
+            Ok(0) => return Ok(false),
+            Ok(bytes_written) => remaining -= bytes_written,
+            Err(_) => {
+                let mut drain = Vec::with_capacity(remaining);
+                let _ = pipe_rd.take(remaining as u64).read_to_end(&mut drain);
+                uucore::io::RawWriter(stdout)
+                    .write_all(&drain)
+                    .inspect_err(handle_broken_pipe)
+                    .map_err(write_err)?;
+                return Ok(false);
+            }
+        }
+    }
+
+    // splice is usable: from here on every error is a diagnosed error.
+    loop {
+        let mut remaining = match splice(&handle.reader, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+            // End of input: splice handled the whole file.
+            Ok(0) => return Ok(true),
+            Ok(bytes_read) => bytes_read,
+            Err(errno) => return Err(CatError::Io(errno.into())),
+        };
+        while remaining > 0 {
+            match splice(&pipe_rd, stdout, remaining) {
+                // No progress; stop splicing.
+                Ok(0) => return Ok(true),
+                Ok(bytes_written) => remaining -= bytes_written,
+                Err(errno) => return Err(write_err(errno.into())),
+            }
+        }
+    }
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
