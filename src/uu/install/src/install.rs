@@ -580,6 +580,7 @@ fn is_new_file_path(path: &Path) -> bool {
 /// A valid target is a regular file, a path that can be created as a new file,
 /// or any existing non-directory entry (including device files, FIFOs, sockets
 /// and symlinks). Directories are handled by `copy_files_into_dir`.
+#[inline]
 fn is_valid_target(path: &Path) -> bool {
     path.is_file() || is_new_file_path(path) || path.symlink_metadata().is_ok_and(|m| !m.is_dir())
 }
