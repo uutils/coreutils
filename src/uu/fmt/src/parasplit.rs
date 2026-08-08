@@ -285,10 +285,9 @@ impl Iterator for FileLines<'_> {
         // treat it like a blank line, except that since it's
         // not truly blank we will not allow mail headers on the
         // following line)
-        if pmatch
-            && n[poffset + self.opts.prefix.as_ref().map_or(0, String::len)..]
-                .iter()
-                .all(|&b| is_fmt_whitespace_byte(b))
+        if n[poffset + self.opts.prefix.as_ref().map_or(0, String::len)..]
+            .iter()
+            .all(|&b| is_fmt_whitespace_byte(b))
         {
             return Some(Line::NoFormatLine(n, false));
         }
