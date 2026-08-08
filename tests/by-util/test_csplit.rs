@@ -237,6 +237,22 @@ fn test_up_to_match_negative_offset() {
 }
 
 #[test]
+fn test_up_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "/45/-2147483648"])
+        .fails()
+        .stderr_is("csplit: '/45/-2147483648': line number out of range\n");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "%45%-2147483648"])
+        .fails()
+        .stderr_is("csplit: '%45%-2147483648': line number out of range\n");
+}
+
+#[test]
 fn test_up_to_match_negative_offset_repeat_twice() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/9$/-3", "{2}"])
