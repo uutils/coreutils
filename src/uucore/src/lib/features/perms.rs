@@ -276,7 +276,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
-pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Error> {
+pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
     if follow {
         file.metadata()
     } else {

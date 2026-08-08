@@ -11,7 +11,7 @@ use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -27,7 +27,7 @@ use uucore::{format_usage, show_error, translate};
 #[derive(Debug, Error)]
 enum JoinError {
     #[error("{}", translate!("join-error-io", "error" => .0))]
-    IOError(#[from] std::io::Error),
+    IOError(#[from] io::Error),
 
     #[error("{0}")]
     UnorderedInput(String),
@@ -233,21 +233,12 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
     }
 
     /// Write the field or the empty filler if the field is empty or not set.
-    fn write_field(
-        &self,
-        writer: &mut impl Write,
-        field: Option<&[u8]>,
-    ) -> Result<(), std::io::Error> {
+    fn write_field(&self, writer: &mut impl Write, field: Option<&[u8]>) -> io::Result<()> {
         writer.write_all(self.field_or_empty(field))
     }
 
     /// Write each field except the one at the index.
-    fn write_fields(
-        &self,
-        writer: &mut impl Write,
-        line: &Line,
-        index: usize,
-    ) -> Result<(), std::io::Error> {
+    fn write_fields(&self, writer: &mut impl Write, line: &Line, index: usize) -> io::Result<()> {
         for i in 0..line.field_ranges.len() {
             if i != index {
                 writer.write_all(self.separator.output_separator())?;
@@ -258,7 +249,7 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
     }
 
     /// Write each field or the empty filler if the field is empty or not set.
-    fn write_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
+    fn write_format<F>(&self, writer: &mut impl Write, f: F) -> io::Result<()>
     where
         F: Fn(&Spec) -> Option<&'a [u8]>,
     {
@@ -272,7 +263,7 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         Ok(())
     }
 
-    fn write_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+    fn write_line_ending(&self, writer: &mut impl Write) -> io::Result<()> {
         writer.write_all(&[self.line_ending as u8])
     }
 }
@@ -499,7 +490,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         other: &State,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         if self.has_line() {
             if other.has_line() {
                 self.combine(writer, other, repr)?;
@@ -519,7 +510,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         other: &State,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let key = self.get_current_key();
 
         for line1 in &self.seq {
@@ -561,10 +552,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn reset_read_line<Sep: Separator>(
-        &mut self,
-        input: &Input<Sep>,
-    ) -> Result<(), std::io::Error> {
+    fn reset_read_line<Sep: Separator>(&mut self, input: &Input<Sep>) -> io::Result<()> {
         let line = self.read_line(&input.separator)?;
         self.reset(line);
         Ok(())
@@ -584,7 +572,7 @@ impl<'a> State<'a> {
         &mut self,
         read_sep: &Sep,
         autoformat: bool,
-    ) -> std::io::Result<usize> {
+    ) -> io::Result<usize> {
         if let Some(line) = self.read_line(read_sep)? {
             self.seq.push(line);
 
@@ -620,7 +608,7 @@ impl<'a> State<'a> {
     }
 
     /// Get the next line without the order check.
-    fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> Result<Option<Line>, std::io::Error> {
+    fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> io::Result<Option<Line>> {
         match self.lines.next() {
             Some(value) => {
                 self.line_num += 1;
@@ -672,7 +660,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         line: &Line,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         if repr.uses_format() {
             repr.write_format(writer, |spec| match *spec {
                 Spec::Key => line.get_field(self.key),
@@ -696,7 +684,7 @@ impl<'a> State<'a> {
         &self,
         writer: &mut impl Write,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         self.write_line(writer, &self.seq[0], repr)
     }
 }

@@ -11,7 +11,7 @@ use itertools::Itertools;
 use regex::Regex;
 use std::ffi::OsStr;
 use std::fs::metadata;
-use std::io::{Read, Write, stderr, stdin, stdout};
+use std::io::{self, Read, Write, stderr, stdin, stdout};
 use std::num::IntErrorKind;
 use std::path::PathBuf;
 use std::str::Utf8Error;
@@ -186,16 +186,13 @@ enum PrError {
     EncounteredErrors { msg: String },
 
     #[error("pr: {}", strip_errno(.0))]
-    Read(std::io::Error),
+    Read(io::Error),
 
     #[error("pr: {}", strip_errno(.0))]
-    Write(std::io::Error),
+    Write(io::Error),
 
     #[error("pr: {path}: {}", strip_errno(error))]
-    ReadPath {
-        path: PathBuf,
-        error: std::io::Error,
-    },
+    ReadPath { path: PathBuf, error: io::Error },
 }
 
 pub fn uu_app() -> Command {
@@ -1320,7 +1317,7 @@ fn write_page(
     lines: &[FileLine],
     options: &OutputOptions,
     page: usize,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let line_separator = options.line_separator.as_bytes();
     let page_separator = options.page_separator_char.as_bytes();
 
@@ -1417,7 +1414,7 @@ fn to_table_short_file(
 
 /// Write `n` space characters to `out` in fixed-size chunks, so the indent is
 /// streamed rather than allocated up front.
-fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> Result<(), std::io::Error> {
+fn write_offset_spaces(out: &mut impl Write, mut n: usize) -> io::Result<()> {
     const SPACES: [u8; 256] = [b' '; 256];
     while n > 0 {
         let chunk = n.min(SPACES.len());
@@ -1432,7 +1429,7 @@ fn write_columns(
     writer: &mut impl Write,
     lines: &[FileLine],
     options: &OutputOptions,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let line_separator = options.content_line_separator.as_bytes();
 
     let content_lines_per_page = if options.double_space {

@@ -10,7 +10,7 @@ use rand::RngExt;
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{self, Write};
 use std::process::Command;
 use uu_cksum::uumain;
 use uufuzz::{
@@ -79,11 +79,7 @@ fn generate_cksum_args() -> Vec<String> {
     args
 }
 
-fn generate_checksum_file(
-    algo: &str,
-    file_path: &str,
-    digest_opts: &[&str],
-) -> Result<String, std::io::Error> {
+fn generate_checksum_file(algo: &str, file_path: &str, digest_opts: &[&str]) -> io::Result<String> {
     let checksum_file_path = temp_dir().join("checksum_file");
     let mut cmd = Command::new(CMD_PATH);
     cmd.arg("-a").arg(algo);
