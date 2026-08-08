@@ -68,7 +68,9 @@ jobs:
         UUTESTS_WASM_RUNNER=wasmtime \
         cargo test --test tests -- \
           test_base32:: test_base64:: test_basenc:: test_basename:: \
-          test_cat:: test_comm:: test_cut:: test_dirname:: test_echo:: \
+          test_cat:: \
+          test_cp::test_cp_arg_symlink test_cp::test_cp_preserve_timestamps \
+          test_comm:: test_cut:: test_dirname:: test_echo:: \
           test_expand:: test_factor:: test_false:: test_fold:: \
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \
           test_od:: test_paste:: test_printf:: test_shuf:: test_sort:: \
