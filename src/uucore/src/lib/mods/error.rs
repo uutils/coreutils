@@ -479,9 +479,15 @@ impl Display for UIoError {
 /// ```
 pub fn strip_errno(err: &std::io::Error) -> String {
     let mut msg = err.to_string();
-    if let Some(pos) = msg.find(" (os error ") {
-        msg.truncate(pos);
+
+    if let Some((prefix, suffix)) = msg.rsplit_once(" (os error ")
+        && suffix
+            .strip_suffix(')')
+            .is_some_and(|n| n.parse::<u32>().is_ok())
+    {
+        msg.truncate(prefix.len());
     }
+
     msg
 }
 
