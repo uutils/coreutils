@@ -84,8 +84,18 @@ pub fn parse_signed_num_max(src: &str) -> Result<SignedNum, ParseSizeError> {
 
     // Remove leading zeros so size is interpreted as decimal, not octal
     let trimmed = size_string.trim_start_matches('0');
+    let had_leading_zeros = trimmed.len() != size_string.len();
     let value = if trimmed.is_empty() {
         // All zeros (e.g., "000" or "0")
+        0
+    } else if had_leading_zeros && !trimmed.chars().any(|c| c.is_ascii_digit()) {
+        // Only a size suffix remains after stripping leading zeros
+        // (e.g., "0K"). Parse it as 1 unit to validate the suffix, but
+        // the value is 0: a zero count times any unit is zero bytes.
+        // Otherwise "0K" would parse as 1KiB (bare suffix means 1).
+        // A genuinely bare suffix with no digits at all (e.g. "kiB")
+        // still parses as 1 of that unit.
+        parse_size_u64_max(trimmed)?;
         0
     } else {
         parse_size_u64_max(trimmed)?
@@ -200,6 +210,38 @@ mod tests {
 
         let result = parse_signed_num_max("000").unwrap();
         assert_eq!(result.value, 0);
+    }
+
+    #[test]
+    fn test_zero_with_suffix() {
+        // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+        let result = parse_signed_num_max("0K").unwrap();
+        assert_eq!(result.value, 0);
+        assert!(result.is_zero());
+
+        let result = parse_signed_num_max("+0K").unwrap();
+        assert_eq!(result.value, 0);
+        assert!(result.has_plus());
+
+        let result = parse_signed_num_max("-0M").unwrap();
+        assert_eq!(result.value, 0);
+        assert!(result.has_minus());
+
+        let result = parse_signed_num_max("00K").unwrap();
+        assert_eq!(result.value, 0);
+
+        let result = parse_signed_num_max("0b").unwrap();
+        assert_eq!(result.value, 0);
+    }
+
+    #[test]
+    fn test_bare_suffix_still_parses_as_one() {
+        // a bare suffix with no digits is 1 of that unit, not 0
+        let result = parse_signed_num_max("kiB").unwrap();
+        assert_eq!(result.value, 1024);
+
+        let result = parse_signed_num_max("K").unwrap();
+        assert_eq!(result.value, 1024);
     }
 
     #[test]

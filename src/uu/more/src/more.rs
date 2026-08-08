@@ -6,7 +6,7 @@
 use std::{
     ffi::OsString,
     fs::File,
-    io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
+    io::{BufRead, BufReader, IsTerminal as _, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::{Path, PathBuf},
     time::Duration,
@@ -20,7 +20,6 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::Attribute,
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
-    tty::IsTty,
 };
 
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -195,7 +194,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let stdin = stdin();
-        if stdin.is_tty() {
+        if stdin.is_terminal() {
             // stdin is not a pipe
             return Err(UUsageError::new(1, MoreError::BadUsage.to_string()));
         }
@@ -351,7 +350,7 @@ enum OutputType {
     Test(Vec<u8>),
 }
 
-impl IsTty for OutputType {
+impl OutputType {
     fn is_tty(&self) -> bool {
         matches!(self, Self::Tty(_))
     }
@@ -379,7 +378,7 @@ impl Write for OutputType {
 
 fn setup_term() -> UResult<OutputType> {
     let mut stdout = stdout();
-    if stdout.is_tty() {
+    if stdout.is_terminal() {
         terminal::enable_raw_mode()?;
         stdout.execute(EnterAlternateScreen)?.execute(Hide)?;
         Ok(OutputType::Tty(stdout))
@@ -397,7 +396,7 @@ fn setup_term() -> UResult<OutputType> {
 
 fn reset_term() -> UResult<()> {
     let mut stdout = stdout();
-    if stdout.is_tty() {
+    if stdout.is_terminal() {
         stdout.queue(Show)?.queue(LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
     } else {
@@ -608,10 +607,9 @@ impl<'a> Pager<'a> {
         let pattern = self.pattern.clone().expect("pattern should be set");
         let mut line_num = self.upper_mark;
         loop {
-            match self.get_line(line_num) {
-                Some(line) if line.contains(&pattern) => return Some(line_num),
-                Some(_) => line_num += 1,
-                None => return None,
+            match self.get_line(line_num)? {
+                line if line.contains(&pattern) => return Some(line_num),
+                _ => line_num += 1,
             }
         }
     }

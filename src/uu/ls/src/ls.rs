@@ -109,15 +109,8 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            Self::InvalidLineWidth(_) => 2,
-            Self::IOError(_) | Self::WriteError(_) => 1,
-            Self::IOErrorContext(_, _, false) => 1,
-            Self::IOErrorContext(_, _, true) => 2,
-            Self::BlockSizeParseError(_) => 2,
-            Self::DiredAndZeroAreIncompatible => 2,
-            Self::AlreadyListedError(_) => 2,
-            Self::TimeStyleParseError(_) => 2,
-            Self::InvalidTabSize(_) => 2,
+            Self::IOError(_) | Self::WriteError(_) | Self::IOErrorContext(_, _, false) => 1,
+            _ => 2,
         }
     }
 }
@@ -864,17 +857,7 @@ impl<'a> PathData<'a> {
         let must_dereference = match &config.dereference {
             Dereference::All => true,
             Dereference::Args => command_line,
-            Dereference::DirArgs => {
-                if command_line {
-                    if let Ok(md) = p_buf.metadata() {
-                        md.is_dir()
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
+            Dereference::DirArgs => command_line && p_buf.metadata().is_ok_and(|m| m.is_dir()),
             Dereference::None => false,
         };
 

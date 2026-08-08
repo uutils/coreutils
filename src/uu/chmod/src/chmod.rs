@@ -36,6 +36,8 @@ enum ChmodError {
     NoSuchFile(PathBuf),
     #[error("{}", translate!("chmod-error-preserve-root", "file" => _0.quote()))]
     PreserveRoot(PathBuf),
+    #[error("{}", translate!("chmod-error-preserve-root-same-as", "file" => _0.quote()))]
+    PreserveRootSameAs(PathBuf),
     #[error("{}", translate!("chmod-error-permission-denied", "file" => _0.quote()))]
     PermissionDenied(PathBuf),
     #[error("{}", translate!("chmod-error-new-permissions", "file" => _0.maybe_quote(), "actual" => _1.clone(), "expected" => _2.clone()))]
@@ -370,40 +372,60 @@ impl Chmoder {
 
         for filename in files {
             let file = Path::new(filename);
-            if !file.exists() {
-                if file.is_symlink() {
-                    if !self.dereference && !self.recursive {
-                        // The file is a symlink and we should not follow it
-                        // Don't try to change the mode of the symlink itself
-                        continue;
-                    }
-                    if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
-                        continue;
-                    }
+            // `Path::exists()` returns `false` when the path's metadata cannot be
+            // read at all (for example a parent directory without search
+            // permission), which made chmod misreport an existing but
+            // inaccessible file as "No such file or directory". Use
+            // `try_exists()` so a permission error is surfaced as such, matching
+            // GNU (issue #9789).
+            match file.try_exists() {
+                Ok(false) => {
+                    if file.is_symlink() {
+                        if !self.dereference && !self.recursive {
+                            // The file is a symlink and we should not follow it
+                            // Don't try to change the mode of the symlink itself
+                            continue;
+                        }
+                        if self.recursive && self.traverse_symlinks == TraverseSymlinks::None {
+                            continue;
+                        }
 
-                    if !self.quiet {
-                        show!(ChmodError::DanglingSymlink(filename.into()));
-                        set_exit_code(1);
-                    }
+                        if !self.quiet {
+                            show!(ChmodError::DanglingSymlink(filename.into()));
+                            set_exit_code(1);
+                        }
 
-                    if self.verbose {
-                        println!(
-                            "{}",
-                            translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
-                        );
+                        if self.verbose {
+                            println!(
+                                "{}",
+                                translate!("chmod-verbose-failed-dangling", "file" => filename.quote())
+                            );
+                        }
+                    } else if !self.quiet {
+                        show!(ChmodError::NoSuchFile(filename.into()));
                     }
-                } else if !self.quiet {
-                    show!(ChmodError::NoSuchFile(filename.into()));
+                    // GNU exits with exit code 1 even if -q or --quiet are passed
+                    // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
+                    set_exit_code(1);
+                    continue;
                 }
-                // GNU exits with exit code 1 even if -q or --quiet are passed
-                // So we set the exit code, because it hasn't been set yet if `self.quiet` is true.
-                set_exit_code(1);
-                continue;
-            } else if !self.dereference && file.is_symlink() {
-                // The file is a symlink and we should not follow it
-                // chmod 755 --no-dereference a/link
-                // should not change the permissions in this case
-                continue;
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    if !self.quiet {
+                        show!(ChmodError::PermissionDenied(filename.into()));
+                    }
+                    set_exit_code(1);
+                    continue;
+                }
+                // Present, or an unexpected error that the chmod attempt below
+                // will surface with a precise message.
+                Ok(true) | Err(_) => {
+                    if !self.dereference && file.is_symlink() {
+                        // The file is a symlink and we should not follow it
+                        // chmod 755 --no-dereference a/link
+                        // should not change the permissions in this case
+                        continue;
+                    }
+                }
             }
             if self.recursive && self.preserve_root && Self::is_root(file) {
                 return Err(ChmodError::PreserveRoot("/".into()).into());
@@ -424,6 +446,17 @@ impl Chmoder {
         matches!(fs::canonicalize(&file), Ok(p) if p == Path::new("/"))
     }
 
+    /// `--preserve-root` guard for the recursive descent.
+    ///
+    /// The operand loop in [`Self::chmod`] only checks the paths named on the
+    /// command line. With `-L`, a symlink met *inside* the tree can resolve to
+    /// `/`, so the failsafe has to be re-checked at every descent or the
+    /// recursion walks straight into the real root. Only symlinks are
+    /// canonicalized, so ordinary trees pay nothing for this.
+    fn descends_into_root(&self, path: &Path) -> bool {
+        self.preserve_root && path.is_symlink() && Self::is_root(path)
+    }
+
     // Non-safe traversal implementation for platforms without safe_traversal support
     #[cfg(any(not(unix), target_os = "redox"))]
     fn walk_dir_with_context(
@@ -432,6 +465,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode
@@ -503,6 +542,12 @@ impl Chmoder {
         is_command_line_arg: bool,
         ancestors: &mut HashSet<FileInformation>,
     ) -> UResult<()> {
+        // Skip (and diagnose) a symlink that resolves to '/' before touching it.
+        if self.descends_into_root(file_path) {
+            show!(ChmodError::PreserveRootSameAs(file_path.into()));
+            return Ok(());
+        }
+
         let mut r = self.chmod_file(file_path);
 
         // Determine whether to traverse symlinks based on context and traversal mode

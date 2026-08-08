@@ -164,9 +164,15 @@ fn test_realpath_logical_mode() {
 fn test_realpath_dangling() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.symlink_file("nonexistent-file", "link");
-    ucmd.arg("link")
-        .succeeds()
-        .stdout_contains(at.plus_as_string("nonexistent-file\n"));
+    let output = ucmd.arg("link").succeeds().stdout_move_str();
+    let printed = Path::new(output.trim_end_matches('\n'));
+    assert_eq!(printed.file_name().unwrap(), "nonexistent-file");
+    // Canonicalize the printed parent dir before comparing, since on Windows
+    // CI the temp dir may be reported using its short (8.3) alias, which is
+    // not guaranteed to match the long-form path from `root_dir_resolved()`.
+    let printed_dir = printed.parent().unwrap().canonicalize().unwrap();
+    let expect_dir = Path::new(&at.root_dir_resolved()).canonicalize().unwrap();
+    assert_eq!(printed_dir, expect_dir);
 }
 
 #[test]
@@ -470,6 +476,32 @@ fn test_realpath_trailing_slash() {
         .arg("nonexistent/./")
         .fails()
         .stderr_contains("No such file or directory\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_realpath_trailing_slash_unreadable_directory() {
+    // A trailing slash only asserts that the operand is a directory, which is
+    // a stat-level check needing search permission on the parent, not read
+    // permission on the directory itself.
+    // https://github.com/uutils/coreutils/issues/13151
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("dir");
+    at.set_mode("dir", 0o100);
+
+    scene
+        .ucmd()
+        .arg("dir/")
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+    scene
+        .ucmd()
+        .args(&["-e", "dir/"])
+        .succeeds()
+        .stdout_contains(format!("{MAIN_SEPARATOR}dir\n"));
+
+    at.set_mode("dir", 0o700);
 }
 
 #[test]

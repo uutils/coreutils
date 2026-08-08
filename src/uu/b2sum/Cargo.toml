@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/b2sum.rs"
 test = false
@@ -32,6 +29,9 @@ fluent = { workspace = true }
 
 [dev-dependencies]
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "b2sum"

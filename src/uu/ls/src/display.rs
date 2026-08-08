@@ -64,7 +64,6 @@ pub(crate) struct LongFormat {
     pub(crate) author: bool,
     pub(crate) group: bool,
     pub(crate) owner: bool,
-    #[cfg(unix)]
     pub(crate) numeric_uid_gid: bool,
 }
 
@@ -667,12 +666,21 @@ fn display_group<'a>(
 }
 
 #[cfg(not(unix))]
-fn display_uname(_metadata: &Metadata, _config: &Config, _uid_cache: &mut ()) -> &'static str {
-    "somebody"
+fn display_uname(_metadata: &Metadata, config: &Config, _uid_cache: &mut ()) -> &'static str {
+    // No uid to report on this platform; with `-n` fall back to "0" so the
+    // output still looks numeric, matching the intent of --numeric-uid-gid.
+    if config.long.numeric_uid_gid {
+        "0"
+    } else {
+        "somebody"
+    }
 }
 
 #[cfg(not(unix))]
-fn display_group(_metadata: &Metadata, _config: &Config, _gid_cache: &mut ()) -> &'static str {
+fn display_group(_metadata: &Metadata, config: &Config, _gid_cache: &mut ()) -> &'static str {
+    if config.long.numeric_uid_gid {
+        return "0";
+    }
     "somegroup"
 }
 
@@ -1191,14 +1199,8 @@ fn indicator_char(path: &PathData, style: Option<IndicatorStyle>) -> Option<char
 
     match style {
         IndicatorStyle::Classify => sym,
-        IndicatorStyle::FileType => match sym {
-            Some('*') => None,
-            _ => sym,
-        },
-        IndicatorStyle::Slash => match sym {
-            Some('/') => Some('/'),
-            _ => None,
-        },
+        IndicatorStyle::FileType => sym.filter(|&c| c != '*'),
+        IndicatorStyle::Slash => sym.filter(|&c| c == '/'),
     }
 }
 

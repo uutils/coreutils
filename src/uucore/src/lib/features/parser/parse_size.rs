@@ -255,7 +255,9 @@ impl<'parser> Parser<'parser> {
         if unit == "%" {
             let number: u128 = Self::parse_number(&numeric_string, 10, size)?;
             return match total_physical_memory() {
-                Ok(total) => Ok((number / 100) * total),
+                Ok(total) => (number / 100)
+                    .checked_mul(total)
+                    .ok_or_else(|| ParseSizeError::size_too_big(size)),
                 Err(_) => Err(ParseSizeError::PhysicalMem(size.to_string())),
             };
         }
@@ -489,10 +491,10 @@ pub enum ParseSizeError {
 impl Error for ParseSizeError {
     fn description(&self) -> &str {
         match *self {
-            Self::InvalidSuffix(ref s) => s,
-            Self::ParseFailure(ref s) => s,
-            Self::SizeTooBig(ref s) => s,
-            Self::PhysicalMem(ref s) => s,
+            Self::InvalidSuffix(ref s)
+            | Self::ParseFailure(ref s)
+            | Self::SizeTooBig(ref s)
+            | Self::PhysicalMem(ref s) => s,
         }
     }
 }
@@ -861,5 +863,21 @@ mod tests {
         assert!(parse_size_u64("-1%").is_err());
         assert!(parse_size_u64("1.0%").is_err());
         assert!(parse_size_u64("0x1%").is_err());
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn parse_percent_overflow() {
+        // A percentage can fit in a u128 while its product with the total
+        // physical memory does not. `u128::MAX` overflows for any machine
+        // reporting more than 100 bytes of memory.
+        let size = format!("{}%", u128::MAX);
+
+        assert!(variant_eq(
+            &parse_size_u128(&size).unwrap_err(),
+            &ParseSizeError::SizeTooBig(String::new())
+        ));
+        assert_eq!(Ok(u128::MAX), parse_size_u128_max(&size));
+        assert_eq!(Ok(u64::MAX), parse_size_u64_max(&size));
     }
 }

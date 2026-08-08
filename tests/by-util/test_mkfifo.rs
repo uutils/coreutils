@@ -156,9 +156,10 @@ fn test_create_fifo_permission_denied() {
     at.mkdir(no_exec_dir);
     at.set_mode(no_exec_dir, 0o644);
 
-    // We no longer attempt to modify file permission if the file was failed to be created.
-    // Therefore the error message should only contain "cannot create".
-    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': File exists\n");
+    // The parent directory has no execute bit, so the kernel refuses to add
+    // an entry to it (EACCES). mkfifo should surface that reason instead of
+    // the old hardcoded "File exists".
+    let err_msg = format!("mkfifo: cannot create fifo '{named_pipe}': Permission denied\n");
 
     scene
         .ucmd()

@@ -541,6 +541,20 @@ fn test_very_wide_hex_byte_output() {
 }
 
 #[test]
+fn test_very_wide_hex_byte_ascii_dump() {
+    const WIDTH: usize = 100_000;
+    let expected = format!(" 41{}  >A<\n", " ".repeat(WIDTH * 3 - 3));
+
+    new_ucmd!()
+        .arg("-An")
+        .arg(format!("-w{WIDTH}"))
+        .arg("-tx1z")
+        .pipe_in("A")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_suppress_duplicates() {
     let input: [u8; 41] = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -932,6 +946,31 @@ fn test_skip_bytes_error() {
         .arg("--skip-bytes=10")
         .run_piped_stdin(input.as_bytes())
         .failure();
+}
+
+// A seekable special file such as /dev/null can be skipped past its (empty)
+// end without error, matching GNU od.
+#[cfg(unix)]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: /dev/null is not a seekable device"
+)]
+fn test_skip_bytes_past_end_of_seekable_device() {
+    new_ucmd!()
+        .arg("-j1")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+// Skipping past the end of a regular file is an error and must not print a
+// trailing offset line, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_no_offset() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.arg("-j10").arg("f").fails().no_stdout();
 }
 
 #[test]

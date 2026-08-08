@@ -583,6 +583,19 @@ fn test_symlink_missing_destination() {
 }
 
 #[test]
+fn test_symlink_error_includes_destination() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_symlink_error_includes_destination";
+    let link = "no_such_dir/test_symlink_error_includes_destination";
+
+    at.touch(file);
+
+    ucmd.args(&["-s", file, link]).fails().stderr_is(format!(
+        "ln: failed to create symbolic link '{link}': No such file or directory\n"
+    ));
+}
+
+#[test]
 fn test_symlink_relative() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_symlink_relative_a";
@@ -948,7 +961,7 @@ fn test_hard_logical_dir_fail() {
         .ucmd()
         .args(&["-L", target, "hard-to-dir-link"])
         .fails()
-        .stderr_contains("failed to create hard link 'link-to-dir'");
+        .stderr_contains("failed to create hard link 'hard-to-dir-link'");
 }
 
 #[test]

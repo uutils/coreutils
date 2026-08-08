@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/id.rs"
 test = false
@@ -35,3 +32,6 @@ path = "src/main.rs"
 [features]
 feat_selinux = ["selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true

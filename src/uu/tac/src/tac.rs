@@ -251,10 +251,7 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
             }
             // Unescape escaped (), |, {} when not inside brackets
             b'\\' if !inside_brackets && !is_escaped => {
-                if let Some(next) = bytes
-                    .get(i + 1)
-                    .filter(|next| matches!(next, b'(' | b')' | b'|' | b'{' | b'}'))
-                {
+                if let Some(next) = bytes.get(i + 1).filter(|c| b"()|{}".contains(c)) {
                     result.push(*next);
                     last_byte = Some(*next);
                     i += 2;
@@ -293,8 +290,7 @@ fn translate_regex_flavor(bytes: &[u8]) -> String {
             }
             b'$' if !inside_brackets && !is_escaped => {
                 let next_is_anchor_position = match bytes.get(i + 1) {
-                    None => true,
-                    Some(b')' | b'|') => true,
+                    None | Some(b')' | b'|') => true,
                     Some(b'\\') => {
                         // Peek two ahead to see if it's \) or \|
                         matches!(bytes.get(i + 2), Some(b')' | b'|'))

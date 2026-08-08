@@ -40,6 +40,7 @@ pub use crate::features::backup_control;
 pub use crate::features::benchmark;
 #[cfg(feature = "buf-copy")]
 pub use crate::features::buf_copy;
+pub use crate::features::char_width;
 #[cfg(feature = "checksum")]
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
@@ -181,9 +182,7 @@ pub fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-        "dir" => "ls",  // dir is an alias for ls
-        "vdir" => "ls", // vdir is an alias for ls
-
+        "dir" | "vdir" => "ls", // aliases for ls
         // Default case - return the util name as is
         _ => util_name,
     }
@@ -427,10 +426,7 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
 pub fn read_yes() -> bool {
     let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
-        _ => false,
-    }
+    std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
 }
 
 #[derive(Debug)]

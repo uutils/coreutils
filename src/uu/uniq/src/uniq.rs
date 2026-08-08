@@ -64,14 +64,6 @@ struct LineMeta {
     key_end: usize,
 }
 
-macro_rules! write_line_terminator {
-    ($writer:expr, $line_terminator:expr) => {
-        $writer
-            .write_all(&[$line_terminator])
-            .map_err_context(|| translate!("uniq-error-write-line-terminator"))
-    };
-}
-
 impl Uniq {
     pub fn write_uniq(&self, mut reader: impl BufRead, mut writer: impl Write) -> UResult<()> {
         let mut first_line_printed = false;
@@ -144,7 +136,9 @@ impl Uniq {
         if (self.delimiters == Delimiters::Append || self.delimiters == Delimiters::Both)
             && first_line_printed
         {
-            write_line_terminator!(writer, line_terminator)?;
+            writer
+                .write_all(&[line_terminator])
+                .map_err_context(|| translate!("uniq-error-write-line-terminator"))?;
         }
         writer
             .flush()
@@ -291,11 +285,11 @@ impl Uniq {
     ) -> UResult<()> {
         let line_terminator = self.get_line_terminator();
 
-        if self.should_print_delimiter(count, first_line_printed) {
-            write_line_terminator!(writer, line_terminator)?;
-        }
-
         line_out.clear();
+
+        if self.should_print_delimiter(count, first_line_printed) {
+            line_out.push(line_terminator);
+        }
 
         if self.show_counts {
             let mut count_buf = [0u8; Self::COUNT_PREFIX_BUF_SIZE];

@@ -430,7 +430,6 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     }
 }
 
-#[cfg(not(target_os = "wasi"))]
 use crate::error::UResult;
 #[cfg(any(
     target_os = "freebsd",
@@ -461,7 +460,7 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg(not(target_os = "wasi"))]
+#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -542,18 +541,12 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "wasi"
     ))]
     {
         // No method to read mounts on these platforms
         Ok(Vec::new())
     }
-}
-
-/// Read file system list.
-#[cfg(target_os = "wasi")]
-pub fn read_fs_list() -> Vec<MountInfo> {
-    // No method to read mounts on WASI
-    Vec::new()
 }
 
 #[derive(Debug, Clone)]
@@ -1014,9 +1007,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x1130_7854 => "inodefs".into(),
         0x0131_11A8 => "ibrix".into(),
         0x2BAD_1DEA => "inotifyfs".into(),
-        0x9660 => "isofs".into(),
-        0x4004 => "isofs".into(),
-        0x4000 => "isofs".into(),
+        0x9660 | 0x4004 | 0x4000 => "isofs".into(),
         0x07C0 => "jffs".into(),
         0x72B6 => "jffs2".into(),
         0x3153_464A => "jfs".into(),
@@ -1066,8 +1057,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x7472_6163 => "tracefs".into(),
         0x2405_1905 => "ubifs".into(),
         0x1501_3346 => "udf".into(),
-        0x0001_1954 => "ufs".into(),
-        0x5419_0100 => "ufs".into(),
+        0x0001_1954 | 0x5419_0100 => "ufs".into(),
         0x9FA2 => "usbdevfs".into(),
         0x0102_1997 => "v9fs".into(),
         0xBACB_ACBC => "vmhgfs".into(),
@@ -1078,8 +1068,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x012F_F7B4 => "xenix".into(),
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
-        0x2FC1_2FC1 => "zfs".into(),
-        0xDE => "zfs".into(),
+        0x2FC1_2FC1 | 0xDE => "zfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable

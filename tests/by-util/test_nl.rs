@@ -209,7 +209,7 @@ fn test_number_separator() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_number_separator_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -644,7 +644,7 @@ fn test_section_delimiter() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_section_delimiter_non_utf8() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -711,7 +711,7 @@ fn test_one_char_section_delimiter() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_one_byte_section_delimiter() {
     use std::{ffi::OsString, os::unix::ffi::OsStringExt};
@@ -929,4 +929,14 @@ fn test_repeated_section_delimiter_flag() {
         .pipe_in("|:|:|:\na\nb\nc")
         .succeeds()
         .stdout_is("\n       a\n       b\n       c\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_is("     1\thello\n");
 }
