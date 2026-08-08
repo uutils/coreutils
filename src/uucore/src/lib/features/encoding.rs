@@ -106,10 +106,8 @@ impl SupportsFastDecodeAndEncode for Base64SimdWrapper {
                         Self::decode_with_no_pad
                     };
 
-                    if decoder(remaining, output).is_err() {
-                        return Err(USimpleError::new(1, "error: invalid input"));
-                    }
-
+                    decoder(remaining, output)
+                        .map_err(|_| USimpleError::new(1, "error: invalid input"))?;
                     break;
                 }
             }
@@ -429,13 +427,8 @@ impl SupportsFastDecodeAndEncode for Z85Wrapper {
             return Err(USimpleError::new(1, "error: invalid input"));
         }
 
-        let decode_result = match z85::decode(input) {
-            Ok(ve) => ve,
-            Err(_de) => {
-                return Err(USimpleError::new(1, "error: invalid input"));
-            }
-        };
-
+        let decode_result =
+            z85::decode(input).map_err(|_de| USimpleError::new(1, "error: invalid input"))?;
         output.extend_from_slice(&decode_result);
 
         Ok(())

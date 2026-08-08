@@ -404,9 +404,7 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
         };
 
         // If there is any error in writing the output, terminate immediately.
-        if let Err(e) = result {
-            return Err(TacError::WriteError(e).into());
-        }
+        result.map_err(TacError::WriteError)?;
     }
     Ok(())
 }

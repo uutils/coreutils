@@ -119,12 +119,11 @@ impl FmtOptions {
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);
         let goal_opt = if let Some(goal_str) = goal_opt_str {
-            match goal_str.parse::<usize>() {
-                Ok(goal) => Some(goal),
-                Err(_) => {
-                    return Err(FmtError::InvalidGoal(goal_str.clone()).into());
-                }
-            }
+            Some(
+                goal_str
+                    .parse::<usize>()
+                    .map_err(|_| FmtError::InvalidGoal(goal_str.clone()))?,
+            )
         } else {
             None
         };
@@ -167,12 +166,9 @@ impl FmtOptions {
 
         let mut tabwidth = 8;
         if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
-            tabwidth = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(_) => {
-                    return Err(FmtError::InvalidTabWidth(s.clone()).into());
-                }
-            };
+            tabwidth = s
+                .parse::<usize>()
+                .map_err(|_| FmtError::InvalidTabWidth(s.clone()))?;
         }
 
         if tabwidth < 1 {
