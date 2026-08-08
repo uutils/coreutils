@@ -1036,11 +1036,9 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
-        let mut stdin_is_fifo = false;
         #[cfg(unix)]
-        if let Ok(md) = fs::metadata("/dev/stdin") {
-            stdin_is_fifo = md.file_type().is_fifo();
-        }
+        let stdin_is_fifo = rustix::fs::fstat(std::io::stdin())
+            .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
