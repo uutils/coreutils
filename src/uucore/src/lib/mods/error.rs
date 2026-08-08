@@ -813,6 +813,19 @@ mod tests {
     }
 
     #[test]
+    fn strip_errno_preserves_nontrailing_os_error() {
+        use super::strip_errno;
+        use std::io::Error;
+
+        let err = Error::other(r#"Permission denied (os error 13) at path "/tmp.haKXBI6xNU""#);
+
+        assert_eq!(
+            strip_errno(&err),
+            r#"Permission denied (os error 13) at path "/tmp.haKXBI6xNU""#
+        );
+    }
+
+    #[test]
     #[cfg(unix)]
     fn test_nix_error_conversion() {
         use super::{FromIo, UIoError};
