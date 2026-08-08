@@ -250,7 +250,6 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_n0_with_follow() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -532,7 +531,6 @@ fn test_null_default() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -622,7 +620,6 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -659,7 +656,6 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
@@ -2121,11 +2117,7 @@ fn test_follow_name_remove() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
@@ -2163,11 +2155,7 @@ fn test_follow_name_truncate1() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate2() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
@@ -2211,7 +2199,6 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 #[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
@@ -5190,7 +5177,7 @@ fn test_failed_write_is_reported_on_seekable_input() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_dev_zero() {
     new_ucmd!()
