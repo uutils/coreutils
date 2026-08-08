@@ -2015,6 +2015,7 @@ dependencies = [
  "libc",
  "thiserror",
  "uucore",
+ "windows-sys",
 ]
 
 [[package]]
