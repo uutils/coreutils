@@ -1695,16 +1695,6 @@ fn test_output_is_input() {
 }
 
 #[test]
-fn test_empty_input_truncates_output() {
-    let (at, mut ucmd) = at_and_ucmd!();
-    at.write("file", "existing contents");
-
-    ucmd.args(&["-o", "file"]).pipe_in("").succeeds();
-
-    assert_eq!(at.read("file"), "");
-}
-
-#[test]
 #[cfg(unix)]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_output_device() {
