@@ -12,7 +12,7 @@
 use std::{
     ffi::{OsStr, OsString},
     fs::{self, File},
-    io::{BufWriter, Read, Write},
+    io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
@@ -108,7 +108,7 @@ pub fn merge(
 
     if !runner::SUPPORTS_COMPRESSION && settings.compress_prog.is_some() {
         let _ = writeln!(
-            std::io::stderr(),
+            io::stderr(),
             "sort: warning: --compress-program is ignored on this platform"
         );
         return merge_with_file_limit::<_, _, WriteablePlainTmpFile>(
@@ -258,6 +258,11 @@ pub struct PlainTmpMergeInput {
     path: PathBuf,
     file: File,
 }
+
+fn flush_writer(writer: &mut impl Write) -> io::Result<()> {
+    writer.flush()
+}
+
 impl WriteableTmpFile for WriteablePlainTmpFile {
     type Closed = ClosedPlainTmpFile;
     type InnerWrite = BufWriter<File>;
@@ -269,7 +274,8 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
         })
     }
 
-    fn finished_writing(self) -> UResult<Self::Closed> {
+    fn finished_writing(mut self) -> UResult<Self::Closed> {
+        flush_writer(&mut self.file)?;
         Ok(ClosedPlainTmpFile { path: self.path })
     }
 
@@ -341,7 +347,8 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
         })
     }
 
-    fn finished_writing(self) -> UResult<Self::Closed> {
+    fn finished_writing(mut self) -> UResult<Self::Closed> {
+        flush_writer(&mut self.child_stdin)?;
         drop(self.child_stdin);
         check_child_success(self.child, &self.compress_prog)?;
         Ok(ClosedCompressedTmpFile {
@@ -354,6 +361,7 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
         &mut self.child_stdin
     }
 }
+
 impl ClosedTmpFile for ClosedCompressedTmpFile {
     type Reopened = CompressedTmpMergeInput;
 
@@ -405,5 +413,35 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{self, BufWriter, Write};
+
+    use super::flush_writer;
+
+    struct FailOnFlush;
+
+    impl Write for FailOnFlush {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("flush failed"))
+        }
+    }
+
+    #[test]
+    fn flush_writer_propagates_flush_errors() {
+        let mut writer = BufWriter::new(FailOnFlush);
+        writer.write_all(b"buffered data").unwrap();
+
+        let error = flush_writer(&mut writer).unwrap_err();
+
+        assert_eq!(error.kind(), io::ErrorKind::Other);
+        let _ = writer.into_parts();
     }
 }
