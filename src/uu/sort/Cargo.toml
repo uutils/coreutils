@@ -46,7 +46,10 @@ foldhash = { workspace = true }
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
 rustix = { workspace = true, features = ["system", "process"] }
 
-[target.'cfg(not(all(target_os = "wasi", not(target_feature = "atomics"))))'.dependencies]
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+rayon = { workspace = true }
+
+[target.wasm32-wasip1-threads.dependencies]
 rayon = { workspace = true }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]

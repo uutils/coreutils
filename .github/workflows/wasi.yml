@@ -36,6 +36,11 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         key: "${{ matrix.job.target }}"
+    - name: Check sort for threaded WASI
+      if: matrix.job.target == 'wasm32-wasip1'
+      run: |
+        rustup target add wasm32-wasip1-threads
+        cargo check --target wasm32-wasip1-threads --no-default-features -p uu_sort
     - name: Install wasmtime
       run: |
         curl https://wasmtime.dev/install.sh -sSf | bash
