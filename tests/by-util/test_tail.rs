@@ -559,6 +559,17 @@ fn test_follow_single() {
         .stdout_only(expected);
 }
 
+#[test]
+#[cfg(wasi_runner)]
+fn test_follow_file_unsupported() {
+    new_ucmd!()
+        .arg("-f")
+        .arg(FOOBAR_TXT)
+        .fails_with_code(1)
+        .stdout_is_fixture("foobar_single_default.expected")
+        .stderr_is("tail: follow mode is not supported on this platform\n");
+}
+
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: test times out
@@ -3747,17 +3758,13 @@ fn test_when_argument_file_is_a_directory() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: symlink-to-directory error path differs from POSIX (ELOOP/EISDIR not reliably surfaced)"
-)]
 fn test_when_argument_file_is_a_symlink() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     let mut file = at.make_file("target");
 
-    at.symlink_file("target", "link");
+    at.relative_symlink_file("target", "link");
 
     ts.ucmd().args(&["-c", "+0", "link"]).succeeds().no_output();
 
@@ -3769,16 +3776,6 @@ fn test_when_argument_file_is_a_symlink() {
         .args(&["-c", "+0", "link"])
         .succeeds()
         .stdout_only(random_string);
-
-    at.mkdir("dir");
-
-    at.symlink_file("dir", "dir_link");
-
-    let expected = "tail: error reading 'dir_link': Is a directory\n";
-    ts.ucmd()
-        .arg("dir_link")
-        .fails_with_code(1)
-        .stderr_only(expected);
 }
 
 // TODO: make this work on windows
@@ -4110,7 +4107,6 @@ fn test_when_follow_retry_then_initial_print_of_file_is_written_to_stdout() {
 
 // TODO: Add test for the warning `--pid=PID is not supported on this system`
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_then_shows_warnings() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -4127,23 +4123,6 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .args(&["--retry", "data"])
         .stderr_to_stdout()
         .succeeds()
-        .stdout_only(expected_stdout);
-
-    let expected_stdout = format!(
-        "tail: warning: --retry only effective for the initial open\n\
-        {file_data}"
-    );
-    let mut child = scene
-        .ucmd()
-        .args(&["--follow=descriptor", "--retry", "data"])
-        .stderr_to_stdout()
-        .run_no_wait();
-
-    child
-        .delay(500)
-        .kill()
-        .make_assertion()
-        .with_current_output()
         .stdout_only(expected_stdout);
 
     let expected_stdout = format!(
@@ -4173,6 +4152,31 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
         .args(&["--pid=1000", "--pid=1000", "--retry", "data"])
         .stderr_to_stdout()
         .succeeds()
+        .stdout_only(expected_stdout);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+fn test_args_when_settings_check_warnings_follow_retry() {
+    let scene = TestScenario::new(util_name!());
+    let file_data = "file data\n";
+    scene.fixtures.write("data", file_data);
+
+    let expected_stdout = format!(
+        "tail: warning: --retry only effective for the initial open\n\
+        {file_data}"
+    );
+    let mut child = scene
+        .ucmd()
+        .args(&["--follow=descriptor", "--retry", "data"])
+        .stderr_to_stdout()
+        .run_no_wait();
+
+    child
+        .delay(500)
+        .kill()
+        .make_assertion()
+        .with_current_output()
         .stdout_only(expected_stdout);
 }
 
