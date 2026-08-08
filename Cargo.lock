@@ -4225,6 +4225,7 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "fluent",
+ "rustix",
  "thiserror 2.0.20",
  "uucore",
 ]
