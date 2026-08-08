@@ -14,7 +14,7 @@ use compare::Compare;
 use uucore::error::UResult;
 
 use crate::{
-    GlobalSettings, Output,
+    GlobalSettings,
     chunks::{self, Chunk, RecycledChunk},
     compare_by,
 };
@@ -59,11 +59,6 @@ pub(super) struct SyncFileMerger<'a, M: MergeInput> {
 }
 
 impl<M: MergeInput> SyncFileMerger<'_, M> {
-    pub(super) fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
-    }
-
     pub(super) fn write_all_to(
         mut self,
         settings: &GlobalSettings,

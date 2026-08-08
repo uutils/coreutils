@@ -18,7 +18,9 @@ use std::{
     rc::Rc,
 };
 
-use uucore::error::UResult;
+use uucore::display::Quotable;
+use uucore::error::{FromIo, UResult};
+use uucore::translate;
 
 use crate::{
     GlobalSettings, Output, SortError, chunks::Chunk, current_open_fd_count, fd_soft_limit, open,
@@ -129,7 +131,14 @@ fn do_merge_to_output<M: MergeInput + 'static>(
     settings: &GlobalSettings,
     output: Output,
 ) -> UResult<()> {
-    runner::merge_without_limit(files, settings)?.write_all(settings, output)
+    let output_name = output
+        .as_output_name()
+        .unwrap_or(OsStr::new("standard output"))
+        .to_owned();
+    let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
+    let mut out = output.into_write();
+    runner::merge_without_limit(files, settings)?.write_all_to(settings, &mut out)?;
+    flush_writer(&mut out).map_err_context(ctx)
 }
 
 /// Merge and write to a writer, dispatching to the active runner.

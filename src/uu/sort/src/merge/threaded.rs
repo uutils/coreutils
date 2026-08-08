@@ -19,7 +19,7 @@ use compare::Compare;
 use uucore::error::{FromIo, UResult};
 
 use crate::{
-    GlobalSettings, Output,
+    GlobalSettings,
     chunks::{self, Chunk, RecycledChunk},
     compare_by,
 };
@@ -155,12 +155,6 @@ pub(super) struct FileMerger<'a> {
 }
 
 impl FileMerger<'_> {
-    /// Write the merged contents to the output file.
-    pub(super) fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
-        let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
-    }
-
     pub(super) fn write_all_to(
         mut self,
         settings: &GlobalSettings,
