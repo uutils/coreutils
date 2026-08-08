@@ -2,6 +2,7 @@
 MD013: false
 # Headers should be surrounded by blank lines
 MD022: true
+# Fenced code blocks should be surrounded by blank lines
 MD031: true
 # Spaces inside emphasis markers
 MD037: true

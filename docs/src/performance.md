@@ -116,6 +116,7 @@ samply record --rate 1000 ./target/debug/coreutils seq 1 1000
 The output using the `debug` profile might be easier to understand, but the performance characteristics may be somewhat different from `release` profile that we _actually_ care about.
 
 Consider using the `profiling` profile, that compiles in `release` mode but with debug symbols. For example:
+
 ```bash
 cargo build --profile profiling -p uu_ls
 samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
@@ -124,6 +125,7 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
 ## Workflow: Measuring Performance Improvements
 
 1. **Establish baselines**:
+
    ```bash
    hyperfine --warmup 3 \
      "/usr/bin/sort large_file.txt" \
@@ -131,6 +133,7 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
    ```
 
 2. **Identify bottlenecks**:
+
    ```bash
    samply record ./our-sort-v1 large_file.txt
    ```
@@ -138,6 +141,7 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
 3. **Make targeted improvements** based on profiling data
 
 4. **Verify improvements**:
+
    ```bash
    hyperfine --warmup 3 \
      "/usr/bin/sort large_file.txt" \
@@ -146,6 +150,7 @@ samply record -r 10000 target/profiling/ls -lR /var .git .git .git > /dev/null
    ```
 
 5. **Document performance changes** with concrete numbers
+
    ```bash
    hyperfine --export-markdown file.md [...]
    ```
