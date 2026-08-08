@@ -1209,3 +1209,45 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len()
     );
 }
+
+/// Creating a temporary file or directory in an unwritable directory must fail
+/// with a clean `Permission denied` message, without leaking the raw
+/// `(os error N)` suffix or the internal `at path ...` detail that the
+/// underlying `tempfile` crate would otherwise embed.
+#[cfg(unix)]
+#[test]
+fn test_permission_denied_clean_message() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use uucore::process::geteuid;
+
+    // chmod 000 does not block root, so the assertion would not hold.
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let dir = scene.fixtures.plus("noperm");
+    fs::create_dir_all(&dir).unwrap();
+    fs::set_permissions(&dir, fs::Permissions::from_mode(0o000)).unwrap();
+
+    // File case: `mktemp -p <dir>` (default template) creates inside <dir>.
+    scene
+        .ucmd()
+        .arg("-p")
+        .arg(&dir)
+        .fails()
+        .stderr_only("mktemp: Permission denied\n");
+
+    // Directory case: `mktemp -d -p <dir>`.
+    scene
+        .ucmd()
+        .arg("-d")
+        .arg("-p")
+        .arg(&dir)
+        .fails()
+        .stderr_only("mktemp: Permission denied\n");
+
+    // Restore perms so the fixture tempdir cleanup can remove the entry.
+    let _ = fs::set_permissions(&dir, fs::Permissions::from_mode(0o755));
+}
