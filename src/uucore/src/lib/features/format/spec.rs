@@ -511,7 +511,8 @@ fn resolve_asterisk_width(
         Some(CanAsterisk::Asterisk(loc)) => {
             let nb = args.next_i64(loc);
             if nb < 0 {
-                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+                // Unsigned arithmetic, so `i64::MIN` (magnitude 2^63) doesn't overflow.
+                Some((usize::try_from(nb.unsigned_abs()).ok().unwrap_or(0), true))
             } else {
                 Some((usize::try_from(nb).ok().unwrap_or(0), false))
             }
@@ -669,6 +670,26 @@ mod tests {
                     ]),
                 )
             );
+        }
+
+        #[test]
+        fn asterisk_i64_min_width() {
+            // Regression test for https://github.com/uutils/coreutils/issues/13766
+            // |i64::MIN| = 2^63 overflows i64, so the magnitude of a negative
+            // `*` width must be computed in unsigned arithmetic.
+            let expected = usize::try_from(i64::MIN.unsigned_abs()).unwrap_or(0);
+            for arg in [
+                FormatArgument::SignedInt(i64::MIN),
+                FormatArgument::Unparsed(i64::MIN.to_string().into()),
+            ] {
+                assert_eq!(
+                    Some((expected, true)),
+                    resolve_asterisk_width(
+                        Some(CanAsterisk::Asterisk(ArgumentLocation::NextArgument)),
+                        &mut FormatArguments::new(&[arg]),
+                    )
+                );
+            }
         }
     }
 
