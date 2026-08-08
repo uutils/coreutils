@@ -615,7 +615,6 @@ fn test_domain_socket() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_write_to_self_empty() {
     // it's ok if the input file is also the output file if it's empty
     let s = TestScenario::new(util_name!());
@@ -627,7 +626,7 @@ fn test_write_to_self_empty() {
         .open(&file_path)
         .unwrap();
 
-    s.ucmd().set_stdout(file).arg(&file_path).succeeds();
+    s.ucmd().set_stdout(file).arg("file.txt").succeeds();
 }
 
 #[test]
