@@ -1047,6 +1047,15 @@ fn test_touch_dash() {
 }
 
 #[test]
+#[cfg(wasi_runner)]
+fn test_touch_dash_unsupported() {
+    new_ucmd!()
+        .arg("-")
+        .fails_with_code(1)
+        .stderr_only("touch: touch - (stdout) is not supported on WASI\n");
+}
+
+#[test]
 fn test_touch_invalid_date_format() {
     let file = "test_touch_invalid_date_format";
 

@@ -958,9 +958,9 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
         Ok(PathBuf::from("/proc/self/fd/1"))
     }
     #[cfg(target_os = "wasi")]
-    return Err(TouchError::UnsupportedPlatformFeature(
-        "touch - (stdout) is not supported on WASI".to_string(),
-    ));
+    return Err(TouchError::UnsupportedPlatformFeature(translate!(
+        "touch-error-stdout-unsupported"
+    )));
     #[cfg(windows)]
     {
         use std::os::windows::prelude::AsRawHandle;
