@@ -1091,15 +1091,22 @@ fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "foo.txt";
     let symlink = "bar.txt";
-    let time = FileTime::from_unix_time(123, 0);
+    let initial_time = FileTime::from_unix_time(123, 0);
+    let updated_atime = FileTime::from_unix_time(456, 0);
 
     at.touch(target);
+    let target_times = get_file_times(&at, target);
     at.relative_symlink_file(target, symlink);
-    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+    set_symlink_file_times(at.plus(symlink), initial_time, initial_time).unwrap();
 
-    ucmd.args(&["-a", "--no-dereference", symlink]).succeeds();
-    // Modification time shouldn't be set to the destination's modification time
-    assert_eq!(time, get_symlink_times(&at, symlink).1);
+    ucmd.args(&["-a", "--no-dereference", "-d", "@456", symlink])
+        .succeeds();
+
+    assert_eq!(
+        (updated_atime, initial_time),
+        get_symlink_times(&at, symlink)
+    );
+    assert_eq!(target_times, get_file_times(&at, target));
 }
 
 #[test]
