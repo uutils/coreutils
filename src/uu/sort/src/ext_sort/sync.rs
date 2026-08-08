@@ -59,7 +59,11 @@ pub fn ext_sort(
         settings,
     )?;
     let Some(mut first) = first else {
-        return Ok(()); // empty input
+        return print_sorted(
+            std::iter::empty::<&crate::Line<'static>>(),
+            settings,
+            output,
+        );
     };
     first.with_dependent_mut(|_, c| sort_by(&mut c.lines, settings, &c.line_data));
 

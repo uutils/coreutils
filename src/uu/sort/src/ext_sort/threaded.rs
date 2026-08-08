@@ -165,7 +165,11 @@ fn reader_writer<
             }
         }
         ReadResult::EmptyInput => {
-            // don't output anything
+            print_sorted(
+                std::iter::empty::<&crate::Line<'static>>(),
+                settings,
+                output,
+            )?;
         }
     }
     Ok(())
