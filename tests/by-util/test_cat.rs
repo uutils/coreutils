@@ -860,7 +860,7 @@ fn test_write_error_handling() {
 /// the input file.
 #[test]
 #[cfg(target_os = "linux")]
-fn test_splice_write_error_message() {
+fn test_write_error_message() {
     use std::fs::File;
 
     let dev_full =

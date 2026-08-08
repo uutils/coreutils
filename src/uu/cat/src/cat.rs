@@ -19,7 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::fs::FileTypeExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UResult, strip_errno};
+use uucore::error::{FromIo, UIoError, UResult, strip_errno};
 use uucore::translate;
 use uucore::{fast_inc::fast_inc_one, format_usage};
 
@@ -82,8 +82,8 @@ enum CatError {
     Io(#[from] io::Error),
     /// A write error to the output; unlike [`Self::Io`] it is reported
     /// without the input filename.
-    #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    Write(io::Error),
+    #[error("{0}")]
+    Write(Box<UIoError>),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -122,6 +122,12 @@ impl From<rustix::io::Errno> for CatError {
     fn from(value: rustix::io::Errno) -> Self {
         Self::Io(value.into())
     }
+}
+
+/// An error writing to the output, using the shared uucore "write error"
+/// context (as opposed to [`CatError::Io`], which names the input file).
+fn write_err(err: io::Error) -> CatError {
+    CatError::Write(err.map_err_context(|| translate!("common-write-error")))
 }
 #[derive(PartialEq)]
 enum NumberingMode {
@@ -496,71 +502,22 @@ fn print_fast<R: FdReadable>(handle: &mut InputHandle<R>) -> CatResult<()> {
     let stdout = io::stdout();
     // Try to use the splice() system call for faster writing. If it works, we're done.
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    if splice_cat(handle, &stdout)? {
-        return Ok(());
-    }
-
-    // If we're not on Linux or Android, or the splice() call failed,
-    // fall back on slower writing.
-    print_unbuffered(handle, stdout)
-}
-
-/// Copy the input to `stdout` with the `splice(2)` syscall.
-///
-/// Returns `Ok(true)` if the whole input was copied, `Ok(false)` if the
-/// caller should fall back on ordinary read/write, and `Err(..)` for a
-/// diagnosed error. Once any bytes have been spliced, a splice error is
-/// fatal and is reported either as an input error (naming the file) or as
-/// a "write error"; before that, splice errors just select read/write.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-fn splice_cat<R: FdReadable>(handle: &mut InputHandle<R>, stdout: &io::Stdout) -> CatResult<bool> {
-    // Create a broker pipe, since splice(2) needs a pipe on one side and we
-    // want to distinguish read errors from write errors. If the pipe cannot
-    // be created (e.g. file descriptor exhaustion), fall back on read/write.
-    let Ok((pipe_rd, pipe_wr)) = uucore::pipes::pipe::<false>() else {
-        return Ok(false);
-    };
-    let input = handle.reader.as_fd();
-    let output = stdout.as_fd();
-
-    let mut some_copied = false;
-    loop {
-        match uucore::pipes::splice(&input, &pipe_wr, uucore::pipes::MAX_ROOTLESS_PIPE_SIZE) {
-            // End of input: splice handled the whole file.
-            Ok(0) => return Ok(true),
-            Ok(bytes_read) => {
-                let mut remaining = bytes_read;
-                while remaining > 0 {
-                    match uucore::pipes::splice(&pipe_rd, &output, remaining) {
-                        // No progress; stop splicing.
-                        Ok(0) => return Ok(some_copied),
-                        Ok(bytes_written) => {
-                            some_copied = true;
-                            remaining -= bytes_written;
-                        }
-                        Err(err) if some_copied => return Err(CatError::Write(err.into())),
-                        Err(_) => {
-                            // stdout cannot take splice data: drain the
-                            // intermediate pipe with read/write, then let
-                            // the caller continue likewise.
-                            let mut drain = Vec::with_capacity(remaining);
-                            let _ = pipe_rd
-                                .take(remaining as u64)
-                                .read_to_end(&mut drain)
-                                .map_err(CatError::Io)?;
-                            uucore::io::RawWriter(&output)
-                                .write_all(&drain)
-                                .inspect_err(handle_broken_pipe)
-                                .map_err(CatError::Write)?;
-                            return Ok(false);
-                        }
-                    }
-                }
-            }
-            Err(err) if some_copied => return Err(CatError::Io(err.into())),
-            Err(_) => return Ok(false),
+    match uucore::pipes::splice_unbounded_diagnose(&handle.reader, &stdout) {
+        // splice() copied the whole input.
+        Ok(uucore::pipes::SpliceOutcome::Done) => return Ok(()),
+        // splice() is not usable here; fall back on slower writing.
+        Ok(uucore::pipes::SpliceOutcome::Fallback) => {}
+        // Once data was copied, a splice error is diagnosed: input errors
+        // name the file, output errors are generic write errors.
+        Err((uucore::pipes::SpliceErrorSide::Input, errno)) => {
+            return Err(CatError::Io(io::Error::from(errno)));
+        }
+        Err((uucore::pipes::SpliceErrorSide::Output, errno)) => {
+            return Err(write_err(io::Error::from(errno)));
         }
     }
+
+    print_unbuffered(handle, stdout)
 }
 
 #[cfg_attr(any(target_os = "linux", target_os = "android"), inline(never))] // splice fast-path does not require this allocation
@@ -580,7 +537,7 @@ fn print_unbuffered<R: FdReadable>(
                 stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)
-                    .map_err(CatError::Write)?;
+                    .map_err(write_err)?;
                 // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
                 #[cfg(not(any(unix, target_os = "wasi")))]

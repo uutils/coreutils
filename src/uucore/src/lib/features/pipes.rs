@@ -112,6 +112,97 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     }
 }
 
+/// Whether an unbounded splice copy finished or must fall back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpliceOutcome {
+    /// Everything was spliced to the end of input.
+    Done,
+    /// splice() is not usable here; the caller should use read/write.
+    Fallback,
+}
+
+/// The side of a failed splice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpliceErrorSide {
+    Input,
+    Output,
+}
+
+/// Copy `source` to `sink` with splice(2) through a broker pipe, reporting
+/// errors by direction.
+///
+/// The first splice of the input may fail for innocent reasons (source or
+/// sink unsupported, interrupted, ...), so an error before any byte was
+/// moved just falls back to read/write. Once data has been moved, any
+/// splice error is reported, tagged with the direction that failed.
+#[inline]
+pub fn splice_unbounded_diagnose(
+    source: &impl AsFd,
+    sink: &impl AsFd,
+) -> Result<SpliceOutcome, (SpliceErrorSide, rustix::io::Errno)> {
+    // Create a broker pipe, since splice(2) needs a pipe on one side and we
+    // want to distinguish input errors from output errors. If the pipe
+    // cannot be created (e.g. file descriptor exhaustion), fall back.
+    let Ok((pipe_rd, pipe_wr)) = pipe::<false>() else {
+        return Ok(SpliceOutcome::Fallback);
+    };
+
+    // fcntl for input would not improve throughput since
+    // - sender with splice probably increased size already
+    // - sender without splice is bottleneck
+    let _ = fcntl_setpipe_size(sink, MAX_ROOTLESS_PIPE_SIZE);
+    // pre-generate page caches for splice
+    let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
+
+    // First input splice: any failure just selects read/write.
+    let mut remaining = match splice(source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(0) => return Ok(SpliceOutcome::Done),
+        Ok(n) => n,
+        Err(_) => return Ok(SpliceOutcome::Fallback),
+    };
+
+    // First output splice: if the sink cannot accept splice data, drain the
+    // broker pipe with plain read/write and hand the rest over to the caller.
+    while remaining > 0 {
+        match splice(&pipe_rd, sink, remaining) {
+            Ok(0) => return Ok(SpliceOutcome::Fallback),
+            Ok(written) => remaining -= written,
+            Err(_) => {
+                let mut drain = Vec::with_capacity(remaining);
+                let _ = pipe_rd.take(remaining as u64).read_to_end(&mut drain);
+                match RawWriter(sink).write_all(&drain) {
+                    Ok(()) => return Ok(SpliceOutcome::Fallback),
+                    Err(e) => {
+                        return Err((
+                            SpliceErrorSide::Output,
+                            e.raw_os_error().map_or(
+                                rustix::io::Errno::IO,
+                                rustix::io::Errno::from_raw_os_error,
+                            ),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    // From here on splice works: any failure is a diagnosed error.
+    loop {
+        let mut remaining = match splice(source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+            Ok(0) => return Ok(SpliceOutcome::Done),
+            Ok(n) => n,
+            Err(errno) => return Err((SpliceErrorSide::Input, errno)),
+        };
+        while remaining > 0 {
+            match splice(&pipe_rd, sink, remaining) {
+                Ok(0) => return Ok(SpliceOutcome::Done),
+                Ok(written) => remaining -= written,
+                Err(errno) => return Err((SpliceErrorSide::Output, errno)),
+            }
+        }
+    }
+}
+
 /// splice `n` bytes with read/write fallback
 /// return actually sent bytes
 #[inline]
