@@ -653,7 +653,7 @@ fn test_touch_set_date_without_leading_zeroes() {
 /// expected by the old nix-based implementation. After switching to rustix
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[cfg_attr(
     wasi_runner,
     ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
