@@ -83,7 +83,7 @@ enum CatError {
     /// A write error to the output; unlike [`Self::Io`] it is reported
     /// without the input filename.
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
-    WriteIo(io::Error),
+    Write(io::Error),
     /// Unknown file type; it's not a regular file, socket, etc.
     #[error("{}", translate!("cat-error-unknown-filetype", "ft_debug" => .ft_debug))]
     UnknownFiletype {
@@ -109,7 +109,7 @@ impl CatError {
     /// Write errors are reported without the filename,
     /// while input errors name the file.
     fn display_message(&self, path: &OsString) -> String {
-        if matches!(self, Self::WriteIo(_)) {
+        if matches!(self, Self::Write(_)) {
             format!("{self}")
         } else {
             format!("{}: {self}", path.maybe_quote())
@@ -538,7 +538,7 @@ fn splice_cat<R: FdReadable>(handle: &mut InputHandle<R>, stdout: &io::Stdout) -
                             some_copied = true;
                             remaining -= bytes_written;
                         }
-                        Err(err) if some_copied => return Err(CatError::WriteIo(err.into())),
+                        Err(err) if some_copied => return Err(CatError::Write(err.into())),
                         Err(_) => {
                             // stdout cannot take splice data: drain the
                             // intermediate pipe with read/write, then let
@@ -551,7 +551,7 @@ fn splice_cat<R: FdReadable>(handle: &mut InputHandle<R>, stdout: &io::Stdout) -
                             uucore::io::RawWriter(&output)
                                 .write_all(&drain)
                                 .inspect_err(handle_broken_pipe)
-                                .map_err(CatError::WriteIo)?;
+                                .map_err(CatError::Write)?;
                             return Ok(false);
                         }
                     }
@@ -580,7 +580,7 @@ fn print_unbuffered<R: FdReadable>(
                 stdout
                     .write_all(&buf[..n])
                     .inspect_err(handle_broken_pipe)
-                    .map_err(CatError::WriteIo)?;
+                    .map_err(CatError::Write)?;
                 // cannot use rustix::io on Windows
                 // really bad workaround for unbuffered write <https://github.com/uutils/coreutils/issues/12188>
                 #[cfg(not(any(unix, target_os = "wasi")))]
