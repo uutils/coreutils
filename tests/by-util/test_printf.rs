@@ -591,6 +591,16 @@ fn sub_any_asterisk_first_param_with_integer() {
 }
 
 #[test]
+#[cfg(target_pointer_width = "64")]
+fn sub_any_asterisk_first_param_with_i64_min() {
+    new_ucmd!()
+        .args(&["%*d", &i64::MIN.to_string(), "1"])
+        .fails_with_code(1)
+        .stderr_contains("write error")
+        .stdout_is("");
+}
+
+#[test]
 fn sub_any_asterisk_second_param_with_integer() {
     new_ucmd!()
         .args(&["|%.*d|", "3", "10"])
