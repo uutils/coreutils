@@ -280,7 +280,9 @@ gitignore: add temporary files
     `Fix #1234`, but `ls: fix version sort order`.
   - You can prefix the title with the utility the PR concerns.
 - Keep PRs small and self-contained. A set of small PRs is much more likely to
-  get merged quickly than one large PR.
+  get merged quickly than one large PR. If you have a large change to submit,
+  consider using [`gh stack`](https://github.com/github/gh-stack) to split it
+  into a series of stacked PRs that are easier to review.
 - Make sure the CI passes (up to intermittently failing tests).
 - You know your code best, that's why it's best if you can solve merge conflicts
   on your branch yourself.
