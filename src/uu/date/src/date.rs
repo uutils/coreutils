@@ -224,6 +224,110 @@ fn strip_parenthesized_comments(input: &str) -> Cow<'_, str> {
     Cow::Owned(result)
 }
 
+/// Split a single whitespace-separated token of the European date form
+/// `DAY.MONTH.` (year omitted) or `DAY.MONTH.YEAR`, returning the day, the
+/// month and the year text. Other tokens return `None`, so time strings with
+/// dots (e.g. `5:15:30.25` or `10.5`) or ISO dates never match.
+fn european_date_token(token: &str) -> Option<(u8, u8, Option<&str>)> {
+    let mut parts = token.split('.');
+
+    let day = parts.next()?;
+    let month = parts.next()?;
+    // Everything after `DAY.MONTH` (possibly empty, i.e. a trailing dot).
+    let rest = parts.next()?;
+    if parts.next().is_some()
+        || day.is_empty()
+        || day.len() > 2
+        || !day.chars().all(|c| c.is_ascii_digit())
+        || month.is_empty()
+        || month.len() > 2
+        || !month.chars().all(|c| c.is_ascii_digit())
+    {
+        return None;
+    }
+
+    let year = if rest.is_empty() {
+        None
+    } else {
+        rest.chars().all(|c| c.is_ascii_digit()).then_some(rest)
+    };
+
+    Some((day.parse().ok()?, month.parse().ok()?, year))
+}
+
+/// One entry of `rewrite_european_date`'s replacement table: `None` removes
+/// the token (a consumed separate-year), `Some((year, [day, month]))`
+/// rewrites it as ISO `YYYY-MM-DD`.
+type TokenReplacement = (usize, Option<(String, [u8; 2])>);
+
+/// Rewrite European date form to ISO `YYYY-MM-DD` so the general parser
+/// can handle it.
+///
+/// `date` accepts `DAY.MONTH[.YEAR]` dates (e.g. `13.09.1999`). When the
+/// year is omitted (`05.12.`) the current year is used. A year may also
+/// follow as a separate token of three or more digits (`09.11. 2007`);
+/// numbers of one or two digits after the date are times of day instead
+/// (`09.11. 3` is 03:00). Tokens that do not look like a European date are
+/// left untouched, so times (`5:15:30.25`), timezone suffixes and relative
+/// items still parse.
+fn rewrite_european_date(input: &str, now: &Zoned) -> String {
+    // European dates always contain a dot; skip tokenizing other inputs.
+    if !input.contains('.') {
+        return input.to_string();
+    }
+    let tokens: Vec<&str> = input.split_whitespace().collect();
+    let mut changed = false;
+    let mut replacements: Vec<TokenReplacement> = Vec::new();
+
+    for (index, token) in tokens.iter().enumerate() {
+        let Some((day, month, inline_year)) = european_date_token(token) else {
+            continue;
+        };
+
+        // A separate year, if any, is the first following token made up of
+        // three or more digits (two-digit numbers are times, e.g. `1.2. 3`).
+        // It only applies when the date token itself carries no year.
+        let year_index = inline_year
+            .is_none()
+            .then(|| {
+                tokens[index + 1..]
+                    .iter()
+                    .position(|t| t.chars().all(|c| c.is_ascii_digit()) && t.len() >= 3)
+                    .map(|offset| index + 1 + offset)
+            })
+            .flatten();
+        let year = year_index
+            .map(|i| tokens[i])
+            .or(inline_year)
+            .map_or_else(|| now.year().to_string(), str::to_owned);
+
+        replacements.push((index, Some((year, [day, month]))));
+        if let Some(year_index) = year_index {
+            replacements.push((year_index, None));
+        }
+        changed = true;
+        break;
+    }
+
+    if !changed {
+        return input.to_string();
+    }
+
+    tokens
+        .iter()
+        .enumerate()
+        .map(
+            |(index, token)| match replacements.iter().find(|(i, _)| *i == index) {
+                Some((_, Some((year, [day, month])))) => format!("{year}-{month:02}-{day:02}"),
+                Some((_, None)) => String::new(),
+                None => (*token).to_string(),
+            },
+        )
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Parse military timezone with optional hour offset.
 /// Pattern: single letter (a-z except j) optionally followed by 1-2 digits.
 /// Returns Some(total_hours_in_utc) or None if pattern doesn't match.
@@ -367,7 +471,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let set_to = match matches.get_one::<String>(OPT_SET) {
         None => None,
-        Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true), false) {
+        Some(input) => match parse_date(input, &now, DebugOptions::new(debug_mode, true)) {
             Ok(ParsedDateTime::InRange(date)) => Some(date),
             Ok(ParsedDateTime::Extended(_)) | Err(_) => {
                 return Err(USimpleError::new(
@@ -390,7 +494,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         return set_system_datetime(convert_for_set(date, settings.utc));
     }
 
-    let allow_extended = matches!(settings.format, Format::Default);
     let output_time_zone = now.time_zone().clone();
 
     // Iterate over all dates - whether it's a single date or a file.
@@ -404,7 +507,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     input,
                     &now,
                     DebugOptions::new(settings.debug, warn_midnight),
-                    allow_extended,
                 )
             };
 
@@ -520,7 +622,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             std::io::stdin(),
             &now,
             DebugOptions::new(settings.debug, true),
-            allow_extended,
         ),
         DateSource::File(ref path) => {
             if path.is_dir() {
@@ -531,12 +632,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
             let file =
                 File::open(path).map_err_context(|| path.as_os_str().maybe_quote().to_string())?;
-            parse_dates_from_reader(
-                file,
-                &now,
-                DebugOptions::new(settings.debug, true),
-                allow_extended,
-            )
+            parse_dates_from_reader(file, &now, DebugOptions::new(settings.debug, true))
         }
         DateSource::FileMtime(ref path) => {
             let metadata = std::fs::metadata(path)
@@ -843,7 +939,10 @@ fn format_extended_default(
         surrogate.offset().seconds(),
     )
     .map_err(str::to_string)?;
-    let format_string = substitute_extended_year(format_string, output.year)?;
+    // Formats without a year specifier (e.g. "%H") need no substitution; the
+    // surrogate renders the same fields the real date would.
+    let format_string = substitute_extended_year(format_string, output.year)
+        .unwrap_or_else(|| format_string.to_string());
 
     format_date_with_locale_aware_months(&surrogate, &format_string, config, false)
 }
@@ -854,7 +953,7 @@ fn surrogate_year(year: u32) -> i16 {
     (BASE + (i64::from(year) - BASE).rem_euclid(400)) as i16
 }
 
-fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, String> {
+fn substitute_extended_year(format_string: &str, year: u32) -> Option<String> {
     let mut output = String::with_capacity(format_string.len() + 8);
     let mut chars = format_string.chars().peekable();
     let year = year.to_string();
@@ -872,6 +971,12 @@ fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, St
                 output.push_str(&year);
                 replaced = true;
             }
+            Some('F') => {
+                // `%F` is `%Y-%m-%d`; only the year needs substituting.
+                output.push_str(&year);
+                output.push_str("-%m-%d");
+                replaced = true;
+            }
             Some(specifier) => {
                 output.push('%');
                 output.push(specifier);
@@ -880,9 +985,7 @@ fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, St
         }
     }
 
-    replaced
-        .then_some(output)
-        .ok_or_else(|| "default date format does not contain %Y".to_string())
+    replaced.then_some(output)
 }
 
 fn format_date_with_locale_aware_months(
@@ -1081,7 +1184,6 @@ fn parse_dates_from_reader<R: Read + 'static>(
     reader: R,
     now: &Zoned,
     dbg_opts: DebugOptions,
-    allow_extended: bool,
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
@@ -1089,7 +1191,7 @@ fn parse_dates_from_reader<R: Read + 'static>(
     Box::new(
         lines
             .map_while(Result::ok)
-            .map(move |s| parse_date(s, now, dbg_opts, allow_extended)),
+            .map(move |s| parse_date(s, now, dbg_opts)),
     )
 }
 
@@ -1098,16 +1200,15 @@ fn parse_date<S: AsRef<str>>(
     s: S,
     now: &Zoned,
     dbg_opts: DebugOptions,
-    allow_extended: bool,
 ) -> Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)> {
-    let input_str = s.as_ref();
+    let input_str = rewrite_european_date(s.as_ref(), now);
 
     if dbg_opts.debug {
         let _ = writeln!(stderr(), "date: input string: {input_str}");
     }
 
     // First, try to parse any timezone abbreviations
-    if let Some(zoned) = try_parse_with_abbreviation(input_str, now) {
+    if let Some(zoned) = try_parse_with_abbreviation(&input_str, now) {
         if dbg_opts.debug {
             let mut err = stderr().lock();
             let _ = writeln!(
@@ -1126,7 +1227,7 @@ fn parse_date<S: AsRef<str>>(
         return Ok(ParsedDateTime::InRange(zoned));
     }
 
-    match parse_datetime::parse_datetime_at_date(now.clone(), input_str) {
+    match parse_datetime::parse_datetime_at_date(now.clone(), &input_str) {
         // Convert to system timezone for display
         // (parse_datetime returns a value in the input's timezone)
         Ok(ParsedDateTime::InRange(date)) => {
@@ -1164,12 +1265,8 @@ fn parse_date<S: AsRef<str>>(
             }
             Ok(ParsedDateTime::InRange(result))
         }
-        Ok(ParsedDateTime::Extended(date)) if allow_extended => Ok(ParsedDateTime::Extended(date)),
-        Ok(ParsedDateTime::Extended(_)) => Err((
-            input_str.into(),
-            parse_datetime::ParseDateTimeError::InvalidInput,
-        )),
-        Err(e) => Err((input_str.into(), e)),
+        Ok(ParsedDateTime::Extended(date)) => Ok(ParsedDateTime::Extended(date)),
+        Err(e) => Err((input_str, e)),
     }
 }
 
@@ -1329,14 +1426,9 @@ mod tests {
     #[test]
     fn test_abbreviation_resolves_relative_date_against_now() {
         let now = "2025-03-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
-        let result = parse_date(
-            "yesterday 10:00 GMT",
-            &now,
-            DebugOptions::new(false, false),
-            false,
-        )
-        .unwrap()
-        .expect_in_range();
+        let result = parse_date("yesterday 10:00 GMT", &now, DebugOptions::new(false, false))
+            .unwrap()
+            .expect_in_range();
         assert_eq!(result.date(), jiff::civil::date(2025, 3, 14));
     }
 
@@ -1348,7 +1440,6 @@ mod tests {
             "Sat 20 Mar 2021 14:53:01 AWST",
             &now,
             DebugOptions::new(false, false),
-            false,
         )
         .unwrap()
         .expect_in_range();
@@ -1388,5 +1479,111 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    #[test]
+    fn test_rewrite_european_date() {
+        // `now` is pinned years away from the real clock: the year filled into
+        // year less dates comes from this `now`, never from the calendar.
+        let now = "2033-06-15T12:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let rewrite = |input: &str| rewrite_european_date(input, &now);
+
+        // Every day/month/year combination, with and without zero padding,
+        // normalizes to the ISO form.
+        for &(day, month, year) in &[
+            (1, 1, 1999),
+            (9, 2, 2027),
+            (31, 12, 2400),
+            (5, 9, 8888),
+            (30, 6, 9999),
+        ] {
+            let iso = format!("{year}-{month:02}-{day:02}");
+            assert_eq!(rewrite(&format!("{day}.{month}.{year}")), iso);
+            assert_eq!(rewrite(&format!("{day:02}.{month:02}.{year}")), iso);
+        }
+
+        // A year less date is filled with the year of `now`.
+        for &(day, month) in &[(5, 12), (3, 7), (1, 1)] {
+            let iso = format!("{}-{month:02}-{day:02}", now.year());
+            assert_eq!(rewrite(&format!("{day}.{month}.")), iso);
+        }
+
+        // A date keeps the whitespace structure of surrounding tokens: a time
+        // with fractional seconds is not a date even when the date comes last.
+        assert_eq!(
+            rewrite("29.2. 8:15:30.25"),
+            format!("{}-02-29 8:15:30.25", now.year())
+        );
+        assert_eq!(
+            rewrite("2:15:30.25 28.8."),
+            format!("2:15:30.25 {}-08-28", now.year())
+        );
+
+        // A following three-or-more digit token is a separate year; a shorter
+        // one stays where it is the way a time of day would.
+        assert_eq!(rewrite("11.6. 4312"), "4312-06-11");
+        assert_eq!(
+            rewrite("11.6. 2035+1"),
+            format!("{}-06-11 2035+1", now.year())
+        );
+        assert_eq!(rewrite("11.6. 23"), format!("{}-06-11 23", now.year()));
+        assert_eq!(rewrite("11.6. 23.5"), format!("{}-06-11 23.5", now.year()));
+
+        // Inline year variants: one or two digits are passed through untouched,
+        // longer years are kept whole; a following token (e.g. a timezone) is
+        // not consumed as part of the date.
+        assert_eq!(rewrite("11.6.99"), "99-06-11");
+        assert_eq!(rewrite("11.6.12000"), "12000-06-11");
+        assert_eq!(rewrite("11.6.1998 UTC"), "1998-06-11 UTC");
+
+        // A non-digit suffix after DAY.MONTH still counts as a year less date;
+        // the whole token is rewritten, so the suffix is dropped with it.
+        assert_eq!(rewrite("11.6.FOO"), format!("{}-06-11", now.year()));
+        assert_eq!(rewrite("11.6.true"), format!("{}-06-11", now.year()));
+        for unchanged in [
+            "2027-11-30",
+            "8:15:30.25",
+            "11.6",
+            "11.6.5.5",
+            "3.14",
+            "11.",
+            "2027.11.30",
+            "next monday",
+        ] {
+            assert_eq!(rewrite(unchanged), unchanged);
+        }
+    }
+
+    #[test]
+    fn test_parse_european_date() {
+        let now = "2033-06-15T20:00:00+00:00[UTC]".parse::<Zoned>().unwrap();
+        let parse = |input: &str| parse_date(input, &now, DebugOptions::new(false, false)).unwrap();
+
+        // With an inline year, day/month/year parse from the dotted form.
+        for &(day, month, year) in &[(31, 12, 1985), (1, 3, 2064), (9, 11, 2004)] {
+            let d = parse(&format!("{day}.{month}.{year}")).expect_in_range();
+            assert_eq!((d.year(), d.month(), d.day()), (year, month, day));
+        }
+
+        // Without a year, the year of `now` is used.
+        for &(day, month) in &[(28, 7), (14, 2)] {
+            let d = parse(&format!("{day}.{month}.")).expect_in_range();
+            assert_eq!((d.year(), d.month(), d.day()), (now.year(), month, day));
+        }
+
+        // A time before or after the date, including fractional seconds, parses.
+        let d = parse(&format!("{}. 9:15:30.25", "6.4")).expect_in_range();
+        assert_eq!(
+            (d.month(), d.day(), d.hour(), d.minute(), d.second()),
+            (4, 6, 9, 15, 30)
+        );
+        let d = parse(&format!("9:15:30.25 {}.", "6.4")).expect_in_range();
+        assert_eq!((d.month(), d.day(), d.hour()), (4, 6, 9));
+
+        // A large inline year lands in the extended variant.
+        let ParsedDateTime::Extended(extended) = parse("9.11.888888") else {
+            panic!("expected extended datetime");
+        };
+        assert_eq!(extended.year, 888_888);
     }
 }
