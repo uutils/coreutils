@@ -330,7 +330,10 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
         .map(str::trim)
         .and_then(|s| s.parse().ok())
         .ok_or_else(|| {
-            ParseError::at_value(ParseErrorKind::InvalidInteger(fd.quote().to_string()), fd)
+            ParseError::at_value(
+                ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
+                fd,
+            )
         })
         .map(|i| unsafe { libc::isatty(i) == 1 })
 }
