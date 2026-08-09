@@ -30,7 +30,7 @@ expensive_tests = []
 # checksum utilities instead of the pure-Rust crates. Provides large speedups
 # on CPUs without SHA-NI.
 #
-# Enable with: `cargo build --release --features unix,openssl`
+# Enable with: `cargo build --release --features openssl`
 #
 # By default OpenSSL is built from source and statically linked (via the
 # `vendored` feature of the `openssl` crate), mirroring how `expr` links
@@ -39,8 +39,7 @@ expensive_tests = []
 #
 # The `?/openssl` entries propagate the choice into each standalone checksum
 # crate only when that crate is itself enabled, so disabling this feature
-# genuinely turns OpenSSL off everywhere. On Windows the feature is a no-op
-# and the pure-Rust implementations are used regardless.
+# genuinely turns OpenSSL off everywhere.
 openssl = [
   "cksum?/openssl",
   "md5sum?/openssl",
