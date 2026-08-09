@@ -12,7 +12,7 @@ use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{fs::File, io::copy, path::Path};
+use std::{fs::File, path::Path};
 #[cfg(unix)]
 use uucore::error::UError;
 use uucore::error::UResult;
@@ -420,21 +420,20 @@ enum StdinData {
 /// Falls back to reading directly into memory if temp file creation fails.
 fn buffer_stdin() -> std::io::Result<StdinData> {
     // Try to create a temp file (respects TMPDIR)
-    if let Ok(mut tmp) = tempfile::tempfile() {
-        // Temp file created - copy stdin to it, then read back
-        copy(&mut stdin(), &mut tmp)?;
-        // SAFETY: `tmp` is an unlinked file owned by this process, so no other
-        // process can open and truncate it. The mapping therefore stays valid
-        // for its whole lifetime and cannot trigger SIGBUS (unlike mapping a
-        // caller-provided file; see #9748).
-        let mmap = unsafe { Mmap::map(&tmp)? };
-        Ok(StdinData::Mmap(mmap))
-    } else {
+    let Ok(mut tmp) = tempfile::tempfile() else {
         // Fall back to reading directly into memory (e.g., bad TMPDIR)
         let mut buf = Vec::new();
         stdin().read_to_end(&mut buf)?;
-        Ok(StdinData::Vec(buf))
-    }
+        return Ok(StdinData::Vec(buf));
+    };
+    // Temp file created - copy stdin to it, then read back
+    uucore::buf_copy::copy_fast(&mut stdin(), &mut tmp)?;
+    // SAFETY: `tmp` is an unlinked file owned by this process, so no other
+    // process can open and truncate it. The mapping therefore stays valid
+    // for its whole lifetime and cannot trigger SIGBUS (unlike mapping a
+    // caller-provided file; see #9748).
+    let mmap = unsafe { Mmap::map(&tmp)? };
+    Ok(StdinData::Mmap(mmap))
 }
 
 #[cfg(test)]
