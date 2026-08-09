@@ -48,8 +48,6 @@ enum ChmodError {
 
 impl UError for ChmodError {}
 
-mod diagnostics;
-
 mod options {
     pub const HELP: &str = "help";
     pub const CHANGES: &str = "changes";
@@ -323,7 +321,12 @@ impl Chmoder {
                             return Err(ExitCode::new(1));
                         }
                         if let Some(args) = &self.args
-                            && diagnostics::render(args, &cmode_unwrapped, clause_start, &error)
+                            && error.render(
+                                args,
+                                &cmode_unwrapped,
+                                clause_start,
+                                &error.to_string(),
+                            )
                         {
                             // The diagnostic is already on stderr; exit quietly.
                             return Err(ExitCode::new(1));
