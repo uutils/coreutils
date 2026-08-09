@@ -855,8 +855,7 @@ jobs:
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
           - { os: macos-latest, features: feat_os_unix, dynamic: false }
-          # Windows is omitted: the `openssl` dep is `cfg(unix)`, so the
-          # feature is a no-op there and there's nothing to exercise.
+          # todo: check Windows (MinGW's system openssl)
     steps:
     - uses: actions/checkout@v7
       with:

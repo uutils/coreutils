@@ -466,9 +466,7 @@ macro_rules! impl_digest_shake {
 // When the `openssl` feature is enabled, md5/sha1/sha2-family digests are
 // backed by OpenSSL's libcrypto, which provides hand-tuned assembly
 // implementations (AVX2, SSSE3, etc.) that are substantially faster than the
-// pure-Rust crates on CPUs without SHA-NI. The OpenSSL backend is only
-// compiled in on `cfg(unix)`; Windows targets always use the pure-Rust path
-// since libcrypto headers aren't generally available there.
+// pure-Rust crates on CPUs without SHA-NI.
 #[cfg(not(feature = "openssl"))]
 pub struct Md5(md5::Md5);
 #[cfg(not(feature = "openssl"))]
