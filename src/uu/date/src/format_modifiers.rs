@@ -85,17 +85,17 @@ fn field_width_too_large(width: usize, specifier: &str) -> FormatError {
 }
 
 /// A parsed `%`-format specifier: `%[flags][width][:colons]<letter>`.
-struct ParsedSpec<'a> {
+pub(crate) struct ParsedSpec<'a> {
     /// Flag characters from `[_0^#+-]`.
-    flags: &'a str,
+    pub(crate) flags: &'a str,
     /// Explicit width, if present. `None` means no width was specified.
     /// A value that overflows `usize` is represented as `Some(usize::MAX)` so
     /// the downstream allocation check surfaces it as `FieldWidthTooLarge`.
-    width: Option<usize>,
+    pub(crate) width: Option<usize>,
     /// The specifier itself, including any leading colons (e.g. `Y`, `:z`, `::z`).
-    spec: &'a str,
+    pub(crate) spec: &'a str,
     /// Total byte length of the parsed sequence including the leading `%`.
-    len: usize,
+    pub(crate) len: usize,
 }
 
 /// Try to parse a format spec at the start of `s`.
@@ -103,7 +103,9 @@ struct ParsedSpec<'a> {
 /// Implements the grammar `%[_0^#+-]*[0-9]*:{0,3}[a-zA-Z]` anchored at the
 /// beginning of `s`. Returns `None` if `s` does not start with `%` or no
 /// valid specifier follows.
-fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
+///
+/// Shared with the extended-year path so both interpret flags/width identically.
+pub(crate) fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     let bytes = s.as_bytes();
     bytes.first().filter(|b| *b == &b'%')?;
 
@@ -351,7 +353,10 @@ fn strip_default_padding(value: &str) -> String {
 /// padding character (space for text, zero for numeric).
 /// Flags are processed in order so that when conflicting flags appear,
 /// the last one takes precedence (e.g., `_+` means `+` wins for padding).
-fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
+///
+/// Shared with the extended-year path so real extended years get the same
+/// modifier semantics as in-range dates.
+pub(crate) fn apply_modifiers(value: &str, parsed: &ParsedSpec<'_>) -> Result<String, FormatError> {
     let flags = parsed.flags;
     let width = parsed.width;
     let specifier = parsed.spec;
