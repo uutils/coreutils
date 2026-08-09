@@ -41,7 +41,7 @@ use std::path::Path;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
 
-#[cfg(feature = "feat_systemd_logind")]
+#[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
 use crate::features::systemd_logind;
 
 pub use self::ut::*;
@@ -333,13 +333,13 @@ impl Utmpx {
     /// Only one instance of [`UtmpxIter`] may be active at a time. This
     /// function will block as long as one is still active. Beware!
     pub fn iter_all_records() -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
         {
             // Use systemd-logind instead of traditional utmp when feature is enabled
             UtmpxIter::new_systemd()
         }
 
-        #[cfg(not(feature = "feat_systemd_logind"))]
+        #[cfg(not(all(feature = "feat_systemd_logind", target_os = "linux")))]
         {
             let iter = UtmpxIter::new();
             unsafe {
@@ -365,7 +365,7 @@ impl Utmpx {
     ///
     /// The same caveats as for [`Utmpx::iter_all_records`] apply.
     pub fn iter_all_records_from<P: AsRef<Path>>(path: P) -> UtmpxIter {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
         {
             // Use systemd-logind for default utmp file when feature is enabled
             if path.as_ref() == Path::new(DEFAULT_FILE) {
@@ -409,7 +409,7 @@ pub struct UtmpxIter {
     /// Ensure UtmpxIter is !Send. Technically redundant because MutexGuard
     /// is also !Send.
     phantom: PhantomData<std::rc::Rc<()>>,
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
     systemd_iter: Option<systemd_logind::SystemdUtmpxIter>,
 }
 
@@ -422,12 +422,12 @@ impl UtmpxIter {
         Self {
             guard,
             phantom: PhantomData,
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             systemd_iter: None,
         }
     }
 
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
     fn new_systemd() -> Self {
         // PoisonErrors can safely be ignored
         let guard = LOCK
@@ -452,7 +452,7 @@ impl UtmpxIter {
 /// Wrapper type that can hold either traditional utmpx records or systemd records
 pub enum UtmpxRecord {
     Traditional(Box<Utmpx>),
-    #[cfg(feature = "feat_systemd_logind")]
+    #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
     Systemd(systemd_logind::SystemdUtmpxCompat),
 }
 
@@ -461,7 +461,7 @@ impl UtmpxRecord {
     pub fn record_type(&self) -> i16 {
         match self {
             Self::Traditional(utmpx) => utmpx.record_type(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.record_type(),
         }
     }
@@ -470,7 +470,7 @@ impl UtmpxRecord {
     pub fn pid(&self) -> i32 {
         match self {
             Self::Traditional(utmpx) => utmpx.pid(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.pid(),
         }
     }
@@ -479,7 +479,7 @@ impl UtmpxRecord {
     pub fn terminal_suffix(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.terminal_suffix(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.terminal_suffix(),
         }
     }
@@ -488,7 +488,7 @@ impl UtmpxRecord {
     pub fn user(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.user(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.user(),
         }
     }
@@ -497,7 +497,7 @@ impl UtmpxRecord {
     pub fn host(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.host(),
         }
     }
@@ -506,7 +506,7 @@ impl UtmpxRecord {
     pub fn tty_device(&self) -> String {
         match self {
             Self::Traditional(utmpx) => utmpx.tty_device(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.tty_device(),
         }
     }
@@ -515,7 +515,7 @@ impl UtmpxRecord {
     pub fn login_time(&self) -> time::OffsetDateTime {
         match self {
             Self::Traditional(utmpx) => utmpx.login_time(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.login_time(),
         }
     }
@@ -526,7 +526,7 @@ impl UtmpxRecord {
     pub fn exit_status(&self) -> (i16, i16) {
         match self {
             Self::Traditional(utmpx) => utmpx.exit_status(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.exit_status(),
         }
     }
@@ -535,7 +535,7 @@ impl UtmpxRecord {
     pub fn is_user_process(&self) -> bool {
         match self {
             Self::Traditional(utmpx) => utmpx.is_user_process(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => systemd.is_user_process(),
         }
     }
@@ -544,7 +544,7 @@ impl UtmpxRecord {
     pub fn canon_host(&self) -> IOResult<String> {
         match self {
             Self::Traditional(utmpx) => utmpx.canon_host(),
-            #[cfg(feature = "feat_systemd_logind")]
+            #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
             Self::Systemd(systemd) => Ok(systemd.canon_host()),
         }
     }
@@ -553,7 +553,7 @@ impl UtmpxRecord {
 impl Iterator for UtmpxIter {
     type Item = UtmpxRecord;
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "feat_systemd_logind")]
+        #[cfg(all(feature = "feat_systemd_logind", target_os = "linux"))]
         {
             if let Some(ref mut systemd_iter) = self.systemd_iter {
                 // We have a systemd iterator - use it exclusively (never fall back to traditional utmp)
