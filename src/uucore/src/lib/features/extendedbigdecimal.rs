@@ -160,24 +160,22 @@ impl Add for ExtendedBigDecimal {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
-        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => Self::BigDecimal(m.add(n)),
-            (Self::BigDecimal(_), Self::MinusInfinity) => Self::MinusInfinity,
-            (Self::BigDecimal(_), Self::Infinity) => Self::Infinity,
+            (Self::BigDecimal(_), Self::MinusInfinity)
+            | (Self::MinusInfinity, Self::BigDecimal(_))
+            | (Self::MinusInfinity, Self::MinusInfinity)
+            | (Self::MinusInfinity, Self::MinusZero) => Self::MinusInfinity,
+            (Self::BigDecimal(_), Self::Infinity)
+            | (Self::Infinity, Self::BigDecimal(_))
+            | (Self::Infinity, Self::Infinity)
+            | (Self::Infinity, Self::MinusZero) => Self::Infinity,
             (Self::BigDecimal(m), Self::MinusZero) => Self::BigDecimal(m),
-            (Self::Infinity, Self::BigDecimal(_)) => Self::Infinity,
-            (Self::Infinity, Self::Infinity) => Self::Infinity,
-            (Self::Infinity, Self::MinusZero) => Self::Infinity,
-            (Self::Infinity, Self::MinusInfinity) => Self::Nan,
-            (Self::MinusInfinity, Self::BigDecimal(_)) => Self::MinusInfinity,
-            (Self::MinusInfinity, Self::MinusInfinity) => Self::MinusInfinity,
-            (Self::MinusInfinity, Self::MinusZero) => Self::MinusInfinity,
-            (Self::MinusInfinity, Self::Infinity) => Self::Nan,
-            (Self::Nan, _) => Self::Nan,
-            (_, Self::Nan) => Self::Nan,
-            (Self::MinusNan, _) => Self::MinusNan,
-            (_, Self::MinusNan) => Self::MinusNan,
+            (Self::Infinity, Self::MinusInfinity)
+            | (Self::MinusInfinity, Self::Infinity)
+            | (Self::Nan, _)
+            | (_, Self::Nan) => Self::Nan,
+            (Self::MinusNan, _) | (_, Self::MinusNan) => Self::MinusNan,
             (Self::MinusZero, other) => other,
         }
     }
@@ -185,56 +183,51 @@ impl Add for ExtendedBigDecimal {
 
 impl PartialEq for ExtendedBigDecimal {
     fn eq(&self, other: &Self) -> bool {
-        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.eq(n),
-            (Self::BigDecimal(_), Self::MinusInfinity) => false,
-            (Self::BigDecimal(_), Self::Infinity) => false,
-            (Self::BigDecimal(_), Self::MinusZero) => false,
-            (Self::Infinity, Self::BigDecimal(_)) => false,
-            (Self::Infinity, Self::Infinity) => true,
-            (Self::Infinity, Self::MinusZero) => false,
-            (Self::Infinity, Self::MinusInfinity) => false,
-            (Self::MinusInfinity, Self::BigDecimal(_)) => false,
-            (Self::MinusInfinity, Self::Infinity) => false,
-            (Self::MinusInfinity, Self::MinusZero) => false,
-            (Self::MinusInfinity, Self::MinusInfinity) => true,
-            (Self::MinusZero, Self::BigDecimal(_)) => false,
-            (Self::MinusZero, Self::Infinity) => false,
-            (Self::MinusZero, Self::MinusZero) => true,
-            (Self::MinusZero, Self::MinusInfinity) => false,
-            (Self::Nan, _) => false,
-            (Self::MinusNan, _) => false,
-            (_, Self::Nan) => false,
-            (_, Self::MinusNan) => false,
+            (Self::BigDecimal(_), Self::MinusInfinity)
+            | (Self::BigDecimal(_), Self::Infinity)
+            | (Self::BigDecimal(_), Self::MinusZero)
+            | (Self::Infinity, Self::BigDecimal(_))
+            | (Self::Infinity, Self::MinusZero)
+            | (Self::Infinity, Self::MinusInfinity)
+            | (Self::MinusInfinity, Self::BigDecimal(_))
+            | (Self::MinusInfinity, Self::Infinity)
+            | (Self::MinusInfinity, Self::MinusZero)
+            | (Self::MinusZero, Self::BigDecimal(_))
+            | (Self::MinusZero, Self::Infinity)
+            | (Self::MinusZero, Self::MinusInfinity)
+            | (Self::Nan, _)
+            | (Self::MinusNan, _)
+            | (_, Self::Nan)
+            | (_, Self::MinusNan) => false,
+            (Self::Infinity, Self::Infinity)
+            | (Self::MinusInfinity, Self::MinusInfinity)
+            | (Self::MinusZero, Self::MinusZero) => true,
         }
     }
 }
 
 impl PartialOrd for ExtendedBigDecimal {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        #[allow(clippy::match_same_arms)] // FIXME
         match (self, other) {
             (Self::BigDecimal(m), Self::BigDecimal(n)) => m.partial_cmp(n),
-            (Self::BigDecimal(_), Self::MinusInfinity) => Some(Ordering::Greater),
-            (Self::BigDecimal(_), Self::Infinity) => Some(Ordering::Less),
+            (Self::BigDecimal(_), Self::MinusInfinity)
+            | (Self::Infinity, Self::BigDecimal(_))
+            | (Self::Infinity, Self::MinusZero)
+            | (Self::Infinity, Self::MinusInfinity)
+            | (Self::MinusZero, Self::MinusInfinity) => Some(Ordering::Greater),
+            (Self::BigDecimal(_), Self::Infinity)
+            | (Self::MinusInfinity, Self::BigDecimal(_))
+            | (Self::MinusInfinity, Self::Infinity)
+            | (Self::MinusInfinity, Self::MinusZero)
+            | (Self::MinusZero, Self::Infinity) => Some(Ordering::Less),
             (Self::BigDecimal(m), Self::MinusZero) => m.partial_cmp(&BigDecimal::zero()),
-            (Self::Infinity, Self::BigDecimal(_)) => Some(Ordering::Greater),
-            (Self::Infinity, Self::Infinity) => Some(Ordering::Equal),
-            (Self::Infinity, Self::MinusZero) => Some(Ordering::Greater),
-            (Self::Infinity, Self::MinusInfinity) => Some(Ordering::Greater),
-            (Self::MinusInfinity, Self::BigDecimal(_)) => Some(Ordering::Less),
-            (Self::MinusInfinity, Self::Infinity) => Some(Ordering::Less),
-            (Self::MinusInfinity, Self::MinusZero) => Some(Ordering::Less),
-            (Self::MinusInfinity, Self::MinusInfinity) => Some(Ordering::Equal),
+            (Self::Infinity, Self::Infinity)
+            | (Self::MinusZero, Self::MinusZero)
+            | (Self::MinusInfinity, Self::MinusInfinity) => Some(Ordering::Equal),
             (Self::MinusZero, Self::BigDecimal(n)) => BigDecimal::zero().partial_cmp(n),
-            (Self::MinusZero, Self::Infinity) => Some(Ordering::Less),
-            (Self::MinusZero, Self::MinusZero) => Some(Ordering::Equal),
-            (Self::MinusZero, Self::MinusInfinity) => Some(Ordering::Greater),
-            (Self::Nan, _) => None,
-            (Self::MinusNan, _) => None,
-            (_, Self::Nan) => None,
-            (_, Self::MinusNan) => None,
+            (Self::Nan, _) | (Self::MinusNan, _) | (_, Self::Nan) | (_, Self::MinusNan) => None,
         }
     }
 }
