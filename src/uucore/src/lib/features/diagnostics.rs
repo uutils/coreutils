@@ -19,7 +19,7 @@
 //! message it always did.
 //!
 //! ```text
-//! Error: invalid integer 'zap'
+//! test: invalid integer 'zap'
 //!    ╭─[ test:1:7 ]
 //!    │
 //!  1 │ 7 -eq zap
@@ -292,7 +292,7 @@ impl Snapshot {
     }
 
     fn report(&self, span: Range<usize>, message: &str, label: &str, help: Option<&str>) -> bool {
-        let id = crate::util_name().to_owned();
+        let id = crate::util_name();
         let color = env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal();
         let config = Config::default()
             // ariadne counts characters unless told otherwise, which would drift
@@ -301,11 +301,10 @@ impl Snapshot {
             .with_color(color)
             .with_char_set(CharSet::Unicode);
 
-        let mut report = Report::build(ReportKind::Error, (id.clone(), span.clone()))
+        let mut report = Report::build(ReportKind::Error, (id, span.clone()))
             .with_config(config)
-            .with_message(message)
             .with_label(
-                Label::new((id.clone(), span))
+                Label::new((id, span))
                     .with_message(label)
                     .with_color(Color::Red),
             );
@@ -314,10 +313,22 @@ impl Snapshot {
             report = report.with_help(help);
         }
 
-        report
+        let mut rendered = Vec::new();
+        if report
             .finish()
-            .eprint((id, Source::from(self.text.as_str())))
-            .is_ok()
+            .write((id, Source::from(self.text.as_str())), &mut rendered)
+            .is_err()
+        {
+            return false;
+        }
+
+        // ariadne heads every report with its own line — a hardcoded, untranslated
+        // "Error:". Drop it and write the utility name instead, so the first line
+        // reads exactly like the plain one-line form.
+        let rendered = String::from_utf8_lossy(&rendered);
+        let body = rendered.split_once('\n').map_or("", |(_, rest)| rest);
+        eprint!("{id}: {message}\n{body}");
+        true
     }
 }
 

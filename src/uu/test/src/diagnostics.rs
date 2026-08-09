@@ -32,14 +32,28 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
 
     let (label, help) = match &err.kind {
         ParseErrorKind::Expected(_) => ("test-diag-label-expected", None),
-        ParseErrorKind::ExtraArgument(_) => ("test-diag-label-extra-argument", None),
-        ParseErrorKind::MissingArgument(_) => ("test-diag-label-missing-argument", None),
+        ParseErrorKind::ExtraArgument(_) => (
+            "test-diag-label-extra-argument",
+            Some(translate!("test-diag-help-extra-argument")),
+        ),
+        ParseErrorKind::MissingArgument(_) => (
+            "test-diag-label-missing-argument",
+            Some(translate!("test-diag-help-missing-argument")),
+        ),
         ParseErrorKind::UnaryOperatorExpected(_) => {
             ("test-diag-label-unary-operator-expected", None)
         }
         ParseErrorKind::InvalidInteger(_) => (
             "test-diag-label-invalid-integer",
-            Some(translate!("test-diag-help-integer-op")),
+            Some(format!(
+                "{}\n{}",
+                translate!("test-diag-help-integer-op"),
+                translate!("test-diag-help-integer-op-mnemonics")
+            )),
+        ),
+        ParseErrorKind::InvalidFileDescriptor(_) => (
+            "test-diag-label-invalid-file-descriptor",
+            Some(translate!("test-diag-help-file-descriptor")),
         ),
         ParseErrorKind::UnknownOperator(_) => (
             "test-diag-label-unknown-operator",

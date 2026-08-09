@@ -170,5 +170,10 @@ test-diag-label-extra-argument = l'expression était déjà complète ici
 test-diag-label-unknown-operator = n'est pas un opérateur connu
 test-diag-label-invalid-integer = un entier était attendu ici
 test-diag-label-unary-operator-expected = nécessite une expression de chaque côté
+test-diag-label-invalid-file-descriptor = un descripteur de fichier était attendu ici
 test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt et -ge comparent des entiers ; utilisez =, {"!"}=, {"<"} ou {">"} pour comparer des chaînes
+test-diag-help-integer-op-mnemonics = -eq égal, -ne différent, -lt inférieur, -le inférieur ou égal, -gt supérieur, -ge supérieur ou égal
+test-diag-help-file-descriptor = -t prend un numéro de descripteur de fichier : 0 pour l'entrée standard, 1 la sortie standard, 2 la sortie d'erreur
+test-diag-help-missing-argument = une variable vide ou non définie ne produit aucun mot, laissant l'opérateur sans opérande ; mettez-la entre guillemets : "$var"
+test-diag-help-extra-argument = une variable non protégée qui produit plusieurs mots en est la cause habituelle ; mettez-la entre guillemets : "$var"
 test-diag-help-unknown-operator = lancez « { $name } --help » pour la liste des opérateurs pris en charge
