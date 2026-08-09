@@ -54,6 +54,19 @@ pub fn enabled() -> bool {
     std::io::stderr().is_terminal()
 }
 
+/// The arguments a diagnostic would point at, keeping them as they were typed.
+///
+/// `args` is the whole argument list, `argv[0]` included; the program name is
+/// dropped since it is never part of what a caret points at.
+///
+/// # Returns
+///
+/// `None` when diagnostics are off, so that the copy is only paid for when
+/// something is going to be rendered.
+pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
+    enabled().then(|| args.get(1..).unwrap_or_default().to_vec())
+}
+
 /// An argument list rendered as a single line, with the position of every
 /// argument inside it.
 pub struct Snapshot {

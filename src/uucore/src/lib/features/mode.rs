@@ -55,6 +55,43 @@ impl ModeError {
             ..self
         }
     }
+
+    /// Render this error against `args`, with a caret under the part of the
+    /// mode that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from.
+    /// * `mode` - The whole mode operand.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when the mode cannot be found among the arguments, in which case
+    /// the caller should fall back to the plain one-line message.
+    pub fn render(
+        &self,
+        args: &[std::ffi::OsString],
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let label = match self.kind {
+            ModeErrorKind::InvalidOperator => "mode-diag-label-invalid-operator",
+            ModeErrorKind::MissingOperator => "mode-diag-label-missing-operator",
+            ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
+        };
+
+        crate::diagnostics::Snapshot::new(args).render_inside(
+            mode,
+            clause_start + self.span.start..clause_start + self.span.end,
+            message,
+            &translate!(label),
+            Some(&translate!("mode-diag-help-syntax")),
+        )
+    }
 }
 
 impl Display for ModeError {

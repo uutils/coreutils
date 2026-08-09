@@ -177,7 +177,7 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc"]
+mode = ["diagnostics", "libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
 parser-num = ["extendedbigdecimal", "num-traits"]
