@@ -429,7 +429,13 @@ fn format_float_decimal(
             return format!("{bd:.0}.");
         }
     }
-    format!("{bd:.precision$}")
+
+    //precision overflows at 65535, prevent overflow with overflow check of 1000
+    //as the usual behavior is "%.xf", where if x is >= 1000, precision will be 0.
+    if precision < 1000 {
+        return format!("{bd:.precision$}");
+    }
+    format!("{bd:.0}")
 }
 
 /// Converts a `&BigDecimal` to a scientific-like `X.XX * 10^e`.
