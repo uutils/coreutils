@@ -399,6 +399,20 @@ impl CmdResult {
         std::str::from_utf8(&self.stderr).unwrap()
     }
 
+    /// Returns the program's standard error with the carriage returns a
+    /// pseudo-terminal inserts and any trailing padding on each line removed.
+    ///
+    /// Diagnostics rendered under [`UCommand::terminal_sim_stderr`] pad their
+    /// lines out to the width of the report, which makes them awkward to
+    /// compare verbatim; this gives back the block as it reads on screen.
+    pub fn stderr_as_displayed(&self) -> String {
+        self.stderr_str()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     /// Returns the program's standard error as a string slice, automatically handling invalid utf8
     pub fn stderr_str_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(&self.stderr)
