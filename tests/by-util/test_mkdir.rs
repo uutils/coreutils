@@ -1082,6 +1082,14 @@ fn test_mkdir_concurrent_creation() {
     }
 }
 
+#[test]
+fn test_mkdir_inside_inexistent_dir() {
+    new_ucmd!()
+        .arg("a/b")
+        .fails_with_code(1)
+        .stderr_is("mkdir: cannot create directory 'a/b': No such file or directory\n");
+}
+
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
 mod diagnostics {

@@ -372,6 +372,13 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
             Ok(())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(USimpleError::new(
+            1,
+            format!(
+                "cannot create directory '{}': {}",
+                path.display(),
+                uucore::error::strip_errno(&e)
+            ),
+        )),
     }
 }
