@@ -1082,6 +1082,7 @@ fn test_mkdir_concurrent_creation() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn test_mkdir_inside_inexistent_dir() {
     new_ucmd!()
