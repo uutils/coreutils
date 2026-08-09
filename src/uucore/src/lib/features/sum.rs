@@ -469,37 +469,37 @@ macro_rules! impl_digest_shake {
 // pure-Rust crates on CPUs without SHA-NI. The OpenSSL backend is only
 // compiled in on `cfg(unix)`; Windows targets always use the pure-Rust path
 // since libcrypto headers aren't generally available there.
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Md5(md5::Md5);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Sha1(sha1::Sha1);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Sha224(sha2::Sha224);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Sha256(sha2::Sha256);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Sha384(sha2::Sha384);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 pub struct Sha512(sha2::Sha512);
 
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Md5, 128);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha1, 160);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha224, 224);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha256, 256);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha384, 384);
-#[cfg(not(all(feature = "openssl", unix)))]
+#[cfg(not(feature = "openssl"))]
 impl_digest_common!(Sha512, 512);
 
 // When OpenSSL is built in FIPS mode (or otherwise refuses an algorithm —
 // e.g. MD5/SHA-1 in strict legacy-off builds), `Hasher::new` returns Err.
 // To avoid panicking at construction time, each type carries a PureRust
 // fallback variant built from the same crate the non-OpenSSL path uses.
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 macro_rules! impl_digest_openssl {
     ($algo_type:ident, $size:literal, $md:expr, $rust_type:ty) => {
         pub enum $algo_type {
@@ -555,32 +555,32 @@ macro_rules! impl_digest_openssl {
     };
 }
 
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(Md5, 128, openssl::hash::MessageDigest::md5(), md5::Md5);
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(Sha1, 160, openssl::hash::MessageDigest::sha1(), sha1::Sha1);
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(
     Sha224,
     224,
     openssl::hash::MessageDigest::sha224(),
     sha2::Sha224
 );
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(
     Sha256,
     256,
     openssl::hash::MessageDigest::sha256(),
     sha2::Sha256
 );
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(
     Sha384,
     384,
     openssl::hash::MessageDigest::sha384(),
     sha2::Sha384
 );
-#[cfg(all(feature = "openssl", unix))]
+#[cfg(feature = "openssl")]
 impl_digest_openssl!(
     Sha512,
     512,
