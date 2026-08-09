@@ -99,13 +99,6 @@ enum CatError {
 
 type CatResult<T> = Result<T, CatError>;
 
-#[cfg(any(unix, target_os = "wasi"))]
-impl From<rustix::io::Errno> for CatError {
-    fn from(value: rustix::io::Errno) -> Self {
-        Self::Io(value.into())
-    }
-}
-
 #[derive(PartialEq)]
 enum NumberingMode {
     None,
