@@ -410,16 +410,15 @@ where
         print!("\r");
     }
     if error_messages.is_empty() {
-        Ok(())
-    } else {
-        // each next line is expected to display "cat: …"
-        let line_joiner = "\ncat: ";
-
-        Err(uucore::error::USimpleError::new(
-            error_messages.len() as i32,
-            error_messages.join(line_joiner),
-        ))
+        return Ok(());
     }
+    // each next line is expected to display "cat: …"
+    let line_joiner = "\ncat: ";
+
+    Err(uucore::error::USimpleError::new(
+        error_messages.len() as i32,
+        error_messages.join(line_joiner),
+    ))
 }
 
 /// Classifies the `InputType` of file at `path` if possible
@@ -534,9 +533,9 @@ fn print_lines<R: FdReadable>(
         };
         let in_buf = &in_buf[..n];
         let mut pos = 0;
-        while pos < n {
+        while let Some(in_buf_pos) = in_buf.get(pos) {
             // skip empty line_number enumerating them if needed
-            if in_buf[pos] == b'\n' {
+            if in_buf_pos == &b'\n' {
                 write_new_line(&mut writer, options, state, handle.is_interactive)?;
                 state.at_line_start = true;
                 pos += 1;
@@ -556,15 +555,16 @@ fn print_lines<R: FdReadable>(
             // print to end of line or end of buffer
             let offset = write_end(&mut writer, &in_buf[pos..], options)?;
 
-            // end of buffer?
-            if offset + pos == in_buf.len() {
+            let Some(in_buf_pos_off) = in_buf.get(offset + pos) else {
+                // end of buffer
                 state.at_line_start = false;
                 break;
-            }
-            if in_buf[pos + offset] == b'\r' {
+            };
+
+            if in_buf_pos_off == &b'\r' {
                 state.skipped_carriage_return = true;
             } else {
-                assert_eq!(in_buf[pos + offset], b'\n');
+                assert_eq!(in_buf_pos_off, &b'\n');
                 // print suitable end of line
                 write_end_of_line(
                     &mut writer,
@@ -650,25 +650,23 @@ fn write_to_end<W: Write>(in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
 
 fn write_tab_to_end<W: Write>(mut in_buf: &[u8], writer: &mut W) -> io::Result<usize> {
     let mut count = 0;
-    loop {
-        if let Some(p) = in_buf
-            .iter()
-            .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
-        {
-            writer.write_all(&in_buf[..p])?;
-            if in_buf[p] == b'\t' {
-                writer.write_all(b"^I")?;
-                in_buf = &in_buf[p + 1..];
-                count += p + 1;
-            } else {
-                // b'\n' or b'\r'
-                return Ok(count + p);
-            }
+
+    while let Some(p) = in_buf
+        .iter()
+        .position(|c| *c == b'\n' || *c == b'\t' || *c == b'\r')
+    {
+        writer.write_all(&in_buf[..p])?;
+        if in_buf[p] == b'\t' {
+            writer.write_all(b"^I")?;
+            in_buf = &in_buf[p + 1..];
+            count += p + 1;
         } else {
-            writer.write_all(in_buf)?;
-            return Ok(in_buf.len() + count);
+            // b'\n' or b'\r'
+            return Ok(count + p);
         }
     }
+    writer.write_all(in_buf)?;
+    Ok(in_buf.len() + count)
 }
 
 fn write_nonprint_to_end<W: Write>(in_buf: &[u8], writer: &mut W, tab: &[u8]) -> io::Result<usize> {
