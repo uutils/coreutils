@@ -96,22 +96,24 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
     let stdout = rustix::stdio::stdout();
     // improve throughput
     let _ = rustix::pipe::fcntl_setpipe_size(stdout, MAX_ROOTLESS_PIPE_SIZE);
-    // GNU catches all strace injections for zero-copy syscalls except for 1st one (checking support of it)
     // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
     // but it is slower than mixing splice even it reduces syscalls...
     let bytes_len = bytes.len();
     if let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
         && let Ok((broker_read, broker_write)) = pipe::<true>()
+        // GNU catches all strace injections for splice expect for 1st one (checking support of it)
+        // do same things for tee too which is enough for actual usage
         && Ok(bytes_len) == tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)
-        && uucore::pipes::drain_pipe(&broker_read, &stdout, bytes_len)?.is_ok()
+        && let Ok(spliced_first) = splice(&broker_read, &stdout, bytes_len)
     {
-        // fallback from tee() is possible since we did not send anything to stdout yet
-        while let Ok(mut remain) = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE) {
-            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
+        let mut remain = bytes_len - spliced_first;
+        loop {
             while remain > 0 {
                 remain -= splice(&broker_read, &stdout, remain)?;
             }
+            remain = tee(&p_read, &broker_write, MAX_ROOTLESS_PIPE_SIZE)?;
+            debug_assert!(remain == bytes_len, "splice should cleanup pipe");
         }
     }
 
