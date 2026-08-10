@@ -1507,6 +1507,18 @@ fn test_emoji_formatting() {
         .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_omits_errno() {
+    let dev_full = std::fs::File::create("/dev/full").expect("failed to open /dev/full");
+
+    new_ucmd!()
+        .arg("\n")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_only("printf: write error: No space left on device\n");
+}
+
 #[test]
 fn test_large_width_format() {
     // Test that extremely large width specifications fail gracefully with an error
