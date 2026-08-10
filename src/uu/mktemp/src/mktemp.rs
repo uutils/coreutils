@@ -72,6 +72,9 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    #[error("{}", translate!("mktemp-error-failed-to-create-file-via-template", "path" => .0.quote(), "error" => .1 ))]
+    FailedToCreate(PathBuf, String),
 }
 
 impl UError for MkTempError {
@@ -560,7 +563,11 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
             let path = Path::new(dir).join(filename);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => {
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+            let path = Path::new(dir).join(filename);
+            Err(MkTempError::FailedToCreate(path, uucore::error::strip_errno(&e)).into())
+        }
     }
 }
 
@@ -589,7 +596,11 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             let path = Path::new(dir).join(filename);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => {
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+            let path = Path::new(dir).join(filename);
+            Err(MkTempError::FailedToCreate(path, uucore::error::strip_errno(&e)).into())
+        }
     }
 }
 
