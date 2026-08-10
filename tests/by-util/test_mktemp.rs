@@ -1174,7 +1174,7 @@ fn test_non_utf8_template(
         result
             .code_is(1)
             .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_contains("Illegal byte sequence");
         return;
     }
     result.success().no_stderr();
@@ -1255,7 +1255,7 @@ fn test_invalid_utf8_suffix(#[values(false, true)] dry_run: bool) {
         result
             .code_is(1)
             .no_stdout()
-            .stderr_contains(std::io::Error::from_raw_os_error(libc::EILSEQ).to_string());
+            .stderr_contains("Illegal byte sequence");
         return;
     }
     result.success().no_stderr();
@@ -1354,4 +1354,38 @@ fn test_write_error_removes_the_temporary_directory() {
         .filter(|name| name.starts_with("keep-none-"))
         .collect();
     assert!(leftovers.is_empty(), "left behind: {leftovers:?}");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_permission_denied_no_os_error() {
+    use rustix::process::geteuid;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    if geteuid().is_root() {
+        return;
+    }
+
+    at.mkdir("dir");
+    fs::set_permissions(at.plus("dir"), fs::Permissions::from_mode(0o444)).unwrap();
+
+    scene
+        .ucmd()
+        .args(&["-p", "dir"])
+        .fails_with_code(1)
+        .stderr_is(
+            "mktemp: failed to create file via template 'dir/tmp.XXXXXXXXXX': Permission denied\n",
+        );
+
+    scene
+        .ucmd()
+        .args(&["-d", "-p", "dir"])
+        .fails_with_code(1)
+        .stderr_is(
+            "mktemp: failed to create file via template 'dir/tmp.XXXXXXXXXX': Permission denied\n",
+        );
 }
