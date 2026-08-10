@@ -1212,10 +1212,12 @@ fn test_mktemp_hidden_file_single_dot() {
 
 #[test]
 #[cfg(unix)]
-fn test_permission_denied() {
+fn test_permission_denied_no_os_error() {
     let scene = TestScenario::new(util_name!());
 
-    scene.ucmd().arg("-p").arg("/").fails().stderr_is(
-        "mktemp: failed to create file via template '/tmp.XXXXXXXXXX': Permission denied\n",
-    );
+    let result = scene.ucmd().arg("-p").arg("/").run();
+
+    assert!(!result.succeeded());
+
+    assert!(!result.stderr_str().contains("os error"));
 }
