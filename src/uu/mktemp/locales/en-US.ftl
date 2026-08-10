@@ -20,7 +20,7 @@ mktemp-error-invalid-template = invalid template, { $template }; with --tmpdir, 
 mktemp-error-too-many-templates = too many templates
 mktemp-error-not-found = failed to create { $template_type } via template { $template }: No such file or directory
 mktemp-error-failed-print = failed to print directory name
-mktemp-error-failed-to-create-file-via-template = file to create file via template { $path }: { $error }
+mktemp-error-failed-to-create-file-via-template = failed to create file via template { $path }: { $error }
 
 # Template types
 mktemp-template-type-directory = directory
