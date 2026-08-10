@@ -586,8 +586,14 @@ fn print_target_section<
         }
     } else {
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if uucore::pipes::splice_unbounded_auto(file, &mut stdout)?.is_err() {
-            io::copy(file, &mut stdout)?;
+        match uucore::pipes::splice_unbounded_auto(file, &mut stdout) {
+            // EINVAL means splice is unusable; copy with read/write.
+            Err(e) if uucore::pipes::splice_unusable(&e) => {
+                io::copy(file, &mut stdout)?;
+            }
+            // Real errors and success both need no further copying.
+            Ok(()) => {}
+            Err(e) => return Err(e.into()),
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]
         io::copy(file, &mut stdout)?;

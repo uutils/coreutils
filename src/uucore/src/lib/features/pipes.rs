@@ -17,13 +17,24 @@ use std::{
 pub const MAX_ROOTLESS_PIPE_SIZE: usize = 1024 * 1024;
 const KERNEL_DEFAULT_PIPE_SIZE: usize = 64 * 1024;
 
-/// A type allows to
-/// - check that zero-copy succeed by ?.is_ok()
-/// - check that zero-copy failed, but read/write fallback succeed by ?.is_err()
-/// - catch the read/write fallback's error by ? or let Err(e)
+/// Whether an error from the splice helpers means that splice is unusable
+/// here, so the caller should fall back on read/write.
 ///
-/// use rustix::io::Result for functions without read/write fallback
-type PipeRes = std::io::Result<Result<(), ()>>;
+/// The helpers in this module use `Err(EINVAL)` as that marker:
+///
+/// - `drain_pipe` fell back to read/write (the data was still written)
+/// - `splice_unbounded_auto` could not splice anything
+///
+/// and they fold `ENOSYS` (kernel without the syscall) into it.
+#[inline]
+pub fn splice_unusable(err: &std::io::Error) -> bool {
+    err.raw_os_error() == Some(rustix::io::Errno::INVAL.raw_os_error())
+}
+
+#[inline]
+fn splice_unusable_errno() -> std::io::Error {
+    std::io::Error::from_raw_os_error(rustix::io::Errno::INVAL.raw_os_error())
+}
 
 /// return pipe and try to extend its size
 /// SIZE_REQUIRED should be true if you want to fail when changing pipe size failed
@@ -56,23 +67,34 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 }
 
 /// splice `len` bytes from `pipe` into `dest`.
+///
+/// Returns `Err(EINVAL)` if splice turned out to be unusable: the data was
+/// delivered by the read/write fallback instead, see [`splice_unusable`].
 #[inline]
-pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
+pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> std::io::Result<()> {
     debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
     let mut remaining = len;
     while remaining > 0 {
-        if let Ok(s) = splice(pipe, dest, remaining) {
-            remaining -= s;
-        } else {
-            // read/write fallback
-            // use read_to_end to make pipe empty for the case write failed
-            let mut drain = Vec::with_capacity(remaining);
-            pipe.take(remaining as u64).read_to_end(&mut drain)?;
-            RawWriter(&dest).write_all(&drain)?;
-            return Ok(Err(()));
+        match splice(pipe, dest, remaining) {
+            Ok(0) => {
+                // no progress; drain by hand
+                let mut drain = Vec::with_capacity(remaining);
+                pipe.take(remaining as u64).read_to_end(&mut drain)?;
+                RawWriter(&dest).write_all(&drain)?;
+                return Err(splice_unusable_errno());
+            }
+            Ok(s) => remaining -= s,
+            Err(_) => {
+                // read/write fallback
+                // use read_to_end to make pipe empty for the case write failed
+                let mut drain = Vec::with_capacity(remaining);
+                pipe.take(remaining as u64).read_to_end(&mut drain)?;
+                RawWriter(&dest).write_all(&drain)?;
+                return Err(splice_unusable_errno());
+            }
         }
     }
-    Ok(Ok(()))
+    Ok(())
 }
 
 /// check that source is FUSE
@@ -86,11 +108,14 @@ pub fn might_fuse(source: &impl AsFd) -> bool {
 ///
 /// throughput is better than direct splice for the case one of in/output is pipe by unknown reason
 /// This includes read ahead and optimization for stdout's pipe size
+///
+/// Returns `Err(EINVAL)` when nothing could be spliced, see [`splice_unusable`].
+/// Errors while draining the intermediate pipe are real output errors.
 #[inline]
-pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRes {
+pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> std::io::Result<()> {
     static PIPE_CACHE: OnceLock<Option<(PipeReader, PipeWriter)>> = OnceLock::new();
     let Some((pipe_rd, pipe_wr)) = PIPE_CACHE.get_or_init(|| pipe::<false>().ok()) else {
-        return Ok(Err(()));
+        return Err(splice_unusable_errno());
     };
 
     // fcntl for input would not improve throughput since
@@ -101,13 +126,11 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
     loop {
         match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(Ok(())),
+            Ok(0) => return Ok(()),
             Ok(n) => {
-                if drain_pipe(pipe_rd, dest, n)?.is_err() {
-                    return Ok(Err(()));
-                }
+                drain_pipe(pipe_rd, dest, n)?;
             }
-            Err(_) => return Ok(Err(())),
+            Err(_) => return Err(splice_unusable_errno()),
         }
     }
 }
@@ -161,8 +184,11 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
                     Ok(s) => {
                         n -= s as u64;
                         bytes_written += s as u64;
-                        if drain_pipe(broker_r, &target, s)?.is_err() {
-                            break false;
+                        if let Err(e) = drain_pipe(broker_r, &target, s) {
+                            if splice_unusable(&e) {
+                                break false;
+                            }
+                            return Err(e);
                         }
                     }
                     _ => break false,

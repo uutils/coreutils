@@ -15,11 +15,17 @@ pub fn copy_fast(
     src: &mut (impl std::io::Read + AsFd),
     dest: &mut impl AsFd,
 ) -> std::io::Result<()> {
-    if crate::pipes::splice_unbounded_auto(src, dest)?.is_err() {
-        // fall back on writing "without buffering", or order of output would be wrong
-        // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
-        // RawWriter also removes io::copy's specialization e.g. copy_file_range which might use reflink
-        std::io::copy(src, &mut crate::io::RawWriter(dest))?;
+    match crate::pipes::splice_unbounded_auto(src, dest) {
+        // EINVAL means splice is unusable; fall back on read/write.
+        Err(e) if crate::pipes::splice_unusable(&e) => {
+            // fall back on writing "without buffering", or order of output would be wrong
+            // unrelated for cp /dev/stdin since cp does not have multiple input? <https://github.com/uutils/coreutils/issues/5186>
+            // RawWriter also removes io::copy's specialization e.g. copy_file_range which might use reflink
+            std::io::copy(src, &mut crate::io::RawWriter(dest))?;
+        }
+        // Real errors and success both need no further copying.
+        Ok(()) => {}
+        Err(e) => return Err(e),
     }
     Ok(())
 }

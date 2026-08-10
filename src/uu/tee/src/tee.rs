@@ -155,10 +155,18 @@ impl MultiWriter {
         macro_rules! splice_or_detach {
             ($pipe:expr, $writer:expr, $len:expr) => {
                 if let Err(e) = uucore::pipes::drain_pipe($pipe, $writer, $len) {
-                    self.aborted |=
-                        process_error(self.output_error_mode, e, $writer, &mut self.ignored_errors)
-                            .is_err();
-                    $writer.name.clear(); //mark as exited
+                    // EINVAL means splice fell back to read/write: keep
+                    // this writer, the data was still written.
+                    if !uucore::pipes::splice_unusable(&e) {
+                        self.aborted |= process_error(
+                            self.output_error_mode,
+                            e,
+                            $writer,
+                            &mut self.ignored_errors,
+                        )
+                        .is_err();
+                        $writer.name.clear(); //mark as exited
+                    }
                 }
             };
         }
