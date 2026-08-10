@@ -19,6 +19,7 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
 bstr = { workspace = true, optional = true }
 clap = { workspace = true }
@@ -34,6 +35,7 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 libc = { workspace = true, optional = true }
+openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
@@ -108,9 +110,6 @@ nix = { workspace = true, features = [
   "user",
   "zerocopy",
 ] }
-# OpenSSL is only used on Unix targets. On Windows, enabling the `openssl`
-# feature is a no-op and the pure-Rust digest implementations are used.
-openssl = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
@@ -143,6 +142,7 @@ default = ["signals"]
 # * non-default features
 backup-control = []
 colors = []
+diagnostics = ["dep:ariadne"]
 checksum = ["quoting-style", "sum", "base64-simd"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
@@ -175,7 +175,7 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["libc"]
+mode = ["diagnostics", "libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
 parser-num = ["extendedbigdecimal", "num-traits"]

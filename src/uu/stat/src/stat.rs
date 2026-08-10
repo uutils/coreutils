@@ -25,7 +25,7 @@ use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
-use std::io::Write;
+use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{env, fs};
@@ -130,7 +130,7 @@ fn write_padded_bytes<W: Write>(
     left: bool,
     width: usize,
     precision: Precision,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let display_bytes = match precision {
         Precision::Number(p) if p < bytes.len() => &bytes[..p],
         _ => bytes,
@@ -159,7 +159,7 @@ fn write_padded_bytes<W: Write>(
 /// write padding based on a writer W and n size
 /// writer is genric to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+fn write_padding<W: Write>(writer: &mut W, n: usize) -> io::Result<()> {
     for _ in 0..n {
         writer.write_all(b" ")?;
     }
@@ -430,7 +430,7 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
 
         let bytes = s.as_bytes();
 
-        if write_padded_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
+        if write_padded_bytes(io::stdout(), bytes, flags.left, width, precision).is_err() {
             // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
             let fallback_string = s.to_string_lossy();
             print_str(&fallback_string, flags, width, precision);
@@ -723,7 +723,7 @@ fn print_unsigned_hex(
 }
 
 fn print_raw_byte(byte: u8) {
-    std::io::stdout().write_all(&[byte]).unwrap();
+    io::stdout().write_all(&[byte]).unwrap();
 }
 
 impl Stater {
@@ -1036,11 +1036,9 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
-        let mut stdin_is_fifo = false;
         #[cfg(unix)]
-        if let Ok(md) = fs::metadata("/dev/stdin") {
-            stdin_is_fifo = md.file_type().is_fifo();
-        }
+        let stdin_is_fifo = rustix::fs::fstat(io::stdin())
+            .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
@@ -1065,7 +1063,9 @@ impl Stater {
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
-            Token::Char(c) => print!("{c}"),
+            Token::Char(c) => io::stdout()
+                .write_all(c.to_string().as_bytes())
+                .map_err(|_| 1)?,
 
             Token::Directive {
                 flag,

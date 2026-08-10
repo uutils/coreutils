@@ -809,13 +809,11 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-O", "nonexistent_file"])
@@ -855,7 +853,6 @@ fn test_file_owned_by_egid() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_egid() {
     new_ucmd!()
         .args(&["-G", "nonexistent_file"])
@@ -876,6 +873,24 @@ fn test_file_not_owned_by_egid() {
 
     new_ucmd!()
         .args(&["-f", target_file, "-a", "!", "-G", target_file])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_owned_by_current_group_windows() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_not_owned_by_current_token_windows() {
+    // The system directory belongs to TrustedInstaller, so it is owned neither
+    // by the user nor by the Administrators group an elevated shell runs as.
+    let system_root = std::env::var("SystemRoot").expect("SystemRoot is not set");
+
+    new_ucmd!()
+        .args(&["-d", &system_root, "-a", "!", "-O", &system_root])
         .succeeds();
 }
 
@@ -1070,7 +1085,6 @@ fn test_bracket_syntax_version() {
 
 #[test]
 #[allow(non_snake_case)]
-#[cfg(unix)]
 fn test_file_N() {
     use std::{fs::FileTimes, time::Duration};
 
@@ -1086,6 +1100,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH);
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).fails();
 
@@ -1096,6 +1111,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).succeeds();
 }
@@ -1174,4 +1190,59 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     // `-f = a` is string comparison "-f" = "a", not file test
     new_ucmd!().args(&["-f", "=", "a"]).fails_with_code(1);
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
+}
+
+mod diagnostics {
+    use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_offending_argument() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2);
+        let stderr = result.stderr_str();
+
+        // The expression is echoed back, with the caret column matching `zap`.
+        assert!(stderr.contains("7 -eq zap"), "{stderr}");
+        assert!(stderr.contains("1:7"), "{stderr}");
+        assert!(stderr.contains("invalid integer 'zap'"), "{stderr}");
+        // The help line points at the string operators instead.
+        assert!(stderr.contains("compare integers"), "{stderr}");
+        // The plain `test: ` prefix is replaced by the report header.
+        assert!(!stderr.starts_with("test: "), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_is_the_default() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2)
+            .stderr_is("test: invalid integer 'zap'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_extra_argument_points_past_the_expression() {
+        new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["k", "!=", "m", "spare"])
+            .fails_with_code(2)
+            .stderr_contains("extra argument 'spare'")
+            .stderr_contains("k != m spare");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bracket_form_reports_under_its_own_name() {
+        // The trailing `]` is dropped before the expression is echoed back.
+        TestScenario::new("[")
+            .ucmd()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap", "]"])
+            .fails_with_code(2)
+            .stderr_contains("[:1:7")
+            .stderr_contains("7 -eq zap");
+    }
 }

@@ -89,6 +89,18 @@ fn test_invalid_buffer_size() {
         .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
+    // A percentage can fit in a u128 while its product with the total
+    // physical memory does not; the parser must report it as too large
+    // rather than panicking or silently wrapping.
+    #[cfg(target_os = "linux")]
+    new_ucmd!()
+        .arg("-S")
+        .arg("340282366920938463463374607431768211455%")
+        .fails_with_code(2)
+        .stderr_only(
+            "sort: --buffer-size argument '340282366920938463463374607431768211455%' too large\n",
+        );
+
     new_ucmd!()
         .arg("-n")
         .arg("-S")
@@ -631,10 +643,8 @@ fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
         .env("LC_ALL", locale)
         .arg("abmon")
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+        .ok()
+        .filter(|s| s.status.success())?;
     let text = String::from_utf8(output.stdout).ok()?;
     let months: Vec<String> = text
         .trim()
@@ -2065,10 +2075,8 @@ fn test_human_numeric_blank_thousands_sep_locale() {
             .arg("thousands_sep")
             .env("LC_ALL", locale)
             .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
+            .ok()
+            .filter(|s| s.status.success())?;
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
         if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
