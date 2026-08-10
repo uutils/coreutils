@@ -7701,7 +7701,7 @@ fn test_no_extra_stat_without_recursion() {
             .ok()?;
         let trace = String::from_utf8_lossy(&output.stderr);
         // No syscalls traced at all means strace could not do its job here.
-        if !trace.contains("(") {
+        if !trace.contains('(') {
             return None;
         }
         Some(trace.lines().filter(|l| l.contains("\"some-dir\"")).count())
