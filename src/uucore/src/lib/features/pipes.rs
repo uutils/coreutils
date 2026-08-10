@@ -99,17 +99,33 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
     // pre-generate page caches for splice
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
-    loop {
-        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(Ok(())),
-            Ok(n) => {
-                if drain_pipe(pipe_rd, dest, n)?.is_err() {
-                    return Ok(Err(()));
-                }
+    // 1st error is used to detect missing support for splice
+    match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(0) => return Ok(Ok(())),
+        Ok(mut n) => {
+            if let Ok(s) = splice(pipe_rd, dest, n) {
+                n -= s;
+            } else {
+                // read/write fallback
+                // use read_to_end to make pipe empty for the case write failed
+                let mut drain = Vec::with_capacity(n);
+                pipe_rd.take(n as u64).read_to_end(&mut drain)?;
+                RawWriter(&dest).write_all(&drain)?;
+                return Ok(Err(()));
             }
-            Err(_) => return Ok(Err(())),
+            while n > 0 {
+                n -= splice(pipe_rd, dest, n)?;
+            }
+        }
+        Err(_) => return Ok(Err(())),
+    }
+    // GNU cat catches all strace injections for 2nd+ splice
+    while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)? {
+        while n > 0 {
+            n -= splice(pipe_rd, dest, n)?;
         }
     }
+    Ok(Ok(()))
 }
 
 /// splice `n` bytes with read/write fallback
