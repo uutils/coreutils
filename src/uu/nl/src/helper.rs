@@ -16,17 +16,23 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     // This vector holds error messages encountered.
     let mut errs: Vec<String> = vec![];
     settings.renumber = opts.get_flag(options::NO_RENUMBER);
-    if let Some(delimiter) = opts.get_one::<OsString>(options::SECTION_DELIMITER) {
-        // GNU nl determines whether a delimiter is a "single character" based on byte length, not
-        // character length. A "single character" implies the second character is a ':'.
-        settings.section_delimiter = if delimiter.len() == 1 {
-            let mut delimiter = delimiter.clone();
+
+    if let Some(mut delimiter) = opts
+        .get_one::<OsString>(options::SECTION_DELIMITER)
+        .cloned()
+    {
+        let is_single_char = delimiter
+            .to_str()
+            .map_or_else(|| delimiter.len() == 1, |s| s.chars().count() == 1);
+
+        // A "single character" implies the second character of the delimiter is ':'.
+        if is_single_char {
             delimiter.push(":");
-            delimiter
-        } else {
-            delimiter.clone()
-        };
+        }
+
+        settings.section_delimiter = delimiter;
     }
+
     if let Some(val) = opts.get_one::<OsString>(options::NUMBER_SEPARATOR) {
         settings.number_separator.clone_from(val);
     }
