@@ -595,6 +595,37 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
 }
 
 #[test]
+fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
+    // A symlink met inside the tree during `chmod -R` must not have its referent
+    // touched: chmod(2) follows the link, and the target can live outside the
+    // tree. GNU never follows such a link, and the --reference path has to behave
+    // like the symbolic/numeric path, which already skips it.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A file that lives outside the tree being modified.
+    at.touch("outside_target");
+    at.set_mode("outside_target", 0o600);
+
+    // The reference file carries a distinctive mode.
+    at.touch("ref");
+    at.set_mode("ref", 0o745);
+
+    // The tree holds a symlink pointing at the outside file.
+    at.mkdir("tree");
+    at.symlink_file("outside_target", "tree/link");
+
+    ucmd.arg("-R").arg("--reference=ref").arg("tree").succeeds();
+
+    // The referent outside the tree keeps its mode, while the walked directory
+    // still picks up the reference mode.
+    assert_eq!(
+        at.metadata("outside_target").permissions().mode() & 0o7777,
+        0o600
+    );
+    assert_eq!(at.metadata("tree").permissions().mode() & 0o7777, 0o745);
+}
+
+#[test]
 fn test_chmod_symlink_non_existing_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
