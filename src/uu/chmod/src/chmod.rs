@@ -824,7 +824,20 @@ impl Chmoder {
 
         // Determine how to apply the permissions
         if let Some(mode) = self.fmode {
-            self.change_file(fperm, mode, file)?;
+            // A symlink reached without dereferencing (for example one met while
+            // walking a `-R` tree) must be left alone: chmod(2) follows the link,
+            // so changing it would change the mode of the referent, which can live
+            // outside the tree. The symbolic/numeric path below already skips it.
+            if file.is_symlink() && !dereference {
+                if self.verbose {
+                    println!(
+                        "neither symbolic link {} nor referent has been changed",
+                        file.quote()
+                    );
+                }
+            } else {
+                self.change_file(fperm, mode, file)?;
+            }
         } else {
             // Special handling for symlinks when not dereferencing
             if file.is_symlink() && !dereference {
