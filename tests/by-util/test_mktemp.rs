@@ -1209,3 +1209,13 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len()
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_permission_denied() {
+    let scene = TestScenario::new(util_name!());
+
+    scene.ucmd().arg("-p").arg("/").fails().stderr_is(
+        "mktemp: failed to create file via template '/tmp.XXXXXXXXXX': Permission denied\n",
+    );
+}

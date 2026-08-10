@@ -599,7 +599,14 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             let path = Path::new(dir).join(filename);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => {
+            let filename = format!("{prefix}{}{suffix}", "X".repeat(rand));
+            let path = Path::new(dir).join(filename);
+            Err(uucore::error::USimpleError::new(
+                1,
+                translate!("mktemp-error-failed-to-create-file-via-template", "path" => path.display(), "error" => uucore::error::strip_errno(&e)),
+            ))
+        }
     }
 }
 
