@@ -253,3 +253,8 @@ printf-error-missing-operand = opérande manquant
 printf-warning-ignoring-excess-arguments = arguments excédentaires ignorés, en commençant par { $arg }
 printf-help-version = Afficher les informations de version
 printf-help-help = Afficher cette aide
+
+# Conseils de diagnostic : affichés sous le caret quand un format ne peut être analysé
+printf-diag-help-spec = %d, %s, %x, %f et les autres conversions C sont acceptées, ainsi que %b et %q ; un % littéral s'écrit %%
+printf-diag-help-escape-hex = \x prend un ou deux chiffres hexadécimaux, \u en prend quatre et \U en prend huit
+printf-diag-help-unicode = les points de code entre D800 et DFFF ou au-delà de 10FFFF ne sont pas des caractères Unicode
