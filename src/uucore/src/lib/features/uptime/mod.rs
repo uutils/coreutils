@@ -3,9 +3,15 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg timeval
+// spell-checker:ignore nusers loadavg
 
 //! Provides functions to get system uptime, number of users and load average.
+//!
+//! The platform-specific sources live in the cfg-gated `unix`/`windows`
+//! submodules, which both provide `get_uptime`, `get_nusers`, `get_loadavg`
+//! and `default_nusers` with identical signatures (one exception: OpenBSD's
+//! `get_nusers` takes the utmp file path as an argument); the shared
+//! formatting helpers here only talk to those re-exported functions.
 
 // The code was originally written in uu_uptime
 // (https://github.com/uutils/coreutils/blob/main/src/uu/uptime/src/uptime.rs)
@@ -18,6 +24,16 @@ use jiff::Timestamp;
 use jiff::tz::TimeZone;
 use libc::time_t;
 use thiserror::Error;
+
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+pub use unix::*;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use windows::*;
 
 #[derive(Debug, Error)]
 pub enum UptimeError {
@@ -43,140 +59,6 @@ pub fn get_formatted_time() -> String {
         .to_zoned(TimeZone::system())
         .strftime("%H:%M:%S")
         .to_string()
-}
-
-/// Safely get macOS boot time using sysctl command
-///
-/// This function uses the sysctl command-line tool to retrieve the kernel
-/// boot time on macOS, avoiding any unsafe code. It parses the output
-/// of the sysctl command to extract the boot time.
-///
-/// # Returns
-///
-/// Returns Some(time_t) if successful, None if the call fails.
-#[cfg(target_os = "macos")]
-fn get_macos_boot_time_sysctl() -> Option<time_t> {
-    use std::process::Command;
-
-    // Execute sysctl command to get boot time
-    let output = Command::new("sysctl")
-        .arg("-n")
-        .arg("kern.boottime")
-        .output();
-
-    if let Ok(output) = output
-        && output.status.success()
-    {
-        // Parse output format: { sec = 1729338352, usec = 0 } Wed Oct 19 08:25:52 2025
-        // We need to extract the seconds value from the structured output
-        let stdout = String::from_utf8_lossy(&output.stdout);
-
-        // Extract the seconds from the output
-        // Look for "sec = " pattern
-        if let Some(sec_start) = stdout.find("sec = ") {
-            let sec_part = &stdout[sec_start + 6..];
-            if let Some(sec_end) = sec_part.find(',') {
-                let sec_str = &sec_part[..sec_end];
-                if let Ok(boot_time) = sec_str.trim().parse::<i64>() {
-                    return Some(boot_time as time_t);
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Get the system uptime
-///
-/// # Arguments
-///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
-///
-/// # Returns
-///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(unix)]
-#[cfg(not(any(target_os = "cygwin", target_os = "netbsd", target_vendor = "apple")))]
-#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    use rustix::time::{ClockId, clock_gettime};
-
-    let tp = clock_gettime(ClockId::Boottime);
-
-    Ok(tp.tv_sec as i64)
-}
-
-/// Get the system uptime
-///
-/// # Arguments
-///
-/// boot_time: Option<time_t> - Manually specify the boot time, or None to try to get it from the system.
-///
-/// # Returns
-///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(any(target_os = "cygwin", target_os = "netbsd", target_vendor = "apple"))]
-pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
-    use crate::utmpx::BOOT_TIME;
-    use crate::utmpx::Utmpx;
-    use std::fs::File;
-    use std::io::Read;
-
-    let mut proc_uptime_s = String::new();
-
-    let proc_uptime = File::open("/proc/uptime")
-        .ok()
-        .and_then(|mut f| f.read_to_string(&mut proc_uptime_s).ok())
-        .and_then(|_| proc_uptime_s.split_whitespace().next())
-        .and_then(|s| s.split('.').next().unwrap_or("0").parse::<i64>().ok());
-
-    if let Some(uptime) = proc_uptime {
-        return Ok(uptime);
-    }
-
-    // Try provided boot_time or derive from utmpx
-    let derived_boot_time = boot_time.or_else(|| {
-        Utmpx::iter_all_records()
-            .filter(|r| r.record_type() == BOOT_TIME)
-            .map(|r| r.login_time().unix_timestamp())
-            .find(|&ts| ts > 0)
-            .map(|ts| ts as time_t)
-    });
-
-    // macOS-specific fallback: use sysctl kern.boottime when utmpx did not provide BOOT_TIME
-    //
-    // On macOS, the utmpx BOOT_TIME record can be unreliable or absent, causing intermittent
-    // test failures (see issue #3621: https://github.com/uutils/coreutils/issues/3621).
-    // The sysctl(CTL_KERN, KERN_BOOTTIME) approach is the canonical way to retrieve boot time
-    // on macOS and is always available, making uptime more reliable on this platform.
-    //
-    // This fallback only runs if utmpx failed to provide a boot time.
-    #[cfg(target_os = "macos")]
-    let derived_boot_time = {
-        let mut t = derived_boot_time;
-        if t.is_none() {
-            // Use a safe wrapper function to get boot time via sysctl
-            if let Some(boot_time) = get_macos_boot_time_sysctl() {
-                t = Some(boot_time);
-            }
-        }
-        t
-    };
-
-    if let Some(t) = derived_boot_time {
-        let now = Timestamp::now().as_second();
-        #[cfg(target_pointer_width = "64")]
-        let boottime: i64 = t;
-        #[cfg(not(target_pointer_width = "64"))]
-        let boottime: i64 = t.into();
-        if now < boottime {
-            Err(UptimeError::BootTime)?;
-        }
-        return Ok(now - boottime);
-    }
-
-    Err(UptimeError::SystemUptime)?
 }
 
 /// The format used to display a FormattedUptime.
@@ -226,25 +108,6 @@ impl FormattedUptime {
     }
 }
 
-/// Get the system uptime
-///
-/// # Arguments
-///
-/// boot_time will be ignored, pass None.
-///
-/// # Returns
-///
-/// Returns a UResult with the uptime in seconds if successful, otherwise an UptimeError.
-#[cfg(windows)]
-#[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
-pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    // GetTickCount64 (unlike GetTickCount) does not wrap after 49.7 days.
-    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
-    // SAFETY: no preconditions; always returns milliseconds since boot
-    let uptime = unsafe { GetTickCount64() };
-    Ok((uptime / 1000) as i64)
-}
-
 /// Get the system uptime in a human-readable format
 ///
 /// # Arguments
@@ -274,118 +137,6 @@ pub fn get_formatted_uptime(
     }
 }
 
-/// Get the number of users currently logged in
-///
-/// # Returns
-///
-/// Returns the number of users currently logged in if successful, otherwise 0.
-#[cfg(unix)]
-#[cfg(not(target_os = "openbsd"))]
-// see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
-pub fn get_nusers() -> usize {
-    use crate::utmpx::USER_PROCESS;
-    use crate::utmpx::Utmpx;
-
-    let mut num_user = 0;
-    Utmpx::iter_all_records().for_each(|ut| {
-        if ut.record_type() == USER_PROCESS {
-            num_user += 1;
-        }
-    });
-    num_user
-}
-
-/// Get the number of users currently logged in
-///
-/// # Returns
-///
-/// Returns the number of users currently logged in if successful, otherwise 0
-#[cfg(target_os = "openbsd")]
-pub fn get_nusers(file: &str) -> usize {
-    use utmp_classic::{UtmpEntry, parse_from_path};
-
-    let Ok(entries) = parse_from_path(file) else {
-        return 0;
-    };
-
-    if entries.is_empty() {
-        return 0;
-    }
-
-    // Count entries that have a non-empty user field
-    entries
-        .iter()
-        .filter_map(|entry| match entry {
-            UtmpEntry::UTMP { user, .. } if !user.is_empty() => Some(()),
-            _ => None,
-        })
-        .count()
-}
-
-/// Get the number of users currently logged in
-///
-/// # Returns
-///
-/// Returns the number of users currently logged in if successful, otherwise 0
-#[cfg(target_os = "windows")]
-pub fn get_nusers() -> usize {
-    use std::ptr;
-    use windows_sys::Win32::System::RemoteDesktop::{
-        WTS_CURRENT_SERVER_HANDLE, WTSEnumerateSessionsW, WTSFreeMemory,
-        WTSQuerySessionInformationW,
-    };
-
-    let mut num_user = 0;
-
-    // SAFETY: WTS_CURRENT_SERVER_HANDLE is a valid handle
-    unsafe {
-        let mut session_info_ptr = ptr::null_mut();
-        let mut session_count = 0;
-
-        let result = WTSEnumerateSessionsW(
-            WTS_CURRENT_SERVER_HANDLE,
-            0,
-            1,
-            &raw mut session_info_ptr,
-            &raw mut session_count,
-        );
-        if result == 0 {
-            return 0;
-        }
-
-        let sessions = std::slice::from_raw_parts(session_info_ptr, session_count as usize);
-
-        for session in sessions {
-            let mut buffer: *mut u16 = ptr::null_mut();
-            let mut bytes_returned = 0;
-
-            let result = WTSQuerySessionInformationW(
-                WTS_CURRENT_SERVER_HANDLE,
-                session.SessionId,
-                5,
-                &raw mut buffer,
-                &raw mut bytes_returned,
-            );
-            if result == 0 || buffer.is_null() {
-                continue;
-            }
-
-            // The buffer is UTF-16 (WTSUserNameW); checking it byte-wise as a
-            // C string would misread names whose first code unit has a zero
-            // low byte (e.g. U+AC00) as empty.
-            if *buffer != 0 {
-                num_user += 1;
-            }
-
-            WTSFreeMemory(buffer.cast());
-        }
-
-        WTSFreeMemory(session_info_ptr.cast());
-    }
-
-    num_user
-}
-
 /// Format the number of users to a human-readable string
 ///
 /// # Returns
@@ -406,44 +157,7 @@ pub fn format_nusers(n: usize) -> String {
 /// e.g. "0 user", "1 user", "2 users"
 #[inline]
 pub fn get_formatted_nusers() -> String {
-    #[cfg(not(target_os = "openbsd"))]
-    return format_nusers(get_nusers());
-
-    #[cfg(target_os = "openbsd")]
-    format_nusers(get_nusers("/var/run/utmp"))
-}
-
-/// Get the system load average
-///
-/// # Returns
-///
-/// Returns a UResult with the load average if successful, otherwise an UptimeError.
-/// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
-#[cfg(unix)]
-pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
-    use core::ffi::c_double;
-    use libc::getloadavg;
-
-    let mut avg: [c_double; 3] = [0.0; 3];
-    // SAFETY: checked whether it returns -1
-    let loads: i32 = unsafe { getloadavg(avg.as_mut_ptr(), 3) };
-
-    if loads == -1 {
-        Err(UptimeError::SystemLoadavg)?
-    } else {
-        Ok((avg[0], avg[1], avg[2]))
-    }
-}
-
-/// Get the system load average
-/// Windows does not have an equivalent to the load average on Unix-like systems.
-///
-/// # Returns
-///
-/// Returns a UResult with an UptimeError.
-#[cfg(windows)]
-pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
-    Err(UptimeError::WindowsLoadavg)?
+    format_nusers(default_nusers())
 }
 
 /// Get the system load average in a human-readable format
@@ -500,78 +214,6 @@ mod tests {
         assert_eq!(
             "10:05",
             FormattedUptime::new(10 * 3600 + 5 * 60).get_human_readable_uptime()
-        );
-    }
-
-    /// Test that sysctl kern.boottime is accessible on macOS and returns valid boot time.
-    /// This ensures the fallback mechanism added for issue #3621 works correctly.
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_macos_sysctl_boottime_available() {
-        // Test the safe wrapper function
-        let boot_time = get_macos_boot_time_sysctl();
-
-        // Verify the safe wrapper succeeded
-        assert!(
-            boot_time.is_some(),
-            "get_macos_boot_time_sysctl should succeed on macOS"
-        );
-
-        let boot_time = boot_time.unwrap();
-
-        // Verify boot time is valid (positive, reasonable value)
-        assert!(boot_time > 0, "Boot time should be positive");
-
-        // Boot time should be after 2000-01-01 (946684800 seconds since epoch)
-        assert!(
-            boot_time > 946_684_800,
-            "Boot time should be after year 2000"
-        );
-
-        // Boot time should be before current time
-        let boot_time = Timestamp::from_second(boot_time).unwrap();
-        let now = Timestamp::now();
-        assert!(boot_time < now, "Boot time should be before current time");
-    }
-
-    /// Test that get_uptime always succeeds on macOS due to sysctl fallback.
-    /// This addresses the intermittent failures reported in issue #3621.
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_get_uptime_always_succeeds_on_macos() {
-        // Call get_uptime without providing boot_time, forcing the system
-        // to use utmpx or fall back to sysctl
-        let result = get_uptime(None);
-
-        assert!(
-            result.is_ok(),
-            "get_uptime should always succeed on macOS with sysctl fallback"
-        );
-
-        let uptime = result.unwrap();
-        assert!(uptime > 0, "Uptime should be positive");
-
-        // Reasonable upper bound: system hasn't been up for more than 365 days
-        // (This is just a sanity check)
-        assert!(
-            uptime < 365 * 86400,
-            "Uptime seems unreasonably high: {uptime} seconds"
-        );
-    }
-
-    /// Test get_uptime consistency by calling it multiple times.
-    /// Verifies the sysctl fallback produces stable results.
-    #[test]
-    #[cfg(target_os = "macos")]
-    fn test_get_uptime_macos_consistency() {
-        let uptime1 = get_uptime(None).expect("First call should succeed");
-        let uptime2 = get_uptime(None).expect("Second call should succeed");
-
-        // Uptimes should be very close (within 1 second)
-        let diff = (uptime1 - uptime2).abs();
-        assert!(
-            diff <= 1,
-            "Consecutive uptime calls should be consistent, got {uptime1} and {uptime2}"
         );
     }
 }
