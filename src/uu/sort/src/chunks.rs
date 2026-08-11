@@ -186,6 +186,7 @@ pub fn read_to_chunk<T: Read>(
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
+        // Separate carry_over and copy them to avoid cost of 0 fill buffer
         buffer.extend_from_slice(&carry_over[buffer.len()..]);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
