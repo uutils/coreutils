@@ -43,16 +43,7 @@ tr-error-backwards-range = range-endpoints of '{ $start }-{ $end }' are in rever
 tr-error-multiple-char-in-equivalence = { $chars }: equivalence class operand must be a single character
 
 # Diagnostic labels: what the caret points at in a set
-tr-diag-label-missing-char-class-name = no class name between the brackets
-tr-diag-label-invalid-char-class = not a character class
-tr-diag-label-missing-equivalence-char = no character between the brackets
-tr-diag-label-multiple-char-in-equivalence = an equivalence class holds a single character
-tr-diag-label-invalid-repeat-count = not a repeat count
-tr-diag-label-backwards-range = this range runs backwards
-tr-diag-label-char-repeat-in-set1 = a repeat is only meaningful in SET2
-tr-diag-label-multiple-char-repeat-in-set2 = a set may hold only one open-ended repeat
-tr-diag-label-class-except-lower-upper-in-set2 = only [:lower:] and [:upper:] may be translated to
-tr-diag-label-class-in-set2-not-matched = no class at the matching position in SET1
+tr-diag-label-backwards-range = did you mean '{ $suggestion }'?
 tr-diag-label-set1-longer-set2-ends-in-class = this set is longer than SET2
 tr-diag-label-complement-more-than-one-unique = only one character may be complemented to
 tr-diag-help-char-class = classes are alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper and xdigit

@@ -3221,8 +3221,7 @@ sort: stray character in field spec: invalid field specification '2.3q'
    ╭─[ sort:1:11 ]
    │
  1 │ sort -k2.3q /dev/null
-   │           ┬
-   │           ╰── not part of a key
+   │           ─
    │
    │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
 ───╯"
@@ -3246,8 +3245,7 @@ sort: stray character in field spec: invalid field specification '1.4,2w'
    ╭─[ sort:1:14 ]
    │
  1 │ sort -k 1.4,2w /dev/null
-   │              ┬
-   │              ╰── not part of a key
+   │              ─
    │
    │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
 ───╯"
@@ -3315,8 +3313,7 @@ sort: options '-hV' are incompatible
    ╭─[ sort:1:9 ]
    │
  1 │ sort -k1hV /dev/null
-   │         ─┬
-   │          ╰── these ordering options contradict each other
+   │         ──
 ───╯"
         );
     }
@@ -3341,8 +3338,7 @@ sort: stray character in field spec: invalid field specification '2.3q'
    ╭─[ sort:1:21 ]
    │
  1 │ sort data.2.3q -k2.3q
-   │                     ┬
-   │                     ╰── not part of a key
+   │                     ─
    │
    │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
 ───╯"

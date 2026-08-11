@@ -11,11 +11,11 @@ use uucore::translate;
 
 use crate::{ExprError, FailurePoint};
 
-/// What to point at: the argument index, the text for the caret, and optional
-/// advice.
+/// What to point at: the argument index, optional text for the caret, and
+/// optional advice.
 struct Located {
     index: usize,
-    label: String,
+    label: Option<String>,
     help: Option<String>,
 }
 
@@ -33,7 +33,7 @@ pub fn render(args: &[Vec<u8>], err: &ExprError, at: &FailurePoint) -> bool {
     snapshot.render(
         located.index,
         &err.to_string(),
-        &located.label,
+        located.label.as_deref(),
         located.help.as_deref(),
     )
 }
@@ -51,28 +51,21 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
     // consume: the operator or parenthesis left dangling.
     let previous = || stopped_at.map(|index| index.saturating_sub(1));
 
+    // Labelled only where a label would add to the message, per the convention
+    // in `uucore::diagnostics`.
     let (index, label, help) = match err {
         ExprError::UnexpectedArgument(_) => (
             // The parser stopped on the argument it did not expect.
             stopped_at,
-            "expr-diag-label-unexpected-argument",
+            Some("expr-diag-label-unexpected-argument"),
             Some("expr-diag-help-unexpected-argument"),
         ),
-        ExprError::MissingArgument(_) => (
-            previous(),
-            "expr-diag-label-missing-argument",
-            Some("expr-diag-help-missing-argument"),
-        ),
-        ExprError::ExpectedClosingBraceAfter(_) => (
-            previous(),
-            "expr-diag-label-expected-closing-brace-after",
-            None,
-        ),
-        ExprError::ExpectedClosingBraceInsteadOf(_) => (
-            previous(),
-            "expr-diag-label-expected-closing-brace-instead-of",
-            None,
-        ),
+        ExprError::MissingArgument(_) => {
+            (previous(), None, Some("expr-diag-help-missing-argument"))
+        }
+        ExprError::ExpectedClosingBraceAfter(_) | ExprError::ExpectedClosingBraceInsteadOf(_) => {
+            (previous(), None, None)
+        }
         // Raised while evaluating; the evaluator says which argument it
         // blames. An operand computed by a subexpression has no argument of
         // its own, and the error falls back to its plain form.
@@ -81,7 +74,7 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
                 FailurePoint::Eval(index) => *index,
                 FailurePoint::Parse(_) => None,
             },
-            "expr-diag-label-non-integer-argument",
+            None,
             Some("expr-diag-help-non-integer-argument"),
         ),
         // An empty expression, a malformed regex, division by zero: nothing to
@@ -100,7 +93,7 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
 
     Some(Located {
         index: index?,
-        label: translate!(label),
+        label: label.map(|key| translate!(key)),
         help: help.map(|key| translate!(key)),
     })
 }

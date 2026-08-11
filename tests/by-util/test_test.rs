@@ -1212,8 +1212,7 @@ test: invalid integer 'zap'
    ╭─[ test:1:7 ]
    │
  1 │ 7 -eq zap
-   │       ─┬─
-   │        ╰─── expected an integer here
+   │       ───
    │
    │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
    │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
@@ -1272,8 +1271,7 @@ test: missing argument after '-gt'
    ╭─[ test:1:4 ]
    │
  1 │ 31 -gt
-   │    ─┬─
-   │     ╰─── nothing follows this
+   │    ───
    │
    │ Help: an unset or empty variable expands to nothing, leaving the operator without an operand; quote it as \"$var\"
 ───╯"
@@ -1332,8 +1330,7 @@ test: invalid integer 'stdout'
    ╭─[ test:1:4 ]
    │
  1 │ -t stdout
-   │    ───┬──
-   │       ╰──── expected a file descriptor here
+   │    ──────
    │
    │ Help: -t takes a file descriptor number: 0 is standard input, 1 standard output, 2 standard error
 ───╯"
@@ -1357,8 +1354,7 @@ test: invalid integer 'stdout'
    ╭─[ test:1:7 ]
    │
  1 │ 1 -eq stdout
-   │       ───┬──
-   │          ╰──── expected an integer here
+   │       ──────
    │
    │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
    │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
@@ -1392,8 +1388,7 @@ test: invalid integer 'stdout'
    ╭─[ [:1:7 ]
    │
  1 │ 7 -eq zap
-   │       ─┬─
-   │        ╰─── expected an integer here
+   │       ───
    │
    │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
    │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal

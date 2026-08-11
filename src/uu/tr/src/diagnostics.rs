@@ -45,58 +45,50 @@ pub fn render(args: &[OsString], sets: &[OsString], err: &SequenceError) -> bool
         set,
         span,
         &err.to_string(),
-        &translate!(label),
+        label.as_deref(),
         help.map(|key| translate!(key)).as_deref(),
     )
 }
 
-/// The caret label for `error`, and the advice that goes under it, or `None`
-/// for an error that a caret cannot be placed for.
-fn describe(error: &BadSequence) -> Option<(&'static str, Option<&'static str>)> {
+/// The caret label for `error`, translated, and the advice that goes under
+/// it, or `None` for an error that a caret cannot be placed for.
+///
+/// Labelled only where a label would add to the message — a fix, or the
+/// decoding of an opaque one — per the convention in [`uucore::diagnostics`].
+fn describe(error: &BadSequence) -> Option<(Option<String>, Option<&'static str>)> {
     match error {
-        BadSequence::MissingCharClassName => Some((
-            "tr-diag-label-missing-char-class-name",
-            Some("tr-diag-help-char-class"),
-        )),
-        BadSequence::InvalidCharClass(_) => Some((
-            "tr-diag-label-invalid-char-class",
-            Some("tr-diag-help-char-class"),
-        )),
-        BadSequence::MissingEquivalentClassChar => Some((
-            "tr-diag-label-missing-equivalence-char",
-            Some("tr-diag-help-equivalence"),
-        )),
-        BadSequence::MultipleCharInEquivalence(_) => Some((
-            "tr-diag-label-multiple-char-in-equivalence",
-            Some("tr-diag-help-equivalence"),
-        )),
-        BadSequence::InvalidRepeatCount(_) => Some((
-            "tr-diag-label-invalid-repeat-count",
-            Some("tr-diag-help-repeat"),
-        )),
-        BadSequence::BackwardsRange { .. } => Some((
-            "tr-diag-label-backwards-range",
+        BadSequence::MissingCharClassName | BadSequence::InvalidCharClass(_) => {
+            Some((None, Some("tr-diag-help-char-class")))
+        }
+        BadSequence::MissingEquivalentClassChar | BadSequence::MultipleCharInEquivalence(_) => {
+            Some((None, Some("tr-diag-help-equivalence")))
+        }
+        BadSequence::InvalidRepeatCount(_) | BadSequence::CharRepeatInSet1 => {
+            Some((None, Some("tr-diag-help-repeat")))
+        }
+        // The one fix is to swap the endpoints; suggest exactly that.
+        BadSequence::BackwardsRange { end, start } => Some((
+            Some(translate!(
+                "tr-diag-label-backwards-range",
+                "suggestion" => format!(
+                    "{}-{}",
+                    crate::operation::range_endpoint_to_string(*end),
+                    crate::operation::range_endpoint_to_string(*start)
+                )
+            )),
             Some("tr-diag-help-backwards-range"),
         )),
-        BadSequence::CharRepeatInSet1 => Some((
-            "tr-diag-label-char-repeat-in-set1",
-            Some("tr-diag-help-repeat"),
+        BadSequence::MultipleCharRepeatInSet2
+        | BadSequence::ClassExceptLowerUpperInSet2
+        | BadSequence::ClassInSet2NotMatchedBySet1 => Some((None, None)),
+        BadSequence::Set1LongerSet2EndsInClass => Some((
+            Some(translate!("tr-diag-label-set1-longer-set2-ends-in-class")),
+            None,
         )),
-        BadSequence::MultipleCharRepeatInSet2 => {
-            Some(("tr-diag-label-multiple-char-repeat-in-set2", None))
-        }
-        BadSequence::ClassExceptLowerUpperInSet2 => {
-            Some(("tr-diag-label-class-except-lower-upper-in-set2", None))
-        }
-        BadSequence::ClassInSet2NotMatchedBySet1 => {
-            Some(("tr-diag-label-class-in-set2-not-matched", None))
-        }
-        BadSequence::Set1LongerSet2EndsInClass => {
-            Some(("tr-diag-label-set1-longer-set2-ends-in-class", None))
-        }
-        BadSequence::ComplementMoreThanOneUniqueInSet2 => {
-            Some(("tr-diag-label-complement-more-than-one-unique", None))
-        }
+        BadSequence::ComplementMoreThanOneUniqueInSet2 => Some((
+            Some(translate!("tr-diag-label-complement-more-than-one-unique")),
+            None,
+        )),
         // Raised against the solved sets rather than what was typed, so there
         // is nothing to point a caret at.
         BadSequence::EmptySet2WhenNotTruncatingSet1 => None,

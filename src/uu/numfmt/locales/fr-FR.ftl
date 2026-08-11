@@ -84,8 +84,6 @@ numfmt-debug-failed-to-convert = échec de conversion d'une partie des nombres e
 numfmt-debug-header-ignored = --header ignoré avec une entrée en ligne de commande
 
 # Étiquettes de diagnostic : ce que le caret désigne dans une chaîne --format
-numfmt-diag-label-missing-directive = aucune directive %f ici
-numfmt-diag-label-unexpected-character = interdit dans une directive
 numfmt-diag-label-number-overflow = ce nombre est trop grand
 numfmt-diag-label-stray-percent = un % littéral doit s'écrire %%
 numfmt-diag-help-format-syntax = un format s'écrit [PRÉFIXE]%[0]['][-][LARGEUR][.PRÉCISION]f[SUFFIXE], comme "%'-10.2f"

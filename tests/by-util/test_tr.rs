@@ -1707,8 +1707,7 @@ tr: invalid character class 'lowre'
    ╭─[ tr:1:5 ]
    │
  1 │ tr w[:lowre:]w x
-   │     ────┬────
-   │         ╰────── not a character class
+   │     ─────────
    │
    │ Help: classes are alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper and xdigit
 ───╯"
@@ -1732,7 +1731,7 @@ tr: range-endpoints of 'y-b' are in reverse collating sequence order
    │
  1 │ tr qw[y-b] x
    │       ─┬─
-   │        ╰─── this range runs backwards
+   │        ╰─── did you mean 'b-y'?
    │
    │ Help: a range goes from the lower character to the higher one, as in a-z
 ───╯"
@@ -1754,8 +1753,7 @@ tr: invalid repeat count '4k' in [c*n] construct
    ╭─[ tr:1:8 ]
    │
  1 │ tr wxy [z*4k]
-   │        ───┬──
-   │           ╰──── not a repeat count
+   │        ──────
    │
    │ Help: [c*N] repeats c N times, [c*] pads SET2 to the length of SET1
 ───╯"
@@ -1778,8 +1776,7 @@ tr: the [c*] repeat construct may not appear in string1
    ╭─[ tr:1:4 ]
    │
  1 │ tr w[q*] xyz
-   │    ──┬──
-   │      ╰──── a repeat is only meaningful in SET2
+   │    ─────
    │
    │ Help: [c*N] repeats c N times, [c*] pads SET2 to the length of SET1
 ───╯"
@@ -1802,8 +1799,7 @@ tr: we: equivalence class operand must be a single character
    ╭─[ tr:1:15 ]
    │
  1 │ tr [:lower:] q[=we=]
-   │               ───┬──
-   │                  ╰──── an equivalence class holds a single character
+   │               ──────
    │
    │ Help: [=c=] stands for every character equivalent to c
 ───╯"
