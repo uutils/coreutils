@@ -1602,6 +1602,7 @@ fn test_empty_output_succeeds_on_full_device() {
         .no_output();
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     #[cfg(unix)]
     use super::*;

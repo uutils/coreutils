@@ -19,11 +19,12 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["diagnostics", "fs", "mode"] }
+uucore = { workspace = true, features = ["fs", "mode"] }
 fluent = { workspace = true }
 nix = { workspace = true }
 
 [features]
+diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
 

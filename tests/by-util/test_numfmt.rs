@@ -1698,6 +1698,7 @@ fn test_header_detached() {
         .stdout_is("1\n2\n");
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
 

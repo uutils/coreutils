@@ -3190,6 +3190,7 @@ fn test_sort_locale_punctuation() {
     }
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
 
