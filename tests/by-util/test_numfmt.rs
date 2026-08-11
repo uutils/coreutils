@@ -1815,6 +1815,31 @@ numfmt: format 'qwe' has no % directive
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_another_option_with_the_same_value() {
+        // --delimiter carries the same text as --format; the caret must land
+        // inside --format, not the option that merely shares its suffix.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--delimiter=%q", "--format=%q", "1000"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
+   ╭─[ numfmt:1:33 ]
+   │
+ 1 │ numfmt --delimiter=%q --format=%q 1000
+   │                                 ┬
+   │                                 ╰── not allowed in a directive
+   │
+   │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
+───╯"
+        );
+    }
+
     #[test]
     fn test_plain_message_when_stderr_is_a_pipe() {
         // The test harness pipes stderr, so the report must not appear.

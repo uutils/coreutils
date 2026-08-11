@@ -13,7 +13,8 @@ use uucore::translate;
 
 use crate::options::{FormatError, FormatErrorKind};
 
-/// Render `err`, raised while parsing `format`, against `args`.
+/// Render `err`, raised while parsing `format`, against `args` — the whole
+/// argument list, program name included.
 ///
 /// Returns `false` when the format cannot be found among the arguments, in
 /// which case the caller should fall back to the plain one-line message.
@@ -25,7 +26,12 @@ pub fn render(args: &[OsString], format: &str, err: &FormatError) -> bool {
         FormatErrorKind::StrayPercent => "numfmt-diag-label-stray-percent",
     };
 
-    Snapshot::new(args).render_inside(
+    let snapshot = Snapshot::with_program(args);
+    let Some(index) = snapshot.index_of_value(format, None, Some("format")) else {
+        return false;
+    };
+    snapshot.render_inside_at(
+        index,
         format,
         err.span.clone(),
         &err.message,
