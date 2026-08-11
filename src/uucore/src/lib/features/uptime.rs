@@ -238,10 +238,11 @@ impl FormattedUptime {
 #[cfg(windows)]
 #[allow(clippy::unnecessary_wraps, reason = "needed on some platforms")]
 pub fn get_uptime(_boot_time: Option<time_t>) -> UResult<i64> {
-    use windows_sys::Win32::System::SystemInformation::GetTickCount;
-    // SAFETY: always return u32
-    let uptime = unsafe { GetTickCount() };
-    Ok(uptime as i64 / 1000)
+    // GetTickCount64 (unlike GetTickCount) does not wrap after 49.7 days.
+    use windows_sys::Win32::System::SystemInformation::GetTickCount64;
+    // SAFETY: no preconditions; always returns milliseconds since boot
+    let uptime = unsafe { GetTickCount64() };
+    Ok((uptime / 1000) as i64)
 }
 
 /// Get the system uptime in a human-readable format
@@ -369,8 +370,10 @@ pub fn get_nusers() -> usize {
                 continue;
             }
 
-            let cstr = core::ffi::CStr::from_ptr(buffer.cast());
-            if !cstr.is_empty() {
+            // The buffer is UTF-16 (WTSUserNameW); checking it byte-wise as a
+            // C string would misread names whose first code unit has a zero
+            // low byte (e.g. U+AC00) as empty.
+            if *buffer != 0 {
                 num_user += 1;
             }
 
