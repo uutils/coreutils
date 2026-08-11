@@ -400,6 +400,15 @@ impl Chmoder {
         }
     }
 
+    fn print_neither_changed(file: OsString) -> std::io::Result<()> {
+        use std::io::{Write as _, stdout};
+        writeln!(
+            stdout(),
+            "{}",
+            translate!("chmod-verbose-neither-changed", "file" => file.quote())
+        )
+    }
+
     fn chmod(&self, files: &[OsString]) -> UResult<()> {
         let mut r = Ok(());
 
@@ -804,10 +813,7 @@ impl Chmoder {
                 // Handle dangling symlinks or other errors
                 return if file.is_symlink() && !dereference {
                     if self.verbose {
-                        println!(
-                            "neither symbolic link {} nor referent has been changed",
-                            file.quote()
-                        );
+                        Self::print_neither_changed(file.into())?;
                     }
                     Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
@@ -830,10 +836,7 @@ impl Chmoder {
             // outside the tree. The symbolic/numeric path below already skips it.
             if file.is_symlink() && !dereference {
                 if self.verbose {
-                    println!(
-                        "{}",
-                        translate!("chmod-verbose-neither-changed", "file" => file.quote())
-                    );
+                    Self::print_neither_changed(file.into())?;
                 }
             } else {
                 self.change_file(fperm, mode, file)?;
@@ -845,10 +848,7 @@ impl Chmoder {
                 // so changing them has no effect. We skip this operation for compatibility.
                 // Note that "chmod without dereferencing" effectively does nothing on symlinks.
                 if self.verbose {
-                    println!(
-                        "neither symbolic link {} nor referent has been changed",
-                        file.quote()
-                    );
+                    Self::print_neither_changed(file.into())?;
                 }
             } else {
                 self.change_file(fperm, new_mode, file)?;
