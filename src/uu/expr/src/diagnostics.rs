@@ -9,7 +9,7 @@
 use uucore::diagnostics::Snapshot;
 use uucore::translate;
 
-use crate::ExprError;
+use crate::{ExprError, FailurePoint};
 
 /// What to point at: the argument index, the text for the caret, and optional
 /// advice.
@@ -21,13 +21,13 @@ struct Located {
 
 /// Render `err` against `args`.
 ///
-/// `stopped_at` is the number of arguments the parser had consumed, and is
-/// `None` for errors raised once the expression was already parsed. Returns
-/// `false` when the error cannot be tied to an argument, in which case the
-/// caller should fall back to the plain one-line message.
-pub fn render(args: &[Vec<u8>], err: &ExprError, stopped_at: Option<usize>) -> bool {
+/// `at` says where the expression failed: how many arguments the parser had
+/// consumed, or which argument evaluation blames. Returns `false` when the
+/// error cannot be tied to an argument, in which case the caller should fall
+/// back to the plain one-line message.
+pub fn render(args: &[Vec<u8>], err: &ExprError, at: &FailurePoint) -> bool {
     let snapshot = Snapshot::from_bytes(args);
-    let Some(located) = locate(&snapshot, err, stopped_at) else {
+    let Some(located) = locate(&snapshot, err, at) else {
         return false;
     };
     snapshot.render(
@@ -38,11 +38,15 @@ pub fn render(args: &[Vec<u8>], err: &ExprError, stopped_at: Option<usize>) -> b
     )
 }
 
-fn locate(snapshot: &Snapshot, err: &ExprError, stopped_at: Option<usize>) -> Option<Located> {
+fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Located> {
     if snapshot.is_empty() {
         return None;
     }
 
+    let stopped_at = match at {
+        FailurePoint::Parse(index) => Some(*index),
+        FailurePoint::Eval(_) => None,
+    };
     // The parser ran out of arguments, so the culprit is the last one it did
     // consume: the operator or parenthesis left dangling.
     let previous = || stopped_at.map(|index| index.saturating_sub(1));
@@ -69,11 +73,14 @@ fn locate(snapshot: &Snapshot, err: &ExprError, stopped_at: Option<usize>) -> Op
             "expr-diag-label-expected-closing-brace-instead-of",
             None,
         ),
-        // Raised while evaluating, so the position is recovered from the value.
-        // An operand computed by a subexpression will not be found, and the
-        // error falls back to its plain form.
-        ExprError::NonIntegerArgument(operand) => (
-            snapshot.index_of_bytes(operand),
+        // Raised while evaluating; the evaluator says which argument it
+        // blames. An operand computed by a subexpression has no argument of
+        // its own, and the error falls back to its plain form.
+        ExprError::NonIntegerArgument(_) => (
+            match at {
+                FailurePoint::Eval(index) => *index,
+                FailurePoint::Parse(_) => None,
+            },
             "expr-diag-label-non-integer-argument",
             Some("expr-diag-help-non-integer-argument"),
         ),

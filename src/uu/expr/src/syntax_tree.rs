@@ -616,12 +616,14 @@ pub struct AstNode {
     inner: AstNodeInner,
 }
 
-// We derive Eq and PartialEq only for tests because we want to ignore the id field.
+// Eq and PartialEq are implemented only for tests, ignoring the id and
+// position fields.
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
     Leaf {
         value: MaybeNonUtf8String,
+        /// Index of the argument the value came from, for diagnostics.
+        position: usize,
     },
     BinOp {
         op_type: BinOp,
@@ -656,13 +658,23 @@ impl AstNode {
         parser.parse().map_err(|e| (e, parser.index))
     }
 
+    /// [`AstNode::eval_located`] without the location, for tests that only
+    /// care about the value.
+    #[cfg(test)]
     pub fn eval(&self) -> ExprResult<NumOrStr> {
+        self.eval_located().map_err(|(error, _)| error)
+    }
+
+    /// Evaluate, reporting on failure the index of the argument the error is
+    /// about, when there is one single argument to blame.
+    pub fn eval_located(&self) -> Result<NumOrStr, (ExprError, Option<usize>)> {
         // This function implements a recursive tree-walking algorithm, but uses an explicit
         // stack approach instead of native recursion to avoid potential stack overflow
         // on deeply nested expressions.
 
         let mut stack = vec![self];
-        let mut result_stack = BTreeMap::new();
+        let mut result_stack: BTreeMap<u32, Result<NumOrStr, (ExprError, Option<usize>)>> =
+            BTreeMap::new();
 
         while let Some(node) = stack.pop() {
             match &node.inner {
@@ -674,7 +686,7 @@ impl AstNode {
                     left,
                     right,
                 } => {
-                    let (Some(right), Some(left)) = (
+                    let (Some(right_result), Some(left_result)) = (
                         result_stack.remove(&right.id),
                         result_stack.remove(&left.id),
                     ) else {
@@ -684,7 +696,23 @@ impl AstNode {
                         continue;
                     };
 
-                    let result = op_type.eval(left, right);
+                    // The operator takes plain results — some, like `|`,
+                    // swallow their children's errors — so the positions are
+                    // held back and re-attached if an error comes out.
+                    let (left_result, left_position) = split(left_result);
+                    let (right_result, right_position) = split(right_result);
+                    let result = op_type.eval(left_result, right_result).map_err(|error| {
+                        let position = match &error {
+                            // Born here from a leaf operand, unless a child
+                            // already located it deeper in the expression.
+                            ExprError::NonIntegerArgument(value) => left_position
+                                .or(right_position)
+                                .or_else(|| leaf_position(left, value))
+                                .or_else(|| leaf_position(right, value)),
+                            _ => left_position.or(right_position),
+                        };
+                        (error, position)
+                    });
                     result_stack.insert(node.id, result);
                 }
                 AstNodeInner::Substr {
@@ -751,13 +779,39 @@ impl AstNode {
     }
 }
 
+/// Take the position out of a located result, leaving the plain result the
+/// operator evaluators work on.
+fn split(
+    result: Result<NumOrStr, (ExprError, Option<usize>)>,
+) -> (ExprResult<NumOrStr>, Option<usize>) {
+    match result {
+        Ok(value) => (Ok(value), None),
+        Err((error, position)) => (Err(error), position),
+    }
+}
+
+/// The position of `node`, when it is a leaf holding exactly `value`.
+fn leaf_position(node: &AstNode, value: &MaybeNonUtf8Str) -> Option<usize> {
+    match &node.inner {
+        AstNodeInner::Leaf {
+            value: leaf,
+            position,
+        } if leaf == value => Some(*position),
+        _ => None,
+    }
+}
+
 impl Drop for AstNode {
     // This is a tree-walking algorithm, so like `eval` it uses an explicit
     // stack instead of native recursion to avoid a stack overflow when
     // dropping a deeply nested AST.
     fn drop(&mut self) {
         fn detach_children(inner: &mut AstNodeInner, stack: &mut Vec<AstNode>) {
-            match std::mem::replace(inner, AstNodeInner::Leaf { value: Vec::new() }) {
+            let empty = AstNodeInner::Leaf {
+                value: Vec::new(),
+                position: 0,
+            };
+            match std::mem::replace(inner, empty) {
                 AstNodeInner::Leaf { .. } => {}
                 AstNodeInner::BinOp { left, right, .. } => {
                     stack.push(*left);
@@ -979,12 +1033,16 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
                     }
                     b"+" => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
                         value: self.next()?.into(),
+                        position: self.index - 1,
                     })),
                     b"(" => {
                         stack.push(ParseFrame::CloseParen);
                         ParseState::Expression { min_prec: 0 }
                     }
-                    s => ParseState::Value(AstNode::new(AstNodeInner::Leaf { value: s.into() })),
+                    s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
+                        value: s.into(),
+                        position: self.index - 1,
+                    })),
                 },
                 ParseState::Value(value) => match stack.pop() {
                     None => return Ok(value),
@@ -1087,12 +1145,51 @@ mod test {
 
     impl Eq for AstNode {}
 
+    // Hand-built expectations cannot know real argument positions, so
+    // equality ignores them, like it ignores ids.
+    impl PartialEq for AstNodeInner {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Self::Leaf { value: a, .. }, Self::Leaf { value: b, .. }) => a == b,
+                (
+                    Self::BinOp {
+                        op_type: a_op,
+                        left: a_left,
+                        right: a_right,
+                    },
+                    Self::BinOp {
+                        op_type: b_op,
+                        left: b_left,
+                        right: b_right,
+                    },
+                ) => a_op == b_op && a_left == b_left && a_right == b_right,
+                (
+                    Self::Substr {
+                        string: a_string,
+                        pos: a_pos,
+                        length: a_length,
+                    },
+                    Self::Substr {
+                        string: b_string,
+                        pos: b_pos,
+                        length: b_length,
+                    },
+                ) => a_string == b_string && a_pos == b_pos && a_length == b_length,
+                (Self::Length { string: a }, Self::Length { string: b }) => a == b,
+                _ => false,
+            }
+        }
+    }
+
+    impl Eq for AstNodeInner {}
+
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
             Self {
                 id: get_next_id(),
                 inner: AstNodeInner::Leaf {
                     value: value.into(),
+                    position: 0,
                 },
             }
         }
