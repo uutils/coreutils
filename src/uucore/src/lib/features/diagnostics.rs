@@ -98,6 +98,8 @@ pub struct Snapshot {
     verbatim: Vec<bool>,
     /// The arguments themselves, for [`Snapshot::index_of`].
     args: Vec<OsString>,
+    /// Index of the first operand: 1 when argument 0 is the program name.
+    first_operand: usize,
 }
 
 impl Snapshot {
@@ -112,6 +114,22 @@ impl Snapshot {
         for arg in args {
             snapshot.push(arg.as_ref().to_os_string());
         }
+        snapshot
+    }
+
+    /// Build a snapshot of an argument list whose first argument is the
+    /// program name.
+    ///
+    /// The program name is shown in the source line — the command reads as it
+    /// was typed — but it is never matched by any locator, so an operand that
+    /// happens to share its text cannot be mistaken for it.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The whole argument list, `argv[0]` included.
+    pub fn with_program<S: AsRef<OsStr>>(args: &[S]) -> Self {
+        let mut snapshot = Self::new(args);
+        snapshot.first_operand = args.len().min(1);
         snapshot
     }
 
@@ -140,6 +158,7 @@ impl Snapshot {
             spans: Vec::with_capacity(len),
             verbatim: Vec::with_capacity(len),
             args: Vec::with_capacity(len),
+            first_operand: 0,
         }
     }
 
@@ -185,10 +204,16 @@ impl Snapshot {
     ///
     /// # Returns
     ///
-    /// The index of the first argument equal to `arg`, or `None` if there is
-    /// none. A repeated value resolves to its first occurrence.
+    /// The index of the first operand equal to `arg`, or `None` if there is
+    /// none. A repeated value resolves to its first occurrence, and the
+    /// program name is never matched.
     pub fn index_of(&self, arg: &OsStr) -> Option<usize> {
-        self.args.iter().position(|candidate| candidate == arg)
+        self.args
+            .iter()
+            .enumerate()
+            .skip(self.first_operand)
+            .find(|(_, candidate)| *candidate == arg)
+            .map(|(index, _)| index)
     }
 
     /// Index of the first argument equal to `arg`, held as raw bytes.
@@ -204,6 +229,122 @@ impl Snapshot {
     /// platform.
     pub fn index_of_bytes(&self, arg: &[u8]) -> Option<usize> {
         self.index_of(&crate::os_str_from_bytes(arg).ok()?)
+    }
+
+    /// Index of the argument carrying `operand` as the value of an option.
+    ///
+    /// An option's value can be spelled many ways — `-k 2.3q`, `-k2.3q`,
+    /// `-rk2.3q`, `--key 2.3q`, `--key=2.3q` — and a text search cannot tell
+    /// the value apart from a file or another option that happens to end with
+    /// the same characters. This walks the arguments and matches only the
+    /// shapes an option value can actually take.
+    ///
+    /// # Arguments
+    ///
+    /// * `operand` - The value at fault, as the parser received it.
+    /// * `short` - The option's short name (`'k'` for `-k`), if it has one.
+    /// * `long` - The option's long name (`"key"` for `--key`), if it has one.
+    ///
+    /// # Returns
+    ///
+    /// The index of the first argument carrying `operand` — the argument
+    /// itself for a detached value, the combined argument for a glued one —
+    /// or `None` if no argument does. First match is the right one for
+    /// repeatable options, since parsing stops at the first failing value.
+    pub fn index_of_value(
+        &self,
+        operand: &str,
+        short: Option<char>,
+        long: Option<&str>,
+    ) -> Option<usize> {
+        // A run of short options the wanted one ends, as in `-r…k`.
+        let ends_cluster = |arg: &str| {
+            let Some(short) = short else { return false };
+            arg.strip_prefix('-').is_some_and(|cluster| {
+                cluster.ends_with(short) && cluster.chars().all(char::is_alphanumeric)
+            })
+        };
+        // `-k` or `--key`, or a cluster of short options ending in `-…k`.
+        let is_flag = |arg: &str| {
+            if let Some(rest) = arg.strip_prefix("--") {
+                return long == Some(rest);
+            }
+            ends_cluster(arg)
+        };
+        // `--key=<operand>`.
+        let is_attached_long = |arg: &str| {
+            let Some(long) = long else { return false };
+            arg.strip_prefix("--")
+                .and_then(|rest| rest.strip_prefix(long))
+                .and_then(|rest| rest.strip_prefix('='))
+                == Some(operand)
+        };
+        // `-k<operand>`, or glued to a cluster as `-r…k<operand>`. An empty
+        // value cannot be glued: `-k` alone is the flag, not the flag carrying
+        // nothing, and taking it for the value would point the caret at the
+        // option instead of the empty argument that follows it.
+        let is_attached_short = |arg: &str| {
+            if operand.is_empty() {
+                return false;
+            }
+            let Some(prefix) = arg
+                .len()
+                .checked_sub(operand.len())
+                .and_then(|end| arg.get(..end))
+            else {
+                return false;
+            };
+            arg.ends_with(operand) && ends_cluster(prefix)
+        };
+
+        let args = self.args.iter().map(|arg| arg.to_str()).enumerate();
+        let mut previous: Option<&str> = None;
+        for (index, arg) in args.skip(self.first_operand) {
+            let Some(arg) = arg else {
+                previous = None;
+                continue;
+            };
+            // Everything after a bare `--` is positional, never an option or
+            // its value.
+            if arg == "--" {
+                break;
+            }
+            if is_attached_long(arg)
+                || is_attached_short(arg)
+                || (arg == operand && previous.is_some_and(is_flag))
+            {
+                return Some(index);
+            }
+            previous = Some(arg);
+        }
+        None
+    }
+
+    /// Index of the `n`-th positional argument, counting from zero.
+    ///
+    /// An argument is taken as positional when it follows a bare `--` or does
+    /// not start with `-`; a lone `-` counts as positional. This only holds
+    /// for utilities none of whose options take a *separate* value — an
+    /// option's detached value would be miscounted as a positional.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Zero-based rank among the positional arguments.
+    ///
+    /// # Returns
+    ///
+    /// The index of that positional, or `None` if there are not that many.
+    pub fn index_of_positional(&self, n: usize) -> Option<usize> {
+        let mut options_ended = false;
+        let mut positionals = (self.first_operand..self.args.len()).filter(|&index| {
+            let bytes = self.args[index].as_encoded_bytes();
+            if !options_ended && bytes == b"--" {
+                options_ended = true;
+                return false;
+            }
+            options_ended || !bytes.starts_with(b"-") || bytes == b"-"
+        });
+        positionals.nth(n)
     }
 
     /// Byte range of the argument at `index`.
@@ -273,6 +414,59 @@ impl Snapshot {
         self.report(span, message, label, help)
     }
 
+    /// Write a report pointing at `range`, a byte range *inside* `operand`,
+    /// where `operand` is the tail (or the whole) of the argument at `index`.
+    ///
+    /// Like [`Snapshot::render_inside`], but the argument is named rather than
+    /// searched for: the caller has located it with [`Snapshot::index_of`],
+    /// [`Snapshot::index_of_value`] or [`Snapshot::index_of_positional`], or
+    /// tracked it itself, so an unrelated argument sharing the operand's text
+    /// cannot draw the caret away.
+    ///
+    /// Falls back to underlining the whole argument when the operand is not
+    /// its tail, or when quoting means an offset inside `operand` no longer
+    /// lines up with what is printed.
+    ///
+    /// # Arguments
+    ///
+    /// * `index` - Position of the argument carrying `operand`.
+    /// * `operand` - The operand at fault, as it was parsed.
+    /// * `range` - Byte range inside `operand` to point at. An empty range
+    ///   marks the character it starts at.
+    /// * `message` - The error message, already localized.
+    /// * `label` - Text placed under the caret, already localized.
+    /// * `help` - An optional line of advice, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` if nothing could be rendered, in which case the caller should
+    /// fall back to a plain one-line message.
+    pub fn render_inside_at(
+        &self,
+        index: usize,
+        operand: &str,
+        range: Range<usize>,
+        message: &str,
+        label: &str,
+        help: Option<&str>,
+    ) -> bool {
+        let Some(span) = self.locate_at(index, operand, range) else {
+            return false;
+        };
+        self.report(span, message, label, help)
+    }
+
+    /// Byte range covered by `range` — an offset inside `operand` — within the
+    /// argument at `index`.
+    fn locate_at(&self, index: usize, operand: &str, range: Range<usize>) -> Option<Range<usize>> {
+        let arg = self.args.get(index)?;
+        let whole = self.spans[index].clone();
+        if !self.verbatim[index] || !arg.as_encoded_bytes().ends_with(operand.as_bytes()) {
+            return Some(whole);
+        }
+        Some(self.locate_tail(whole, operand, range))
+    }
+
     /// Byte range covered by `range` — an offset inside `operand` — once
     /// `operand` has been found among the arguments.
     fn locate(&self, operand: &str, range: Range<usize>) -> Option<Range<usize>> {
@@ -284,21 +478,26 @@ impl Snapshot {
         if !self.verbatim[index] {
             return Some(whole);
         }
+        Some(self.locate_tail(whole, operand, range))
+    }
 
+    /// Byte range covered by `range` — an offset inside `operand` — where
+    /// `operand` is the tail of the argument spanning `whole`.
+    fn locate_tail(&self, whole: Range<usize>, operand: &str, range: Range<usize>) -> Range<usize> {
         let base = whole.end - operand.len();
         // Offsets come from someone else's parser, so they are only trusted as
         // far as the text agrees with them.
         let start = self.floor_boundary(base + range.start.min(operand.len()));
         let end = self.floor_boundary(base + range.end.clamp(range.start, operand.len()));
         if start < end {
-            return Some(start..end);
+            return start..end;
         }
         // An empty range means something is missing rather than wrong; give the
         // caret the character it stopped at, or the whole argument if the
         // operand ran out.
         match self.text[start..].chars().next() {
-            Some(c) if start < whole.end => Some(start..start + c.len_utf8()),
-            _ => Some(whole),
+            Some(c) if start < whole.end => start..start + c.len_utf8(),
+            _ => whole,
         }
     }
 
@@ -471,5 +670,132 @@ mod tests {
         let snap = snapshot(&["dup", "-ef", "dup"]);
         assert_eq!(snap.index_of(OsStr::new("dup")), Some(0));
         assert_eq!(snap.index_of(OsStr::new("absent")), None);
+    }
+
+    #[test]
+    fn the_program_name_is_never_the_argument_looked_for() {
+        // `printf printf` prints its own name; the operand is the second one.
+        let snap = Snapshot::with_program(&["printf", "printf"]);
+        assert_eq!(snap.index_of(OsStr::new("printf")), Some(1));
+    }
+
+    #[test]
+    fn an_operand_starting_with_a_dash_is_still_found() {
+        // What `index_of_positional` cannot do: printf takes hyphen values, so
+        // `-%y` is the format rather than an option.
+        let snap = Snapshot::with_program(&["printf", "-%y", "arg"]);
+        assert_eq!(snap.index_of(OsStr::new("-%y")), Some(1));
+        assert_eq!(snap.index_of_positional(0), Some(2));
+    }
+
+    #[test]
+    fn a_value_is_found_in_every_spelling_of_its_option() {
+        for (args, expected) in [
+            (&["-k", "2.3q", "f"][..], 1),
+            (&["-k2.3q", "f"][..], 0),
+            (&["-rk2.3q", "f"][..], 0),
+            (&["--key", "2.3q", "f"][..], 1),
+            (&["--key=2.3q", "f"][..], 0),
+        ] {
+            let snap = snapshot(args);
+            assert_eq!(
+                snap.index_of_value("2.3q", Some('k'), Some("key")),
+                Some(expected),
+                "in {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_program_name_is_never_an_option_value() {
+        let snap = Snapshot::with_program(&["sort", "-k", "sort"]);
+        assert_eq!(snap.index_of_value("sort", Some('k'), Some("key")), Some(2));
+    }
+
+    #[test]
+    fn a_file_sharing_the_value_text_is_not_the_value() {
+        let snap = Snapshot::with_program(&["sort", "data.2.3q", "-k2.3q"]);
+        assert_eq!(snap.index_of_value("2.3q", Some('k'), Some("key")), Some(2));
+    }
+
+    #[test]
+    fn another_option_sharing_the_value_suffix_is_not_the_value() {
+        let snap = Snapshot::with_program(&["numfmt", "--delimiter=%q", "--format=%q", "1000"]);
+        assert_eq!(snap.index_of_value("%q", None, Some("format")), Some(2));
+    }
+
+    #[test]
+    fn a_long_option_is_not_mistaken_for_a_short_cluster() {
+        // `--am=644` ends in `m` + the operand, but it is not a `-m` cluster.
+        let snap = snapshot(&["--am=644", "-m644", "d"]);
+        assert_eq!(snap.index_of_value("644", Some('m'), Some("mode")), Some(1));
+    }
+
+    #[test]
+    fn a_value_after_a_double_dash_is_not_an_option_value() {
+        let snap = snapshot(&["--", "-k", "2.3q"]);
+        assert_eq!(snap.index_of_value("2.3q", Some('k'), Some("key")), None);
+    }
+
+    #[test]
+    fn an_empty_value_is_the_argument_after_the_flag() {
+        // `-k` ends in `k` and in the empty operand, but it is the flag.
+        let snap = snapshot(&["-k", "", "f"]);
+        assert_eq!(snap.index_of_value("", Some('k'), Some("key")), Some(1));
+    }
+
+    #[test]
+    fn a_missing_value_cannot_be_located() {
+        let snap = snapshot(&["-x", "unrelated"]);
+        assert_eq!(snap.index_of_value("2.3q", Some('k'), Some("key")), None);
+    }
+
+    #[test]
+    fn positionals_are_counted_across_options() {
+        let snap = Snapshot::with_program(&["tr", "-c", "ab", "tr"]);
+        assert_eq!(snap.index_of_positional(0), Some(2));
+        assert_eq!(snap.index_of_positional(1), Some(3));
+        assert_eq!(snap.index_of_positional(2), None);
+    }
+
+    #[test]
+    fn a_double_dash_ends_options_for_positionals() {
+        let snap = Snapshot::with_program(&["tr", "--", "-d", "x"]);
+        assert_eq!(snap.index_of_positional(0), Some(2));
+        assert_eq!(snap.index_of_positional(1), Some(3));
+    }
+
+    #[test]
+    fn a_lone_dash_is_a_positional() {
+        let snap = snapshot(&["-c", "-", "x"]);
+        assert_eq!(snap.index_of_positional(0), Some(1));
+    }
+
+    #[test]
+    fn locate_at_points_inside_the_named_argument() {
+        for (args, index) in [(&["-k2.3x", "f"][..], 0), (&["-k", "2.3x", "f"][..], 1)] {
+            let snap = snapshot(args);
+            let span = snap.locate_at(index, "2.3x", 3..4).unwrap();
+            assert_eq!(&snap.text[span], "x", "in {args:?}");
+        }
+    }
+
+    #[test]
+    fn locate_at_ignores_an_earlier_argument_with_the_same_tail() {
+        let snap = snapshot(&["data.2.3q", "-k2.3q"]);
+        let span = snap.locate_at(1, "2.3q", 3..4).unwrap();
+        assert_eq!(span, snap.spans[1].start + 5..snap.spans[1].start + 6);
+    }
+
+    #[test]
+    fn locate_at_underlines_the_whole_argument_when_the_operand_is_not_its_tail() {
+        let snap = snapshot(&["ab", "cd"]);
+        assert_eq!(snap.locate_at(1, "zz", 0..1), Some(3..5));
+    }
+
+    #[test]
+    fn locate_at_past_the_end_cannot_be_located() {
+        let snap = snapshot(&["ab"]);
+        assert_eq!(snap.locate_at(5, "ab", 0..1), None);
     }
 }
