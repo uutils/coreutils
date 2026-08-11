@@ -750,6 +750,7 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
 }
 
 fn write_padding(writer: &mut impl Write, byte: u8, mut len: usize) -> std::io::Result<()> {
+    // One KiB keeps stack use small while amortizing writes for large field widths.
     const BUFFER_SIZE: usize = 1024;
     let buffer = [byte; BUFFER_SIZE];
 
