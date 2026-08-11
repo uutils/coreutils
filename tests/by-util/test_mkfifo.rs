@@ -254,13 +254,6 @@ fn test_mkfifo_permission_unchanged_when_failed() {
 #[cfg(unix)]
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ mkfifo:1:7 ]`.
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("mkfifo:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
         let result = new_ucmd!()
@@ -271,7 +264,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid mode"), "{stderr}");
         // The caret lands on `?`: three columns of `-m ` and four of mode.
-        assert_eq!(caret_column(stderr), Some(7), "{stderr}");
+        assert_eq!(result.caret_column(), Some(7), "{stderr}");
     }
 
     #[test]

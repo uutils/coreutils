@@ -275,13 +275,6 @@ fn test_mknod_selinux_invalid_cleanup() {
 #[cfg(unix)]
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ mknod:1:8 ]`.
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("mknod:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
         let result = new_ucmd!()
@@ -292,7 +285,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid mode"), "{stderr}");
         // The caret lands on `?`: three columns of `-m ` and four of mode.
-        assert_eq!(caret_column(stderr), Some(8), "{stderr}");
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
     }
 
     #[test]

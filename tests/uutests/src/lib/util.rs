@@ -413,6 +413,28 @@ impl CmdResult {
             .join("\n")
     }
 
+    /// Returns the one-based column a caret diagnostic points at.
+    ///
+    /// A report opens with a header naming the utility and the position it
+    /// points at — `╭─[ chmod:1:5 ]` — which is the only place the column is
+    /// written out; the caret row itself is padded and drawn with box
+    /// characters. Asserting on the column keeps a test to the one thing it
+    /// cares about, where matching the block verbatim would break on every
+    /// wording change.
+    ///
+    /// # Returns
+    ///
+    /// `None` when stderr carries no such header: the plain one-line message
+    /// was printed, or the diagnostic pointed at another line.
+    pub fn caret_column(&self) -> Option<usize> {
+        let header = format!("{}:1:", self.util_name.as_ref()?);
+        let line = self
+            .stderr_str()
+            .lines()
+            .find(|line| line.contains(&header))?;
+        line.rsplit(':').next()?.trim_end_matches(" ]").parse().ok()
+    }
+
     /// Returns the program's standard error as a string slice, automatically handling invalid utf8
     pub fn stderr_str_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(&self.stderr)
