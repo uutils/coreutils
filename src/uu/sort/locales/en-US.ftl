@@ -31,7 +31,6 @@ sort-failed-parse-field-index = failed to parse field index {$field} {$error}
 sort-field-index-cannot-be-zero = field index can not be 0
 sort-failed-parse-char-index = failed to parse character index {$char}: {$error}
 sort-invalid-option = invalid option: '{$option}'
-sort-invalid-char-index-zero-start = invalid character index 0 for the start position of a field
 sort-invalid-field-spec = {$msg}: invalid field specification {$spec}
 sort-invalid-count-at-start-of = invalid count at start of {$string}
 sort-invalid-number-at-field-start = invalid number at field start
