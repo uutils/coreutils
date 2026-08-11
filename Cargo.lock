@@ -152,7 +152,7 @@ checksum = "4d6867f1565b3aad85681f1015055b087fcfd840d6aeee6eee7f2da317603695"
 dependencies = [
  "autocfg",
  "libm",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -864,7 +864,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 2.0.119",
+ "syn 3.0.3",
 ]
 
 [[package]]
@@ -2061,6 +2061,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-bigint"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93e7820bc0a80a0238e650327316f929ba18d5be054b647490a3a6a339f3e7c0"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-conv"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2081,7 +2091,7 @@ version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17bb261bf36fa7d83f4c294f834e91256769097b3cb505d44831e0a179ac647f"
 dependencies = [
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-traits",
 ]
@@ -2095,7 +2105,7 @@ dependencies = [
  "bitvec",
  "either",
  "lru",
- "num-bigint",
+ "num-bigint 0.4.8",
  "num-integer",
  "num-modular",
  "num-traits",
@@ -3612,7 +3622,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-traits",
  "onig",
  "thiserror 2.0.20",
@@ -3627,7 +3637,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-prime",
  "uucore",
 ]
@@ -4106,7 +4116,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "fluent",
- "num-bigint",
+ "num-bigint 0.5.1",
  "num-traits",
  "thiserror 2.0.20",
  "uucore",
