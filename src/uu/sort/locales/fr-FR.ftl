@@ -31,7 +31,6 @@ sort-failed-parse-field-index = échec d'analyse de l'index de champ {$field} {$
 sort-field-index-cannot-be-zero = l'index de champ ne peut pas être 0
 sort-failed-parse-char-index = échec d'analyse de l'index de caractère {$char} : {$error}
 sort-invalid-option = option invalide : '{$option}'
-sort-invalid-char-index-zero-start = index de caractère 0 invalide pour la position de début d'un champ
 sort-invalid-field-spec = {$msg} : spécification de champ invalide {$spec}
 sort-invalid-count-at-start-of = nombre invalide au début de {$string}
 sort-invalid-number-at-field-start = nombre invalide au début du champ
