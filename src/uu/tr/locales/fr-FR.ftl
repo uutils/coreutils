@@ -56,7 +56,6 @@ tr-diag-label-class-except-lower-upper-in-set2 = seules [:lower:] et [:upper:] p
 tr-diag-label-class-in-set2-not-matched = aucune classe à la position correspondante dans SET1
 tr-diag-label-set1-longer-set2-ends-in-class = cet ensemble est plus long que SET2
 tr-diag-label-complement-more-than-one-unique = un seul caractère peut être la cible du complément
-tr-diag-label-empty-set2 = cet ensemble est vide
 tr-diag-help-char-class = les classes sont alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper et xdigit
 tr-diag-help-equivalence = [=c=] désigne tout caractère équivalent à c
 tr-diag-help-repeat = [c*N] répète c N fois, [c*] complète SET2 à la longueur de SET1
