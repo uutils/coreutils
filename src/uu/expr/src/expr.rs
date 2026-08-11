@@ -108,24 +108,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(os_string_to_vec)
         .collect::<Result<Vec<_>, _>>()?;
 
-    if args.len() == 1 && args[0] == b"--help" {
-        uu_app().print_help()?;
-    } else if args.len() == 1 && args[0] == b"--version" {
-        writeln!(stdout(), "expr {}", uucore::crate_version!())?;
-    } else {
-        // The first argument may be "--" and should be be ignored.
-        let args = if !args.is_empty() && args[0] == b"--" {
-            &args[1..]
-        } else {
-            &args
-        };
+    let mut args = &args[..];
+    match args {
+        [a] if a == b"--help" => uu_app().print_help()?,
+        [a] if a == b"--version" => writeln!(stdout(), "expr {}", uucore::crate_version!())?,
+        _ => {
+            // -- as the first argument should be ignored
+            if let [a, rest @ ..] = args
+                && a == b"--"
+            {
+                args = rest;
+            }
+            let res = AstNode::parse(args)?.eval()?.eval_as_string();
+            let _ = stdout().write_all(&res);
+            let _ = stdout().write_all(b"\n");
 
-        let res = AstNode::parse(args)?.eval()?.eval_as_string();
-        let _ = stdout().write_all(&res);
-        let _ = stdout().write_all(b"\n");
-
-        if !is_truthy(&res.into()) {
-            return Err(1.into());
+            if !is_truthy(&res.into()) {
+                return Err(1.into());
+            }
         }
     }
 
