@@ -2102,13 +2102,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         ..Default::default()
     };
 
+    // Kept for the caret in `-k` diagnostics, which echoes the command line:
+    // taken before the legacy rewrite, so that a `-k` error in a command that
+    // also used `+POS` shows what was typed rather than the `-k` the rewrite
+    // synthesized.
+    let args: Vec<OsString> = args.collect();
+    let key_args = uucore::diagnostics::capture(&args);
+
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
     if !legacy_warnings.is_empty() {
         index_legacy_warnings(&processed_args, &mut legacy_warnings);
     }
-    // Kept for the caret in `-k` diagnostics, which needs the arguments as they
-    // reached the parser.
-    let key_args = uucore::diagnostics::capture(&processed_args);
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), processed_args, 2)?;
 

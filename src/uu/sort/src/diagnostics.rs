@@ -13,7 +13,8 @@ use uucore::translate;
 
 use crate::{KeyError, KeyErrorKind};
 
-/// Render `err`, raised while parsing `key`, against `args`.
+/// Render `err`, raised while parsing `key`, against `args` — the whole
+/// argument list, program name included.
 ///
 /// Returns `false` when the key cannot be found among the arguments, in which
 /// case the caller should fall back to the plain one-line message.
@@ -25,7 +26,12 @@ pub fn render(args: &[OsString], key: &str, err: &KeyError) -> bool {
         KeyErrorKind::IncompatibleOptions => ("sort-diag-label-incompatible-options", false),
     };
 
-    Snapshot::new(args).render_inside(
+    let snapshot = Snapshot::with_program(args);
+    let Some(index) = snapshot.index_of_value(key, Some('k'), Some("key")) else {
+        return false;
+    };
+    snapshot.render_inside_at(
+        index,
         key,
         err.span.clone(),
         &err.message,
