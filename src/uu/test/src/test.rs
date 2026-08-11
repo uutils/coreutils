@@ -75,19 +75,16 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     }
     // `parse` consumes the arguments, so keep a copy for the diagnostic — but
     // only when one could actually be rendered.
-    let expression = uucore::diagnostics::enabled().then(|| args.clone());
+    let expression = uucore::diagnostics::capture(&args);
 
     match parse(args).and_then(|mut stack| eval(&mut stack)) {
         Ok(true) => Ok(()),
         Ok(false) => Err(1.into()),
         Err(e) => {
-            if let Some(expression) = &expression
-                && diagnostics::render(expression, &e)
-            {
-                // The diagnostic is already on stderr; exit quietly.
-                return Err(uucore::error::ExitCode::new(2));
-            }
-            Err(e.into())
+            let reported = expression
+                .as_ref()
+                .is_some_and(|expression| diagnostics::render(expression, &e));
+            Err(uucore::error::quiet_if_reported(reported, e))
         }
     }
 }
