@@ -56,12 +56,14 @@ impl ModeError {
         }
     }
 
-    /// Render this error against `args`, with a caret under the part of the
-    /// mode that is at fault.
+    /// Render this error against `args`, where the mode is the value of the
+    /// `-m`/`--mode` option.
     ///
     /// # Arguments
     ///
-    /// * `args` - The argument list the mode came from.
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name — as [`crate::diagnostics::operands`] returns it, since the other
+    ///   renderer here takes a positional index into the same list.
     /// * `mode` - The whole mode operand.
     /// * `clause_start` - Where the clause that failed begins inside `mode`,
     ///   since a mode is parsed one comma-separated clause at a time.
@@ -71,9 +73,58 @@ impl ModeError {
     ///
     /// `false` when the mode cannot be found among the arguments, in which case
     /// the caller should fall back to the plain one-line message.
-    pub fn render(
+    pub fn render_mode_value(
         &self,
         args: &[std::ffi::OsString],
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let snapshot = crate::diagnostics::Snapshot::new(args);
+        let Some(index) = snapshot.index_of_value(mode, Some('m'), Some("mode")) else {
+            return false;
+        };
+        self.render_snapshot(&snapshot, index, mode, clause_start, message)
+    }
+
+    /// Render this error against `args`, with the argument carrying the mode
+    /// already located by the caller.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from, without the program
+    ///   name.
+    /// * `index` - Position of the argument carrying the mode inside `args`.
+    /// * `mode` - The mode as it appears in that argument.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when nothing could be rendered, in which case the caller should
+    /// fall back to the plain one-line message.
+    pub fn render_at(
+        &self,
+        args: &[std::ffi::OsString],
+        index: usize,
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        self.render_snapshot(
+            &crate::diagnostics::Snapshot::new(args),
+            index,
+            mode,
+            clause_start,
+            message,
+        )
+    }
+
+    fn render_snapshot(
+        &self,
+        snapshot: &crate::diagnostics::Snapshot,
+        index: usize,
         mode: &str,
         clause_start: usize,
         message: &str,
@@ -84,7 +135,8 @@ impl ModeError {
             ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
         };
 
-        crate::diagnostics::Snapshot::new(args).render_inside(
+        snapshot.render_inside_at(
+            index,
             mode,
             clause_start + self.span.start..clause_start + self.span.end,
             message,

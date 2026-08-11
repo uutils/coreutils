@@ -377,7 +377,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             let message = translate!("install-error-invalid-mode", "error" => err.to_string());
             // When the diagnostic is rendered it is already on stderr; exit quietly.
-            if !diag_args.is_some_and(|args| err.render(args, x, 0, &message)) {
+            if !diag_args.is_some_and(|args| err.render_mode_value(args, x, 0, &message)) {
                 show_error!("{message}");
             }
             1
