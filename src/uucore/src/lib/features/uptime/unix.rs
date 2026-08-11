@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg
+// spell-checker:ignore gettime BOOTTIME clockid boottime nusers loadavg getloadavg cfgs
 
 //! Unix implementation of the platform side of `uucore::uptime`: system
 //! uptime, user count and load average. The macOS/NetBSD/Cygwin and OpenBSD

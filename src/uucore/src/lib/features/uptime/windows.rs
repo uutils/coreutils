@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore nusers loadavg
+// spell-checker:ignore nusers loadavg INFOW
 
 //! Windows implementation of the platform side of `uucore::uptime`:
 //! `GetTickCount64` for the uptime, WTS session enumeration for the user
