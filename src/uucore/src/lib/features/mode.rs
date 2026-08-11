@@ -7,12 +7,14 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
+use std::ffi::{OsStr, OsString};
 use std::fmt::{self, Display};
 use std::ops::Range;
 
 #[cfg(windows)]
 use libc::umask;
 
+use crate::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use crate::translate;
 
 /// A mode string that does not parse, and the part of it that is at fault.
@@ -73,7 +75,7 @@ impl ModeError {
     /// the caller should fall back to the plain one-line message.
     pub fn render(
         &self,
-        args: &[std::ffi::OsString],
+        args: &[OsString],
         mode: &str,
         clause_start: usize,
         message: &str,
@@ -84,14 +86,75 @@ impl ModeError {
             ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
         };
 
-        crate::diagnostics::Snapshot::new(args).render_inside(
-            mode,
-            clause_start + self.span.start..clause_start + self.span.end,
-            message,
-            &translate!(label),
-            Some(&translate!("mode-diag-help-syntax")),
+        let range = clause_start + self.span.start..clause_start + self.span.end;
+        let label = translate!(label);
+        let help = translate!("mode-diag-help-syntax");
+
+        if !mode.chars().any(char::is_control) && !message.chars().any(char::is_control) {
+            return crate::diagnostics::Snapshot::new(args).render_inside(
+                mode,
+                range,
+                message,
+                &label,
+                Some(&help),
+            );
+        }
+
+        let Some(prefix) = mode.get(..range.start) else {
+            return false;
+        };
+        let Some(fault) = mode.get(range.clone()) else {
+            return false;
+        };
+        let Some(suffix) = mode.get(range.end..) else {
+            return false;
+        };
+        let escaped_prefix = escape_diagnostic_text(prefix);
+        let escaped_fault = escape_diagnostic_text(fault);
+        let escaped_mode = format!(
+            "{escaped_prefix}{escaped_fault}{}",
+            escape_diagnostic_text(suffix)
+        );
+        let escaped_range = escaped_prefix.len()..escaped_prefix.len() + escaped_fault.len();
+
+        let Some(index) = args
+            .iter()
+            .position(|arg| arg.as_encoded_bytes().ends_with(mode.as_bytes()))
+        else {
+            return false;
+        };
+        let Some(arg) = args[index].to_str() else {
+            return false;
+        };
+        let arg_prefix = &arg[..arg.len() - mode.len()];
+        let mut escaped_args: Vec<OsString> = args.to_vec();
+        escaped_args[index] = format!("{arg_prefix}{escaped_mode}").into();
+
+        crate::diagnostics::Snapshot::new(&escaped_args).render_inside(
+            &escaped_mode,
+            escaped_range,
+            &escape_diagnostic_text(message),
+            &label,
+            Some(&help),
         )
     }
+}
+
+fn escape_diagnostic_text(text: &str) -> String {
+    let mut escaped = String::with_capacity(text.len());
+    for character in text.chars() {
+        if character.is_control() {
+            let mut buffer = [0; 4];
+            let character = character.encode_utf8(&mut buffer);
+            let quoted = locale_aware_escape_name(OsStr::new(character), QuotingStyle::C_NO_QUOTES)
+                .into_string()
+                .expect("C-style quoting always produces valid UTF-8");
+            escaped.push_str(&quoted);
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
 }
 
 impl Display for ModeError {

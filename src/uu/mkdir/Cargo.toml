@@ -23,6 +23,7 @@ uucore = { workspace = true, features = [
   "fs",
   "fsxattr",
   "mode",
+  "quoting-style",
 ] }
 fluent = { workspace = true }
 

@@ -10,6 +10,7 @@ mkdir-help-selinux = set SELinux security context of each created directory to t
 mkdir-help-context = like -Z, or if CTX is specified then set the SELinux or SMACK security context to CTX
 
 # Error messages
+mkdir-error-invalid-mode = invalid mode { $mode }
 mkdir-error-empty-directory-name = cannot create directory '': No such file or directory
 mkdir-error-file-exists = { $path }: File exists
 mkdir-error-failed-to-create-tree = failed to create whole tree
