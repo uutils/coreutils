@@ -71,10 +71,6 @@ expr-error-match-utf8 = match does not support invalid UTF-8 encoding in { $arg 
 
 # Diagnostic labels, used when errors are rendered with a source snippet
 expr-diag-label-unexpected-argument = the expression was already complete here
-expr-diag-label-missing-argument = nothing follows this
-expr-diag-label-expected-closing-brace-after = a closing parenthesis should follow this
-expr-diag-label-expected-closing-brace-instead-of = a closing parenthesis was expected instead
-expr-diag-label-non-integer-argument = this is not an integer
 expr-diag-help-missing-argument = every operator needs a value on both sides
 expr-diag-help-unexpected-argument = the shell may have expanded an operator; quote it as '{"*"}' or escape it as {"\\*"}
 expr-diag-help-non-integer-argument = arithmetic operators need integers; use = or {"!"}= to compare strings instead

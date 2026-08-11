@@ -30,33 +30,34 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
         },
     };
 
+    // Labelled only where a label would add to the message, per the convention
+    // in `uucore::diagnostics`.
     let (label, help) = match &err.kind {
-        ParseErrorKind::Expected(_) => ("test-diag-label-expected", None),
+        ParseErrorKind::Expected(_) => (None, None),
         ParseErrorKind::ExtraArgument(_) => (
-            "test-diag-label-extra-argument",
+            Some(translate!("test-diag-label-extra-argument")),
             Some(translate!("test-diag-help-extra-argument")),
         ),
-        ParseErrorKind::MissingArgument(_) => (
-            "test-diag-label-missing-argument",
-            Some(translate!("test-diag-help-missing-argument")),
-        ),
-        ParseErrorKind::UnaryOperatorExpected(_) => {
-            ("test-diag-label-unary-operator-expected", None)
+        ParseErrorKind::MissingArgument(_) => {
+            (None, Some(translate!("test-diag-help-missing-argument")))
         }
+        ParseErrorKind::UnaryOperatorExpected(_) => (
+            Some(translate!("test-diag-label-unary-operator-expected")),
+            None,
+        ),
         ParseErrorKind::InvalidInteger(_) => (
-            "test-diag-label-invalid-integer",
+            None,
             Some(format!(
                 "{}\n{}",
                 translate!("test-diag-help-integer-op"),
                 translate!("test-diag-help-integer-op-mnemonics")
             )),
         ),
-        ParseErrorKind::InvalidFileDescriptor(_) => (
-            "test-diag-label-invalid-file-descriptor",
-            Some(translate!("test-diag-help-file-descriptor")),
-        ),
+        ParseErrorKind::InvalidFileDescriptor(_) => {
+            (None, Some(translate!("test-diag-help-file-descriptor")))
+        }
         ParseErrorKind::UnknownOperator(_) => (
-            "test-diag-label-unknown-operator",
+            None,
             Some(translate!(
                 "test-diag-help-unknown-operator",
                 "name" => uucore::util_name()
@@ -69,7 +70,7 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
     snapshot.render(
         index,
         &err.kind.to_string(),
-        &translate!(label),
+        label.as_deref(),
         help.as_deref(),
     )
 }

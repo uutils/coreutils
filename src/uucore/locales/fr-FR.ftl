@@ -86,7 +86,6 @@ mode-error-unexpected-end = fin de mode inattendue
 mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $operator } trouvé)
 
 # Étiquettes de diagnostic : ce que le caret désigne dans un mode
-mode-diag-label-invalid-operator = +, - ou = attendu ici
 mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
 mode-diag-label-invalid-number = n'est pas un mode octal
 mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w

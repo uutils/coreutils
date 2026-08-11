@@ -19,11 +19,12 @@ use crate::options::{FormatError, FormatErrorKind};
 /// Returns `false` when the format cannot be found among the arguments, in
 /// which case the caller should fall back to the plain one-line message.
 pub fn render(args: &[OsString], format: &str, err: &FormatError) -> bool {
+    // Labelled only where a label would add to the message, per the convention
+    // in `uucore::diagnostics`.
     let label = match err.kind {
-        FormatErrorKind::MissingDirective => "numfmt-diag-label-missing-directive",
-        FormatErrorKind::UnexpectedCharacter => "numfmt-diag-label-unexpected-character",
-        FormatErrorKind::NumberOverflow => "numfmt-diag-label-number-overflow",
-        FormatErrorKind::StrayPercent => "numfmt-diag-label-stray-percent",
+        FormatErrorKind::MissingDirective | FormatErrorKind::UnexpectedCharacter => None,
+        FormatErrorKind::NumberOverflow => Some("numfmt-diag-label-number-overflow"),
+        FormatErrorKind::StrayPercent => Some("numfmt-diag-label-stray-percent"),
     };
 
     let snapshot = Snapshot::with_program(args);
@@ -35,7 +36,7 @@ pub fn render(args: &[OsString], format: &str, err: &FormatError) -> bool {
         format,
         err.span.clone(),
         &err.message,
-        &translate!(label),
+        label.map(|label| translate!(label)).as_deref(),
         Some(&translate!("numfmt-diag-help-format-syntax")),
     )
 }

@@ -19,11 +19,13 @@ use crate::{KeyError, KeyErrorKind};
 /// Returns `false` when the key cannot be found among the arguments, in which
 /// case the caller should fall back to the plain one-line message.
 pub fn render(args: &[OsString], key: &str, err: &KeyError) -> bool {
+    // Labelled only where a label would add to the message, per the convention
+    // in `uucore::diagnostics`.
     let (label, help) = match err.kind {
-        KeyErrorKind::MissingCount => ("sort-diag-label-missing-count", true),
-        KeyErrorKind::ZeroCount => ("sort-diag-label-zero-count", false),
-        KeyErrorKind::StrayCharacter => ("sort-diag-label-stray-character", true),
-        KeyErrorKind::IncompatibleOptions => ("sort-diag-label-incompatible-options", false),
+        KeyErrorKind::MissingCount => (Some("sort-diag-label-missing-count"), true),
+        KeyErrorKind::ZeroCount => (Some("sort-diag-label-zero-count"), false),
+        KeyErrorKind::StrayCharacter => (None, true),
+        KeyErrorKind::IncompatibleOptions => (None, false),
     };
 
     let snapshot = Snapshot::with_program(args);
@@ -35,7 +37,7 @@ pub fn render(args: &[OsString], key: &str, err: &KeyError) -> bool {
         key,
         err.span.clone(),
         &err.message,
-        &translate!(label),
+        label.map(|label| translate!(label)).as_deref(),
         help.then(|| translate!("sort-diag-help-key-syntax"))
             .as_deref(),
     )

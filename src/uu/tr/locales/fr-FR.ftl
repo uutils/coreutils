@@ -44,16 +44,7 @@ tr-error-backwards-range = les points de fin de plage de '{ $start }-{ $end }' s
 tr-error-multiple-char-in-equivalence = { $chars } : l'opérande de classe d'équivalence doit être un seul caractère
 
 # Étiquettes de diagnostic : ce que le caret désigne dans un ensemble
-tr-diag-label-missing-char-class-name = aucun nom de classe entre les crochets
-tr-diag-label-invalid-char-class = n'est pas une classe de caractères
-tr-diag-label-missing-equivalence-char = aucun caractère entre les crochets
-tr-diag-label-multiple-char-in-equivalence = une classe d'équivalence contient un seul caractère
-tr-diag-label-invalid-repeat-count = n'est pas un nombre de répétitions
-tr-diag-label-backwards-range = cet intervalle est à l'envers
-tr-diag-label-char-repeat-in-set1 = une répétition n'a de sens que dans SET2
-tr-diag-label-multiple-char-repeat-in-set2 = un ensemble ne peut contenir qu'une répétition ouverte
-tr-diag-label-class-except-lower-upper-in-set2 = seules [:lower:] et [:upper:] peuvent être une cible de traduction
-tr-diag-label-class-in-set2-not-matched = aucune classe à la position correspondante dans SET1
+tr-diag-label-backwards-range = vouliez-vous dire '{ $suggestion }' ?
 tr-diag-label-set1-longer-set2-ends-in-class = cet ensemble est plus long que SET2
 tr-diag-label-complement-more-than-one-unique = un seul caractère peut être la cible du complément
 tr-diag-help-char-class = les classes sont alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper et xdigit
