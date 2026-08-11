@@ -78,6 +78,12 @@ fn test_nproc_ignore() {
             .succeeds();
         let nproc: u8 = result.stdout_str().trim().parse().unwrap();
         assert_eq!(nproc_total - 1, nproc);
+        // overflow
+        TestScenario::new(util_name!())
+            .ucmd()
+            .arg("--ignore=99999999999999999999")
+            .succeeds()
+            .stdout_only("1\n");
     }
 }
 

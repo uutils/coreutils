@@ -5,12 +5,16 @@
 
 // spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
+mod diagnostics;
 pub(crate) mod error;
 mod parser;
+#[cfg(windows)]
+mod platform;
 
 use clap::Command;
-use error::{ParseError, ParseResult};
+use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
+use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
 #[cfg(unix)]
@@ -69,9 +73,23 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // Show actual name with error
         let _ = uu_app().name("test");
     }
-    let result = parse(args).map(|mut stack| eval(&mut stack))??;
+    // `parse` consumes the arguments, so keep a copy for the diagnostic — but
+    // only when one could actually be rendered.
+    let expression = uucore::diagnostics::enabled().then(|| args.clone());
 
-    if result { Ok(()) } else { Err(1.into()) }
+    match parse(args).and_then(|mut stack| eval(&mut stack)) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(1.into()),
+        Err(e) => {
+            if let Some(expression) = &expression
+                && diagnostics::render(expression, &e)
+            {
+                // The diagnostic is already on stderr; exit quietly.
+                return Err(uucore::error::ExitCode::new(2));
+            }
+            Err(e.into())
+        }
+    }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or
@@ -97,10 +115,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::Op(Operator::String(op))) => {
             let b = pop_literal!();
             let a = pop_literal!();
-            match op.to_string_lossy().as_ref() {
-                "!=" => Ok(a != b),
-                "<" => Ok(a < b),
-                ">" => Ok(a > b),
+            match op.as_encoded_bytes() {
+                b"!=" => Ok(a != b),
+                b"<" => Ok(a < b),
+                b">" => Ok(a > b),
                 _ => Ok(a == b),
             }
         }
@@ -119,19 +137,16 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
             let s = match stack.pop() {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
-                None => {
-                    return Ok(true);
-                }
+                None => return Ok(true),
                 _ => {
-                    return Err(ParseError::MissingArgument(op.quote().to_string()));
+                    return Err(ParseError::at_value(
+                        ParseErrorKind::MissingArgument(op.quote().to_string()),
+                        &op,
+                    ));
                 }
             };
 
-            Ok(if op == "-z" {
-                s.is_empty()
-            } else {
-                !s.is_empty()
-            })
+            Ok((op == "-z") == s.is_empty())
         }
         Some(Symbol::UnaryOp(UnaryOperator::FiletestOp(op))) => {
             let op = op.to_str().unwrap();
@@ -146,9 +161,8 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
                 "-f" => path(&f, &PathCondition::Regular),
                 "-g" => path(&f, &PathCondition::GroupIdFlag),
                 "-G" => path(&f, &PathCondition::GroupOwns),
-                "-h" => path(&f, &PathCondition::SymLink),
+                "-h" | "-L" => path(&f, &PathCondition::SymLink),
                 "-k" => path(&f, &PathCondition::Sticky),
-                "-L" => path(&f, &PathCondition::SymLink),
                 "-N" => path(&f, &PathCondition::ExistsModifiedLastRead),
                 "-O" => path(&f, &PathCondition::UserOwns),
                 "-p" => path(&f, &PathCondition::Fifo),
@@ -166,7 +180,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             if (op == "-a" || op == "-o") && stack.len() < 2 {
-                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+                return Err(ParseError::at_value(
+                    ParseErrorKind::UnaryOperatorExpected(op.quote().to_string()),
+                    &op,
+                ));
             }
 
             let b = eval(stack)?;
@@ -174,37 +191,108 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        _ => Err(ParseError::ExpectedValue),
+        _ => Err(ParseErrorKind::ExpectedValue.into()),
+    }
+}
+
+/// An integer operand of a comparison, split into a sign and its decimal digits.
+///
+/// Keeping the digits as text instead of converting them to a fixed-width
+/// integer is what lets operands of any length be compared, matching GNU, which
+/// places no limit on the width of the integers `test` accepts.
+#[derive(Debug, PartialEq, Eq)]
+struct Integer<'a> {
+    negative: bool,
+    /// The digits without leading zeros. Empty when the value is zero.
+    digits: &'a str,
+}
+
+impl<'a> Integer<'a> {
+    /// Parse an operand of the form `[+-]?[0-9]+`, surrounded by optional
+    /// whitespace, returning [`None`] when it has any other shape.
+    fn parse(value: &'a OsStr) -> Option<Self> {
+        let value = value.to_str()?.trim();
+
+        // Only ASCII `+`/`-` are sliced off, so this always cuts on a char boundary.
+        let (negative, digits) = match value.as_bytes().first()? {
+            b'-' => (true, &value[1..]),
+            b'+' => (false, &value[1..]),
+            _ => (false, value),
+        };
+
+        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+
+        let digits = digits.trim_start_matches('0');
+
+        // Zero is neither positive nor negative, so `-0` compares equal to `0`.
+        Some(Self {
+            negative: negative && !digits.is_empty(),
+            digits,
+        })
+    }
+}
+
+impl Ord for Integer<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self.negative, other.negative) {
+            (false, true) => Ordering::Greater,
+            (true, false) => Ordering::Less,
+            (negative, _) => {
+                // Leading zeros are already gone, so the longer run of digits is
+                // the larger magnitude and equal-length runs order bytewise.
+                let magnitude = self
+                    .digits
+                    .len()
+                    .cmp(&other.digits.len())
+                    .then_with(|| self.digits.cmp(other.digits));
+
+                if negative {
+                    magnitude.reverse()
+                } else {
+                    magnitude
+                }
+            }
+        }
+    }
+}
+
+impl PartialOrd for Integer<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
 /// Operations to compare integers
 /// `a` is the left hand side
-/// `b` is the left hand side
+/// `b` is the right hand side
 /// `op` the operation (ex: -eq, -lt, etc)
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
-    let a: i128 = a
-        .to_str()
-        .map(str::trim)
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
-
-    let b: i128 = b
-        .to_str()
-        .map(str::trim)
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
+    let left = Integer::parse(a).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(a.quote().to_string()), a)
+    })?;
+    let right = Integer::parse(b).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(b.quote().to_string()), b)
+    })?;
 
     // Do the maths
+    let order = left.cmp(&right);
+
     Ok(match op.to_str() {
-        Some("-eq") => a == b,
-        Some("-ne") => a != b,
-        Some("-gt") => a > b,
-        Some("-ge") => a >= b,
-        Some("-lt") => a < b,
-        Some("-le") => a <= b,
-        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        Some("-eq") => order.is_eq(),
+        Some("-ne") => order.is_ne(),
+        Some("-gt") => order.is_gt(),
+        Some("-ge") => order.is_ge(),
+        Some("-lt") => order.is_lt(),
+        Some("-le") => order.is_le(),
+        _ => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     })
 }
 
@@ -226,7 +314,12 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
         (Some("-ot"), _, Ok(_)) => true,
         (Some("-ef" | "-nt" | "-ot"), _, _) => false,
-        (_, _, _) => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        (_, _, _) => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     };
 
     Ok(result)
@@ -236,7 +329,12 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
+        .ok_or_else(|| {
+            ParseError::at_value(
+                ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
+                fd,
+            )
+        })
         .map(|i| unsafe { libc::isatty(i) == 1 })
 }
 
@@ -260,6 +358,16 @@ enum PathCondition {
     UserIdFlag,
     Writable,
     Executable,
+}
+
+/// Whether the file was modified more recently than it was last read, the
+/// condition behind `-N`. A timestamp the platform cannot report counts as
+/// "not modified since read" rather than aborting.
+fn modified_since_read(metadata: &fs::Metadata) -> bool {
+    matches!(
+        (metadata.accessed(), metadata.modified()),
+        (Ok(read), Ok(modified)) if read < modified
+    )
 }
 
 #[cfg(not(windows))]
@@ -304,9 +412,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => {
-            metadata.accessed().unwrap() < metadata.modified().unwrap()
-        }
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
@@ -325,6 +431,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
+    use crate::platform::owned_by_current_token;
     use std::fs::metadata;
 
     let Ok(stat) = metadata(path) else {
@@ -332,27 +439,26 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     };
 
     match condition {
-        PathCondition::BlockSpecial => false,
-        PathCondition::CharacterSpecial => false,
         PathCondition::Directory => stat.is_dir(),
-        PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => unimplemented!(),
+        PathCondition::Exists | PathCondition::Readable => true,
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&stat),
+        PathCondition::GroupOwns => owned_by_current_token(path, true),
+        PathCondition::UserOwns => owned_by_current_token(path, false),
         PathCondition::Regular => stat.is_file(),
-        PathCondition::GroupIdFlag => false,
-        PathCondition::GroupOwns => unimplemented!(),
-        PathCondition::SymLink => false,
-        PathCondition::Sticky => false,
-        PathCondition::UserOwns => unimplemented!(),
-        PathCondition::Fifo => false,
-        PathCondition::Readable => true,
-        PathCondition::Socket => false,
         PathCondition::NonEmpty => stat.len() > 0,
-        PathCondition::UserIdFlag => false,
         PathCondition::Writable => !stat.permissions().readonly(),
         PathCondition::Executable => std::path::Path::new(path)
             .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
+        PathCondition::BlockSpecial
+        | PathCondition::CharacterSpecial
+        | PathCondition::Fifo
+        | PathCondition::GroupIdFlag
+        | PathCondition::Socket
+        | PathCondition::Sticky
+        | PathCondition::SymLink
+        | PathCondition::UserIdFlag => false,
     }
 }
 
@@ -451,5 +557,121 @@ mod tests {
         let a = OsStr::new("42");
         let b = OsStr::new("42");
         assert!(!integers(a, b, OsStr::new("-ne")).unwrap());
+    }
+
+    /// The 71-digit operand reported in the GNU compatibility issue, which is
+    /// far wider than any fixed-size integer type.
+    const BIG: &str = "16267277278126277227728782172782882627278282882172762677623672762783782";
+    /// `BIG` with its final digit incremented, so the two only differ in the
+    /// least significant digit.
+    const BIG_PLUS_ONE: &str =
+        "16267277278126277227728782172782882627278282882172762677623672762783783";
+    /// One digit shorter than `BIG`, so the two differ in width.
+    const SMALLER: &str = "1626727727812627722772878217278288262727828288217276267762367276278378";
+
+    #[test]
+    fn test_integer_op_beyond_i128() {
+        let big = OsStr::new(BIG);
+        let big_plus_one = OsStr::new(BIG_PLUS_ONE);
+        let smaller = OsStr::new(SMALLER);
+        let one = OsStr::new("1");
+
+        assert!(integers(big, big, OsStr::new("-eq")).unwrap());
+        assert!(!integers(big, big, OsStr::new("-ne")).unwrap());
+        assert!(integers(big, big, OsStr::new("-ge")).unwrap());
+        assert!(integers(big, big, OsStr::new("-le")).unwrap());
+
+        assert!(integers(one, big, OsStr::new("-ne")).unwrap());
+        assert!(integers(one, big, OsStr::new("-lt")).unwrap());
+        assert!(integers(big, one, OsStr::new("-gt")).unwrap());
+
+        // Same width, differing only in the least significant digit.
+        assert!(integers(big_plus_one, big, OsStr::new("-gt")).unwrap());
+        assert!(integers(big, big_plus_one, OsStr::new("-lt")).unwrap());
+        assert!(!integers(big, big_plus_one, OsStr::new("-eq")).unwrap());
+
+        // Differing widths.
+        assert!(integers(big, smaller, OsStr::new("-gt")).unwrap());
+        assert!(integers(smaller, big, OsStr::new("-lt")).unwrap());
+    }
+
+    #[test]
+    fn test_integer_op_beyond_i128_negative() {
+        let big = OsStr::new(BIG);
+        let neg_big =
+            OsStr::new("-16267277278126277227728782172782882627278282882172762677623672762783782");
+        let neg_smaller =
+            OsStr::new("-1626727727812627722772878217278288262727828288217276267762367276278378");
+
+        assert!(integers(neg_big, neg_big, OsStr::new("-eq")).unwrap());
+        assert!(integers(neg_big, OsStr::new("0"), OsStr::new("-lt")).unwrap());
+        assert!(integers(neg_big, big, OsStr::new("-lt")).unwrap());
+        assert!(integers(big, neg_big, OsStr::new("-gt")).unwrap());
+
+        // A wider negative number is the smaller of the two.
+        assert!(integers(neg_big, neg_smaller, OsStr::new("-lt")).unwrap());
+        assert!(integers(neg_smaller, neg_big, OsStr::new("-gt")).unwrap());
+    }
+
+    #[test]
+    fn test_integer_parse_normalizes_sign_and_leading_zeros() {
+        // Zero carries no sign, so `-0` and `0` are the same value.
+        assert_eq!(
+            Integer::parse(OsStr::new("-0")),
+            Integer::parse(OsStr::new("0"))
+        );
+        assert_eq!(
+            Integer::parse(OsStr::new("+0")),
+            Integer::parse(OsStr::new("-0"))
+        );
+        assert_eq!(
+            Integer::parse(OsStr::new("007")),
+            Integer::parse(OsStr::new("7"))
+        );
+        assert_eq!(
+            Integer::parse(OsStr::new("-007")),
+            Integer::parse(OsStr::new("-7"))
+        );
+        // Surrounding whitespace is ignored.
+        assert_eq!(
+            Integer::parse(OsStr::new(" 42 ")),
+            Integer::parse(OsStr::new("42"))
+        );
+        // Normalization is not limited by width either.
+        let padded = OsString::from(format!("+00{BIG}"));
+        assert_eq!(Integer::parse(&padded), Integer::parse(OsStr::new(BIG)));
+    }
+
+    #[test]
+    fn test_integer_op_rejects_malformed_operands() {
+        // Widening the accepted range must not make any of these parse.
+        // "\u{664}\u{662}" and "\u{ff11}\u{ff12}" are non-ASCII digits, which
+        // also exercise operands that are not one byte per character.
+        for operand in [
+            "",
+            "-",
+            "+",
+            "++5",
+            "--5",
+            "5-",
+            "+-5",
+            "1_0",
+            "0x10",
+            "1e3",
+            "123.45",
+            "4 2",
+            "\u{664}\u{662}",
+            "\u{ff11}\u{ff12}",
+        ] {
+            let operand = OsStr::new(operand);
+            assert!(
+                integers(operand, OsStr::new("0"), OsStr::new("-eq")).is_err(),
+                "{operand:?} should not parse as an integer"
+            );
+            assert!(
+                integers(OsStr::new("0"), operand, OsStr::new("-eq")).is_err(),
+                "{operand:?} should not parse as an integer"
+            );
+        }
     }
 }

@@ -11,11 +11,12 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
+#[cfg(not(windows))]
+use uucore::error::ExitCode;
 use uucore::error::{UResult, USimpleError};
-use uucore::translate;
-
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
 
@@ -53,19 +54,29 @@ pub struct Config<'a> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn get_mode(_matches: &ArgMatches) -> Result<Option<u32>, String> {
+fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
     Ok(None)
 }
 
+/// `diag_args` is the argument list a caret can point into, or `None` when the
+/// plain one-line message is all that is wanted.
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches) -> Result<Option<u32>, String> {
+fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
     // Not tested on Windows
-    if let Some(m) = matches.get_one::<String>(options::MODE) {
-        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask()).map(Some)
-    } else {
+    let Some(m) = matches.get_one::<String>(options::MODE) else {
         // If no mode argument, let the kernel apply umask and ACLs naturally.
-        Ok(None)
-    }
+        return Ok(None);
+    };
+    mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
+        .map(Some)
+        .map_err(|err| {
+            if diag_args.is_some_and(|args| err.render(args, m, 0, &err.to_string())) {
+                // The diagnostic is already on stderr; exit quietly.
+                ExitCode::new(1)
+            } else {
+                USimpleError::new(1, err.to_string())
+            }
+        })
 }
 
 #[uucore::main]
@@ -73,8 +84,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let mode = get_mode(&matches, diag_args.as_deref())?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -85,20 +100,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches) {
-        Ok(mode) => {
-            let config = Config {
-                recursive,
-                mode,
-                verbose,
-                set_security_context: set_security_context || context.is_some(),
-                context,
-            };
-            exec(dirs, &config);
-            Ok(())
-        }
-        Err(f) => Err(USimpleError::new(1, f)),
-    }
+    let config = Config {
+        recursive,
+        mode,
+        verbose,
+        set_security_context: set_security_context || context.is_some(),
+        context,
+    };
+
+    exec(dirs, &config);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -309,6 +321,18 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
     #[cfg(not(unix))]
     let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
 
+    // Label the directory at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context && uucore::selinux::is_selinux_enabled() {
+        let mode = uucore::libc::S_IFDIR | mkdir_mode as uucore::libc::mode_t;
+        match uucore::selinux::FsCreateContext::new(path, Some(mode), config.context) {
+            Ok(guard) => Some(guard),
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        }
+    } else {
+        None
+    };
+
     match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
             if config.verbose {
@@ -317,16 +341,6 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                     "{}",
                     translate!("mkdir-verbose-created-directory", "util_name" => "mkdir", "path" => path.quote())
                 )?;
-            }
-
-            // Apply SELinux context if requested
-            #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
-            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
-                if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
-                {
-                    let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(1, e.to_string()));
-                }
             }
 
             // Apply SMACK context if requested

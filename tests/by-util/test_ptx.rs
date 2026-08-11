@@ -9,6 +9,8 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
 }
 #[test]
 fn test_reference_format_for_stdin() {
@@ -295,6 +297,14 @@ fn test_sentence_regexp_newlines_are_spaces() {
 }
 
 #[test]
+fn test_sentence_regexp_invalid_syntax_failure() {
+    new_ucmd!()
+        .args(&["-S", "^["])
+        .fails()
+        .stderr_contains("Invalid regexp");
+}
+
+#[test]
 fn test_gnu_mode_dumb_format() {
     // Test GNU mode (dumb format) - the default mode without -G flag
     new_ucmd!().pipe_in("a b").succeeds().stdout_only(
@@ -366,6 +376,33 @@ fn test_unicode_in_after_chunk_does_not_panic() {
 }
 
 #[test]
+fn test_unicode_in_before_chunk_does_not_panic() {
+    // Regression test for issue #10893: a panic in get_output_chunks() when the
+    // computed max_before_size used char counts but the assert compared against
+    // before.len() (byte length). A multibyte char in the before chunk could
+    // trigger: `assertion failed: max_before_size >= before.len()`.
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("éé word\n")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_unicode_tail_chunk_sizing() {
+    // The tail chunk budget (max_tail_size) subtracts the size of the before
+    // chunk. It must use the before chunk's char count, not its byte length,
+    // otherwise a multibyte before chunk shrinks the tail too much and drops a
+    // word that fits. Here "cc" wraps into the tail before "aé bé KEY"; with the
+    // byte-based budget it was dropped.
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("aé bé KEY cc dd ee ff gg\n")
+        .succeeds()
+        .stdout_contains("cc/ aé");
+}
+
+#[test]
 fn test_duplicate_input_files() {
     new_ucmd!()
         .args(&["one_word", "one_word"])
@@ -416,4 +453,12 @@ fn test_invalid_regex_word_trailing_backslash() {
 #[test]
 fn test_invalid_regex_word_unclosed_group() {
     new_ucmd!().args(&["-W", "(wrong"]).succeeds().no_stderr();
+}
+
+#[test]
+fn test_missing_file_error_contains_filename() {
+    new_ucmd!()
+        .arg("zxc")
+        .fails()
+        .stderr_is("ptx: 'zxc': No such file or directory\n");
 }

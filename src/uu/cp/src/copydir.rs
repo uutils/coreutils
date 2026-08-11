@@ -277,10 +277,18 @@ fn copy_direntry(
         entry_is_dir_no_follow
     };
 
+    // `exists()` resolves symlinks, so a destination entry that is itself a
+    // symlink to a directory would look like an already-existing directory and
+    // be descended into -- writing the source subtree through the link and out
+    // of the destination tree. GNU refuses this ("cannot overwrite
+    // non-directory ... with directory"), so treat a symlink at the destination
+    // as the non-directory it is.
+    let dest_is_symlink = entry.local_to_target.is_symlink();
+
     // If the source is a directory and the destination does not
     // exist, ...
-    if source_is_dir && !entry.local_to_target.exists() {
-        return if entry.target_is_file {
+    if source_is_dir && (dest_is_symlink || !entry.local_to_target.exists()) {
+        return if entry.target_is_file || dest_is_symlink {
             Err(translate!("cp-error-cannot-overwrite-non-directory-with-directory").into())
         } else {
             build_dir(
@@ -403,6 +411,20 @@ pub(crate) fn copy_directory(
         if let Some(parent) = root.parent() {
             let new_target = target.join(parent);
             build_dir(&new_target, true, options, None)?;
+            if root
+                .components()
+                .next_back()
+                .is_some_and(|component| matches!(component, std::path::Component::ParentDir))
+            {
+                let dest = target.join(root);
+                build_dir(&dest, false, options, Some(root)).map_err(|err| match err {
+                    CpError::IoErr(io_err) => CpError::IoErrContext(
+                        io_err,
+                        format!("cannot create directory {}", dest.quote()),
+                    ),
+                    err => err,
+                })?;
+            }
             if options.verbose {
                 // For example, if copying file `a/b/c` and its parents
                 // to directory `d/`, then print
@@ -572,7 +594,9 @@ pub(crate) fn copy_directory(
     // Also fix permissions for parent directories,
     // if we were asked to create them.
     if options.parents {
-        let dest = target.join(root.file_name().unwrap());
+        let dest = root
+            .file_name()
+            .map_or_else(|| target.to_path_buf(), |name| target.join(name));
         for (x, y) in aligned_ancestors(root, dest.as_path()) {
             if let Ok(src) = canonicalize(x, MissingHandling::Normal, ResolveMode::Physical) {
                 copy_attributes(

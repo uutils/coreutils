@@ -2,6 +2,9 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-fn main() {
-    println!("Hello World!");
-}
+
+#[cfg(windows)]
+pub use self::windows::owned_by_current_token;
+
+#[cfg(windows)]
+mod windows;

@@ -204,6 +204,29 @@ fn test_nc_0_wo_follow() {
 }
 
 #[test]
+fn test_zero_bytes_with_suffix() {
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    let ts = TestScenario::new(util_name!());
+    ts.ucmd()
+        .args(&["-c0K"])
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c00K"])
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    ts.ucmd()
+        .args(&["-c+0K"])
+        .pipe_in("qwerty")
+        .succeeds()
+        .stdout_is("qwerty");
+}
+
+#[test]
 #[cfg(all(unix, not(target_os = "freebsd")))]
 fn test_nc_0_wo_follow2() {
     use std::os::unix::fs::PermissionsExt;
@@ -227,7 +250,6 @@ fn test_nc_0_wo_follow2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
 fn test_n0_with_follow() {
     let (at, mut ucmd) = at_and_ucmd!();
     let test_file = "test.txt";
@@ -501,7 +523,6 @@ fn test_null_default() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_single() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -589,7 +610,6 @@ fn test_permission_denied_is_not_reported_as_not_found() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut child = ucmd
@@ -625,7 +645,6 @@ fn test_follow_multiple() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
 fn test_follow_name_multiple() {
     // spell-checker:disable-next-line
     for argument in ["--follow=name", "--follo=nam", "--f=n"] {
@@ -1610,6 +1629,62 @@ fn test_retry7() {
     }
 }
 
+/// Under `--follow=name`, a watched file replaced by a symlink must be reported
+/// as untailable, not silently followed to the link target (which would
+/// exfiltrate its contents).
+#[test]
+#[cfg(unix)]
+#[cfg(not(target_os = "android"))]
+fn test_follow_name_replaced_by_symlink_is_untailable() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("secret", "secret-must-not-leak\n");
+    at.write("watched", "visible\n");
+
+    let mut p = ts
+        .ucmd()
+        .args(&[
+            "-F",
+            "-s.1",
+            "--max-unchanged-stats=1",
+            "--use-polling",
+            "watched",
+        ])
+        .run_no_wait();
+    p.make_assertion_with_delay(500).is_alive();
+
+    // Wait until tail's *initial* read of "watched" has actually completed
+    // (i.e. the pre-existing content has been printed) before swapping it
+    // for a symlink. Otherwise, under scheduler contention, tail's initial
+    // open (which legitimately follows symlinks, like any other file open)
+    // could race with the swap and open the symlink's target on its very
+    // first read -- before the untailable-symlink guard (which only applies
+    // to the follow loop) is even active. That would be a test timing bug,
+    // not the vulnerability this test is meant to catch.
+    for _ in 0..50 {
+        if p.stdout_all().contains("visible") {
+            break;
+        }
+        p.delay(20);
+    }
+
+    // Swap the watched file for a symlink pointing at a secret file.
+    // Create the symlink under a temporary name and rename it into place
+    // atomically, so the poller never observes an intermediate state where
+    // "watched" is missing (which would race with the poll interval and be
+    // reported as "has become inaccessible" instead).
+    at.symlink_file("secret", "watched.tmp");
+    at.rename("watched.tmp", "watched");
+    p.delay(1000);
+
+    p.kill()
+        .make_assertion()
+        .with_all_output()
+        .stdout_does_not_contain("secret-must-not-leak")
+        .stderr_contains("has been replaced with an untailable symbolic link");
+}
+
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
@@ -2011,11 +2086,7 @@ fn test_follow_name_remove() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate1() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ cp file backup && head file > file && sleep 1 && cp backup file
@@ -2052,11 +2123,7 @@ fn test_follow_name_truncate1() {
 }
 
 #[test]
-#[cfg(all(
-    not(target_os = "windows"),
-    not(target_os = "android"),
-    not(target_os = "freebsd")
-))] // FIXME: for currently not working platforms
+#[cfg(all(not(target_os = "android"), not(target_os = "freebsd")))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate2() {
     // This test triggers a truncate event while `tail --follow=name file` is running.
     // $ ((sleep 1 && echo -n "x\nx\nx\n" >> file && sleep 1 && \
@@ -2099,7 +2166,6 @@ fn test_follow_name_truncate2() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate3() {
     // Opening an empty file in truncate mode should not trigger a truncate event while
     // `tail --follow=name file` is running.
@@ -4033,7 +4099,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
     );
     scene
         .ucmd()
-        .args(&["--pid=1000", "data"])
+        .args(&["--pid=0", "data"])
         .stderr_to_stdout()
         .succeeds()
         .stdout_only(expected_stdout);
@@ -4995,10 +5061,10 @@ fn test_when_piped_input_then_no_broken_pipe() {
 
 #[test]
 #[cfg(unix)]
-fn test_when_output_closed_then_no_broken_pie() {
+fn test_when_output_closed_then_no_broken_pipe() {
     let mut cmd = new_ucmd!();
     let mut child = cmd
-        .args(&["-c", "100000", "/dev/zero"])
+        .args(&["-c", "10000000", "/dev/zero"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
@@ -5036,6 +5102,15 @@ fn test_failed_write_is_reported() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn test_failed_warning_write_is_reported() {
+    new_ucmd!()
+        .args(&["--pid=0", "/dev/null"])
+        .set_stderr(File::create("/dev/full").unwrap())
+        .fails_with_code(1);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn test_failed_write_is_reported_on_seekable_input() {
     let ts = TestScenario::new("tail");
     let at = &ts.fixtures;
@@ -5050,7 +5125,7 @@ fn test_failed_write_is_reported_on_seekable_input() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 fn test_dev_zero() {
     new_ucmd!()
         .args(&["-c", "1", "/dev/zero"])
@@ -5179,4 +5254,14 @@ fn test_follow_symlink_target_change() {
         .with_all_output()
         .stdout_contains("A\n")
         .stdout_contains("B\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_contains("hello");
 }

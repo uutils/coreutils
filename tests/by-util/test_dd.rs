@@ -9,7 +9,7 @@ use uutests::new_ucmd;
 use uutests::util::TestScenario;
 #[cfg(all(unix, not(feature = "feat_selinux")))]
 use uutests::util::run_ucmd_as_root_with_stdin_stdout;
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 use uutests::util::{UCommand, get_tests_binary};
 use uutests::util_name;
 
@@ -19,12 +19,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -148,8 +143,35 @@ fn test_large_numeric_operands_do_not_panic() {
             .arg(operand)
             .pipe_in("")
             .fails_with_code(1)
+}
+
+#[test]
+fn test_huge_block_size_is_rejected_without_panicking() {
+    // Regression test for #12844: a block size >= i64::MAX used to panic
+    // ("attempt to multiply with overflow"); it must be rejected cleanly.
+    for arg in [
+        "bs=9223372036854775807",      // i64::MAX
+        "ibs=99999999999999999999",    // larger than u64::MAX
+        "obs=18446744073709551616",    // u64::MAX + 1
+        "cbs=9223372036854775808",     // i64::MAX + 1
+        "ibs=1778172772721772786161B", // overflows via the 'B' suffix
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .fails_with_code(1)
+            .no_stdout()
             .stderr_contains("Value too large for defined data type");
     }
+}
+
+#[test]
+fn test_huge_obs_reports_memory_error_instead_of_aborting() {
+    // Regression test for #12847: a valid but huge `obs` used to abort
+    // ("memory allocation of N bytes failed"); it must fail gracefully instead.
+    new_ucmd!()
+        .arg("obs=1PB")
+        .fails_with_code(1)
+        .stderr_contains("memory");
 }
 
 #[test]
@@ -1579,11 +1601,11 @@ fn test_skip_input_fifo() {
 }
 
 /// Test for reading part of stdin from each of two child processes.
-#[cfg(all(not(windows), feature = "printf"))]
+#[cfg(not(windows))]
 #[test]
 fn test_multiple_processes_reading_stdin() {
     // TODO Investigate if this is possible on Windows.
-    let printf = format!("{} printf 'abcdef\n'", get_tests_binary());
+    let printf = "printf 'abcdef\n'".to_string();
     let dd_skip = format!("{} dd bs=1 skip=3 count=0", get_tests_binary());
     let dd = format!("{} dd", get_tests_binary());
     UCommand::new()
@@ -1676,12 +1698,7 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1721,12 +1738,7 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(
-    unix,
-    not(target_os = "macos"),
-    not(target_os = "freebsd"),
-    feature = "printf"
-))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1764,6 +1776,53 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
     let output = child.wait_with_output().unwrap();
     assert_eq!(output.stdout, b"abcd");
     let expected = b"0+2 records in\n0+2 records out\n4 bytes copied";
+    assert!(output.stderr.starts_with(expected));
+}
+
+/// Regression test for <https://github.com/uutils/coreutils/issues/13458>:
+/// two deliberately short reads (ibs=3 sees only 2 bytes each) must be
+/// gathered into a single obs=6 output block without pulling stale bytes
+/// from the ibs-aligned gap into the output.
+///
+/// The writer below runs `printf` inside `sh`, where it is a builtin, so this
+/// needs no `printf` feature.
+#[test]
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
+    // Create the FIFO.
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+    let fifoname = at.plus_as_string("fifo");
+
+    // Start a `dd` process that reads from the fifo (so it will wait
+    // until the writer process starts).
+    let mut reader_command = Command::new(get_tests_binary());
+    let child = reader_command
+        .args(["dd", "ibs=3", "obs=6", &format!("if={fifoname}")])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
+        .spawn()
+        .unwrap();
+
+    // Start different processes to write to the FIFO, with a small
+    // pause in between.
+    let mut writer_command = Command::new("sh");
+    let _ = writer_command
+        .args([
+            "-c",
+            &format!("(printf \"ab\"; sleep 0.1; printf \"cd\") > {fifoname}"),
+        ])
+        .spawn()
+        .unwrap()
+        .wait();
+
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(output.stdout, b"abcd");
+    let expected = b"0+2 records in\n0+1 records out\n4 bytes copied";
     assert!(output.stderr.starts_with(expected));
 }
 
@@ -1956,7 +2015,7 @@ fn test_nocache_eof() {
 }
 
 #[test]
-#[cfg(all(target_os = "linux", feature = "printf"))]
+#[cfg(target_os = "linux")]
 fn test_nocache_eof_fadvise_zero_length() {
     use std::process::Command;
     let (at, _ucmd) = at_and_ucmd!();
@@ -2147,4 +2206,24 @@ fn test_bs_not_positive() {
                 .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
         }
     }
+}
+
+#[test]
+fn test_count_bytes_with_expanding_block_conv() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let mut input = vec![b'a'; 1000];
+    input.extend([b'Z'; 24]);
+    at.write_bytes("input.txt", &input);
+    ucmd.args(&[
+        "if=input.txt",
+        "of=output.bin",
+        "conv=block",
+        "cbs=1024",
+        "count=1000",
+        "iflag=count_bytes",
+    ])
+    .succeeds();
+    let output = at.read_bytes("output.bin");
+    assert_eq!(bytecount::count(&output, b'a'), 1000);
+    assert!(!output.contains(&b'Z'));
 }

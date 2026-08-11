@@ -454,7 +454,7 @@ pub(crate) fn check_and_reset_sigusr1() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-extern "C" fn sigusr1_handler(_: std::os::raw::c_int) {
+extern "C" fn sigusr1_handler(_: core::ffi::c_int) {
     SIGUSR1_RECEIVED.store(true, Ordering::Relaxed);
 }
 

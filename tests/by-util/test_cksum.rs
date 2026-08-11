@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+// spell-checker:ignore (words) asdf algo algos asha characted mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -68,6 +68,16 @@ fn test_multiple_files() {
 fn test_stdin() {
     new_ucmd!()
         .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is_fixture("crc_stdin.expected");
+}
+
+#[test]
+fn test_stdin_with_dash_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("-");
+
+    ucmd.pipe_in_fixture("lorem_ipsum.txt")
         .succeeds()
         .stdout_is_fixture("crc_stdin.expected");
 }
@@ -1547,6 +1557,40 @@ fn test_check_md5_format() {
         .succeeds()
         .stdout_contains("empty: OK")
         .stdout_contains("not-empty: OK");
+}
+
+// The digest in check mode must be computed over the raw bytes of the file:
+// on Windows, no CRLF -> LF conversion must happen (matching generation).
+#[test]
+fn test_check_crlf_file_hashed_as_raw_bytes() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    // md5 of the raw bytes b"abc\r\nd\r"; hashing with CRLF converted to LF
+    // would yield b7597fc3635cfc9b646eee54636dfa5a instead.
+    at.write_bytes("f", b"abc\r\nd\r");
+    at.write("CHECKSUM", "e5bd2e073913d2cb78174d5be11ab1e9  f\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_contains("f: OK");
+
+    // Same with the binary marker `*`.
+    at.write("CHECKSUM_BINARY", "e5bd2e073913d2cb78174d5be11ab1e9 *f\n");
+
+    scene
+        .ucmd()
+        .arg("-a")
+        .arg("md5")
+        .arg("--check")
+        .arg("CHECKSUM_BINARY")
+        .succeeds()
+        .stdout_contains("f: OK");
 }
 
 // Manage the mixed behavior
@@ -3315,6 +3359,22 @@ fn test_check_shake256_no_length() {
         .stderr_only("cksum: 'standard input': no properly formatted checksum lines found\n");
 }
 
+#[test]
+fn test_shake_extremely_large_length_does_not_abort() {
+    // Regression test for #12869: an absurdly large `--length` used to
+    // trigger an unguarded allocation that aborts the process instead of
+    // returning a normal error.
+    new_ucmd!()
+        .args(&[
+            "--algorithm",
+            "shake128",
+            "--length",
+            "10011111117721172727",
+        ])
+        .pipe_in("")
+        .fails();
+}
+
 #[template]
 #[rstest]
 #[case::no_length(
@@ -3422,4 +3482,42 @@ fn test_check_blake3_untagged(
         .pipe_in(untagged)
         .succeeds()
         .stdout_only("FILE: OK\n");
+}
+
+#[test]
+fn test_locale_aware_error_filename_escaping() {
+    // 'Ã' is valid UTF-8, invalid ASCII.
+    let filename = "file_Ã";
+
+    // The characted is valid and not escaped in UTF-8
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg(filename)
+        .fails_with_code(1)
+        .stderr_is("cksum: file_Ã: No such file or directory\n");
+
+    // In C locale, non-ASCII bytes are escaped
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg(filename)
+        .fails_with_code(1)
+        .stderr_is("cksum: 'file_'$'\\303\\203': No such file or directory\n");
+
+    // Same with a directory error
+    let dirname = "dir_Ã";
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir(dirname);
+    ucmd.env("LC_ALL", "C")
+        .arg(dirname)
+        .fails_with_code(1)
+        .stderr_is("cksum: 'dir_'$'\\303\\203': Is a directory\n");
+
+    // A parenthesis is escaped in any case.
+    for locale in ["C", "en_US.UTF-8"] {
+        new_ucmd!()
+            .env("LC_ALL", locale)
+            .arg("file_x(y")
+            .fails_with_code(1)
+            .stderr_is("cksum: 'file_x(y': No such file or directory\n");
+    }
 }

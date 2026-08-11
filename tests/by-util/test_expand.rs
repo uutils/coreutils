@@ -273,6 +273,25 @@ fn test_tabs_with_too_large_size() {
     new_ucmd!().arg(arg).fails().stderr_contains(expected_error);
 }
 
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI runner target is not suitable for this address-space-limit regression test"
+)]
+#[test]
+fn test_large_tab_stop_without_tabs_does_not_allocate() {
+    use rlimit::Resource;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .arg("--tabs=267672676527678256")
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
 #[test]
 fn test_tabs_shortcut() {
     new_ucmd!()
@@ -452,6 +471,24 @@ fn test_expand_non_utf8_paths() {
     ucmd.arg(&filename)
         .succeeds()
         .stdout_is("hello   world\ntest    line\n");
+}
+
+#[test]
+fn test_wide_multibyte_char_width() {
+    // A tab following a wide character must expand to the next tab stop based
+    // on the character's display width, not its byte length. Regression for a
+    // bug where the UTF-8 sequence length was derived from the leading byte's
+    // codepoint value, so 3- and 4-byte characters were mis-measured.
+    // U+4E2D (中, 3 bytes, width 2): col 0->2, tab pads 6 spaces to column 8.
+    new_ucmd!()
+        .pipe_in("\u{4E2D}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{4E2D}      |");
+    // U+1F600 (😀, 4 bytes, width 2) behaves the same.
+    new_ucmd!()
+        .pipe_in("\u{1F600}\t|".as_bytes())
+        .succeeds()
+        .stdout_is("\u{1F600}      |");
 }
 
 #[test]

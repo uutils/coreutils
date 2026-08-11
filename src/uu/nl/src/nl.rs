@@ -395,9 +395,17 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     loop {
         line.clear();
         // reads up to and including b'\n'; returns 0 on EOF
-        let n = reader
-            .read_until(b'\n', &mut line)
-            .map_err_context(|| translate!("nl-error-could-not-read-line"))?;
+        let n = match reader.read_until(b'\n', &mut line) {
+            Ok(bytes_read) => bytes_read,
+            Err(err) => {
+                show_error!(
+                    "{}",
+                    err.map_err_context(|| translate!("nl-error-could-not-read-line"))
+                );
+                set_exit_code(1);
+                break;
+            }
+        };
         if n == 0 {
             break;
         }
@@ -444,12 +452,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             };
 
             if is_line_numbered {
-                let Some(line_number) = stats.line_number else {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("nl-error-line-number-overflow"),
-                    ));
-                };
+                let line_number = stats.line_number.ok_or_else(|| {
+                    USimpleError::new(1, translate!("nl-error-line-number-overflow"))
+                })?;
                 settings
                     .number_format
                     .format_to(&mut writer, line_number, settings.number_width)

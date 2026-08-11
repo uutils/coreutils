@@ -75,34 +75,34 @@ fn test_delete() {
 
 #[test]
 fn test_delete_graph_and_print_match_gnu() {
-    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    let input = *b" A!\t\n";
     new_ucmd!()
         .args(&["-d", "[:graph:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b' ', b'\t', b'\n']);
+        .stdout_is_bytes(*b" \t\n");
 
     new_ucmd!()
         .args(&["-d", "[:print:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b'\t', b'\n']);
+        .stdout_is_bytes(*b"\t\n");
 }
 
 #[test]
 fn test_delete_complement_graph_and_print_match_gnu() {
-    let input = [b' ', b'A', b'!', b'\t', b'\n'];
+    let input = *b" A!\t\n";
     new_ucmd!()
         .args(&["-d", "-c", "[:graph:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b'A', b'!']);
+        .stdout_is_bytes(*b"A!");
 
     new_ucmd!()
         .args(&["-d", "-c", "[:print:]"])
         .pipe_in(input)
         .succeeds()
-        .stdout_is_bytes([b' ', b'A', b'!']);
+        .stdout_is_bytes(*b" A!");
 }
 
 #[test]
@@ -385,6 +385,7 @@ fn test_truncate_with_set1_shorter_than_set2() {
 fn test_truncate_applies_before_complement_with_class() {
     new_ucmd!()
         .args(&["-ct", "[:digit:]", "X"])
+        .ignore_stdin_write_error()
         .pipe_in("A")
         .fails()
         .stderr_contains("when translating with complemented character classes,\nstring2 must map all characters in the domain to one");

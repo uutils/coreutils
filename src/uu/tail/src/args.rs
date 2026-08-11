@@ -10,7 +10,7 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
@@ -134,7 +134,7 @@ pub struct Settings {
     pub follow: Option<FollowMode>,
     pub max_unchanged_stats: u32,
     pub mode: FilterMode,
-    pub pid: platform::Pid,
+    pub pid: Option<platform::Pid>,
     pub retry: bool,
     pub sleep_sec: Duration,
     pub use_polling: bool,
@@ -152,7 +152,7 @@ impl Default for Settings {
             sleep_sec: Duration::from_secs_f32(1.0),
             follow: Option::default(),
             mode: FilterMode::default(),
-            pid: Default::default(),
+            pid: Option::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
@@ -264,7 +264,7 @@ impl Settings {
                         ));
                     }
 
-                    settings.pid = pid;
+                    settings.pid = Some(pid);
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -300,7 +300,7 @@ impl Settings {
 
     /// Check [`Settings`] for problematic configurations of tail originating from user provided
     /// command line arguments and print appropriate warnings.
-    pub fn check_warnings(&self) {
+    pub fn check_warnings(&self) -> std::io::Result<()> {
         if self.retry {
             if self.follow.is_none() {
                 show_warning!("{}", translate!("tail-warning-retry-ignored"));
@@ -309,10 +309,15 @@ impl Settings {
             }
         }
 
-        if self.pid != 0 {
+        if let Some(pid) = self.pid {
             if self.follow.is_none() {
-                show_warning!("{}", translate!("tail-warning-pid-ignored"));
-            } else if !platform::supports_pid_checks(self.pid) {
+                writeln!(
+                    std::io::stderr().lock(),
+                    "{}: warning: {}",
+                    uucore::util_name(),
+                    translate!("tail-warning-pid-ignored")
+                )?;
+            } else if pid != 0 && !platform::supports_pid_checks(pid) {
                 show_warning!("{}", translate!("tail-warning-pid-not-supported"));
             }
         }
@@ -322,7 +327,7 @@ impl Settings {
         // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
-            let blocking_stdin = self.pid == 0
+            let blocking_stdin = self.pid.unwrap_or_default() == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
                 && Handle::stdin().is_ok_and(|handle| {
@@ -336,6 +341,8 @@ impl Settings {
                 show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));
             }
         }
+
+        Ok(())
     }
 
     /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
@@ -431,7 +438,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     // In cases 4 & 5, we want to try parsing the obsolete arguments, which corresponds to
     // checking whether clap succeeded or the first argument starts with '+'.
     let possible_obsolete_args = &args_vec[1];
-    if clap_result.is_ok() && !possible_obsolete_args.to_string_lossy().starts_with('+') {
+    if clap_result.is_ok() && possible_obsolete_args.as_encoded_bytes().first() != Some(&b'+') {
         return clap_result;
     }
     match parse_obsolete(possible_obsolete_args, args_vec.get(2))? {

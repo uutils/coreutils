@@ -41,7 +41,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    settings.check_warnings();
+    settings.check_warnings()?;
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
@@ -85,7 +85,9 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
                 tail_stdin(settings, &mut printer, input, &mut observer)?;
             }
             InputKind::File(path) => {
-                tail_file(settings, &mut printer, input, path, &mut observer, 0)?;
+                if let Err(err) = tail_file(settings, &mut printer, input, path, &mut observer, 0) {
+                    show!(err);
+                }
             }
         }
     }
@@ -100,7 +102,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
             follow::follow(observer, settings)?;
         }
     }
@@ -160,7 +162,7 @@ fn tail_file(
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
+        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
@@ -255,19 +257,16 @@ fn tail_stdin(
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
     #[cfg(target_os = "macos")]
+    if let Ok(mut stdin_handle) = same_file::Handle::stdin()
+        && let Ok(meta) = stdin_handle.as_file_mut().metadata()
+        && meta.file_type().is_dir()
     {
-        if let Ok(mut stdin_handle) = same_file::Handle::stdin() {
-            if let Ok(meta) = stdin_handle.as_file_mut().metadata() {
-                if meta.file_type().is_dir() {
-                    set_exit_code(1);
-                    show_error!(
-                        "{}",
-                        translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
-                    );
-                    return Ok(());
-                }
-            }
-        }
+        set_exit_code(1);
+        show_error!(
+            "{}",
+            translate!("tail-error-cannot-open-no-such-file", "file" => input.display_name.clone(), "error" => translate!("tail-no-such-file-or-directory"))
+        );
+        return Ok(());
     }
 
     // Check if stdin was closed before Rust reopened it as /dev/null
@@ -469,7 +468,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
-        FilterMode::Lines(Signum::MinusZero, _) => {
+        FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
@@ -482,9 +481,6 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
-        }
-        FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -501,7 +497,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
+        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
+        | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
@@ -529,9 +526,6 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut chunks = chunks::LinesChunkBuffer::new(*sep, 0);
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
-        }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
         }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;

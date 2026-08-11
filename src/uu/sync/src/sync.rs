@@ -4,12 +4,6 @@
 // file that was distributed with this source code.
 
 use clap::{Arg, ArgAction, Command};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::errno::Errno;
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::fcntl::{OFlag, open};
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use nix::sys::stat::Mode;
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, get_exit_code, set_exit_code};
@@ -26,11 +20,6 @@ static ARG_FILES: &str = "files";
 
 #[cfg(unix)]
 mod platform {
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::fcntl::{FcntlArg, OFlag, fcntl};
-    use nix::unistd::sync;
-    #[cfg(any(target_os = "linux", target_os = "android"))]
-    use nix::unistd::{fdatasync, syncfs};
     #[cfg(any(target_os = "linux", target_os = "android"))]
     use std::fs::{File, OpenOptions};
     #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -49,7 +38,7 @@ mod platform {
         reason = "fn sig must match on all platforms"
     )]
     pub fn do_sync() -> UResult<()> {
-        sync();
+        rustix::fs::sync();
         Ok(())
     }
 
@@ -60,18 +49,15 @@ mod platform {
     fn open_and_reset_nonblock(path: &str) -> UResult<File> {
         let f = OpenOptions::new()
             .read(true)
-            .custom_flags(OFlag::O_NONBLOCK.bits())
+            .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
             .open(path)
             .map_err_context(|| path.to_string())?;
         // Reset O_NONBLOCK flag if it was set (matches GNU behavior)
         // This is non-critical, so we log errors but don't fail
-        if let Err(e) = fcntl(&f, FcntlArg::F_SETFL(OFlag::empty())) {
+        if let Err(e) = rustix::fs::fcntl_setfl(&f, rustix::fs::OFlags::empty()) {
             use std::io::{Write, stderr};
-            let _ = writeln!(
-                stderr(),
-                "sync: {}",
-                translate!("sync-warning-fcntl-failed", "file" => path, "error" => e.to_string())
-            );
+            let msg = translate!("sync-warning-fcntl-failed", "file" => path, "error" => std::io::Error::from(e).to_string());
+            let _ = writeln!(stderr(), "sync: {msg}");
             uucore::error::set_exit_code(1);
         }
         Ok(f)
@@ -80,11 +66,11 @@ mod platform {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_sync_with<F>(files: &[String], op: F) -> UResult<()>
     where
-        F: Fn(File) -> Result<(), nix::Error>,
+        F: Fn(File) -> Result<(), rustix::io::Errno>,
     {
         for path in files {
             let f = open_and_reset_nonblock(path)?;
-            op(f).map_err_context(
+            op(f).map_err(std::io::Error::from).map_err_context(
                 || translate!("sync-error-syncing-file", "file" => path.quote()),
             )?;
         }
@@ -93,12 +79,12 @@ mod platform {
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_syncfs(files: &[String]) -> UResult<()> {
-        do_sync_with(files, syncfs)
+        do_sync_with(files, rustix::fs::syncfs)
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     pub fn do_fdatasync(files: &[String]) -> UResult<()> {
-        do_sync_with(files, fdatasync)
+        do_sync_with(files, rustix::fs::fdatasync)
     }
 }
 
@@ -229,18 +215,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     for f in &files {
-        // Use the Nix open to be able to set the NONBLOCK flags for fifo files
+        // open with O_NONBLOCK to handle fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
             let path = Path::new(f);
-            if let Err(e) = open(path, OFlag::O_NONBLOCK, Mode::empty()) {
-                if e != Errno::EACCES || (e == Errno::EACCES && path.is_dir()) {
-                    show_error!(
-                        "{}",
-                        translate!("sync-error-opening-file", "file" => f.quote(), "err" => e.desc())
-                    );
-                    set_exit_code(1);
-                }
+            if let Err(e) = rustix::fs::open(
+                path,
+                rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            ) && (e != rustix::io::Errno::ACCESS || path.is_dir())
+            {
+                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => uucore::error::strip_errno(&std::io::Error::from(e)));
+                show_error!("{msg}");
+                set_exit_code(1);
             }
         }
         #[cfg(not(any(target_os = "linux", target_os = "android")))]

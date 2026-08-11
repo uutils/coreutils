@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/chmod.rs"
 doctest = false
@@ -21,11 +18,20 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["entries", "fs", "mode", "perms"] }
+uucore = { workspace = true, features = [
+  "diagnostics",
+  "entries",
+  "fs",
+  "mode",
+  "perms",
+] }
 fluent = { workspace = true }
 
 [target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 uucore = { workspace = true, features = ["safe-traversal"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "chmod"

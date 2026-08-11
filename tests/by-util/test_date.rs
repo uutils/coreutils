@@ -67,6 +67,41 @@ fn test_invalid_short_option() {
 }
 
 #[test]
+fn test_large_year_default_output() {
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "18978-01-01"])
+        .succeeds()
+        .stdout_is("Thu Jan  1 00:00:00 UTC 18978\n");
+}
+
+#[test]
+fn test_large_year_default_output_boundary() {
+    for (input, expected) in [
+        ("9999-01-01", "Fri Jan  1 00:00:00 UTC 9999\n"),
+        ("10000-01-01", "Sat Jan  1 00:00:00 UTC 10000\n"),
+        ("10000-01-01 00:00 +1400", "Fri Dec 31 10:00:00 UTC 9999\n"),
+        ("9999-12-31 23:00 -1400", "Sat Jan  1 13:00:00 UTC 10000\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-d", input])
+            .succeeds()
+            .stdout_is(expected);
+    }
+
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "10000-02-30"])
+        .fails_with_code(1)
+        .stderr_contains("invalid date");
+}
+
+#[test]
 fn test_format_option_not_to_capture_other_valid_arguments() {
     new_ucmd!()
         .arg("+%Y%m%d%H%M%S")
@@ -81,6 +116,14 @@ fn test_single_dash_as_date() {
         .arg("-")
         .fails_with_code(1)
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_single_dash_as_date_string() {
+    new_ucmd!()
+        .args(&["-u", "-d", "-", "+%T"])
+        .succeeds()
+        .stdout_is("00:00:00\n");
 }
 
 #[test]
@@ -601,6 +644,14 @@ fn test_invalid_format_string() {
 }
 
 #[test]
+fn test_invalid_format_string_with_too_many_colons() {
+    new_ucmd!()
+        .arg("+%_::::z")
+        .succeeds()
+        .stdout_is("%_::::z\n");
+}
+
+#[test]
 fn test_capitalized_numeric_time_zone() {
     // %z     +hhmm numeric time zone (e.g., -0400)
     // # is supposed to capitalize, which makes little sense here, but keep coverage
@@ -1072,6 +1123,27 @@ fn test_date_tz_abbreviation_us_timezones() {
             .succeeds()
             .no_stderr();
     }
+}
+
+#[test]
+fn test_date_double_timezone_is_invalid() {
+    // A date string that specifies a timezone twice is invalid, matching GNU.
+    // Regression test for issue #12875.
+    for input in ["EST EST", "EST PST", "2021-03-20 14:53:01 EST EST"] {
+        new_ucmd!()
+            .arg("-d")
+            .arg(input)
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+
+    // A single trailing timezone abbreviation must still be accepted.
+    new_ucmd!()
+        .arg("-d")
+        .arg("2021-03-20 14:53:01 EST")
+        .arg("+%Y-%m-%d %H:%M:%S")
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]
@@ -1877,25 +1949,41 @@ fn test_date_strftime_narrow_width_on_wide_default() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/283 — GNU date floors negative fractional epochs (`@-1.5` -> -2); uutils truncates toward zero (-> -1)."]
 fn test_date_negative_fractional_epoch_flooring() {
-    new_ucmd!()
-        .env("LC_ALL", "C")
-        .env("TZ", "UTC")
-        .arg("-d")
-        .arg("@-1.5")
-        .arg("+%s")
-        .succeeds()
-        .stdout_is("-2\n");
+    // GNU date floors `%s` toward negative infinity for negative fractional
+    // epochs, while jiff truncates toward zero. See parse_datetime issue #283.
+    for (input, format, expected) in [
+        ("@-1.5", "+%s", "-2\n"),
+        ("@-0.25", "+%s", "-1\n"),
+        ("@-2.75", "+%s.%N", "-3.250000000\n"),
+        ("@-100.5", "+%s", "-101\n"),
+        // Positive fractions and whole seconds are unaffected.
+        ("@42.9", "+%s", "42\n"),
+        ("@-7", "+%s", "-7\n"),
+        // `%%s` stays a literal specifier and must not be substituted.
+        ("@-1.5", "+%%s=%s", "%s=-2\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC")
+            .arg("-d")
+            .arg(input)
+            .arg(format)
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/parse_datetime/issues/282 — parse_datetime rejects `HH:MM am/pm` forms (e.g. `2024-06-15 12:00 PM`, `2024-06-15 11:30am`). GNU date accepts them."]
 fn test_date_input_hhmm_ampm() {
-    for input in [
-        "2024-06-15 12:00 PM",
-        "2024-06-15 11:30am",
-        "2024-06-15 3:00 PM",
+    // GNU date accepts a 12-hour meridiem suffix on a combined date+time.
+    // Regression test for https://github.com/uutils/parse_datetime/issues/282.
+    for (input, expected) in [
+        ("2024-06-15 12:00 PM", "12:00\n"),
+        ("2024-06-15 11:30am", "11:30\n"),
+        ("2024-06-15 3:00 PM", "15:00\n"),
+        ("2024-06-15 12:00 AM", "00:00\n"),
+        ("2024-06-15 3:00 p.m.", "15:00\n"),
     ] {
         new_ucmd!()
             .env("LC_ALL", "C")
@@ -1903,7 +1991,8 @@ fn test_date_input_hhmm_ampm() {
             .arg("-d")
             .arg(input)
             .arg("+%H:%M")
-            .succeeds();
+            .succeeds()
+            .stdout_is(expected);
     }
 }
 
@@ -1977,7 +2066,6 @@ fn test_date_strftime_flag_on_composite() {
 }
 
 #[test]
-#[ignore = "https://github.com/uutils/coreutils/issues/11656 — GNU date strips the `O` strftime modifier in C locale (e.g. `%Om` -> `%m`); uutils leaks it as literal `%om`."]
 fn test_date_strftime_o_modifier() {
     // In C locale the `O` modifier is a no-op (alternative numeric symbols).
     // GNU renders `%Om` as `06` for June; uutils renders it as the literal `%Om`.
@@ -1986,9 +2074,9 @@ fn test_date_strftime_o_modifier() {
         .env("TZ", "UTC")
         .arg("-d")
         .arg("2024-06-15")
-        .arg("+%Om-%Oy-%Ol")
+        .arg("+%Om-%Oy-%Od")
         .succeeds()
-        .stdout_is("06-24-12\n");
+        .stdout_is("06-24-15\n");
 }
 
 #[test]

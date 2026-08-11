@@ -196,6 +196,63 @@ fn test_recursive() {
 }
 
 #[test]
+fn test_one_file_system_same_device() {
+    // Cross-device skipping needs a mount point (root privileges), so here we
+    // only guard the single-device case: the whole tree must still be removed.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_one_file_system_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--one-file-system")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.file_exists(&file));
+    assert!(!at.dir_exists(&subdir));
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_all_same_device() {
+    // Refusing to cross a device boundary needs a mount point (root
+    // privileges); without one, --preserve-root=all must remove the tree as
+    // usual since it stays on a single device.
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_preserve_root_all_dir";
+    let subdir = format!("{dir}/subdir");
+    let file = format!("{subdir}/file");
+
+    at.mkdir(dir);
+    at.mkdir(&subdir);
+    at.touch(&file);
+
+    ucmd.arg("--preserve-root=all")
+        .arg("-rf")
+        .arg(dir)
+        .succeeds()
+        .no_stderr();
+
+    assert!(!at.dir_exists(dir));
+}
+
+#[test]
+fn test_preserve_root_rejects_unknown_value() {
+    new_ucmd!()
+        .arg("--preserve-root=bogus")
+        .arg("-rf")
+        .arg("anything")
+        .fails()
+        .stderr_contains("invalid value 'bogus'");
+}
+
+#[test]
 fn test_recursive_multiple() {
     let (at, mut ucmd) = at_and_ucmd!();
     let dir = "test_rm_recursive_directory";
@@ -275,6 +332,94 @@ fn test_verbose() {
         .arg(file_b)
         .succeeds()
         .stdout_only(format!("removed '{file_a}'\nremoved '{file_b}'\n"));
+}
+
+// Regression test for issue #10551: `rm -v` must report a verbose output
+// write failure on stderr and exit 1 instead of panicking.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_rm_verbose_write_error_file";
+
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-v")
+        .arg(file)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(file));
+}
+
+// Directory variant of the #10551 regression test.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_does_not_panic_dir() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_dir";
+    let file = "test_rm_verbose_write_error_dir/a";
+
+    at.mkdir(dir);
+    at.touch(file);
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    // A broken stdout must not stop the removal itself.
+    assert!(!at.file_exists(file));
+    assert!(!at.dir_exists(dir));
+}
+
+// A broken standard output must be reported once, not once per removed entry.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_verbose_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_rm_verbose_write_error_once";
+
+    at.mkdir(dir);
+    for name in ["alpha", "bravo", "charlie", "delta"] {
+        at.touch(format!("{dir}/{name}"));
+    }
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("-r")
+        .arg("-v")
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1);
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    assert!(!at.dir_exists(dir));
 }
 
 #[test]

@@ -6,7 +6,7 @@
 use std::{
     ffi::OsString,
     fs::File,
-    io::{BufRead, BufReader, Stdin, Stdout, Write, stdin, stdout},
+    io::{BufRead, BufReader, IsTerminal as _, Stdin, Stdout, Write, stdin, stdout},
     panic::set_hook,
     path::{Path, PathBuf},
     time::Duration,
@@ -20,7 +20,6 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::Attribute,
     terminal::{self, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen},
-    tty::IsTty,
 };
 
 use uucore::error::{UResult, USimpleError, UUsageError};
@@ -123,7 +122,7 @@ impl Options {
         ) {
             // We add 1 to the number of lines to display because the last line
             // is used for the banner
-            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n + 1),
+            (Some(n), _) | (None, Some(n)) if n > 0 => Some(n.saturating_add(1)),
             _ => None, // Use terminal height
         };
         let from_line = match matches.get_one::<usize>(options::FROM_LINE).copied() {
@@ -195,7 +194,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     } else {
         let stdin = stdin();
-        if stdin.is_tty() {
+        if stdin.is_terminal() {
             // stdin is not a pipe
             return Err(UUsageError::new(1, MoreError::BadUsage.to_string()));
         }
@@ -351,7 +350,7 @@ enum OutputType {
     Test(Vec<u8>),
 }
 
-impl IsTty for OutputType {
+impl OutputType {
     fn is_tty(&self) -> bool {
         matches!(self, Self::Tty(_))
     }
@@ -379,7 +378,7 @@ impl Write for OutputType {
 
 fn setup_term() -> UResult<OutputType> {
     let mut stdout = stdout();
-    if stdout.is_tty() {
+    if stdout.is_terminal() {
         terminal::enable_raw_mode()?;
         stdout.execute(EnterAlternateScreen)?.execute(Hide)?;
         Ok(OutputType::Tty(stdout))
@@ -397,7 +396,7 @@ fn setup_term() -> UResult<OutputType> {
 
 fn reset_term() -> UResult<()> {
     let mut stdout = stdout();
-    if stdout.is_tty() {
+    if stdout.is_terminal() {
         stdout.queue(Show)?.queue(LeaveAlternateScreen)?;
         terminal::disable_raw_mode()?;
     } else {
@@ -571,16 +570,15 @@ impl<'a> Pager<'a> {
             return Ok(());
         }
         loop {
-            if event::poll(Duration::from_millis(100))? {
-                if let Event::Key(KeyEvent {
+            if event::poll(Duration::from_millis(100))?
+                && let Event::Key(KeyEvent {
                     code: KeyCode::Enter,
                     modifiers: KeyModifiers::NONE,
                     kind: KeyEventKind::Press,
                     ..
                 }) = event::read()?
-                {
-                    return Ok(());
-                }
+            {
+                return Ok(());
             }
         }
     }
@@ -609,10 +607,9 @@ impl<'a> Pager<'a> {
         let pattern = self.pattern.clone().expect("pattern should be set");
         let mut line_num = self.upper_mark;
         loop {
-            match self.get_line(line_num) {
-                Some(line) if line.contains(&pattern) => return Some(line_num),
-                Some(_) => line_num += 1,
-                None => return None,
+            match self.get_line(line_num)? {
+                line if line.contains(&pattern) => return Some(line_num),
+                _ => line_num += 1,
             }
         }
     }
@@ -1135,6 +1132,14 @@ mod tests {
         assert!(stdout.contains("0\n"));
         assert!(stdout.contains("1\n"));
         assert!(!stdout.contains("2\n"));
+    }
+
+    #[test]
+    fn test_lines_option_max_u16() {
+        // The +1 for the banner line used to overflow when -n is u16::MAX.
+        let matches = uu_app().get_matches_from(vec!["more", "-n", "65535"]);
+        let options = Options::from(&matches);
+        assert_eq!(options.lines, Some(u16::MAX));
     }
 
     #[test]

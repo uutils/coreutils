@@ -329,7 +329,10 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
     if name == "-" {
         Ok(LineReader::new(Input::stdin(), line_ending))
     } else {
-        if metadata(name)?.is_dir() {
+        // some platforms shows different read error
+        // try to override the error message, but failure of it is not serious
+        #[cfg(any(target_os = "wasi", target_os = "windows"))]
+        if metadata(name).is_ok_and(|m| m.is_dir()) {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;

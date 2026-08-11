@@ -2,10 +2,11 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
+// spell-checker:ignore defaultcon setfscreatecon
 //! Set of functions to manage SELinux security contexts
 
 use std::error::Error;
+use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::translate;
@@ -60,6 +61,127 @@ impl From<SeLinuxError> for i32 {
 /// Note: libselinux internally caches this value, so no additional caching is needed.
 pub fn is_selinux_enabled() -> bool {
     selinux::kernel_support() != selinux::KernelSupport::Unsupported
+}
+
+/// Sets the context the kernel applies to objects created by this thread, and
+/// restores the policy default when dropped (`setfscreatecon`).
+///
+/// Unlike [`set_selinux_security_context`], which relabels after creating, the
+/// object is never visible with the wrong context. Not [`Send`]: the context is
+/// per-thread state.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::Path;
+/// use uucore::selinux::FsCreateContext;
+///
+/// let context = String::from("unconfined_u:object_r:user_home_t:s0");
+/// let _guard = FsCreateContext::new(Path::new("/path/to/fifo"), None, Some(&context))?;
+/// // Anything created from here on is labelled at creation time.
+/// # Ok::<(), uucore::selinux::SeLinuxError>(())
+/// ```
+#[must_use = "the creation context is restored as soon as the guard is dropped"]
+pub struct FsCreateContext {
+    // False when no default context existed, so there is nothing to restore.
+    installed: bool,
+    _not_send: PhantomData<*const ()>,
+}
+
+/// GNU creates the object unlabelled rather than failing when the policy has no
+/// default for the path, or the filesystem cannot hold one (`ignorable_ctx_err`).
+fn is_ignorable_context_error(error: &(dyn Error + 'static)) -> bool {
+    let mut current = Some(error);
+    while let Some(err) = current {
+        if let Some(io_error) = err.downcast_ref::<std::io::Error>() {
+            return matches!(
+                io_error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENODATA | libc::ENOTSUP)
+            );
+        }
+        current = err.source();
+    }
+    false
+}
+
+impl FsCreateContext {
+    /// Installs the creation context.
+    ///
+    /// `context` is an explicit `--context=CTX` value. `None` asks the policy
+    /// for the default context of `path`, which is what a bare `-Z` does;
+    /// `mode` refines that lookup with the type and permission bits of the
+    /// object about to be created, and may be `None` when they are not known.
+    pub fn new(
+        path: &Path,
+        mode: Option<libc::mode_t>,
+        context: Option<&String>,
+    ) -> Result<Self, SeLinuxError> {
+        if !is_selinux_enabled() {
+            return Err(SeLinuxError::SELinuxNotEnabled);
+        }
+
+        if let Some(ctx_str) = context {
+            let c_context = std::ffi::CString::new(ctx_str.as_str()).map_err(|e| {
+                SeLinuxError::ContextConversionFailure(
+                    ctx_str.to_owned(),
+                    selinux_error_description(&e),
+                )
+            })?;
+
+            SecurityContext::from_c_str(&c_context, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| {
+                    SeLinuxError::ContextSetFailure(
+                        ctx_str.to_owned(),
+                        selinux_error_description(&e),
+                    )
+                })?;
+        } else {
+            // Mirror GNU's `defaultcon`.
+            let labeler =
+                selinux::label::Labeler::<selinux::label::back_end::File>::new(&[], false)
+                    .map_err(|e| {
+                        SeLinuxError::ContextRetrievalFailure(selinux_error_description(&e))
+                    })?;
+
+            let default_context =
+                match labeler.look_up_by_path(path, mode.and_then(selinux::FileAccessMode::new)) {
+                    Ok(context) => context,
+                    Err(e) if is_ignorable_context_error(&e) => {
+                        return Ok(Self {
+                            installed: false,
+                            _not_send: PhantomData,
+                        });
+                    }
+                    Err(e) => {
+                        return Err(SeLinuxError::ContextRetrievalFailure(
+                            selinux_error_description(&e),
+                        ));
+                    }
+                };
+
+            default_context
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| {
+                    SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e))
+                })?;
+        }
+
+        Ok(Self {
+            installed: true,
+            _not_send: PhantomData,
+        })
+    }
+}
+
+impl Drop for FsCreateContext {
+    fn drop(&mut self) {
+        if !self.installed {
+            return;
+        }
+        // A failed reset is not actionable here.
+        let _ = SecurityContext::set_default_context_for_new_file_system_objects();
+    }
 }
 
 /// Returns a string describing the error and its causes.

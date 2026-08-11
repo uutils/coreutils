@@ -285,6 +285,18 @@ fn test_truncate_bytes_size() {
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
+#[test]
+fn test_relative_size_overflow_preserves_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+
+    ucmd.args(&["--size=+18446744073709551615", FILE1])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+
+    assert_eq!(at.read(FILE1), "x");
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
@@ -478,4 +490,20 @@ fn test_truncate_non_utf8_paths() {
 
     // Test that truncate can handle non-UTF-8 filenames
     ts.ucmd().arg("-s").arg("10").arg(file_name).succeeds();
+}
+
+#[test]
+fn test_empty_size() {
+    new_ucmd!()
+        .args(&["-s", "", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: ''\n");
+}
+
+#[test]
+fn test_sign_as_a_size() {
+    new_ucmd!()
+        .args(&["-s", "+", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: '+'\n");
 }

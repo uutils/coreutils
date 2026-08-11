@@ -11,15 +11,13 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/stat.rs"
 doctest = false
 
 [dependencies]
 clap = { workspace = true }
+rustix = { workspace = true }
 uucore = { workspace = true, features = [
   "entries",
   "libc",
@@ -34,6 +32,9 @@ fluent = { workspace = true }
 
 [features]
 selinux = ["uucore/selinux"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "stat"

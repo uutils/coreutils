@@ -55,8 +55,7 @@ fn count_bytes_using_splice(fd: &impl rustix::fd::AsFd) -> Result<usize, usize> 
 /// In the special case where we only need to count the number of bytes. There
 /// are several optimizations we can do:
 ///   1. On Unix,  we can simply `stat` the file if it is regular.
-///   2. On Linux -- if the above did not work -- we can use splice to count
-///      the number of bytes if the file is a FIFO.
+///   2. On Linux -- if the above did not work -- we can use splice with broker.
 ///   3. On Windows we can use `std::os::windows::fs::MetadataExt` to get file size
 ///      for regular files
 ///   3. Otherwise, we just read normally, but without the overhead of counting
@@ -130,14 +129,11 @@ pub(crate) fn count_bytes_fast<T: WordCountable>(handle: &mut T) -> (usize, Opti
                 }
             }
         }
-        // Else, if we're on Linux and our file is a FIFO pipe
-        // (or stdin), we use splice to count the number of bytes.
+        // Else, if we're on Linux, we use splice with broker (mostly for stream)
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        if (stat.st_mode as libc::mode_t & libc::S_IFIFO) != 0 {
-            match count_bytes_using_splice(handle) {
-                Ok(n) => return (n, None),
-                Err(n) => byte_count = n,
-            }
+        match count_bytes_using_splice(handle) {
+            Ok(n) => return (byte_count + n, None),
+            Err(n) => byte_count = n,
         }
     }
 

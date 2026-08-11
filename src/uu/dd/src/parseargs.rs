@@ -335,6 +335,14 @@ impl Parser {
         if num == 0 {
             return Err(ParseError::InvalidNumber(val.to_string()));
         }
+        // GNU rejects a block size >= i64::MAX (intmax_t); otherwise the value
+        // overflows later when the buffer is computed or allocated.
+        if num >= i64::MAX as u64 {
+            return Err(ParseError::InvalidNumberWithErrMsg(
+                val.to_string(),
+                "Value too large for defined data type".to_string(),
+            ));
+        }
         num.try_into()
             .map_err(|_| ParseError::BsOutOfRange(arg.to_string()))
     }
@@ -354,7 +362,6 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(f.to_string())),
                 "direct" => linux_only!(f, i.direct = true),
                 "directory" => linux_only!(f, i.directory = true),
                 "dsync" => linux_only!(f, i.dsync = true),
@@ -364,9 +371,9 @@ impl Parser {
                 "noatime" => linux_only!(f, i.noatime = true),
                 "noctty" => linux_only!(f, i.noctty = true),
                 "nofollow" => linux_only!(f, i.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" | "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Input-only flags
                 "fullblock" => i.fullblock = true,
@@ -386,7 +393,6 @@ impl Parser {
         for f in val.split(',') {
             match f {
                 // Common flags
-                "cio" => return Err(ParseError::Unimplemented(val.to_string())),
                 "direct" => linux_only!(f, o.direct = true),
                 "directory" => linux_only!(f, o.directory = true),
                 "dsync" => linux_only!(f, o.dsync = true),
@@ -396,9 +402,9 @@ impl Parser {
                 "noatime" => linux_only!(f, o.noatime = true),
                 "noctty" => linux_only!(f, o.noctty = true),
                 "nofollow" => linux_only!(f, o.nofollow = true),
-                "nolinks" => return Err(ParseError::Unimplemented(f.to_string())),
-                "binary" => return Err(ParseError::Unimplemented(f.to_string())),
-                "text" => return Err(ParseError::Unimplemented(f.to_string())),
+                "cio" | "nolinks" | "binary" | "text" => {
+                    return Err(ParseError::Unimplemented(f.to_string()));
+                }
 
                 // Output-only flags
                 "append" => o.append = true,

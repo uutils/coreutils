@@ -2,8 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-//spell-checker:ignore TAOCP indegree FADV
-//spell-checker:ignore (libs) interner uclibc
+
+// spell-checker:ignore TAOCP indegree
+// spell-checker:ignore (libs) interner
+
 use clap::{Arg, ArgAction, Command};
 use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
@@ -35,50 +37,33 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .into_iter()
         .flatten();
 
-    let input = match (inputs.next(), inputs.next()) {
-        (None, _) => {
-            return Err(USimpleError::new(
-                1,
-                translate!("tsort-error-at-least-one-input"),
-            ));
-        }
-        (Some(input), None) => input,
-        (Some(_), Some(extra)) => {
-            return Err(USimpleError::new(
-                1,
-                translate!(
-                    "tsort-error-extra-operand",
-                    "operand" => extra.quote(),
-                    "util" => "tsort"
-                ),
-            ));
-        }
-    };
-    let file: File;
+    let input = inputs.next().expect("default value should be set by clap");
+
+    if let Some(extra) = inputs.next() {
+        return Err(USimpleError::new(
+            1,
+            translate!(
+                "tsort-error-extra-operand",
+                "operand" => extra.quote()
+            ),
+        ));
+    }
+
     // Create the directed graph from pairs of tokens in the input data.
     let mut g = Graph::new(input.to_string_lossy().to_string());
     if input == "-" {
         process_input(io::stdin().lock(), &mut g)?;
     } else {
-        // Windows reports a permission denied error when trying to read a directory.
-        // So we check manually beforehand. On other systems, we avoid this extra check for performance.
+        // some platforms cannot catch this as read error. Needs additional cost by stat
         #[cfg(windows)]
         {
-            use std::path::Path;
-
-            let path = Path::new(input);
-            if path.is_dir() {
+            let input = std::path::Path::new(input);
+            if input.is_dir() {
                 return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
             }
-
-            file = File::open(path)?;
         }
-        #[cfg(not(windows))]
-        {
-            file = File::open(input)?;
-        }
-        // advise the OS we will access the data sequentially if available.
-        // offset 0 => from the start of the file. None => for the whole file.
+        let file = File::open(input)?;
+        // advise the OS we will access the data sequentially if possible
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
 
@@ -223,15 +208,15 @@ impl Graph {
     }
 
     fn name(&self) -> String {
-        //SAFETY: the name is interned during graph creation and stored as name_sym.
-        // gives much better performance on lookup.
-        unsafe { self.interner.resolve_unchecked(self.name_sym).to_owned() }
+        self.interner
+            .resolve(self.name_sym)
+            .expect("symbol should be interned")
+            .to_owned()
     }
     fn get_node_name(&self, node_sym: Sym) -> &str {
-        //SAFETY: the only way to get a Sym is by manipulating an interned string.
-        // gives much better performance on lookup.
-
-        unsafe { self.interner.resolve_unchecked(node_sym) }
+        self.interner
+            .resolve(node_sym)
+            .expect("symbol should be interned")
     }
 
     fn add_edge(&mut self, from: Sym, to: Sym) {
