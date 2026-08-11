@@ -19,6 +19,7 @@ doctest = false
 
 [features]
 default = ["i18n-collator"]
+diagnostics = ["uucore/diagnostics"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
@@ -34,7 +35,6 @@ self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
-  "diagnostics",
   "fs",
   "parser-size",
   "version-cmp",

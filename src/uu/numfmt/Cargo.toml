@@ -17,7 +17,6 @@ path = "src/numfmt.rs"
 [dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = [
-  "diagnostics",
   "parser",
   "ranges",
   "i18n-common",
@@ -30,6 +29,9 @@ memchr = { workspace = true }
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
 
 [lints]
 workspace = true

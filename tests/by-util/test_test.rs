@@ -1192,6 +1192,7 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
 

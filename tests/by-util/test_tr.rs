@@ -1686,6 +1686,7 @@ fn test_stdin_is_socket() {
         .stdout_is(";;");
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
 
