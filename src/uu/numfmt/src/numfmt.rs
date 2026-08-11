@@ -9,8 +9,8 @@ use crate::format::{escape_line, write_formatted_with_delimiter, write_formatted
 use crate::options::{
     DEBUG, DELIMITER, FIELD, FIELD_DEFAULT, FORMAT, FROM, FROM_DEFAULT, FROM_UNIT,
     FROM_UNIT_DEFAULT, FormatOptions, GROUPING, HEADER, HEADER_DEFAULT, INVALID, InvalidModes,
-    NUMBER, NumfmtOptions, PADDING, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT, TO_UNIT,
-    TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
+    NUMBER, NumfmtOptions, PADDING, ParseError, ROUND, RoundMethod, SUFFIX, TO, TO_DEFAULT,
+    TO_UNIT, TO_UNIT_DEFAULT, TransformOptions, UNIT_SEPARATOR, ZERO_TERMINATED,
 };
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
@@ -19,7 +19,7 @@ use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::{ExitCode, UResult};
+use uucore::error::{UResult, quiet_if_reported};
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -245,7 +245,7 @@ fn parse_delimiter(arg: &OsString) -> Result<Vec<u8>> {
     }
 }
 
-fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
+fn parse_options(args: &ArgMatches) -> std::result::Result<NumfmtOptions, ParseError> {
     let from = parse_unit(args.get_one::<String>(FROM).unwrap(), FROM)?;
     let to = parse_unit(args.get_one::<String>(TO).unwrap(), TO)?;
     let from_unit = parse_unit_size(args.get_one::<String>(FROM_UNIT).unwrap())?;
@@ -303,17 +303,13 @@ fn parse_options(args: &ArgMatches) -> Result<NumfmtOptions> {
     };
 
     if grouping && args.contains_id(FORMAT) {
-        return Err(translate!(
-            "numfmt-error-grouping-cannot-be-combined-with-format"
-        ));
+        return Err(translate!("numfmt-error-grouping-cannot-be-combined-with-format").into());
     }
 
     let grouping = grouping || format.grouping;
 
     if grouping && to != Unit::None {
-        return Err(translate!(
-            "numfmt-error-grouping-cannot-be-combined-with-to"
-        ));
+        return Err(translate!("numfmt-error-grouping-cannot-be-combined-with-to").into());
     }
 
     let delimiter = args
@@ -398,18 +394,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options = match parse_options(&matches) {
         Ok(options) => options,
-        Err(message) => {
-            // Only the format is worth a caret, and only when it is the very
-            // error that was reported: other options are checked first.
-            if let Some(args) = &format_args
-                && let Some(format) = matches.get_one::<String>(FORMAT)
-                && let Err(error) = format.parse::<FormatOptions>()
-                && error.message == message
-                && diagnostics::render(args, format, &error)
-            {
-                // The diagnostic is already on stderr; exit quietly.
-                return Err(ExitCode::new(1));
-            }
+        // A format error still knows where in the format string it happened,
+        // so it is the one error worth a caret.
+        Err(ParseError::Format(error)) => {
+            let reported = format_args
+                .as_ref()
+                .zip(matches.get_one::<String>(FORMAT))
+                .is_some_and(|(args, format)| diagnostics::render(args, format, &error));
+            return Err(quiet_if_reported(
+                reported,
+                NumfmtError::IllegalArgument(error.message),
+            ));
+        }
+        Err(ParseError::Other(message)) => {
             return Err(NumfmtError::IllegalArgument(message).into());
         }
     };
