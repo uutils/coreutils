@@ -37,10 +37,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    # Remove once https://github.com/actions/runner-images/issues/14232 is resolved.
-    - name: Trust preinstalled Homebrew taps
-      run: brew trust aws/tap
-      if: runner.os == 'macOS'
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -414,10 +410,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    # Remove once https://github.com/actions/runner-images/issues/14232 is resolved.
-    - name: Trust preinstalled Homebrew taps
-      run: brew trust aws/tap
-      if: runner.os == 'macOS'
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
@@ -571,10 +563,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    # Remove once https://github.com/actions/runner-images/issues/14232 is resolved.
-    - name: Trust preinstalled Homebrew taps
-      run: brew trust aws/tap
-      if: runner.os == 'macOS'
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
