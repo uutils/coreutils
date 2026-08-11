@@ -59,18 +59,20 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 #[inline]
 pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
     debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
-    let mut remaining = len;
+    // 1st error is used to detect missing support for splice
+    let mut remaining = if let Ok(s) = splice(pipe, dest, len) {
+        len - s
+    } else {
+        // read/write fallback
+        // use read_to_end to make pipe empty for the case write failed
+        let mut drain = Vec::with_capacity(len);
+        pipe.take(len as u64).read_to_end(&mut drain)?;
+        RawWriter(&dest).write_all(&drain)?;
+        return Ok(Err(()));
+    };
+    // GNU cat catches all strace injections for 2nd+ splice
     while remaining > 0 {
-        if let Ok(s) = splice(pipe, dest, remaining) {
-            remaining -= s;
-        } else {
-            // read/write fallback
-            // use read_to_end to make pipe empty for the case write failed
-            let mut drain = Vec::with_capacity(remaining);
-            pipe.take(remaining as u64).read_to_end(&mut drain)?;
-            RawWriter(&dest).write_all(&drain)?;
-            return Ok(Err(()));
-        }
+        remaining -= splice(pipe, dest, remaining)?;
     }
     Ok(Ok(()))
 }
@@ -95,19 +97,9 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     // 1st error is used to detect missing support for splice
     match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
         Ok(0) => return Ok(Ok(())),
-        Ok(mut n) => {
-            if let Ok(s) = splice(pipe_rd, dest, n) {
-                n -= s;
-            } else {
-                // read/write fallback
-                // use read_to_end to make pipe empty for the case write failed
-                let mut drain = Vec::with_capacity(n);
-                pipe_rd.take(n as u64).read_to_end(&mut drain)?;
-                RawWriter(&dest).write_all(&drain)?;
+        Ok(n) => {
+            if drain_pipe(pipe_rd, dest, n)?.is_err() {
                 return Ok(Err(()));
-            }
-            while n > 0 {
-                n -= splice(pipe_rd, dest, n)?;
             }
         }
         Err(_) => return Ok(Err(())),
