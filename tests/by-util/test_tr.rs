@@ -1794,6 +1794,30 @@ tr: we: equivalence class operand must be a single character
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_the_program_name_as_a_set() {
+        // The second set reads exactly like the program name; the caret must
+        // stay on the operand, not drift onto `tr` at the start of the line.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "[:alpha:]", "tr"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: when translating with complemented character classes,
+string2 must map all characters in the domain to one
+   ╭─[ tr:1:17 ]
+   │
+ 1 │ tr -c [:alpha:] tr
+   │                 ─┬
+   │                  ╰── only one character may be complemented to
+───╯"
+        );
+    }
+
     #[test]
     fn test_plain_message_when_stderr_is_a_pipe() {
         // The test harness pipes stderr, so the report must not appear.
