@@ -8,7 +8,7 @@
 use clap::builder::{TypedValueParser, ValueParserFactory};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use uucore::display::{Quotable, println_verbatim};
-use uucore::error::{FromIo, UError, UResult, UUsageError};
+use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::translate;
 
@@ -74,6 +74,9 @@ enum MkTempError {
 
     #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
     NotFound(String, PathBuf),
+
+    #[error("{}", strip_errno(.0))]
+    Io(std::io::Error),
 }
 
 impl UError for MkTempError {
@@ -570,7 +573,7 @@ fn make_temp_dir(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResult
             let path = Path::new(dir).join(filename);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-directory"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(MkTempError::Io(e).into()),
     }
 }
 
@@ -599,7 +602,7 @@ fn make_temp_file(dir: &Path, prefix: &str, rand: usize, suffix: &str) -> UResul
             let path = Path::new(dir).join(filename);
             Err(MkTempError::NotFound(translate!("mktemp-template-type-file"), path).into())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(MkTempError::Io(e).into()),
     }
 }
 
