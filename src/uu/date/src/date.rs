@@ -1173,7 +1173,23 @@ fn parse_date<S: AsRef<str>>(
     }
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(target_os = "wasi")]
+/// Returns the resolution of the system's realtime clock.
+///
+/// `rustix::time::clock_getres` excludes WASI, so call `libc::clock_getres`
+/// (available on WASI) directly instead.
+fn get_clock_resolution() -> Timestamp {
+    let timespec = unsafe {
+        let mut timespec: libc::timespec = std::mem::zeroed();
+        libc::clock_getres(libc::CLOCK_REALTIME, &raw mut timespec);
+        timespec
+    };
+
+    #[allow(clippy::unnecessary_cast, reason = "needed for 32 bit target")]
+    Timestamp::constant(timespec.tv_sec as _, timespec.tv_nsec as _)
+}
+
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn get_clock_resolution() -> Timestamp {
     unimplemented!("getting clock resolution not implemented (unsupported target)");
 }
@@ -1212,7 +1228,7 @@ fn get_clock_resolution() -> Timestamp {
     Timestamp::constant(0, 100)
 }
 
-#[cfg(not(any(unix, windows)))]
+#[cfg(not(any(unix, windows, target_os = "wasi")))]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     unimplemented!("setting date not implemented (unsupported target)");
 }
@@ -1231,6 +1247,15 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
         translate!("date-error-setting-date-not-supported-macos"),
+    ))
+}
+
+#[cfg(target_os = "wasi")]
+/// The WASI sandbox has no syscall for setting the wall clock.
+fn set_system_datetime(_date: Zoned) -> UResult<()> {
+    Err(USimpleError::new(
+        1,
+        translate!("date-error-setting-date-not-supported-wasi"),
     ))
 }
 
@@ -1388,5 +1413,40 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    #[test]
+    fn test_escape_invalid_bytes() {
+        // Printable ASCII preserved, boundaries escaped
+        assert_eq!(escape_invalid_bytes(b"hello"), "hello");
+        assert_eq!(escape_invalid_bytes(b""), "");
+        // High-bit, control chars, DEL, and backslash all escaped as octal
+        assert_eq!(escape_invalid_bytes(b"\xb0"), "\\260");
+        assert_eq!(escape_invalid_bytes(b"\x00"), "\\000");
+        assert_eq!(escape_invalid_bytes(b"\x7f"), "\\177");
+        assert_eq!(escape_invalid_bytes(b"\\"), "\\134");
+        // Mixed content
+        assert_eq!(escape_invalid_bytes(b"a\xb0b\\c"), "a\\260b\\134c");
+    }
+
+    #[test]
+    fn test_get_clock_resolution() {
+        let res = get_clock_resolution();
+        assert!(res.as_second() >= 0 && res.as_second() <= 1);
+        assert!(res.as_second() > 0 || res.subsec_nanosecond() > 0);
+    }
+
+    #[test]
+    fn test_convert_for_set() {
+        let date = "2025-03-15T10:30:00+05:00[Asia/Karachi]"
+            .parse::<Zoned>()
+            .unwrap();
+        // UTC mode converts to UTC
+        let utc = convert_for_set(date.clone(), true);
+        assert_eq!(utc.time_zone(), &TimeZone::UTC);
+        assert_eq!((utc.hour(), utc.minute()), (5, 30));
+        // Local mode returns unchanged
+        let local = convert_for_set(date.clone(), false);
+        assert_eq!((local.hour(), local.minute()), (date.hour(), date.minute()));
     }
 }
