@@ -216,21 +216,6 @@ impl Snapshot {
             .map(|(index, _)| index)
     }
 
-    /// Index of the first argument equal to `arg`, held as raw bytes.
-    ///
-    /// # Arguments
-    ///
-    /// * `arg` - The argument to look for, as raw bytes.
-    ///
-    /// # Returns
-    ///
-    /// The index of the first argument equal to `arg`, or `None` if there is
-    /// none or the bytes cannot be represented as an [`OsStr`] on this
-    /// platform.
-    pub fn index_of_bytes(&self, arg: &[u8]) -> Option<usize> {
-        self.index_of(&crate::os_str_from_bytes(arg).ok()?)
-    }
-
     /// Index of the argument carrying `operand` as the value of an option.
     ///
     /// An option's value can be spelled many ways — `-k 2.3q`, `-k2.3q`,
@@ -376,52 +361,18 @@ impl Snapshot {
         self.report(span, message, label, help)
     }
 
-    /// Write a report pointing at `range`, a byte range *inside* `operand`.
-    ///
-    /// For utilities whose operands are small languages of their own — a `sort`
-    /// key, a `chmod` mode — the argument as a whole is rarely the answer; the
-    /// caret belongs under the one character that broke the parse. `operand` is
-    /// looked up among the arguments, so a key passed as `-k2.3x` and one passed
-    /// as `-k 2.3x` both point at the same place.
-    ///
-    /// Falls back to underlining the whole argument when quoting means an offset
-    /// inside `operand` no longer lines up with what is printed.
-    ///
-    /// # Arguments
-    ///
-    /// * `operand` - The operand at fault, as it was parsed.
-    /// * `range` - Byte range inside `operand` to point at. An empty range
-    ///   marks the character it starts at.
-    /// * `message` - The error message, already localized.
-    /// * `label` - Text placed under the caret, already localized.
-    /// * `help` - An optional line of advice, already localized.
-    ///
-    /// # Returns
-    ///
-    /// `false` if nothing could be rendered, in which case the caller should
-    /// fall back to a plain one-line message.
-    pub fn render_inside(
-        &self,
-        operand: &str,
-        range: Range<usize>,
-        message: &str,
-        label: &str,
-        help: Option<&str>,
-    ) -> bool {
-        let Some(span) = self.locate(operand, range) else {
-            return false;
-        };
-        self.report(span, message, label, help)
-    }
-
     /// Write a report pointing at `range`, a byte range *inside* `operand`,
     /// where `operand` is the tail (or the whole) of the argument at `index`.
     ///
-    /// Like [`Snapshot::render_inside`], but the argument is named rather than
-    /// searched for: the caller has located it with [`Snapshot::index_of`],
-    /// [`Snapshot::index_of_value`] or [`Snapshot::index_of_positional`], or
-    /// tracked it itself, so an unrelated argument sharing the operand's text
-    /// cannot draw the caret away.
+    /// For utilities whose operands are small languages of their own — a `sort`
+    /// key, a `chmod` mode — the argument as a whole is rarely the answer; the
+    /// caret belongs under the one character that broke the parse. The argument
+    /// is named rather than searched for: the caller has located it with
+    /// [`Snapshot::index_of`], [`Snapshot::index_of_value`] or
+    /// [`Snapshot::index_of_positional`], or tracked it itself, so an unrelated
+    /// argument sharing the operand's text cannot draw the caret away. The
+    /// operand may sit at the tail of a larger argument, so a key passed as
+    /// `-k2.3x` and one passed as `-k 2.3x` both point at the same place.
     ///
     /// Falls back to underlining the whole argument when the operand is not
     /// its tail, or when quoting means an offset inside `operand` no longer
@@ -462,20 +413,6 @@ impl Snapshot {
         let arg = self.args.get(index)?;
         let whole = self.spans[index].clone();
         if !self.verbatim[index] || !arg.as_encoded_bytes().ends_with(operand.as_bytes()) {
-            return Some(whole);
-        }
-        Some(self.locate_tail(whole, operand, range))
-    }
-
-    /// Byte range covered by `range` — an offset inside `operand` — once
-    /// `operand` has been found among the arguments.
-    fn locate(&self, operand: &str, range: Range<usize>) -> Option<Range<usize>> {
-        let index = self
-            .args
-            .iter()
-            .position(|arg| arg.as_encoded_bytes().ends_with(operand.as_bytes()))?;
-        let whole = self.spans[index].clone();
-        if !self.verbatim[index] {
             return Some(whole);
         }
         Some(self.locate_tail(whole, operand, range))
@@ -604,15 +541,17 @@ mod tests {
         let snap = Snapshot::from_bytes(&[b"9", b"+", b"4"]);
         assert_eq!(snap.text, "9 + 4");
         assert_eq!(snap.index_of(OsStr::new("+")), Some(1));
-        assert_eq!(snap.index_of_bytes(b"4"), Some(2));
+        assert_eq!(snap.index_of(OsStr::new("4")), Some(2));
     }
 
     #[cfg(unix)]
     #[test]
     fn invalid_utf8_arguments_can_still_be_found() {
+        use std::os::unix::ffi::OsStrExt;
+
         let snap = Snapshot::from_bytes(&[&b"ba\x80d"[..], b"+", b"1"]);
         // A lossy conversion would not compare equal to the raw argument.
-        assert_eq!(snap.index_of_bytes(b"ba\x80d"), Some(0));
+        assert_eq!(snap.index_of(OsStr::from_bytes(b"ba\x80d")), Some(0));
     }
 
     #[test]
@@ -622,46 +561,31 @@ mod tests {
     }
 
     #[test]
-    fn a_range_inside_an_operand_is_found_whether_it_is_glued_to_the_option() {
-        for args in [&["-k2.3x", "f"][..], &["-k", "2.3x", "f"][..]] {
-            let snap = snapshot(args);
-            let span = snap.locate("2.3x", 3..4).unwrap();
-            assert_eq!(&snap.text[span], "x");
-        }
-    }
-
-    #[test]
     fn an_empty_range_still_gets_one_character() {
         let snap = snapshot(&["u+rwx,g"]);
-        let span = snap.locate("u+rwx,g", 6..6).unwrap();
+        let span = snap.locate_at(0, "u+rwx,g", 6..6).unwrap();
         assert_eq!(&snap.text[span], "g");
     }
 
     #[test]
     fn a_range_at_the_end_of_an_operand_falls_back_to_the_argument() {
         let snap = snapshot(&["-k1,"]);
-        assert_eq!(snap.locate("1,", 2..2), Some(0..4));
+        assert_eq!(snap.locate_at(0, "1,", 2..2), Some(0..4));
     }
 
     #[test]
     fn a_quoted_operand_falls_back_to_the_whole_argument() {
         let snap = snapshot(&["a b", "-k1"]);
         // Offsets inside `a b` would land on the quotes that were added.
-        assert_eq!(snap.locate("a b", 1..2), Some(0..5));
-        assert_eq!(&snap.text[snap.locate("a b", 1..2).unwrap()], "'a b'");
-    }
-
-    #[test]
-    fn an_operand_that_is_not_an_argument_cannot_be_located() {
-        let snap = snapshot(&["-k1"]);
-        assert_eq!(snap.locate("2.3", 0..1), None);
+        assert_eq!(snap.locate_at(0, "a b", 1..2), Some(0..5));
+        assert_eq!(&snap.text[snap.locate_at(0, "a b", 1..2).unwrap()], "'a b'");
     }
 
     #[test]
     fn offsets_inside_a_multibyte_operand_stay_on_character_boundaries() {
         let snap = snapshot(&["--from=éx"]);
         // Mid-character offset, walked back rather than slicing a code point.
-        let span = snap.locate("éx", 1..3).unwrap();
+        let span = snap.locate_at(0, "éx", 1..3).unwrap();
         assert_eq!(&snap.text[span], "éx");
     }
 
