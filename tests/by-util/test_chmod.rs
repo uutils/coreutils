@@ -1693,14 +1693,6 @@ fn test_chmod_symlink_two_links_same_dir() {
 
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ chmod:1:5 ]`.
-    #[cfg(unix)]
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("chmod:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[cfg(unix)]
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
@@ -1715,7 +1707,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid operator"), "{stderr}");
         // The caret lands on `?`, the fifth character of the mode.
-        assert_eq!(caret_column(stderr), Some(5), "{stderr}");
+        assert_eq!(result.caret_column(), Some(5), "{stderr}");
     }
 
     #[cfg(unix)]
@@ -1732,7 +1724,7 @@ mod diagnostics {
 
         // Clauses are parsed one at a time, but the caret is placed in the
         // whole mode: `!` is its seventh character.
-        assert_eq!(caret_column(stderr), Some(7), "{stderr}");
+        assert_eq!(result.caret_column(), Some(7), "{stderr}");
     }
 
     #[cfg(unix)]
@@ -1748,7 +1740,7 @@ mod diagnostics {
         let stderr = result.stderr_str();
 
         assert!(stderr.contains("invalid mode"), "{stderr}");
-        assert_eq!(caret_column(stderr), Some(1), "{stderr}");
+        assert_eq!(result.caret_column(), Some(1), "{stderr}");
     }
 
     #[cfg(unix)]
@@ -1778,27 +1770,45 @@ mod diagnostics {
         let stderr = result.stderr_str();
 
         assert!(stderr.contains("invalid operator"), "{stderr}");
-        assert_eq!(caret_column(stderr), Some(4), "{stderr}");
+        assert_eq!(result.caret_column(), Some(4), "{stderr}");
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_plain_message_when_negative_modes_are_joined() {
+    fn test_snippet_points_into_the_right_negative_mode() {
         let (at, mut ucmd) = at_and_ucmd!();
         at.touch("probe");
 
-        // Several negative modes are joined into one mode that matches no
-        // single argument, so there is nothing to point at.
+        // Several negative modes are joined into one mode string before being
+        // parsed, but the caret still lands on `%` inside the one argument
+        // that carries the bad clause.
         let result = ucmd
             .terminal_sim_stderr()
             .args(&["-w", "-r%x", "probe"])
             .fails_with_code(1);
+        let stderr = result.stderr_str();
 
-        // The pseudo-terminal turns the newline into CRLF, hence the trim.
-        assert_eq!(
-            result.stderr_str().trim_end(),
-            "chmod: invalid operator (expected +, -, or =, but found %)"
-        );
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // Column 6 of `-w -r%x probe` is the `%`.
+        assert_eq!(result.caret_column(), Some(6), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_mode_not_a_file_with_the_same_name() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("g+rw?x");
+
+        // The file is named exactly like the mode; the caret belongs to the
+        // mode operand, the first of the two.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["g+rw?x", "g+rw?x"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(5), "{stderr}");
     }
 
     #[test]

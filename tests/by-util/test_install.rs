@@ -3075,13 +3075,6 @@ fn test_install_backup_custom_suffix_refuses() {
 #[cfg(unix)]
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ install:1:8 ]`.
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("install:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -3095,7 +3088,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid operator"), "{stderr}");
         // The caret lands on `?`: three columns of `-m ` and four of mode.
-        assert_eq!(caret_column(stderr), Some(8), "{stderr}");
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
     }
 
     #[test]
