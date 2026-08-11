@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) asdf algo algos asha characted mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
+// spell-checker:ignore (words) asdf algo algos asha mgmt xffname hexa GFYEQ HYQK Yqxb dont checkfile
 
 use rstest::rstest;
 use rstest_reuse::{apply, template};
@@ -3489,7 +3489,7 @@ fn test_locale_aware_error_filename_escaping() {
     // 'Ã' is valid UTF-8, invalid ASCII.
     let filename = "file_Ã";
 
-    // The characted is valid and not escaped in UTF-8
+    // The character is valid and not escaped in UTF-8
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
         .arg(filename)
