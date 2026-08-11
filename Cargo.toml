@@ -20,7 +20,7 @@ categories.workspace = true
 all-features = true
 
 [features]
-default = ["feat_common_core"]
+default = ["feat_common_core", "feat_diagnostics"]
 ## OS feature shortcodes
 unix = ["feat_os_unix"]
 windows = ["feat_os_windows"]
@@ -62,6 +62,15 @@ uudoc = [
   "dep:zip",
 ]
 ## features
+# "feat_diagnostics" == render errors against the argument list with a caret
+# when stderr is a terminal. On by default; build with `--no-default-features`
+# (plus a `feat_os_*` selection) to compile the rendering — and its ariadne
+# dependency — out. Utilities then keep their plain one-line messages.
+# Enabling `uucore/diagnostics` is enough: cargo unifies features, so every
+# utility in the build sees it. The matching `diagnostics` feature each `uu_*`
+# crate declares is there for building that crate on its own, and is
+# deliberately not listed here.
+feat_diagnostics = ["uucore/diagnostics"]
 ## Optional feature for stdbuf
 # "feat_external_libstdbuf" == use an external libstdbuf.so for stdbuf instead of embedding it
 feat_external_libstdbuf = ["stdbuf/feat_external_libstdbuf"]
@@ -396,6 +405,11 @@ version = "0.10.0"
 
 [workspace.dependencies]
 ansi-width = "0.1.0"
+# The diagnostics rewrite ariadne's output by row number, so a release that
+# changes the shape of a report is a breaking change here even when it is not
+# one for ariadne. `uucore`'s `the_rendered_report_has_the_row_shape_the_rewriting_assumes`
+# is what catches it; keep the bound tight enough that only patch releases
+# arrive without one running.
 ariadne = "0.6.0"
 base64-simd = "0.8"
 bigdecimal = "0.4"

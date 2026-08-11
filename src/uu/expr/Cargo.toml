@@ -20,13 +20,16 @@ clap = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 onig = { workspace = true }
-uucore = { workspace = true, features = ["diagnostics", "i18n-collator"] }
+uucore = { workspace = true, features = ["i18n-collator"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
 
 [lints]
 workspace = true

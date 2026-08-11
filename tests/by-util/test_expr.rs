@@ -2040,6 +2040,7 @@ fn test_emoji_operations() {
         .stdout_only("1\n");
 }
 
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
     #[cfg(unix)]

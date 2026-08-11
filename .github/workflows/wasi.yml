@@ -59,6 +59,9 @@ jobs:
         # Run host-compiled integration tests against the WASI binary.
         # Tests incompatible with WASI are annotated with
         # #[cfg_attr(wasi_runner, ignore)] in the test source files.
+        # The binary above is built without default features, so it has no
+        # caret diagnostics; the host test crate does have them, hence the
+        # not(wasi_runner) in the cfg guarding every `mod diagnostics`.
         # TODO: add integration tests for these tools as WASI support is extended:
         #   arch b2sum cat cksum csplit date dir dircolors fmt join
         #   ls md5sum mkdir mv nproc pathchk pr printenv ptx pwd readlink

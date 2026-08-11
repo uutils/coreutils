@@ -1093,6 +1093,7 @@ fn test_mkdir_inside_inexistent_dir() {
 
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
     #[test]
