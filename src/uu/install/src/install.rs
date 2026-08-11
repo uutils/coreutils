@@ -387,8 +387,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         None
     };
 
-    let backup_mode =
-        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)?;
+    let backup_mode = backup_control::determine_backup_mode(matches)?;
     let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
