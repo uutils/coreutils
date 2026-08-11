@@ -372,6 +372,9 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
             Ok(())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(USimpleError::new(
+            1,
+            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => uucore::error::strip_errno(&e)),
+        )),
     }
 }
