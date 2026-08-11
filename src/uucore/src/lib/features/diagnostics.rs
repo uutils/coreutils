@@ -10,26 +10,32 @@
 //! arguments back as a source line and points a caret at the one that is at
 //! fault.
 //!
-//! A utility is expected to map its own error type to an argument index, a
-//! label, and optionally a line of advice; everything user-facing is passed in
-//! already localized, so this module holds no messages of its own.
+//! A utility is expected to map its own error type to an argument index,
+//! optionally a label, and optionally a line of advice; everything user-facing
+//! is passed in already localized, so this module holds no messages of its
+//! own. A label should add something the message does not say — an
+//! expectation, or a fix — never restate it: with no label the span is drawn
+//! as a bare underline, and the message and advice carry the rest.
 //!
 //! Rendering only happens when stderr is a terminal, so anything reading our
 //! output — a script, a pipe, a test suite — still sees the plain one-line
 //! message it always did.
 //!
 //! ```text
-//! test: invalid integer 'zap'
-//!    ╭─[ test:1:7 ]
+//! tr: range-endpoints of 'y-b' are in reverse collating sequence order
+//!    ╭─[ tr:1:7 ]
 //!    │
-//!  1 │ 7 -eq zap
+//!  1 │ tr qw[y-b] x
 //!    │       ─┬─
-//!    │        ╰─── expected an integer here
+//!    │        ╰─── did you mean 'b-y'?
+//!    │
+//!    │ Help: a range goes from the lower character to the higher one, as in a-z
 //! ───╯
 //! ```
 
 // spell-checker:ignore étage
 
+use std::borrow::Cow;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
@@ -347,14 +353,22 @@ impl Snapshot {
     /// * `index` - Position of the argument at fault. An index past the end
     ///   points at the last argument.
     /// * `message` - The error message, already localized.
-    /// * `label` - Text placed under the caret, already localized.
+    /// * `label` - Text placed under the caret, already localized, or `None`
+    ///   for a bare underline. A label should add something the message does
+    ///   not say — an expectation, or a fix — never restate it.
     /// * `help` - An optional line of advice, already localized.
     ///
     /// # Returns
     ///
     /// `false` if nothing could be rendered, in which case the caller should
     /// fall back to a plain one-line message.
-    pub fn render(&self, index: usize, message: &str, label: &str, help: Option<&str>) -> bool {
+    pub fn render(
+        &self,
+        index: usize,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
         let Some(span) = self.span_at(index) else {
             return false;
         };
@@ -385,7 +399,9 @@ impl Snapshot {
     /// * `range` - Byte range inside `operand` to point at. An empty range
     ///   marks the character it starts at.
     /// * `message` - The error message, already localized.
-    /// * `label` - Text placed under the caret, already localized.
+    /// * `label` - Text placed under the caret, already localized, or `None`
+    ///   for a bare underline. A label should add something the message does
+    ///   not say — an expectation, or a fix — never restate it.
     /// * `help` - An optional line of advice, already localized.
     ///
     /// # Returns
@@ -398,7 +414,7 @@ impl Snapshot {
         operand: &str,
         range: Range<usize>,
         message: &str,
-        label: &str,
+        label: Option<&str>,
         help: Option<&str>,
     ) -> bool {
         let Some(span) = self.locate_at(index, operand, range) else {
@@ -446,7 +462,24 @@ impl Snapshot {
             .unwrap_or(0)
     }
 
-    fn report(&self, span: Range<usize>, message: &str, label: &str, help: Option<&str>) -> bool {
+    /// Whether `row` is one of the two rows a single label occupies.
+    ///
+    /// A report with one label on one source line always has the same shape,
+    /// once its `Error:` headline has been dropped: the file header, a blank
+    /// gutter, the source line, then the underline and the arm under it.
+    fn is_label_row(row: usize) -> bool {
+        /// Row holding the arguments as they were typed.
+        const SOURCE: usize = 2;
+        (SOURCE + 1..=SOURCE + 2).contains(&row)
+    }
+
+    fn report(
+        &self,
+        span: Range<usize>,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
         let id = crate::util_name();
         let color = env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal();
         let config = Config::default()
@@ -456,13 +489,14 @@ impl Snapshot {
             .with_color(color)
             .with_char_set(CharSet::Unicode);
 
-        let mut report = Report::build(ReportKind::Error, (id, span.clone()))
+        // An empty message keeps the underline and the caret; ariadne draws
+        // nothing at all for a label without a message.
+        let caret = Label::new((id, span.clone()))
+            .with_color(Color::Red)
+            .with_message(label.unwrap_or_default());
+        let mut report = Report::build(ReportKind::Error, (id, span))
             .with_config(config)
-            .with_label(
-                Label::new((id, span))
-                    .with_message(label)
-                    .with_color(Color::Red),
-            );
+            .with_label(caret);
 
         if let Some(help) = help {
             report = report.with_help(help);
@@ -482,7 +516,29 @@ impl Snapshot {
         // reads exactly like the plain one-line form.
         let rendered = String::from_utf8_lossy(&rendered);
         let body = rendered.split_once('\n').map_or("", |(_, rest)| rest);
-        eprint!("{id}: {message}\n{body}");
+        if label.is_some() {
+            eprint!("{id}: {message}\n{body}");
+        } else {
+            // The empty message left an arrow arm pointing at nothing: drop it
+            // and flatten the tee, so only the underline remains. Only the two
+            // rows ariadne drew for the label are rewritten — the row above
+            // them echoes the arguments, and an argument is free to contain a
+            // `╰` or a `┬` of its own.
+            let body = body
+                .lines()
+                .enumerate()
+                .filter(|&(row, line)| !(Self::is_label_row(row) && line.contains('╰')))
+                .map(|(row, line)| {
+                    if Self::is_label_row(row) {
+                        Cow::Owned(line.replace('┬', "─"))
+                    } else {
+                        Cow::Borrowed(line)
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            eprintln!("{id}: {message}\n{body}");
+        }
         true
     }
 }

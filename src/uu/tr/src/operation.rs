@@ -49,6 +49,16 @@ pub enum BadSequence {
     MultipleCharInEquivalence(String),
 }
 
+/// A range endpoint, printed the way the shell would show it: as itself for
+/// printable ASCII — backslash-escaped where Rust escapes it, so `\` and the
+/// quotes come back doubled — and as an octal escape otherwise.
+pub(crate) fn range_endpoint_to_string(ut: u32) -> String {
+    match char::from_u32(ut) {
+        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
+        _ => format!("\\{ut:03o}"),
+    }
+}
+
 impl Display for BadSequence {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -114,18 +124,10 @@ impl Display for BadSequence {
                 )
             }
             Self::BackwardsRange { end, start } => {
-                fn end_or_start_to_string(ut: u32) -> String {
-                    match char::from_u32(ut) {
-                        Some(ch @ '\x20'..='\x7E') => ch.escape_default().to_string(),
-                        _ => {
-                            format!("\\{ut:03o}")
-                        }
-                    }
-                }
                 write!(
                     f,
                     "{}",
-                    translate!("tr-error-backwards-range", "start" => end_or_start_to_string(*start), "end" => end_or_start_to_string(*end))
+                    translate!("tr-error-backwards-range", "start" => range_endpoint_to_string(*start), "end" => range_endpoint_to_string(*end))
                 )
             }
             Self::MultipleCharInEquivalence(s) => write!(

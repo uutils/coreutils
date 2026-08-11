@@ -1719,8 +1719,7 @@ numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
    ╭─[ numfmt:1:18 ]
    │
  1 │ numfmt --format=%q 1000
-   │                  ┬
-   │                  ╰── not allowed in a directive
+   │                  ─
    │
    │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
 ───╯"
@@ -1790,8 +1789,7 @@ numfmt: format 'qwe' has no % directive
    ╭─[ numfmt:1:17 ]
    │
  1 │ numfmt --format=qwe 1000
-   │                 ─┬─
-   │                  ╰─── no %f directive here
+   │                 ───
    │
    │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
 ───╯"
@@ -1832,8 +1830,7 @@ numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
    ╭─[ numfmt:1:33 ]
    │
  1 │ numfmt --delimiter=%q --format=%q 1000
-   │                                 ┬
-   │                                 ╰── not allowed in a directive
+   │                                 ─
    │
    │ Help: a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in \"%'-10.2f\"
 ───╯"

@@ -130,9 +130,10 @@ impl ModeError {
         message: &str,
     ) -> bool {
         let label = match self.kind {
-            ModeErrorKind::InvalidOperator => "mode-diag-label-invalid-operator",
-            ModeErrorKind::MissingOperator => "mode-diag-label-missing-operator",
-            ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
+            // The message already names the expected operators.
+            ModeErrorKind::InvalidOperator => None,
+            ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
+            ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
         };
 
         snapshot.render_inside_at(
@@ -140,7 +141,7 @@ impl ModeError {
             mode,
             clause_start + self.span.start..clause_start + self.span.end,
             message,
-            &translate!(label),
+            label.map(|label| translate!(label)).as_deref(),
             Some(&translate!("mode-diag-help-syntax")),
         )
     }

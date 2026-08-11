@@ -2082,8 +2082,7 @@ expr: syntax error: missing argument after '*'
    ╭─[ expr:1:3 ]
    │
  1 │ 6 *
-   │   ┬
-   │   ╰── nothing follows this
+   │   ─
    │
    │ Help: every operator needs a value on both sides
 ───╯"
@@ -2105,8 +2104,7 @@ expr: non-integer argument
    ╭─[ expr:1:1 ]
    │
  1 │ oops + 4
-   │ ──┬─
-   │   ╰─── this is not an integer
+   │ ────
    │
    │ Help: arithmetic operators need integers; use = or != to compare strings instead
 ───╯"
@@ -2129,8 +2127,7 @@ expr: syntax error: expecting ')' after '7'
    ╭─[ expr:1:7 ]
    │
  1 │ ( 6 + 7
-   │       ┬
-   │       ╰── a closing parenthesis should follow this
+   │       ─
 ───╯"
         );
     }
@@ -2175,8 +2172,7 @@ expr: non-integer argument
    ╭─[ expr:1:9 ]
    │
  1 │ a = 2 + a
-   │         ┬
-   │         ╰── this is not an integer
+   │         ─
    │
    │ Help: arithmetic operators need integers; use = or != to compare strings instead
 ───╯"
