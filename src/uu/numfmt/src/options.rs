@@ -151,9 +151,23 @@ impl Display for FormatError {
     }
 }
 
-impl From<FormatError> for String {
+/// Why option parsing failed: a format error that still knows where in the
+/// format string it happened, or a plain message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseError {
+    Format(FormatError),
+    Other(String),
+}
+
+impl From<FormatError> for ParseError {
     fn from(error: FormatError) -> Self {
-        error.message
+        Self::Format(error)
+    }
+}
+
+impl From<String> for ParseError {
+    fn from(message: String) -> Self {
+        Self::Other(message)
     }
 }
 
