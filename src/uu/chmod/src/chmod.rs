@@ -831,8 +831,8 @@ impl Chmoder {
             if file.is_symlink() && !dereference {
                 if self.verbose {
                     println!(
-                        "neither symbolic link {} nor referent has been changed",
-                        file.quote()
+                        "{}",
+                        translate!("chmod-verbose-neither-changed", "file" => file.quote())
                     );
                 }
             } else {
