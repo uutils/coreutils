@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg naïve nave
+// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd
 
 use uutests::{at_and_ucmd, new_ucmd};
 
