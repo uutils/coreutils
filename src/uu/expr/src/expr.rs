@@ -103,13 +103,20 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Where an expression failed, in terms a diagnostic can point at.
+pub enum FailurePoint {
+    /// The parser failed after consuming this many arguments.
+    Parse(usize),
+    /// Evaluation failed, at this argument when one is to blame.
+    Eval(Option<usize>),
+}
+
 /// Parse and evaluate the expression.
-///
-/// On failure the second half of the error reports how many arguments the
-/// parser had consumed, which is `None` once parsing has succeeded.
-fn evaluate(args: &[Vec<u8>]) -> Result<Vec<u8>, (ExprError, Option<usize>)> {
-    let ast = AstNode::parse_located(args).map_err(|(e, at)| (e, Some(at)))?;
-    let value = ast.eval().map_err(|e| (e, None))?;
+fn evaluate(args: &[Vec<u8>]) -> Result<Vec<u8>, (ExprError, FailurePoint)> {
+    let ast = AstNode::parse_located(args).map_err(|(e, at)| (e, FailurePoint::Parse(at)))?;
+    let value = ast
+        .eval_located()
+        .map_err(|(e, at)| (e, FailurePoint::Eval(at)))?;
     Ok(value.eval_as_string())
 }
 
@@ -136,12 +143,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
         let res = match evaluate(args) {
             Ok(res) => res,
-            Err((e, stopped_at)) => {
-                if uucore::diagnostics::enabled() && diagnostics::render(args, &e, stopped_at) {
-                    // The diagnostic is already on stderr; exit quietly.
-                    return Err(uucore::error::ExitCode::new(e.code()));
-                }
-                return Err(e.into());
+            Err((e, at)) => {
+                let reported = uucore::diagnostics::enabled() && diagnostics::render(args, &e, &at);
+                return Err(uucore::error::quiet_if_reported(reported, e));
             }
         };
         let _ = stdout().write_all(&res);

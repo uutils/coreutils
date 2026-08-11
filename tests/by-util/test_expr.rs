@@ -2157,6 +2157,47 @@ expr: syntax error: expecting ')' after '7'
             .stderr_contains("for more information");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_operand_that_failed_not_its_twin() {
+        // Both operands read `a`, but only the right-hand one of `+` failed
+        // arithmetic; the caret must not drift to the first occurrence, a
+        // perfectly valid string operand of `=`.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["a", "=", "2", "+", "a"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+expr: non-integer argument
+   ╭─[ expr:1:9 ]
+   │
+ 1 │ a = 2 + a
+   │         ┬
+   │         ╰── this is not an integer
+   │
+   │ Help: arithmetic operators need integers; use = or != to compare strings instead
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_computed_operand_stays_plain() {
+        // The failing operand is the result of `substr`, not an argument, so
+        // there is nothing to point at and the plain message is kept.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["substr", "abc", "1", "2", "+", "1"])
+            .fails_with_code(2);
+        assert_eq!(
+            result.stderr_str().replace("\r\n", "\n"),
+            "expr: non-integer argument\n"
+        );
+    }
+
     #[test]
     fn test_plain_message_is_the_default() {
         // The test harness pipes stderr, so the report must not appear.
