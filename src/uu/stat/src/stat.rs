@@ -406,13 +406,7 @@ fn determine_padding_char(flags: Flags) -> Padding {
 /// * `precision` - How many digits of precision, if any.
 fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
     // Truncate and pad on the byte representation, so a precision that lands inside a multibyte character does not cause a panic.
-    let _ = write_padded_bytes(
-        std::io::stdout(),
-        s.as_bytes(),
-        flags.left,
-        width,
-        precision,
-    );
+    let _ = write_padded_bytes(io::stdout(), s.as_bytes(), flags.left, width, precision);
 }
 
 /// Prints a `OsString` value based on the provided flags, width, and precision.
