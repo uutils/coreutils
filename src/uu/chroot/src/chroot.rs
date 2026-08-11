@@ -194,6 +194,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options.chroot_target = resolved;
     }
 
+    // Probe the path with `metadata` so the *original* I/O error reaches the
+    // user. `Path::is_dir()` swallows that error and reports `false` for any
+    // failure — including `ENAMETOOLONG` (a 256-char path on Linux), which GNU
+    // surfaces as "File name too long". Without this, a too-long NEWROOT
+    // would be misreported as "no such directory".
+    if let Err(e) = std::fs::metadata(&options.newroot) {
+        return Err(ChrootError::CannotStat(options.newroot, e).into());
+    }
     if !options.newroot.is_dir() {
         return Err(ChrootError::NoSuchDirectory(options.newroot).into());
     }
