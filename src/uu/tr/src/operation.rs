@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl
+// spell-checker:ignore (strings) anychar combinator Alnum Punct Xdigit alnum punct xdigit cntrl alpah
 
 use crate::unicode_table;
 use nom::{
@@ -419,9 +419,12 @@ impl Sequence {
     ///
     /// The alternatives are tried in the same order as before; the loop only
     /// replaces `many0` so that how much each sequence consumed is still known
-    /// once it turns out to be wrong.
+    /// once it turns out to be wrong. Like `many0`, it consumes the whole set
+    /// even past a bad sequence: parsing the tail emits the warnings — an
+    /// ambiguous octal escape, invalid UTF-8 — that it always has.
     fn parse_set(input: &[u8]) -> Result<Vec<Self>, (BadSequence, Range<usize>)> {
         let mut result = Vec::new();
+        let mut first_error = None;
         let mut rest = input;
         while !rest.is_empty() {
             let start = input.len() - rest.len();
@@ -440,11 +443,25 @@ impl Sequence {
             // The last alternative accepts any single byte, so this only
             // happens on input the loop has already run out of.
             let Ok((next, sequence)) = parsed else { break };
+            // `many0` refuses an alternative that matched nothing rather than
+            // loop on it forever; none of the ones above can, but the loop is
+            // no place to find out if one ever does.
+            if next.len() == rest.len() {
+                break;
+            }
             let end = input.len() - next.len();
-            result.push(sequence.map_err(|error| (error, start..end))?);
+            match sequence {
+                Ok(sequence) => result.push(sequence),
+                Err(error) => {
+                    first_error.get_or_insert((error, start..end));
+                }
+            }
             rest = next;
         }
-        Ok(result)
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(result),
+        }
     }
 
     fn parse_octal(input: &[u8]) -> IResult<&[u8], u8> {
