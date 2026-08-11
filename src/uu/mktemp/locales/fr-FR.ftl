@@ -20,6 +20,7 @@ mktemp-error-invalid-template = modèle invalide, { $template } ; avec --tmpdir,
 mktemp-error-too-many-templates = trop de modèles
 mktemp-error-not-found = échec de la création de { $template_type } via le modèle { $template } : Aucun fichier ou répertoire de ce type
 mktemp-error-failed-print = échec de l'affichage du nom de répertoire
+mktemp-error-failed-to-create-file-via-template = fichier à créer à partir d'un modèle '{ $path }': { $error }
 
 # Types de modèle
 mktemp-template-type-directory = répertoire
