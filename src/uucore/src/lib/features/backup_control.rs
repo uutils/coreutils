@@ -533,7 +533,7 @@ pub fn backup_would_destroy_source(
     }
 
     // Then compare the files themselves rather than how they were spelled, so
-    // `a~`, `./a~` and an absolute path are all recognised. If the backup does
+    // `a~`, `./a~` and an absolute path are all recognized. If the backup does
     // not exist yet there is nothing to destroy.
     let mut target_backup_filename = target.as_os_str().to_owned();
     target_backup_filename.push(suffix);
