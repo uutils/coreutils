@@ -3311,6 +3311,59 @@ sort: options '-hV' are incompatible
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_a_file_that_ends_like_the_key() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("data.2.3q");
+
+        // The input file's name ends with the key's text; the caret must stay
+        // on the `-k` operand, not drift onto the file.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["data.2.3q", "-k2.3q"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '2.3q'
+   ╭─[ sort:1:21 ]
+   │
+ 1 │ sort data.2.3q -k2.3q
+   │                     ┬
+   │                     ╰── not part of a key
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_the_program_name_as_a_key() {
+        // A key spelled exactly like the program name must not pull the caret
+        // onto `sort` itself at the start of the line.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k", "sort", "/dev/null"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid number at field start: invalid count at start of 'sort'
+   ╭─[ sort:1:9 ]
+   │
+ 1 │ sort -k sort /dev/null
+   │         ──┬─
+   │           ╰─── expected a number here
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
     #[test]
     fn test_plain_message_when_stderr_is_not_a_terminal() {
         // The test harness pipes stderr, so the report must not appear.
