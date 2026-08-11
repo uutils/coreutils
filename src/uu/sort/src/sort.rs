@@ -1285,33 +1285,23 @@ impl FieldSelector {
             char: from_char,
             ignore_blanks: from_ignore_blanks,
         };
-        Self::new(from, to, settings).map_err(|message| KeyError {
-            message,
-            span: 0..key.len(),
-            kind: KeyErrorKind::ZeroCount,
-        })
+        Ok(Self::new(from, to, settings))
     }
 
-    fn new(
-        from: KeyPosition,
-        to: Option<KeyPosition>,
-        settings: KeySettings,
-    ) -> Result<Self, String> {
-        if from.char == 0 {
-            Err(translate!("sort-invalid-char-index-zero-start"))
-        } else {
-            Ok(Self {
-                needs_selection: (from.field != 1
-                    || from.char != 1
-                    || to.is_some()
-                    || matches!(settings.mode, SortMode::Numeric | SortMode::HumanNumeric)
-                    || from.ignore_blanks)
-                    && !matches!(settings.mode, SortMode::GeneralNumeric),
-                needs_tokens: from.field != 1 || from.char == 0 || to.is_some(),
-                from,
-                to,
-                settings,
-            })
+    fn new(from: KeyPosition, to: Option<KeyPosition>, settings: KeySettings) -> Self {
+        // A zero start position is rejected by `parse` before getting here.
+        debug_assert_ne!(from.char, 0);
+        Self {
+            needs_selection: (from.field != 1
+                || from.char != 1
+                || to.is_some()
+                || matches!(settings.mode, SortMode::Numeric | SortMode::HumanNumeric)
+                || from.ignore_blanks)
+                && !matches!(settings.mode, SortMode::GeneralNumeric),
+            needs_tokens: from.field != 1 || to.is_some(),
+            from,
+            to,
+            settings,
         }
     }
 
@@ -2399,18 +2389,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     if !matches.contains_id(options::KEY) {
         // add a default selector matching the whole line
         let key_settings = KeySettings::from(&settings);
-        settings.selectors.push(
-            FieldSelector::new(
-                KeyPosition {
-                    field: 1,
-                    char: 1,
-                    ignore_blanks: key_settings.ignore_blanks,
-                },
-                None,
-                key_settings,
-            )
-            .unwrap(),
-        );
+        settings.selectors.push(FieldSelector::new(
+            KeyPosition {
+                field: 1,
+                char: 1,
+                ignore_blanks: key_settings.ignore_blanks,
+            },
+            None,
+            key_settings,
+        ));
     }
 
     let needs_random = settings.mode == SortMode::Random
