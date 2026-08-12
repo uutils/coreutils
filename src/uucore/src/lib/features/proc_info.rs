@@ -514,9 +514,15 @@ mod tests {
             PathBuf::from_str(&format!("/proc/{}", current_pid())).unwrap(),
         )
         .unwrap();
-        assert_eq!(pid_entry.uid().unwrap(), crate::process::getuid());
-        assert_eq!(pid_entry.euid().unwrap(), crate::process::geteuid());
-        assert_eq!(pid_entry.gid().unwrap(), crate::process::getgid());
-        assert_eq!(pid_entry.egid().unwrap(), crate::process::getegid());
+        assert_eq!(pid_entry.uid().unwrap(), rustix::process::getuid().as_raw());
+        assert_eq!(
+            pid_entry.euid().unwrap(),
+            rustix::process::geteuid().as_raw()
+        );
+        assert_eq!(pid_entry.gid().unwrap(), rustix::process::getgid().as_raw());
+        assert_eq!(
+            pid_entry.egid().unwrap(),
+            rustix::process::getegid().as_raw()
+        );
     }
 }

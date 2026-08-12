@@ -14,6 +14,8 @@ mod platform;
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
+#[cfg(not(windows))]
+use rustix::process::{getegid, geteuid};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -22,8 +24,6 @@ use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(not(windows))]
-use uucore::process::{getegid, geteuid};
 
 use uucore::translate;
 
@@ -386,9 +386,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     }
 
     let perm = |metadata: Metadata, p: Permission| {
-        if geteuid() == metadata.uid() {
+        if geteuid().as_raw() == metadata.uid() {
             metadata.mode() & ((p as u32) << 6) != 0
-        } else if getegid() == metadata.gid() {
+        } else if getegid().as_raw() == metadata.gid() {
             metadata.mode() & ((p as u32) << 3) != 0
         } else {
             metadata.mode() & (p as u32) != 0
@@ -415,10 +415,10 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
-        PathCondition::GroupOwns => metadata.gid() == getegid(),
+        PathCondition::GroupOwns => metadata.gid() == getegid().as_raw(),
         PathCondition::SymLink => metadata.file_type().is_symlink(),
         PathCondition::Sticky => metadata.mode() & S_ISVTX != 0,
-        PathCondition::UserOwns => metadata.uid() == geteuid(),
+        PathCondition::UserOwns => metadata.uid() == geteuid().as_raw(),
         PathCondition::Fifo => file_type.is_fifo(),
         PathCondition::Readable => perm(metadata, Permission::Read),
         PathCondition::Socket => file_type.is_socket(),

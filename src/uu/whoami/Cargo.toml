@@ -28,6 +28,9 @@ windows-sys = { workspace = true, features = [
   "Win32_Foundation",
 ] }
 
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true }
+
 [lints]
 workspace = true
 
