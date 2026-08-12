@@ -35,7 +35,7 @@ pub fn render(args: &[OsString], err: &ParseError) -> bool {
     let (label, help) = match &err.kind {
         ParseErrorKind::Expected(_) => (None, None),
         ParseErrorKind::ExtraArgument(_) => (
-            Some(translate!("test-diag-label-extra-argument")),
+            Some(translate!("diagnostics-label-expression-complete")),
             Some(translate!("test-diag-help-extra-argument")),
         ),
         ParseErrorKind::MissingArgument(_) => {

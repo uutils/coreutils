@@ -111,6 +111,9 @@ format-error-invalid-universal-character = invalid universal character name \{ $
 # The word ariadne heads the advice line of a caret report with
 diagnostics-help-label = Help
 
+# Diagnostic label shared by the utilities whose arguments are an expression
+diagnostics-label-expression-complete = the expression was already complete here
+
 # Checksum errors (cksum, md5sum, sha*sum, b2sum)
 checksum-error-raw-multiple-files = the --raw option is not supported with multiple files
 checksum-error-check-only-flag = the --{ $flag } option is meaningful only when verifying checksums

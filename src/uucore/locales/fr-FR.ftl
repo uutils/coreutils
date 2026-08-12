@@ -105,6 +105,9 @@ format-error-invalid-universal-character = nom de caractère universel invalide 
 # Le mot en tête de la ligne de conseil d'un rapport avec caret
 diagnostics-help-label = Aide{" "}
 
+# Étiquette de diagnostic partagée par les utilitaires dont les arguments forment une expression
+diagnostics-label-expression-complete = l'expression était déjà complète ici
+
 # Erreurs de somme de contrôle (cksum, md5sum, sha*sum, b2sum)
 checksum-error-raw-multiple-files = l'option --raw n'est pas prise en charge avec plusieurs fichiers
 checksum-error-check-only-flag = l'option --{ $flag } n'a de sens que lors de la vérification de sommes de contrôle

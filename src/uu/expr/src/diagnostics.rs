@@ -57,7 +57,7 @@ fn locate(snapshot: &Snapshot, err: &ExprError, at: &FailurePoint) -> Option<Loc
         ExprError::UnexpectedArgument(_) => (
             // The parser stopped on the argument it did not expect.
             stopped_at,
-            Some("expr-diag-label-unexpected-argument"),
+            Some("diagnostics-label-expression-complete"),
             Some("expr-diag-help-unexpected-argument"),
         ),
         ExprError::MissingArgument(_) => {

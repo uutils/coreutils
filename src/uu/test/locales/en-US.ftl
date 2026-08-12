@@ -164,7 +164,6 @@ test-error-invalid-integer = invalid integer { $value }
 test-error-unary-operator-expected = { $operator }: unary operator expected
 
 # Diagnostic labels, used when errors are rendered with a source snippet
-test-diag-label-extra-argument = the expression was already complete here
 test-diag-label-unary-operator-expected = this needs an expression on both sides
 test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, {"!"}=, {"<"} or {">"} to compare strings
 test-diag-help-integer-op-mnemonics = -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
