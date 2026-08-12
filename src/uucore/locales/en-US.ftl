@@ -110,3 +110,23 @@ format-error-invalid-universal-character = invalid universal character name \{ $
 
 # The word ariadne heads the advice line of a caret report with
 diagnostics-help-label = Help
+
+# Checksum errors (cksum, md5sum, sha*sum, b2sum)
+checksum-error-raw-multiple-files = the --raw option is not supported with multiple files
+checksum-error-check-only-flag = the --{ $flag } option is meaningful only when verifying checksums
+checksum-error-length-required = --length required for { $algorithm }
+checksum-error-invalid-length = invalid length: { $length }
+checksum-error-length-too-big-for-blake = maximum digest length for { $algorithm } is 512 bits
+checksum-error-length-not-multiple-of-8 = length is not a multiple of 8
+checksum-error-invalid-length-for-sha = digest length for { $algorithm } must be 224, 256, 384, or 512
+checksum-error-length-required-for-sha = --algorithm={ $algorithm } requires specifying --length 224, 256, 384, or 512
+checksum-error-length-only-for-blake2b-sha2-sha3 = --length is only supported with --algorithm blake2b, sha2, or sha3
+checksum-error-binary-text-conflict = the --binary and --text options are meaningless when verifying checksums
+checksum-error-text-without-untagged = --text mode is only supported with --untagged
+checksum-error-tag-check = the --tag option is meaningless when verifying checksums
+checksum-error-text-after-tag = --tag does not support --text mode
+checksum-error-algorithm-not-supported-with-check = --check is not supported with --algorithm={"{"}bsd,sysv,crc,crc32b{"}"}
+checksum-error-combine-multiple-algorithms = You cannot combine multiple hash algorithms!
+checksum-error-need-algorithm-to-hash = Needs an algorithm to hash with.
+    Use --help for more information.
+checksum-error-unknown-algorithm = unknown algorithm: { $algorithm }: clap should have prevented this case

@@ -17,7 +17,7 @@ use crate::sum::{
     Blake2b, Blake3, Bsd, CRC32B, Crc, Digest, DigestOutput, DigestWriter, Md5, Sha1, Sha3_224,
     Sha3_256, Sha3_384, Sha3_512, Sha224, Sha256, Sha384, Sha512, Shake128, Shake256, Sm3, SysV,
 };
-use crate::{show_error, translate};
+use crate::{show_error, translate, translate_text};
 
 pub mod compute;
 pub mod validate;
@@ -439,43 +439,43 @@ impl SizedAlgoKind {
 
 #[derive(Debug, Error)]
 pub enum ChecksumError {
-    #[error("the --raw option is not supported with multiple files")]
+    #[error("{}", translate!("checksum-error-raw-multiple-files"))]
     RawMultipleFiles,
 
-    #[error("the --{0} option is meaningful only when verifying checksums")]
+    #[error("{}", translate_text!("checksum-error-check-only-flag", "flag" => _0))]
     CheckOnlyFlag(String),
 
     // --length sanitization errors
-    #[error("--length required for {}", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-length-required", "algorithm" => _0.quote()))]
     LengthRequired(String),
-    #[error("invalid length: {}", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-invalid-length", "length" => _0.quote()))]
     InvalidLength(String),
-    #[error("maximum digest length for {} is 512 bits", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-length-too-big-for-blake", "algorithm" => _0.quote()))]
     LengthTooBigForBlake(String),
-    #[error("length is not a multiple of 8")]
+    #[error("{}", translate!("checksum-error-length-not-multiple-of-8"))]
     LengthNotMultipleOf8,
-    #[error("digest length for {} must be 224, 256, 384, or 512", .0.quote())]
+    #[error("{}", translate_text!("checksum-error-invalid-length-for-sha", "algorithm" => _0.quote()))]
     InvalidLengthForSha(String),
-    #[error("--algorithm={0} requires specifying --length 224, 256, 384, or 512")]
+    #[error("{}", translate_text!("checksum-error-length-required-for-sha", "algorithm" => _0))]
     LengthRequiredForSha(String),
-    #[error("--length is only supported with --algorithm blake2b, sha2, or sha3")]
+    #[error("{}", translate!("checksum-error-length-only-for-blake2b-sha2-sha3"))]
     LengthOnlyForBlake2bSha2Sha3,
 
-    #[error("the --binary and --text options are meaningless when verifying checksums")]
+    #[error("{}", translate!("checksum-error-binary-text-conflict"))]
     BinaryTextConflict,
-    #[error("--text mode is only supported with --untagged")]
+    #[error("{}", translate!("checksum-error-text-without-untagged"))]
     TextWithoutUntagged,
-    #[error("the --tag option is meaningless when verifying checksums")]
+    #[error("{}", translate!("checksum-error-tag-check"))]
     TagCheck,
-    #[error("--tag does not support --text mode")]
+    #[error("{}", translate!("checksum-error-text-after-tag"))]
     TextAfterTag,
-    #[error("--check is not supported with --algorithm={{bsd,sysv,crc,crc32b}}")]
+    #[error("{}", translate!("checksum-error-algorithm-not-supported-with-check"))]
     AlgorithmNotSupportedWithCheck,
-    #[error("You cannot combine multiple hash algorithms!")]
+    #[error("{}", translate!("checksum-error-combine-multiple-algorithms"))]
     CombineMultipleAlgorithms,
-    #[error("Needs an algorithm to hash with.\nUse --help for more information.")]
+    #[error("{}", translate!("checksum-error-need-algorithm-to-hash"))]
     NeedAlgorithmToHash,
-    #[error("unknown algorithm: {0}: clap should have prevented this case")]
+    #[error("{}", translate_text!("checksum-error-unknown-algorithm", "algorithm" => _0))]
     UnknownAlgorithm(String),
     #[error("{}: {}", translate!("common-write-error"), strip_errno(.0))]
     Write(io::Error),

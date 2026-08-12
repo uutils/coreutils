@@ -104,3 +104,23 @@ format-error-invalid-universal-character = nom de caractère universel invalide 
 
 # Le mot en tête de la ligne de conseil d'un rapport avec caret
 diagnostics-help-label = Aide{" "}
+
+# Erreurs de somme de contrôle (cksum, md5sum, sha*sum, b2sum)
+checksum-error-raw-multiple-files = l'option --raw n'est pas prise en charge avec plusieurs fichiers
+checksum-error-check-only-flag = l'option --{ $flag } n'a de sens que lors de la vérification de sommes de contrôle
+checksum-error-length-required = --length est requis pour { $algorithm }
+checksum-error-invalid-length = longueur invalide : { $length }
+checksum-error-length-too-big-for-blake = la longueur maximale d'empreinte pour { $algorithm } est de 512 bits
+checksum-error-length-not-multiple-of-8 = la longueur n'est pas un multiple de 8
+checksum-error-invalid-length-for-sha = la longueur d'empreinte pour { $algorithm } doit être 224, 256, 384 ou 512
+checksum-error-length-required-for-sha = --algorithm={ $algorithm } nécessite de préciser --length 224, 256, 384 ou 512
+checksum-error-length-only-for-blake2b-sha2-sha3 = --length n'est pris en charge qu'avec --algorithm blake2b, sha2 ou sha3
+checksum-error-binary-text-conflict = les options --binary et --text n'ont pas de sens lors de la vérification de sommes de contrôle
+checksum-error-text-without-untagged = le mode --text n'est pris en charge qu'avec --untagged
+checksum-error-tag-check = l'option --tag n'a pas de sens lors de la vérification de sommes de contrôle
+checksum-error-text-after-tag = --tag ne prend pas en charge le mode --text
+checksum-error-algorithm-not-supported-with-check = --check n'est pas pris en charge avec --algorithm={"{"}bsd,sysv,crc,crc32b{"}"}
+checksum-error-combine-multiple-algorithms = Vous ne pouvez pas combiner plusieurs algorithmes de hachage !
+checksum-error-need-algorithm-to-hash = Un algorithme de hachage est nécessaire.
+    Utilisez --help pour plus d'informations.
+checksum-error-unknown-algorithm = algorithme inconnu : { $algorithm } : clap aurait dû empêcher ce cas
