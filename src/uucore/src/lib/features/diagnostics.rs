@@ -100,9 +100,6 @@ pub struct Snapshot {
     text: String,
     /// Byte range of each argument inside `text`.
     spans: Vec<Range<usize>>,
-    /// Whether each argument was written out as-is, so that an offset inside it
-    /// also holds inside `text`.
-    verbatim: Vec<bool>,
     /// The arguments themselves, for [`Snapshot::index_of`].
     args: Vec<OsString>,
     /// Index of the first operand: 1 when argument 0 is the program name.
@@ -163,7 +160,6 @@ impl Snapshot {
         Self {
             text: String::new(),
             spans: Vec::with_capacity(len),
-            verbatim: Vec::with_capacity(len),
             args: Vec::with_capacity(len),
             first_operand: 0,
         }
@@ -178,20 +174,17 @@ impl Snapshot {
         // argument itself: quoting changes the length (a non-UTF-8 argument is
         // shown as `$'fo\x80o'`) and the caret has to line up with what is
         // actually printed.
-        let verbatim = match arg.to_str() {
+        match arg.to_str() {
             // Operators such as `=` or `!=` are shell-special, but quoting them
             // here would only obscure the expression.
             Some(s) if !s.is_empty() && !s.chars().any(char::is_whitespace) => {
                 self.text.push_str(s);
-                true
             }
             _ => {
                 let _ = write!(self.text, "{}", arg.maybe_quote());
-                false
             }
-        };
+        }
         self.spans.push(start..self.text.len());
-        self.verbatim.push(verbatim);
         self.args.push(arg);
     }
 
@@ -429,16 +422,29 @@ impl Snapshot {
     fn locate_at(&self, index: usize, operand: &str, range: Range<usize>) -> Option<Range<usize>> {
         let arg = self.args.get(index)?;
         let whole = self.spans[index].clone();
-        if !self.verbatim[index] || !arg.as_encoded_bytes().ends_with(operand.as_bytes()) {
+        // An empty operand has nothing of its own to point at, and would be
+        // found at the end of the argument rather than where it was written.
+        // The argument as echoed — a bare pair of quotes — is what was typed.
+        if operand.is_empty() || !arg.as_encoded_bytes().ends_with(operand.as_bytes()) {
             return Some(whole);
         }
-        Some(self.locate_tail(whole, operand, range))
+        // Where the operand's own text sits in what was printed for this
+        // argument. An argument holding a space is echoed quoted, so the
+        // operand no longer ends the span it is drawn in — but the quoting
+        // only wraps it, and an offset inside it still holds wherever its
+        // bytes turned up. An argument that had to be escaped to be printed
+        // — a non-UTF-8 one, or one quoting cannot wrap — does not contain
+        // them contiguously, and falls back to a plain underline.
+        let Some(offset) = self.text[whole.clone()].rfind(operand) else {
+            return Some(whole);
+        };
+        Some(self.locate_operand(whole.start + offset, operand, range))
     }
 
     /// Byte range covered by `range` — an offset inside `operand` — where
-    /// `operand` is the tail of the argument spanning `whole`.
-    fn locate_tail(&self, whole: Range<usize>, operand: &str, range: Range<usize>) -> Range<usize> {
-        let base = whole.end - operand.len();
+    /// `operand` is drawn starting at `base`.
+    fn locate_operand(&self, base: usize, operand: &str, range: Range<usize>) -> Range<usize> {
+        let whole = base..base + operand.len();
         // Offsets come from someone else's parser, so they are only trusted as
         // far as the text agrees with them.
         let start = self.floor_boundary(base + range.start.min(operand.len()));
@@ -447,8 +453,8 @@ impl Snapshot {
             return start..end;
         }
         // An empty range means something is missing rather than wrong; give the
-        // caret the character it stopped at, or the whole argument if the
-        // operand ran out.
+        // caret the character it stopped at, or the whole operand if it ran
+        // out.
         match self.text[start..].chars().next() {
             Some(c) if start < whole.end => start..start + c.len_utf8(),
             _ => whole,
@@ -723,17 +729,21 @@ mod tests {
     }
 
     #[test]
-    fn a_range_at_the_end_of_an_operand_falls_back_to_the_argument() {
+    fn a_range_at_the_end_of_an_operand_falls_back_to_the_operand() {
         let snap = snapshot(&["-k1,"]);
-        assert_eq!(snap.locate_at(0, "1,", 2..2), Some(0..4));
+        // Nothing left to point at, so the caret takes the operand — not the
+        // `-k` in front of it, which is not what went wrong.
+        assert_eq!(snap.locate_at(0, "1,", 2..2), Some(2..4));
+        assert_eq!(&snap.text[2..4], "1,");
     }
 
     #[test]
-    fn a_quoted_operand_falls_back_to_the_whole_argument() {
+    fn offsets_hold_inside_an_operand_the_report_had_to_quote() {
         let snap = snapshot(&["a b", "-k1"]);
-        // Offsets inside `a b` would land on the quotes that were added.
-        assert_eq!(snap.locate_at(0, "a b", 1..2), Some(0..5));
-        assert_eq!(&snap.text[snap.locate_at(0, "a b", 1..2).unwrap()], "'a b'");
+        // The quoting only wraps the operand, so an offset into it still lands
+        // on the same bytes.
+        let span = snap.locate_at(0, "a b", 1..2).unwrap();
+        assert_eq!(&snap.text[span], " ");
     }
 
     #[test]
