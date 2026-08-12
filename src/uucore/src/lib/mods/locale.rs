@@ -613,11 +613,53 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     }
 }
 
+/// Macro for retrieving localized messages, substituting arguments as text.
+///
+/// [`translate!`] hands Fluent a number whenever an argument parses as one,
+/// and the locale then formats it: a length of `123456` comes back as
+/// `123 456` wherever thousands are grouped. Use this macro instead whenever
+/// the argument is text the user typed or a value that must be echoed
+/// unchanged — a file name, an escape, a width — and [`translate!`] when the
+/// value really is a number the reader should see in their own conventions,
+/// or when a plural selector needs one.
+///
+/// # Arguments
+///
+/// * `$id` - The message identifier string
+/// * Key-value pairs in the format `"key" => value`, each substituted with
+///   its [`ToString`] rendering
+///
+/// # Examples
+///
+/// ```
+/// use uucore::translate_text;
+/// use fluent::FluentArgs;
+///
+/// // '17' stays '17', whatever the locale does to numbers
+/// let error = translate_text!("checksum-error-invalid-length", "length" => "17");
+/// ```
+#[macro_export]
+macro_rules! translate_text {
+    ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
+        {
+            let mut args = fluent::FluentArgs::new();
+            $(
+                args.set($key, $value.to_string());
+            )+
+            $crate::locale::get_message_with_args($id, args)
+        }
+    };
+}
+
 /// Macro for retrieving localized messages with optional arguments.
 ///
 /// This macro provides a unified interface for both simple message retrieval
 /// and message retrieval with variable substitution. It accepts a message ID
 /// and optionally key-value pairs using the `"key" => value` syntax.
+///
+/// An argument that parses as a number is handed to Fluent as one, so the
+/// locale formats it — grouping its digits, for instance. When the value has
+/// to come back exactly as it went in, reach for [`translate_text!`].
 ///
 /// # Arguments
 ///
@@ -673,8 +715,8 @@ macro_rules! translate {
     };
 }
 
-// Re-export the macro for easier access
-pub use translate;
+// Re-export the macros for easier access
+pub use {translate, translate_text};
 
 #[cfg(test)]
 mod tests {
