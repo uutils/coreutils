@@ -85,12 +85,20 @@ fn main() {
     cmd.current_dir(libstdbuf_src)
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
 
-    // Get the current profile
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    // Determine the actual profile from OUT_DIR since PROFILE env var only gives the base profile
+    // for inherited profiles (e.g., PROFILE=release for both release and release-small).
+    // OUT_DIR is always .../target/[triple/]{profile}/build/{pkg-hash}/out, so the profile
+    // is exactly 3 parent levels up — regardless of whether a target triple is in the path.
+    let profile = Path::new(&out_dir)
+        .ancestors()
+        .nth(3)
+        .and_then(|p| p.file_name())
+        .and_then(|s| s.to_str())
+        .unwrap_or("debug");
 
-    // Pass the release flag if we're in release mode
-    if profile == "release" || profile == "bench" {
-        cmd.arg("--release");
+    // Pass the profile to the nested build (for release, release-small, profiling, bench, etc.)
+    if profile != "debug" {
+        cmd.arg("--profile").arg(profile);
     }
 
     // Pass the target architecture if we're cross-compiling
@@ -112,17 +120,17 @@ fn main() {
     // Check multiple possible locations for the built library
     let possible_paths = if !target.is_empty() && target != "unknown" {
         vec![
-            build_dir.join(&target).join(&profile).join(&lib_name),
+            build_dir.join(&target).join(profile).join(&lib_name),
             build_dir
                 .join(&target)
-                .join(&profile)
+                .join(profile)
                 .join("deps")
                 .join(&lib_name),
         ]
     } else {
         vec![
-            build_dir.join(&profile).join(&lib_name),
-            build_dir.join(&profile).join("deps").join(&lib_name),
+            build_dir.join(profile).join(&lib_name),
+            build_dir.join(profile).join("deps").join(&lib_name),
         ]
     };
 
