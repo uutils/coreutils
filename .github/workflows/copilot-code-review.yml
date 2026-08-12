@@ -1,0 +1,22 @@
+# spell-checker:ignore Swatinem
+name: Copilot Code Review
+
+# Declares the runner used by Copilot code review. Without this file, the
+# review can fail to start before its timeout because no runner is assigned.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/copilot-code-review.yml
+
+permissions:
+  contents: read
+
+jobs:
+  copilot-setup-steps:
+    # Copilot code review only supports Ubuntu x64 runners.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
