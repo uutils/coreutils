@@ -120,3 +120,9 @@ fn test_filename_proc_self_mem() {
 
     assert!(stderr == input_output || stderr == io);
 }
+
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn test_stdout_write_error_interruption() {
+    new_ucmd!().arg("-").pipe_in("1\n").fails();
+}
