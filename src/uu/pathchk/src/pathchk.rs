@@ -255,7 +255,11 @@ fn check_searchable(path: &str) -> bool {
             if e.kind() == ErrorKind::NotFound {
                 true
             } else {
-                writeln!(std::io::stderr(), "{e}");
+                writeln!(
+                    std::io::stderr(),
+                    "{}",
+                    format_args!("pathchk: {}: {}", path, uucore::error::strip_errno(&e))
+                );
                 false
             }
         }
