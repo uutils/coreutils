@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed
+// spell-checker:ignore clocal erange tcgetattr tcsetattr tcsanow tiocgwinsz tiocswinsz cfgetospeed cfsetospeed ushort vmin vtime cflag lflag ispeed ospeed cfgetispeed
 // spell-checker:ignore parenb parodd cmspar hupcl cstopb cread clocal crtscts CSIZE
 // spell-checker:ignore ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixoff ixon iuclc ixany imaxbel iutf
 // spell-checker:ignore opost olcuc ocrnl onlcr onocr onlret ofdel nldly crdly tabdly bsdly vtdly ffdly ofill
@@ -30,7 +30,7 @@ use nix::libc::{TCGETS2, termios2};
 
 use nix::sys::termios::{
     ControlFlags, InputFlags, LocalFlags, OutputFlags, SetArg, SpecialCharacterIndices as S,
-    Termios, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
+    Termios, cfgetispeed, cfgetospeed, cfsetispeed, cfsetospeed, tcgetattr, tcsetattr,
 };
 use nix::{ioctl_read_bad, ioctl_write_ptr_bad};
 use std::cmp::Ordering;
@@ -437,11 +437,39 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+
+        // POSIX allows tcsetattr to return success even when it could only partially
+        // apply the requested settings. GNU stty re-reads with tcgetattr and compares
+        // to catch this; we do the same so that callers can rely on the exit code.
+        let applied = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        if !termios_eq(&termios, &applied) {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{}: unable to perform all requested operations",
+                    opts.device_name
+                ),
+            ));
+        }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
     }
     Ok(())
+}
+
+/// Compare two `Termios` structs for equality the same way GNU's `eq_mode()` does:
+/// input/output/control/local flags, all control characters, and both baud rates.
+/// We deliberately skip any platform-specific fields (like `line_discipline`) that
+/// the kernel may normalise on its own.
+fn termios_eq(a: &Termios, b: &Termios) -> bool {
+    a.input_flags == b.input_flags
+        && a.output_flags == b.output_flags
+        && a.control_flags == b.control_flags
+        && a.local_flags == b.local_flags
+        && a.control_chars == b.control_chars
+        && cfgetispeed(a) == cfgetispeed(b)
+        && cfgetospeed(a) == cfgetospeed(b)
 }
 
 // The GNU implementation adds the --help message when the args are incorrectly formatted
@@ -1343,8 +1371,57 @@ impl TermiosFlag for LocalFlags {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nix::sys::termios::{cfsetispeed, cfsetospeed};
 
     // Essential unit tests for complex internal parsing and logic functions.
+
+    // Tests for termios_eq
+    #[test]
+    fn test_termios_eq_identical() {
+        // Two default Termios values should be equal to themselves.
+        // We can't easily construct a Termios from scratch, so we use
+        // the kernel's own defaults by opening /dev/null... but that's
+        // not a tty. Instead, just verify that the function is reflexive
+        // on whatever a default Termios looks like by constructing two
+        // identical structs via the nix defaults.
+        //
+        // nix doesn't expose a Termios::new(); the easiest portable way
+        // to get a valid one is unsafe zeroing.  That's fine for a unit
+        // test: we're testing the comparison logic, not kernel values.
+        let a: Termios = unsafe { std::mem::zeroed() };
+        let b: Termios = unsafe { std::mem::zeroed() };
+        assert!(termios_eq(&a, &b));
+    }
+
+    #[test]
+    fn test_termios_eq_flag_differs() {
+        let mut a: Termios = unsafe { std::mem::zeroed() };
+        let mut b: Termios = unsafe { std::mem::zeroed() };
+        // Flip one input flag so the two structs differ.
+        a.input_flags |= InputFlags::IGNBRK;
+        assert!(!termios_eq(&a, &b));
+        b.input_flags |= InputFlags::IGNBRK;
+        assert!(termios_eq(&a, &b));
+    }
+
+    #[test]
+    fn test_termios_eq_control_char_differs() {
+        let mut a: Termios = unsafe { std::mem::zeroed() };
+        let b: Termios = unsafe { std::mem::zeroed() };
+        a.control_chars[S::VINTR as usize] = 3; // ^C
+        assert!(!termios_eq(&a, &b));
+    }
+
+    #[test]
+    fn test_termios_eq_baud_differs() {
+        let mut a: Termios = unsafe { std::mem::zeroed() };
+        let mut b: Termios = unsafe { std::mem::zeroed() };
+        // Set different output baud rates.
+        cfsetospeed(&mut a, nix::sys::termios::BaudRate::B9600).unwrap();
+        cfsetospeed(&mut b, nix::sys::termios::BaudRate::B115200).unwrap();
+        assert!(!termios_eq(&a, &b));
+    }
+
 
     // Control character parsing tests
     #[test]
