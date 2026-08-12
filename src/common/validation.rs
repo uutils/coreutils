@@ -64,8 +64,7 @@ fn get_canonical_util_name(util_name: &str) -> &str {
     match util_name {
         // uu_test aliases - '[' is an alias for test
         "[" => "test",
-        "dir" => "ls",  // dir is an alias for ls
-        "vdir" => "ls", // vdir is an alias for ls
+        "dir" | "vdir" => "ls", // aliases for ls
 
         // Default case - return the util name as is
         _ => util_name,
@@ -75,7 +74,10 @@ fn get_canonical_util_name(util_name: &str) -> &str {
 /// Gets the binary path from command line arguments
 /// Panics if the binary path cannot be determined
 #[cfg(any(
-    not(any(target_os = "linux", target_os = "android")),
+    not(any(
+        target_os = "linux",
+        all(target_os = "android", target_pointer_width = "64")
+    )),
     target_env = "musl"
 ))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
@@ -88,7 +90,10 @@ pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {
 /// Get actual binary path from kernel, not argv0, to prevent `env -a` from bypassing
 /// AppArmor, SELinux policies on hard-linked binaries
 #[cfg(all(
-    any(target_os = "linux", target_os = "android"),
+    any(
+        target_os = "linux",
+        all(target_os = "android", target_pointer_width = "64")
+    ),
     not(target_env = "musl")
 ))]
 pub fn binary_path(args: &mut impl Iterator<Item = OsString>) -> PathBuf {

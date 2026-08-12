@@ -22,6 +22,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(embedded_file)?;
 
     // Generate optimized lookup function instead of HashMap
+    writeln!(embedded_file, "#[expect(clippy::match_same_arms)]")?; // needed for dir and vdir aliases for ls
     writeln!(
         embedded_file,
         "pub fn get_embedded_locale(key: &str) -> Option<&'static str> {{"
@@ -249,19 +250,14 @@ fn embed_static_utility_locales(
 
     for entry in entries {
         let file_name = entry.file_name();
-        if let Some(dir_name) = file_name.to_str() {
+        if let Some(dir_name) = file_name.to_str() &&
             // Match uu_<util>-<version>
-            #[expect(clippy::collapsible_if)]
-            if let Some((util_part, _)) = dir_name.split_once('-') {
-                if let Some(util_name) = util_part.strip_prefix("uu_") {
-                    embed_component_locales(
-                        embedded_file,
-                        locales_to_embed,
-                        util_name,
-                        |locale| entry.path().join(format!("locales/{locale}.ftl")),
-                    )?;
-                }
-            }
+            let Some((util_part, _)) = dir_name.split_once('-') &&
+                let Some(util_name) = util_part.strip_prefix("uu_")
+        {
+            embed_component_locales(embedded_file, locales_to_embed, util_name, |locale| {
+                entry.path().join(format!("locales/{locale}.ftl"))
+            })?;
         }
     }
 
@@ -369,17 +365,16 @@ where
         for entry in std::fs::read_dir(locale_dir)? {
             let entry = entry?;
             let path = entry.path();
-            #[expect(clippy::collapsible_if)]
-            if path.extension().is_some_and(|e| e == "ftl") {
-                if let Some(locale) = path.file_stem().and_then(|s| s.to_str()) {
-                    embed_locale_file(
-                        embedded_file,
-                        &path,
-                        &format!("{component_name}/{locale}.ftl"),
-                        locale,
-                        component_name,
-                    )?;
-                }
+            if path.extension().is_some_and(|e| e == "ftl")
+                && let Some(locale) = path.file_stem().and_then(|s| s.to_str())
+            {
+                embed_locale_file(
+                    embedded_file,
+                    &path,
+                    &format!("{component_name}/{locale}.ftl"),
+                    locale,
+                    component_name,
+                )?;
             }
         }
     }

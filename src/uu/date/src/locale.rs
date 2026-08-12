@@ -19,7 +19,7 @@ macro_rules! cfg_langinfo {
 }
 
 cfg_langinfo! {
-    use std::ffi::CStr;
+    use core::ffi::CStr;
     use std::sync::OnceLock;
 
     #[cfg(test)]
@@ -80,12 +80,7 @@ cfg_langinfo! {
                 return None;
             }
 
-            let format = CStr::from_ptr(d_t_fmt_ptr).to_str().ok()?;
-            if format.is_empty() {
-                return None;
-            }
-
-            Some(format.to_string())
+            CStr::from_ptr(d_t_fmt_ptr).to_str().ok().filter(|f| !f.is_empty()).map(ToOwned::to_owned)
         }
     }
 

@@ -69,7 +69,7 @@ jobs:
           uu_ptx
         ]
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -79,7 +79,7 @@ jobs:
 
       - name: Run sccache-cache
         id: sccache-setup
-        uses: mozilla-actions/sccache-action@v0.0.10
+        uses: mozilla-actions/sccache-action@v0.0.11
         continue-on-error: true
       - name: Export sccache
         if: steps.sccache-setup.outcome == 'success'
@@ -105,7 +105,7 @@ jobs:
           cargo codspeed build -m ${{ matrix.type }} -p ${{ matrix.package }}
 
       - name: Run ${{ matrix.type }} benchmarks for ${{ matrix.package }}
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         env:
           CODSPEED_LOG: debug
         with:

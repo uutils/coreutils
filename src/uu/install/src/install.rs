@@ -20,7 +20,7 @@ use std::io::{Write, stdout};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::process;
 use thiserror::Error;
-use uucore::backup_control::{self, BackupMode};
+use uucore::backup_control::{self, BackupMode, backup_would_destroy_source};
 use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
@@ -90,6 +90,9 @@ enum InstallError {
 
     #[error("{}", translate!("install-error-backup-failed", "from" => .0.quote(), "error" => strip_errno(.1)))]
     BackupFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("{}", translate!("install-error-backing-up-destroy-source", "dest" => .0.quote(), "source" => .1.quote()))]
+    BackupWouldDestroySource(PathBuf, PathBuf),
 
     #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
     InstallFailed(PathBuf, PathBuf, String),
@@ -186,6 +189,9 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
@@ -193,7 +199,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let behavior = behavior(&matches)?;
+    let behavior = behavior(&matches, diag_args.as_deref())?;
 
     match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
@@ -340,6 +346,16 @@ pub fn uu_app() -> Command {
         )
 }
 
+/// Resolve an owner/group argument to a numeric id.
+///
+/// First looks the value up by name (or by id) via `lookup`. When no matching
+/// entry exists but the value is a plain integer, that integer is used as the
+/// id directly. This matches GNU, which accepts unused numeric ids such as
+/// `install -o 1100`. Returns `None` when the value is neither known nor numeric.
+fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Option<u32> {
+    lookup(value).ok().or_else(|| value.parse::<u32>().ok())
+}
+
 /// Determine behavior, given command line arguments.
 ///
 /// If successful, returns a filled-out Behavior struct.
@@ -348,7 +364,7 @@ pub fn uu_app() -> Command {
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
+fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
@@ -360,17 +376,19 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
-            show_error!(
-                "{}",
-                translate!("install-error-invalid-mode", "error" => err)
-            );
+            let message = translate!("install-error-invalid-mode", "error" => err.to_string());
+            // When the diagnostic is rendered it is already on stderr; exit quietly.
+            if !diag_args.is_some_and(|args| err.render(args, x, 0, &message)) {
+                show_error!("{message}");
+            }
             1
         })?)
     } else {
         None
     };
 
-    let backup_mode = backup_control::determine_backup_mode(matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)?;
     let target_dir = matches.get_one::<String>(OPT_TARGET_DIRECTORY).cloned();
     let no_target_dir = matches.get_flag(OPT_NO_TARGET_DIRECTORY);
     if target_dir.is_some() && no_target_dir {
@@ -423,17 +441,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let owner_id = if owner.is_empty() {
         None
     } else {
-        match usr2uid(&owner) {
-            Ok(u) => Some(u),
-            // When using -o500 option and there's no user with uid 500 on the system
-            // usr2uid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with uid 500 in the same situation
-            // so just return the supplied owner as uid if it's an integer value
-            Err(_) => match owner.parse::<u32>() {
-                Ok(u) => Some(u),
-                Err(_) => return Err(InstallError::InvalidUser(owner.clone()).into()),
-            },
-        }
+        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     };
 
     let group = matches
@@ -444,17 +452,7 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let group_id = if group.is_empty() {
         None
     } else {
-        match grp2gid(&group) {
-            Ok(g) => Some(g),
-            // When using -g500 option and there's no group with gid 500 on the system
-            // grp2gid returns an Err value and the whole install operation fails.
-            // GNU coreutils installs a file with gid 500 in the same situation
-            // so just return the supplied group as gid if it's an integer value
-            Err(_) => match group.parse::<u32>() {
-                Ok(g) => Some(g),
-                Err(_) => return Err(InstallError::InvalidGroup(group.clone()).into()),
-            },
-        }
+        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -540,23 +538,30 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
             }
         }
 
-        if mode::chmod(path, b.mode()).is_err() {
-            // Error messages are printed by the mode::chmod function!
+        // Ownership before mode; on failure skip the chmod.
+        // See set_ownership_and_permissions for why.
+        if b.privileged
+            && let Err(e) = chown_optional_user_group(path, b)
+        {
+            show!(e);
             uucore::error::set_exit_code(1);
             continue;
         }
 
+        // Set SELinux context for directory if needed
+        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
         if b.privileged {
-            show_if_err!(chown_optional_user_group(path, b));
-
-            // Set SELinux context for directory if needed
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
             if b.default_context {
                 show_if_err!(set_selinux_default_context(path));
             } else if b.context.is_some() {
                 let context = get_context_for_selinux(b);
                 show_if_err!(set_selinux_security_context(path, context));
             }
+        }
+
+        if mode::chmod(path, b.mode()).is_err() {
+            // Error messages are printed by the mode::chmod function!
+            uucore::error::set_exit_code(1);
         }
     }
     // If the exit code was set, or show! has been called at least once
@@ -572,6 +577,16 @@ fn is_new_file_path(path: &Path) -> bool {
         && path
             .parent()
             .is_none_or(|p| p.as_os_str().is_empty() || p.is_dir())
+}
+
+/// Test if the path is a valid target for a single-file install.
+///
+/// A valid target is a regular file, a path that can be created as a new file,
+/// or any existing non-directory entry (including device files, FIFOs, sockets
+/// and symlinks). Directories are handled by `copy_files_into_dir`.
+#[inline]
+fn is_valid_target(path: &Path) -> bool {
+    path.is_file() || is_new_file_path(path) || path.symlink_metadata().is_ok_and(|m| !m.is_dir())
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -776,14 +791,14 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        if is_valid_target(&target) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
                     return Ok(());
                 }
 
-                let backup_path = perform_backup(&target, b)?;
+                let backup_path = perform_backup(source, &target, b)?;
 
                 if let Err(e) = parent_fd.unlink_at(filename.as_os_str(), false)
                     && e.kind() != std::io::ErrorKind::NotFound
@@ -898,6 +913,8 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// # Parameters
 ///
+/// * `from` - The source file path, needed to refuse a backup that would
+///   destroy it.
 /// * `to` - The destination file path.
 /// * `b` - The behavior configuration.
 ///
@@ -905,7 +922,15 @@ fn chown_optional_user_group(path: &Path, b: &Behavior) -> UResult<()> {
 ///
 /// Returns an Option containing the backup path, or None if backup is not needed.
 ///
-fn perform_backup(to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBuf>> {
+    // Renaming the destination over the source would leave nothing to install
+    // from, so refuse instead.
+    if backup_would_destroy_source(from, to, &b.suffix, b.backup_mode, true) {
+        return Err(
+            InstallError::BackupWouldDestroySource(to.to_path_buf(), from.to_path_buf()).into(),
+        );
+    }
+
     if to.exists() {
         if b.verbose {
             writeln!(
@@ -1007,6 +1032,11 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
         .mode(0o600)
         .open(to)?;
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    if rustix::fs::ioctl_ficlone(&dest, &handle).is_ok() {
+        return Ok(());
+    }
+
     copy_fast(&mut handle, &mut dest).map_err(|err| {
         InstallError::InstallFailed(from.to_path_buf(), to.to_path_buf(), err.to_string())
     })?;
@@ -1072,11 +1102,13 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
 /// Returns an empty Result or an error in case of failure.
 ///
 fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
-    // Silent the warning as we want to the error message
-    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
+    // Ownership first, then mode, as GNU does: chown(2) clears setuid/setgid, and
+    // a failed chown must not leave a mode carrying them already applied.
     if b.privileged {
         chown_optional_user_group(to, b)?;
     }
+    // Silent the warning as we want to the error message
+    mode::chmod(to, b.mode()).map_err(|_| InstallError::ChmodFailed(to.to_path_buf()))?;
 
     Ok(())
 }
@@ -1169,7 +1201,7 @@ fn copy(from: &Path, to: &Path, b: &Behavior) -> UResult<()> {
         return Ok(());
     }
     // Declare the path here as we may need it for the verbose output below.
-    let backup_path = perform_backup(to, b)?;
+    let backup_path = perform_backup(from, to, b)?;
 
     copy_file(from, to)?;
 

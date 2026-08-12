@@ -7,10 +7,10 @@
 
 #![cfg(any(target_os = "linux", target_os = "android"))]
 
-use std::ffi::{CStr, CString, OsStr};
+use core::ffi::{CStr, c_int, c_long, c_short};
+use std::ffi::{CString, OsStr};
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
-use std::os::raw::{c_int, c_long, c_short};
 use std::path::Path;
 use std::{io, iter, ptr, slice};
 

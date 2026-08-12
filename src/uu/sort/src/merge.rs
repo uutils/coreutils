@@ -20,7 +20,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     rc::Rc,
-    sync::mpsc::{Receiver, Sender, SyncSender, channel, sync_channel},
+    sync::mpsc::{Receiver, Sender, SyncSender, TryRecvError, channel, sync_channel},
     thread::{self, JoinHandle},
 };
 
@@ -44,17 +44,18 @@ fn replace_output_file_in_input_files(
     let mut copy: Option<PathBuf> = None;
     if let Some(Ok(output_path)) = output.map(|path| Path::new(path).canonicalize()) {
         for file in files {
-            if let Ok(file_path) = Path::new(file).canonicalize() {
-                if file_path == output_path {
-                    if let Some(copy) = &copy {
-                        *file = copy.clone().into_os_string();
-                    } else {
-                        let (_file, copy_path) = tmp_dir.next_file()?;
-                        fs::copy(file_path, &copy_path)
-                            .map_err(|error| SortError::OpenTmpFileFailed { error })?;
-                        *file = copy_path.clone().into_os_string();
-                        copy = Some(copy_path);
-                    }
+            if Path::new(file)
+                .canonicalize()
+                .is_ok_and(|file_path| file_path == output_path)
+            {
+                if let Some(copy) = &copy {
+                    *file = copy.clone().into_os_string();
+                } else {
+                    let (_file, copy_path) = tmp_dir.next_file()?;
+                    fs::copy(&output_path, &copy_path)
+                        .map_err(|error| SortError::OpenTmpFileFailed { error })?;
+                    *file = copy_path.clone().into_os_string();
+                    copy = Some(copy_path);
                 }
             }
         }
@@ -308,12 +309,46 @@ impl FileMerger<'_> {
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
-        while self
-            .write_next(out, settings)
-            .map_err_context(|| "write failed".into())?
-        {}
-        drop(self.request_sender);
-        self.reader_join_handle.join().unwrap()
+        let write_result = loop {
+            match self
+                .write_next(out, settings)
+                .map_err_context(|| "write failed".into())
+            {
+                Ok(true) => (),
+                Ok(false) => break Ok(()),
+                Err(error) => {
+                    // Don't return yet: we still have to shut the reader thread down in an
+                    // orderly fashion below. Returning here would drop our receivers while
+                    // the reader is still sending, and `chunks::read` unwraps that send.
+                    break Err(error);
+                }
+            }
+        };
+
+        let Self {
+            heap,
+            request_sender,
+            reader_join_handle,
+            ..
+        } = self;
+
+        // Stop asking for chunks, so the reader runs out of work and returns.
+        drop(request_sender);
+        // Until it does, keep draining the files it might still be sending to. We have to
+        // poll all of them in turn rather than draining one at a time: the reader can be
+        // blocked on any one channel, and blocking on a different one would deadlock.
+        let mut files = heap.into_vec();
+        while !files.is_empty() {
+            files.retain(|file| {
+                !matches!(file.receiver.try_recv(), Err(TryRecvError::Disconnected))
+            });
+            thread::yield_now();
+        }
+
+        let reader_result = reader_join_handle.join().unwrap();
+        // A write failure is what the user needs to hear about; the reader hitting an error
+        // on the way down is secondary.
+        write_result.and(reader_result)
     }
 
     fn write_next(
@@ -330,18 +365,18 @@ impl FileMerger<'_> {
 
             file.current_chunk.with_dependent(|_, contents| {
                 let current_line = &contents.lines[file.line_idx];
-                if settings.unique {
-                    if let Some(prev) = &prev {
-                        let cmp = compare_by(
-                            &prev.chunk.lines()[prev.line_idx],
-                            current_line,
-                            settings,
-                            prev.chunk.line_data(),
-                            file.current_chunk.line_data(),
-                        );
-                        if cmp == Ordering::Equal {
-                            return Ok(());
-                        }
+                if settings.unique
+                    && let Some(prev) = &prev
+                {
+                    let cmp = compare_by(
+                        &prev.chunk.lines()[prev.line_idx],
+                        current_line,
+                        settings,
+                        prev.chunk.line_data(),
+                        file.current_chunk.line_data(),
+                    );
+                    if cmp == Ordering::Equal {
+                        return Ok(());
                     }
                 }
                 current_line.write(writer, settings)
@@ -362,14 +397,14 @@ impl FileMerger<'_> {
                 self.heap.peek_mut().unwrap().line_idx += 1;
             }
 
-            if let Some(prev) = prev {
-                if let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk) {
-                    // If nothing is referencing the previous chunk anymore, this means that the previous line
-                    // was the last line of the chunk. We can recycle the chunk.
-                    self.request_sender
-                        .send((prev.file_number, prev_chunk.recycle()))
-                        .ok();
-                }
+            if let Some(prev) = prev
+                && let Ok(prev_chunk) = Rc::try_unwrap(prev.chunk)
+            {
+                // If nothing is referencing the previous chunk anymore, this means that the previous line
+                // was the last line of the chunk. We can recycle the chunk.
+                self.request_sender
+                    .send((prev.file_number, prev_chunk.recycle()))
+                    .ok();
             }
         }
         Ok(!self.heap.is_empty())

@@ -1507,6 +1507,18 @@ fn test_emoji_formatting() {
         .stdout_only("Status: Success 🚀 🎯 Count: 42\n");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error_omits_errno() {
+    let dev_full = std::fs::File::create("/dev/full").expect("failed to open /dev/full");
+
+    new_ucmd!()
+        .arg("\n")
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_only("printf: write error: No space left on device\n");
+}
+
 #[test]
 fn test_large_width_format() {
     // Test that extremely large width specifications fail gracefully with an error
@@ -1549,4 +1561,27 @@ fn test_q_string_control_chars_with_quotes() {
         .args(&["%q", input])
         .succeeds()
         .stdout_only("''$'\\001'\\'''$'\\001'");
+}
+
+// Output with no trailing newline stays in the buffer until the process exits,
+// so the failure is only visible when it is flushed.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_unterminated_write_error_is_reported() {
+    new_ucmd!()
+        .arg("greeting")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("printf: write error: No space left on device\n");
+}
+
+// Producing no output at all is not a write failure.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_empty_output_succeeds_on_full_device() {
+    new_ucmd!()
+        .arg("")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .succeeds()
+        .no_output();
 }

@@ -25,7 +25,7 @@ use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
-use std::io::Write;
+use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
 use std::{env, fs};
@@ -130,7 +130,7 @@ fn write_padded_bytes<W: Write>(
     left: bool,
     width: usize,
     precision: Precision,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let display_bytes = match precision {
         Precision::Number(p) if p < bytes.len() => &bytes[..p],
         _ => bytes,
@@ -159,7 +159,7 @@ fn write_padded_bytes<W: Write>(
 /// write padding based on a writer W and n size
 /// writer is genric to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+fn write_padding<W: Write>(writer: &mut W, n: usize) -> io::Result<()> {
     for _ in 0..n {
         writer.write_all(b" ")?;
     }
@@ -405,11 +405,8 @@ fn determine_padding_char(flags: Flags) -> Padding {
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
 fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
-    let s = match precision {
-        Precision::Number(p) if p < s.len() => &s[..p],
-        _ => s,
-    };
-    pad_and_print(s, flags.left, width, Padding::Space);
+    // Truncate and pad on the byte representation, so a precision that lands inside a multibyte character does not cause a panic.
+    let _ = write_padded_bytes(io::stdout(), s.as_bytes(), flags.left, width, precision);
 }
 
 /// Prints a `OsString` value based on the provided flags, width, and precision.
@@ -430,7 +427,7 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
 
         let bytes = s.as_bytes();
 
-        if write_padded_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
+        if write_padded_bytes(io::stdout(), bytes, flags.left, width, precision).is_err() {
             // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
             let fallback_string = s.to_string_lossy();
             print_str(&fallback_string, flags, width, precision);
@@ -586,8 +583,7 @@ fn print_integer(
         ""
     };
     let extended = match precision {
-        Precision::NotSpecified => format!("{prefix}{arg}"),
-        Precision::NoNumber => format!("{prefix}{arg}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{arg}"),
         Precision::Number(p) => format!("{prefix}{arg:0>p$}"),
     };
     pad_and_print(&extended, flags.left, width, padding_char);
@@ -618,13 +614,14 @@ fn precision_trunc(num: f64, precision: Precision) -> String {
     let num_str = num.to_string();
     let n = num_str.len();
     match (num_str.find('.'), precision) {
-        (None, Precision::NotSpecified) => num_str,
-        (None, Precision::NoNumber) => num_str,
-        (None, Precision::Number(0)) => num_str,
+        (None, Precision::NotSpecified)
+        | (None, Precision::NoNumber)
+        | (None, Precision::Number(0))
+        | (Some(_), Precision::NoNumber) => num_str,
         (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
-        (Some(i), Precision::NotSpecified) => num_str[..i].to_string(),
-        (Some(_), Precision::NoNumber) => num_str,
-        (Some(i), Precision::Number(0)) => num_str[..i].to_string(),
+        (Some(i), Precision::NotSpecified) | (Some(i), Precision::Number(0)) => {
+            num_str[..i].to_string()
+        }
         (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
         (Some(i), Precision::Number(p)) => {
             format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
@@ -668,8 +665,7 @@ fn print_unsigned(
         Cow::Borrowed(num.as_str())
     };
     let s = match precision {
-        Precision::NotSpecified => s,
-        Precision::NoNumber => s,
+        Precision::NotSpecified | Precision::NoNumber => s,
         Precision::Number(p) => format!("{s:0>p$}").into(),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -693,8 +689,7 @@ fn print_unsigned_oct(
 ) {
     let prefix = if flags.alter { "0" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:o}"),
-        Precision::NoNumber => format!("{prefix}{num:o}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:o}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -718,20 +713,20 @@ fn print_unsigned_hex(
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:x}"),
-        Precision::NoNumber => format!("{prefix}{num:x}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:x}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$x}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
 fn print_raw_byte(byte: u8) {
-    std::io::stdout().write_all(&[byte]).unwrap();
+    io::stdout().write_all(&[byte]).unwrap();
 }
 
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
         while *i < bound {
+            #[expect(clippy::match_same_arms)] // needs comment
             match chars[*i] {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
@@ -822,21 +817,20 @@ impl Stater {
         *i = j;
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
-        if *i + 1 < bound {
-            if let Some(&next_char) = chars.get(*i + 1) {
-                if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
-                {
-                    flag.major = chars[*i] == 'H';
-                    flag.minor = chars[*i] == 'L';
-                    *i += 1;
-                    return Ok(Token::Directive {
-                        flag,
-                        width,
-                        precision,
-                        format: next_char,
-                    });
-                }
-            }
+        if *i + 1 < bound
+            && let Some(&next_char) = chars.get(*i + 1).filter(|c| **c == 'd' || **c == 'r')
+            && (chars[*i] == 'H' || chars[*i] == 'L')
+        {
+            let is_major = chars[*i] == 'H';
+            flag.major = is_major;
+            flag.minor = !is_major; // chars[*i] == 'L'
+            *i += 1;
+            return Ok(Token::Directive {
+                flag,
+                width,
+                precision,
+                format: next_char,
+            });
         }
 
         Ok(Token::Directive {
@@ -1039,12 +1033,9 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
-        let mut stdin_is_fifo = false;
-        if cfg!(unix) {
-            if let Ok(md) = fs::metadata("/dev/stdin") {
-                stdin_is_fifo = md.file_type().is_fifo();
-            }
-        }
+        #[cfg(unix)]
+        let stdin_is_fifo = rustix::fs::fstat(io::stdin())
+            .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
@@ -1069,7 +1060,9 @@ impl Stater {
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
-            Token::Char(c) => print!("{c}"),
+            Token::Char(c) => io::stdout()
+                .write_all(c.to_string().as_bytes())
+                .map_err(|_| 1)?,
 
             Token::Directive {
                 flag,

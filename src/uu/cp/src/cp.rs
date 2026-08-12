@@ -2,7 +2,8 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (ToDO) copydir ficlone fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore (ToDO) copydir fiemap ftruncate linkgs lstat nlink nlinks pathbuf pwrite reflink strs xattrs symlinked deduplicated advcpmv nushell IRWXG IRWXO IRWXU IRWXUGO IRWXU IRWXG IRWXO IRWXUGO sflag
+// spell-checker:ignore RDONLY futimens utimensat
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -27,6 +28,7 @@ use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
+use uucore::backup_control::backup_would_destroy_source;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
 use uucore::fs::{
@@ -1066,10 +1068,9 @@ impl Options {
 
         let copy_mode = CopyMode::from_matches(matches);
 
-        let backup_mode = match backup_control::determine_backup_mode(matches) {
-            Err(e) => return Err(CpError::Backup(BackupError(format!("{e}")))),
-            Ok(mode) => mode,
-        };
+        let backup_mode =
+            backup_control::determine_backup_mode(std::env::var("VERSION_CONTROL").ok(), matches)
+                .map_err(|e| CpError::Backup(BackupError(format!("{e}"))))?;
         let update_mode = update_control::determine_update_mode(matches);
 
         if backup_mode != BackupMode::None
@@ -1383,12 +1384,13 @@ fn show_error_if_needed(error: &CpError) {
     match error {
         // When using --no-clobber, we don't want to show
         // an error message
+        #[expect(clippy::match_same_arms)] // needs comment
         CpError::NotAllFilesCopied => {
             // Need to return an error code
         }
         CpError::Skipped(_) => {
             // touch a b && echo "n"|cp -i a b && echo $?
-            // should return an error from GNU 9.2
+            // should return an error
         }
         // Format IoErrContext using strip_errno to remove "(os error N)" suffix
         // for GNU-compatible output
@@ -1625,47 +1627,38 @@ fn copy_source(
 // This fix adds yet another metadata read.
 // Should this metadata be read once and then reused throughout the execution?
 // https://github.com/uutils/coreutils/issues/6658
-#[allow(clippy::if_not_else)]
-fn file_mode_for_interactive_overwrite(
-    #[cfg_attr(not(unix), allow(unused_variables))] path: &Path,
-) -> Option<(String, String)> {
-    // Retain outer braces to ensure only one branch is included
-    {
-        #[cfg(unix)]
-        {
-            use libc::{S_IWUSR, mode_t};
-            use std::os::unix::prelude::MetadataExt;
+#[cfg(unix)]
+fn file_mode_for_interactive_overwrite(path: &Path) -> Option<(String, String)> {
+    use libc::{S_IWUSR, mode_t};
+    use std::os::unix::prelude::MetadataExt;
 
-            match path.metadata() {
-                Ok(me) => {
-                    // Cast is necessary on some platforms
-                    #[allow(clippy::unnecessary_cast)]
-                    let mode: mode_t = me.mode() as mode_t;
+    match path.metadata() {
+        Ok(me) => {
+            // Cast is necessary on some platforms
+            #[allow(clippy::unnecessary_cast)]
+            let mode: mode_t = me.mode() as mode_t;
 
-                    // It looks like this extra information is added to the prompt iff the file's user write bit is 0
-                    //  write permission, owner
-                    if uucore::has!(mode, S_IWUSR) {
-                        None
-                    } else {
-                        // Discard leading digits
-                        let mode_without_leading_digits = mode & 0o7777;
+            // It looks like this extra information is added to the prompt iff the file's user write bit is 0
+            //  write permission, owner
+            if !uucore::has!(mode, S_IWUSR) {
+                // Discard leading digits
+                let mode_without_leading_digits = mode & 0o7777;
 
-                        Some((
-                            format!("{mode_without_leading_digits:04o}"),
-                            uucore::fs::display_permissions_unix(mode as u32, false),
-                        ))
-                    }
-                }
-                // TODO: How should failure to read the metadata be handled? Ignoring for now.
-                Err(_) => None,
+                return Some((
+                    format!("{mode_without_leading_digits:04o}"),
+                    uucore::fs::display_permissions_unix(mode as u32, false),
+                ));
             }
-        }
-
-        #[cfg(not(unix))]
-        {
             None
         }
+        // TODO: How should failure to read the metadata be handled? Ignoring for now.
+        Err(_) => None,
     }
+}
+
+#[cfg(not(unix))]
+fn file_mode_for_interactive_overwrite(_: &Path) -> Option<(String, String)> {
+    None
 }
 
 impl OverwriteMode {
@@ -1733,8 +1726,7 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
     }
 
     match uucore::selinux::set_selinux_security_context(path, context) {
-        Ok(()) => Ok(()),
-        Err(uucore::selinux::SeLinuxError::OperationNotSupported) => Ok(()),
+        Ok(()) | Err(uucore::selinux::SeLinuxError::OperationNotSupported) => Ok(()),
         Err(e) => Err(CpError::Error(
             translate!("cp-error-selinux-error", "error" => e),
         )),
@@ -1883,18 +1875,13 @@ pub(crate) fn copy_attributes(
 
             fs::set_permissions(dest, source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-            // FIXME: Implement this for windows as well
-            #[cfg(feature = "feat_acl")]
-            exacl::getfacl(source, None)
-                .and_then(|acl| exacl::setfacl(&[dest], &acl, None))
-                .map_err(|err| CpError::Error(err.to_string()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
             // so we keep ACL parity with GNU without preserving user xattrs
             // (which are intentionally excluded from the default -p set per
             // issue #9704). Best-effort: ignore failures on filesystems that
             // do not support ACL xattrs.
-            #[cfg(all(unix, not(target_os = "android")))]
+            #[cfg(all(unix, not(target_os = "android")))] // todo: support acl for other targets
             copy_acls(source, dest);
         }
 
@@ -1904,7 +1891,23 @@ pub(crate) fn copy_attributes(
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
         let atime = FileTime::from_last_access_time(&source_metadata);
         let mtime = FileTime::from_last_modification_time(&source_metadata);
-        if dest.is_symlink() {
+        // `set_file_times` opens the destination (O_RDONLY) before calling
+        // futimens; opening a FIFO or device with no peer blocks forever, and a
+        // socket cannot be opened at all. For symlinks and these special files
+        // use the path-based, no-follow variant, which sets the times via
+        // utimensat without opening.
+        #[cfg(unix)]
+        let no_open = {
+            let ft = source_metadata.file_type();
+            dest.is_symlink()
+                || ft.is_fifo()
+                || ft.is_socket()
+                || ft.is_char_device()
+                || ft.is_block_device()
+        };
+        #[cfg(not(unix))]
+        let no_open = dest.is_symlink();
+        if no_open {
             filetime::set_symlink_file_times(dest, atime, mtime)?;
         } else {
             filetime::set_file_times(dest, atime, mtime)?;
@@ -1916,18 +1919,13 @@ pub(crate) fn copy_attributes(
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
-        if let Ok(context) = selinux::SecurityContext::of_path(source, false, false) {
-            if let Some(context) = context {
-                if let Err(e) = context.set_for_path(dest, false, false) {
-                    return Err(CpError::Error(
-                        translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-                    ));
-                }
-            }
-        } else {
-            return Err(CpError::Error(
-                translate!("cp-error-selinux-get-context", "path" => source.quote()),
-            ));
+        let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
+            CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
+        })?;
+        if let Some(context) = context {
+            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
+					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
+				))?;
         }
         Ok(())
     })?;
@@ -2015,6 +2013,11 @@ fn backup_dest(dest: &Path, backup_path: &Path, is_dest_symlink: bool) -> CopyRe
     if is_dest_symlink {
         fs::rename(dest, backup_path)?;
     } else {
+        match fs::remove_file(backup_path) {
+            Ok(()) => {}
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+            Err(err) => return Err(err.into()),
+        }
         fs::copy(dest, backup_path)?;
     }
     Ok(())
@@ -2109,7 +2112,7 @@ fn handle_existing_dest(
     let mut is_dest_removed = false;
     let backup_path = backup_control::get_backup_path(options.backup, dest, &options.backup_suffix);
     if let Some(backup_path) = backup_path {
-        if paths_refer_to_same_file(source, &backup_path, true) {
+        if backup_would_destroy_source(source, dest, &options.backup_suffix, options.backup, true) {
             return Err(translate!("cp-error-backing-up-destroy-source", "dest" => dest.quote(), "source" => source.quote())
             .into());
         }
@@ -2191,12 +2194,12 @@ fn delete_dest_if_needed_and_allowed(
 fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     // Windows requires clearing readonly attribute before deletion when using --force
     #[cfg(windows)]
-    if options.force() {
-        if let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions()) {
-            #[allow(clippy::permissions_set_readonly_false)]
-            perms.set_readonly(false);
-            let _ = fs::set_permissions(path, perms);
-        }
+    if options.force()
+        && let Ok(mut perms) = fs::metadata(path).map(|m| m.permissions())
+    {
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        let _ = fs::set_permissions(path, perms);
     }
 
     match fs::remove_file(path) {
@@ -2680,7 +2683,13 @@ fn copy_file(
     }
 
     // TODO: implement something similar to gnu's lchown
-    if !dest_is_symlink {
+    //
+    // Check the destination as it is now, not as it was before the copy:
+    // copying a symlink without dereferencing recreates it as a symlink here,
+    // and chmod() would follow it and change the mode of the link target,
+    // which can live outside the copied tree. Conversely, --remove-destination
+    // replaces a symlink with a regular file that still needs its mode set.
+    if !dest.is_symlink() {
         // Here, to match GNU semantics, we quietly ignore an error
         // if a user does not have the correct ownership to modify
         // the permissions of a file.

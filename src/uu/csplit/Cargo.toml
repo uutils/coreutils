@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/csplit.rs"
 doctest = false
@@ -33,6 +30,9 @@ path = "src/main.rs"
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bench]]
 name = "csplit_bench"

@@ -42,7 +42,10 @@ use crate::extendedbigdecimal::ExtendedBigDecimal;
 pub use argument::{FormatArgument, FormatArguments};
 
 use self::{escape::parse_escape_code, num_format::Formatter};
-use crate::{NonUtf8OsStrError, error::UError};
+use crate::{
+    NonUtf8OsStrError,
+    error::{UError, strip_errno},
+};
 pub use spec::Spec;
 use std::{
     error::Error,
@@ -113,7 +116,7 @@ impl Display for FormatError {
             Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
             // TODO: Error message below needs some work
             Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(e) => write!(f, "write error: {e}"),
+            Self::IoError(e) => write!(f, "write error: {}", strip_errno(e)),
             Self::NoMoreArguments => write!(f, "no more arguments"),
             Self::InvalidArgument(_) => write!(f, "invalid argument"),
             Self::MissingHex => write!(f, "missing hexadecimal number in escape"),

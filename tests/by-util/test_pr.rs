@@ -221,6 +221,15 @@ fn test_with_valid_page_ranges() {
 }
 
 #[test]
+fn test_start_page_exceeds_page_count() {
+    new_ucmd!()
+        .args(&["--pages=2", "hosts.log"])
+        .succeeds()
+        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
+        .stdout_is("");
+}
+
+#[test]
 fn test_with_page_range() {
     let test_file_path = "test.log";
     let expected_test_file_path = "test_page_range_1.log.expected";
@@ -437,6 +446,102 @@ fn test_offset_too_large() {
         .stderr_is(format!(
             "pr: '-o MARGIN' invalid line offset: '{arg}': Value too large for defined data type\n"
         ));
+}
+
+#[test]
+fn test_start_line_number_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", "-N", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-N NUMBER' invalid starting line number: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_page_length_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["-l", arg, "-3"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_number_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-n' extra characters or invalid number in the argument: '{arg}': Value too large for defined data type\nTry 'pr --help' for more information.\n"
+        ));
+}
+
+#[test]
+fn test_page_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-W", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-W PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-w", arg, "-2"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_count_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["--column", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+
+    // The legacy -COLUMN operand form behaves the same.
+    new_ucmd!()
+        .args(&[format!("-{arg}")])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_large_number_width_does_not_panic() {
+    // Widths above u16::MAX used to panic with "Formatting argument out
+    // of range"; GNU pads the number out to the full width instead.
+    // With -t (no page headers/footers) GNU emits no page padding, so the
+    // output is exactly the numbered line.
+    new_ucmd!()
+        .args(&["-t", "-n", "70000"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is(format!("{}1\tx\n", " ".repeat(69999)));
+}
+
+#[test]
+fn test_large_page_width_does_not_panic() {
+    // A page width above u16::MAX used to panic in the header layout.
+    new_ucmd!()
+        .args(&["-W", "200000"])
+        .pipe_in("x\n")
+        .succeeds();
 }
 
 #[cfg(target_os = "linux")]
@@ -1070,4 +1175,16 @@ fn test_merge_empty_input() {
         .args(&["-m", "/dev/null", "/dev/null"])
         .succeeds()
         .no_output();
+}
+
+#[test]
+fn test_missing_file_error_message() {
+    // A nonexistent operand must be reported as "pr: <file>: <message>", like
+    // GNU pr, with the raw "(os error N)" suffix stripped. The exact message
+    // text is platform dependent, so only assert the portable parts.
+    new_ucmd!()
+        .arg("nonexistent_file")
+        .fails_with_code(1)
+        .stderr_contains("pr: nonexistent_file: ")
+        .stderr_does_not_contain("(os error");
 }

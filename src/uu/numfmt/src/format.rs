@@ -43,9 +43,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
             continue;
         }
         let num_str = s[..i].replace(dec_sep, ".");
-        if num_str.parse::<f64>().is_err() {
-            return None;
-        }
+        num_str.parse::<f64>().ok()?;
         return Some(&s[..i]);
     }
 
@@ -418,10 +416,8 @@ fn transform_from(
     })?;
     let had_no_suffix = suffix.is_none();
 
-    if had_no_suffix {
-        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
-            return Ok(scaled);
-        }
+    if had_no_suffix && let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+        return Ok(scaled);
     }
 
     let i = i.to_f64() * (opts.from_unit as f64);
@@ -478,6 +474,12 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
 /// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
+
+    // rounding is a no-op once the scale factor overflows f64;
+    // dividing by it would turn the value into NaN
+    if !p.is_finite() {
+        return n;
+    }
 
     method.round(p * n) / p
 }
@@ -628,7 +630,7 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None => localize(format!(
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
@@ -637,7 +639,7 @@ fn transform_to(
             localize(format!("{i2:.precision$}"))
         }
         None => localize(format!("{i2:.0}")),
-        Some(s) if precision > 0 => localize(format!(
+        Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
@@ -845,7 +847,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
                 writer.write_all(b" ").unwrap();
-                &prefix[1..]
+                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
             };

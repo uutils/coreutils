@@ -22,8 +22,8 @@ use uucore::translate;
 
 use super::super::{
     InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
-    show_permission_denied_error, show_removal_error, verbose_removed_directory,
-    verbose_removed_file,
+    report_verbose_write_error, show_permission_denied_error, show_removal_error,
+    verbose_removed_directory, verbose_removed_file,
 };
 
 #[inline]
@@ -87,8 +87,8 @@ fn prompt_dir_with_mode(path: &Path, mode: libc::mode_t, options: &Options) -> b
     let stdin_ok = options.__presume_input_tty.unwrap_or(false) || stdin().is_terminal();
 
     match (stdin_ok, readable, writable, options.interactive) {
-        (false, _, _, InteractiveMode::PromptProtected) => true,
-        (false, false, false, InteractiveMode::Never) => true,
+        (false, _, _, InteractiveMode::PromptProtected)
+        | (false, false, false, InteractiveMode::Never) => true,
         (_, false, false, _) => prompt_yes!(
             "attempt removal of inaccessible directory {}?",
             path.quote()
@@ -128,7 +128,7 @@ pub fn safe_remove_file(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            verbose_removed_file(path, options);
+            report_verbose_write_error(verbose_removed_file(path, options));
             Some(false)
         }
         Err(e) => {
@@ -159,7 +159,7 @@ pub fn safe_remove_empty_dir(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             Some(false)
         }
         Err(e) => {
@@ -206,7 +206,7 @@ fn handle_permission_denied(
         return true;
     }
     // Successfully removed empty directory
-    verbose_removed_directory(entry_path, options);
+    report_verbose_write_error(verbose_removed_directory(entry_path, options));
     false
 }
 
@@ -224,11 +224,11 @@ fn handle_unlink(
         show_error!("{e}");
         true
     } else {
-        if is_dir {
-            verbose_removed_directory(entry_path, options);
+        report_verbose_write_error(if is_dir {
+            verbose_removed_directory(entry_path, options)
         } else {
-            verbose_removed_file(entry_path, options);
-        }
+            verbose_removed_file(entry_path, options)
+        });
         false
     }
 }
@@ -258,7 +258,7 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
             error_occurred
         }
         Ok(_) => {
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             false
         }
     }
@@ -268,11 +268,10 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
 /// own device differs from this is a mount point, which `--preserve-root=all`
 /// refuses to cross.
 fn parent_device(path: &Path) -> Option<u64> {
-    let parent = match path.parent() {
+    let parent = match path.parent()? {
         // A bare name like "b" has an empty parent, meaning the current dir.
-        Some(p) if p.as_os_str().is_empty() => Path::new("."),
-        Some(p) => p,
-        None => return None,
+        p if p.as_os_str().is_empty() => Path::new("."),
+        p => p,
     };
     fs::metadata(parent).ok().map(|m| m.dev())
 }
@@ -323,7 +322,7 @@ pub fn safe_remove_dir_recursive(
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 // Try to remove the directory directly if it's empty
                 if fs::remove_dir(path).is_ok() {
-                    verbose_removed_directory(path, options);
+                    report_verbose_write_error(verbose_removed_directory(path, options));
                     return false;
                 }
                 // If we can't read the directory AND can't remove it,

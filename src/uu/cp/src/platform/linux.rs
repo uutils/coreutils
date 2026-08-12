@@ -2,10 +2,10 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore ficlone reflink ftruncate pwrite fiemap lseek nofollow
+// spell-checker:ignore reflink ftruncate pwrite fiemap lseek nofollow
 
 use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
-use std::io::Read;
+use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::FileTypeExt;
 use std::os::unix::fs::MetadataExt;
@@ -96,7 +96,7 @@ where
     if ioctl_ficlone(dst_file, src_file).is_err() {
         return match fallback {
             CloneFallback::Error => Err(CpError::IoErrContext(
-                std::io::Error::last_os_error(),
+                io::Error::last_os_error(),
                 context.to_owned(),
             )),
             CloneFallback::FSCopy => fs_copy(source, dest, nofollow, context),
@@ -112,7 +112,7 @@ where
 /// Checks whether a file contains any non null bytes i.e. any byte != 0x0
 /// This function returns a tuple of (bool, u64, u64) signifying a tuple of (whether a file has
 /// data, its size, no of blocks it has allocated in disk)
-fn check_for_data(source: &Path, nofollow: bool) -> Result<(bool, u64, u64), std::io::Error> {
+fn check_for_data(source: &Path, nofollow: bool) -> io::Result<(bool, u64, u64)> {
     let mut src_file = open_source(source, nofollow)?;
     let metadata = src_file.metadata()?;
 
@@ -131,7 +131,7 @@ fn check_for_data(source: &Path, nofollow: bool) -> Result<(bool, u64, u64), std
 
 /// Checks whether a file is sparse i.e. it contains holes, uses the crude heuristic blocks < size / 512
 /// Reference:`<https://doc.rust-lang.org/std/os/unix/fs/trait.MetadataExt.html#tymethod.blocks>`
-fn check_sparse_detection(source: &Path, nofollow: bool) -> Result<bool, std::io::Error> {
+fn check_sparse_detection(source: &Path, nofollow: bool) -> io::Result<bool> {
     let src_file = open_source(source, nofollow)?;
     let metadata = src_file.metadata()?;
     let size = metadata.size();
@@ -155,7 +155,7 @@ where
         )
     })?;
 
-    let ctx_err = |e: std::io::Error| CpError::IoErrContext(e, context.to_owned());
+    let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size = src_file.metadata().map_err(&ctx_err)?.size();
     ftruncate(&dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
@@ -201,7 +201,7 @@ where
         )
     })?;
 
-    let ctx_err = |e: std::io::Error| CpError::IoErrContext(e, context.to_owned());
+    let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size: usize = src_file
         .metadata()
@@ -274,7 +274,7 @@ where
         )
     })?;
 
-    let ctx_err = |e: std::io::Error| CpError::IoErrContext(e, context.to_owned());
+    let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let dest_is_stream = is_stream(&dst_file.metadata().map_err(&ctx_err)?);
     if !dest_is_stream {
@@ -283,7 +283,7 @@ where
     }
 
     buf_copy::copy_fast(&mut src_file, &mut dst_file)
-        .map_err(|e| std::io::Error::other(format!("{e}")))
+        .map_err(|e| io::Error::other(format!("{e}")))
         .map_err(&ctx_err)?;
 
     Ok(())
@@ -444,7 +444,7 @@ fn handle_reflink_auto_sparse_always(
     source: &Path,
     dest: &Path,
     nofollow: bool,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> io::Result<(CopyDebug, CopyMethod)> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::Unsupported,
@@ -465,12 +465,8 @@ fn handle_reflink_auto_sparse_always(
             copy_debug.sparse_detection = SparseDebug::SeekHoleZeros;
         }
         (false, true, 0) => copy_method = CopyMethod::FSCopy,
-
-        (true, false, 0) => copy_debug.sparse_detection = SparseDebug::SeekHole,
         (true, true, _) => copy_debug.sparse_detection = SparseDebug::SeekHoleZeros,
-
         (true, false, _) => copy_debug.sparse_detection = SparseDebug::SeekHole,
-
         (_, _, _) => (),
     }
     if check_dest_is_fifo(dest) {
@@ -481,10 +477,7 @@ fn handle_reflink_auto_sparse_always(
 
 /// Handles debug results when flags are "--reflink=auto" and "--sparse=auto" and specifies what
 /// type of copy should be used
-fn handle_reflink_never_sparse_never(
-    source: &Path,
-    nofollow: bool,
-) -> Result<CopyDebug, std::io::Error> {
+fn handle_reflink_never_sparse_never(source: &Path, nofollow: bool) -> io::Result<CopyDebug> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -505,10 +498,7 @@ fn handle_reflink_never_sparse_never(
 
 /// Handles debug results when flags are "--reflink=auto" and "--sparse=never", files will be copied
 /// through cloning them with fallback switching to [`std::fs::copy`]
-fn handle_reflink_auto_sparse_never(
-    source: &Path,
-    nofollow: bool,
-) -> Result<CopyDebug, std::io::Error> {
+fn handle_reflink_auto_sparse_never(source: &Path, nofollow: bool) -> io::Result<CopyDebug> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -534,7 +524,7 @@ fn handle_reflink_auto_sparse_auto(
     source: &Path,
     dest: &Path,
     nofollow: bool,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> io::Result<(CopyDebug, CopyMethod)> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::Unsupported,
@@ -578,7 +568,7 @@ fn handle_reflink_never_sparse_auto(
     source: &Path,
     dest: &Path,
     nofollow: bool,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> io::Result<(CopyDebug, CopyMethod)> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,
@@ -615,7 +605,7 @@ fn handle_reflink_never_sparse_always(
     source: &Path,
     dest: &Path,
     nofollow: bool,
-) -> Result<(CopyDebug, CopyMethod), std::io::Error> {
+) -> io::Result<(CopyDebug, CopyMethod)> {
     let mut copy_debug = CopyDebug {
         offload: OffloadReflinkDebug::Unknown,
         reflink: OffloadReflinkDebug::No,

@@ -29,6 +29,7 @@ help-flag-version = Afficher les informations de version
 error-io = Erreur E/S
 error-permission-denied = Permission refusée
 error-file-not-found = Aucun fichier ou répertoire de ce type
+error-no-such-process = Aucun processus de ce type
 error-invalid-argument = Argument invalide
 error-is-a-directory = { $file }: Est un répertoire
 
@@ -79,3 +80,13 @@ checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $al
 # Messages uudoc pour les exemples tldr
 uudoc-tldr-attribution = Les exemples sont fournis par le [projet tldr-pages](https://tldr.sh) sous la [licence CC BY 4.0](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
 uudoc-tldr-disclaimer = Veuillez noter que, uutils étant en cours de développement, certains exemples peuvent échouer.
+
+# Messages d'analyse des modes symboliques
+mode-error-unexpected-end = fin de mode inattendue
+mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $operator } trouvé)
+
+# Étiquettes de diagnostic : ce que le caret désigne dans un mode
+mode-diag-label-invalid-operator = +, - ou = attendu ici
+mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
+mode-diag-label-invalid-number = n'est pas un mode octal
+mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w

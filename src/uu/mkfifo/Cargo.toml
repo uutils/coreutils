@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mkfifo.rs"
 test = false
@@ -21,7 +18,7 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode"] }
+uucore = { workspace = true, features = ["diagnostics", "fs", "mode"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
@@ -33,6 +30,9 @@ libc = { workspace = true }
 [features]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mkfifo"

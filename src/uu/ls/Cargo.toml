@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/ls.rs"
 doctest = false
@@ -35,6 +32,7 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
+  "i18n-collator",
   "parser-size",
   "parser-glob",
   "quoting-style",
@@ -67,3 +65,6 @@ harness = false
 [features]
 feat_selinux = ["selinux", "uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
