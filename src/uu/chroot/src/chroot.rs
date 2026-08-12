@@ -194,10 +194,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         options.chroot_target = resolved;
     }
 
-    if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
-    }
-
     let mut cmd_iter = matches
         .get_many::<OsString>(options::COMMAND)
         .into_iter()
