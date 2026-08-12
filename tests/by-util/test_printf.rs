@@ -1677,22 +1677,23 @@ printf: invalid universal character name \\ud800
 
     #[cfg(unix)]
     #[test]
-    fn test_snippet_underlines_a_quoted_format_wholesale() {
+    fn test_snippet_points_inside_a_quoted_format() {
         let result = new_ucmd!()
             .terminal_sim_stderr()
             .args(&["hello %s and %z", "world"])
             .fails_with_code(1);
 
-        // A format with a space in it is echoed back quoted, so offsets into
-        // it no longer line up; the whole operand is underlined instead.
+        // A format with a space in it is echoed back quoted. The quotes only
+        // wrap it, so the caret still finds the one spec at fault rather than
+        // underlining the whole operand.
         assert_eq!(
             result.stderr_as_displayed(),
             "\
 printf: %z: invalid conversion specification
-   ╭─[ printf:1:8 ]
+   ╭─[ printf:1:22 ]
    │
  1 │ printf 'hello %s and %z' world
-   │        ─────────────────
+   │                      ──
    │
    │ Help: %d, %s, %x, %f and the other C conversions are accepted, plus %b and %q; a literal % is written %%
 ───╯"
