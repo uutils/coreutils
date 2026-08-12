@@ -2139,3 +2139,102 @@ fn test_env_disallow_double_underscore_all() {
         .fails()
         .stderr_contains("invalid signal");
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unterminated_quote() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo 'unterminated"])
+            .fails_with_code(125);
+
+        // The string is echoed back quoted, since it holds spaces; the caret
+        // still lands inside it, on the run that never closes.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+env: no terminating quote in -S string at position 18 for quote '''
+   ╭─[ env:1:9 ]
+   │
+ 1 │ env -S \"echo 'unterminated\"
+   │         ──────────────────
+   │
+   │ Help: -S quotes as the shell does: ' and \" come in pairs, and \\' escapes a quote
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_invalid_escape() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo \\q"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // The caret covers the backslash and the character it was meant to
+        // escape, not just the one the parser stopped on.
+        assert!(stderr.contains("invalid sequence '\\q'"), "{stderr}");
+        assert!(stderr.contains(" 1 │ env -S 'echo \\q'"), "{stderr}");
+        assert!(stderr.contains("\n   │              ──"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_whole_variable_reference() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo ${1FOO}"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // Raised on the digit, but the caret covers the reference from its
+        // `$`, which is what the reader has to fix.
+        assert!(stderr.contains("only ${VARNAME} expansion"), "{stderr}");
+        assert!(
+            stderr.contains("a variable name cannot start with a digit"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("\n   │              ─┬─"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_follows_the_string_when_it_is_glued_to_the_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-Secho ${FOO"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // `-Secho …` carries the string in the same argument, so the caret
+        // shifts by the two columns the option takes.
+        assert!(stderr.contains("this { is never closed"), "{stderr}");
+        assert!(stderr.contains(" 1 │ env '-Secho ${FOO'"), "{stderr}");
+        assert!(stderr.contains("\n   │             ──┬──"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_into_the_right_argument() {
+        // The same text appears as the command env is asked to run; the caret
+        // belongs to the -S string, which is where the parse failed.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo \\q", "echo \\q"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("env:1:14"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["-S", "echo 'unterminated"])
+            .fails_with_code(125)
+            .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
+    }
+}
