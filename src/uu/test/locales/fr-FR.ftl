@@ -164,7 +164,6 @@ test-error-invalid-integer = entier invalide { $value }
 test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
 
 # Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
-test-diag-label-extra-argument = l'expression était déjà complète ici
 test-diag-label-unary-operator-expected = nécessite une expression de chaque côté
 test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt et -ge comparent des entiers ; utilisez =, {"!"}=, {"<"} ou {">"} pour comparer des chaînes
 test-diag-help-integer-op-mnemonics = -eq égal, -ne différent, -lt inférieur, -le inférieur ou égal, -gt supérieur, -ge supérieur ou égal

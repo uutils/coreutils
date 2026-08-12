@@ -70,7 +70,6 @@ expr-error-too-big-range-quantifier-index = Expression régulière trop grande
 expr-error-match-utf8 = match ne supporte pas l'encodage UTF-8 invalide dans { $arg }
 
 # Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
-expr-diag-label-unexpected-argument = l'expression était déjà complète ici
 expr-diag-help-missing-argument = chaque opérateur a besoin d'une valeur de chaque côté
 expr-diag-help-unexpected-argument = le shell a peut-être développé un opérateur ; protégez-le avec '{"*"}' ou échappez-le avec {"\\*"}
 expr-diag-help-non-integer-argument = les opérateurs arithmétiques attendent des entiers ; utilisez = ou {"!"}= pour comparer des chaînes
