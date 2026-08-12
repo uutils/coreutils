@@ -9,6 +9,17 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+fn profile_from_out_dir(out_dir: &Path) -> Option<String> {
+    // OUT_DIR contains the actual Cargo profile directory, including custom
+    // profiles that are not preserved in the PROFILE environment variable.
+    out_dir
+        .parent()?
+        .parent()?
+        .parent()?
+        .file_name()
+        .map(|profile| profile.to_string_lossy().into_owned())
+}
+
 fn main() {
     // do not compile libstdbuf for windows target. The windows stdbuf.exe loads libstdbuf.dll compiled for the cygwin target.
     if env::var("CARGO_CFG_UNIX").is_err() {
@@ -85,12 +96,20 @@ fn main() {
     cmd.current_dir(libstdbuf_src)
         .args(["build", "--target-dir", build_dir.to_str().unwrap()]);
 
-    // Get the current profile
-    let profile = env::var("PROFILE").unwrap_or_else(|_| "debug".to_string());
+    let profile = profile_from_out_dir(Path::new(&out_dir))
+        .or_else(|| env::var("PROFILE").ok())
+        .unwrap_or_else(|| "debug".to_string());
 
-    // Pass the release flag if we're in release mode
-    if profile == "release" || profile == "bench" {
-        cmd.arg("--release");
+    // Pass the current build profile to libstdbuf, so custom profiles like
+    // release-small use the same settings as the stdbuf crate.
+    match profile.as_str() {
+        "debug" => {}
+        "release" | "bench" => {
+            cmd.arg("--release");
+        }
+        profile => {
+            cmd.arg("--profile").arg(profile);
+        }
     }
 
     // Pass the target architecture if we're cross-compiling
