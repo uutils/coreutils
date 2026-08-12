@@ -4,11 +4,13 @@
 // file that was distributed with this source code.
 
 //! Maps a [`FormatError`] onto the part of the `--format` string it came from,
-//! so that [`uucore::diagnostics`] can render it with a caret.
+//! so that [`uucore::diagnostics`] can render it with a caret. A bad `--field`
+//! list goes through [`RangeError`], which knows how to render itself.
 
 use std::ffi::OsString;
 
 use uucore::diagnostics::Snapshot;
+use uucore::ranges::RangeError;
 use uucore::translate;
 
 use crate::options::{FormatError, FormatErrorKind};
@@ -38,5 +40,23 @@ pub fn render(args: &[OsString], format: &str, err: &FormatError) -> bool {
         &err.message,
         label.map(|label| translate!(label)).as_deref(),
         Some(&translate!("numfmt-diag-help-format-syntax")),
+    )
+}
+
+/// Render `err`, raised while parsing `fields` — the value of `--field` —
+/// against `args`.
+///
+/// # Returns
+///
+/// `false` when the list cannot be found among the arguments, in which case
+/// the caller should fall back to the plain one-line message.
+pub fn render_field(args: &[OsString], fields: &str, err: &RangeError) -> bool {
+    err.render_option_value(
+        args,
+        fields,
+        None,
+        Some("field"),
+        &translate!("numfmt-diag-label-zero-field"),
+        &translate!("numfmt-diag-help-field-syntax"),
     )
 }
