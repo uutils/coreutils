@@ -8,6 +8,7 @@
 //! A module for handling ranges of values.
 
 use std::cmp::max;
+use std::ops::Range as ByteRange;
 use std::str::FromStr;
 
 use crate::display::Quotable;
@@ -41,36 +42,172 @@ impl FromStr for Range {
     /// assert!(Range::from_str("a-b").is_err());
     /// ```
     fn from_str(s: &str) -> Result<Self, &'static str> {
-        fn parse(s: &str) -> Result<usize, &'static str> {
-            match s.parse::<usize>() {
-                Ok(0) => Err("fields and positions are numbered from 1"),
+        Self::parse(s).map_err(|invalid| invalid.reason)
+    }
+}
+
+/// What is wrong with a range, so that a caller can label a caret.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RangeErrorKind {
+    /// A bound that is not a number at all.
+    NotANumber,
+    /// A bound of zero, where counting starts at one.
+    ZeroBound,
+    /// A bound too large to be used.
+    TooLarge,
+    /// A bare `-`, with a bound on neither side.
+    NoEndpoint,
+    /// A range that ends before it starts.
+    Inverted,
+}
+
+/// A list of ranges that does not parse, and the part of it that is at fault.
+///
+/// The message is built here so that it reads exactly as it always has; `span`
+/// and `kind` are what a caret needs on top of it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RangeError {
+    pub message: String,
+    /// Byte range inside the whole list, not inside the one item at fault.
+    pub span: ByteRange<usize>,
+    pub kind: RangeErrorKind,
+}
+
+impl std::fmt::Display for RangeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for RangeError {}
+
+impl RangeError {
+    /// Render this error against `args`, with a caret under the one range in
+    /// `list` that is at fault.
+    ///
+    /// A list of ranges reads the same wherever it is taken, so what a caret
+    /// says about a bad one is written here rather than in each utility. Only
+    /// the two texts that genuinely differ between them are passed in: what a
+    /// range counts, and how the option spells a list.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The whole argument list, program name included — as
+    ///   [`crate::diagnostics::capture`] returns it.
+    /// * `list` - The list of ranges as typed, the value of the option below.
+    /// * `short` - The short name of that option, if it has one.
+    /// * `long` - Its long name, if it has one.
+    /// * `zero_bound` - Already localized: what a zero bound got wrong, which
+    ///   depends on what the range counts — bytes, fields, characters.
+    /// * `help` - Already localized: how a list is written for this option.
+    ///
+    /// # Returns
+    ///
+    /// `false` when no argument carries `list` as that option's value, in which
+    /// case the caller should fall back to the plain one-line message.
+    pub fn render_option_value(
+        &self,
+        args: &[std::ffi::OsString],
+        list: &str,
+        short: Option<char>,
+        long: Option<&str>,
+        zero_bound: &str,
+        help: &str,
+    ) -> bool {
+        // Labelled only where a label would add to the message, per the
+        // convention in `crate::diagnostics`.
+        let label = match self.kind {
+            RangeErrorKind::NotANumber | RangeErrorKind::NoEndpoint => None,
+            RangeErrorKind::ZeroBound => Some(std::borrow::Cow::Borrowed(zero_bound)),
+            RangeErrorKind::TooLarge => Some(std::borrow::Cow::Owned(crate::translate!(
+                "range-diag-label-too-large"
+            ))),
+            RangeErrorKind::Inverted => Some(std::borrow::Cow::Owned(crate::translate!(
+                "range-diag-label-inverted"
+            ))),
+        };
+
+        crate::diagnostics::Snapshot::with_program(args).render_option_value(
+            list,
+            short,
+            long,
+            self.span.clone(),
+            &self.message,
+            label.as_deref(),
+            Some(help),
+        )
+    }
+}
+
+/// One range that does not parse, located inside the item it was read from.
+struct Invalid {
+    reason: &'static str,
+    span: ByteRange<usize>,
+    kind: RangeErrorKind,
+}
+
+impl Range {
+    /// Parse one range, reporting where inside `s` the trouble is.
+    fn parse(s: &str) -> Result<Self, Invalid> {
+        // Each bound is parsed where it sits, so that a caret can point at the
+        // one that is wrong rather than at the pair.
+        let bound = |part: &str, offset: usize| -> Result<usize, Invalid> {
+            let at = |reason, kind| Invalid {
+                reason,
+                span: offset..offset + part.len(),
+                kind,
+            };
+            match part.parse::<usize>() {
+                Ok(0) => Err(at(
+                    "fields and positions are numbered from 1",
+                    RangeErrorKind::ZeroBound,
+                )),
                 // GNU fails when we are at the limit. Match their behavior
-                Ok(n) if n == usize::MAX => Err("byte/character offset is too large"),
+                Ok(n) if n == usize::MAX => Err(at(
+                    "byte/character offset is too large",
+                    RangeErrorKind::TooLarge,
+                )),
                 Ok(n) => Ok(n),
-                Err(_) => Err("failed to parse range"),
+                Err(_) => Err(at("failed to parse range", RangeErrorKind::NotANumber)),
             }
-        }
+        };
+        // Everything after the dash starts one byte past it.
+        let after_dash = |low: &str| low.len() + 1;
 
         Ok(match s.split_once('-') {
             None => {
-                let n = parse(s)?;
+                let n = bound(s, 0)?;
                 Self { low: n, high: n }
             }
-            Some(("", "")) => return Err("invalid range with no endpoint"),
+            Some(("", "")) => {
+                return Err(Invalid {
+                    reason: "invalid range with no endpoint",
+                    span: 0..s.len(),
+                    kind: RangeErrorKind::NoEndpoint,
+                });
+            }
             Some((low, "")) => Self {
-                low: parse(low)?,
+                low: bound(low, 0)?,
                 high: usize::MAX - 1,
             },
             Some(("", high)) => Self {
                 low: 1,
-                high: parse(high)?,
+                high: bound(high, after_dash(""))?,
             },
             Some((low, high)) => {
-                let (low, high) = (parse(low)?, parse(high)?);
-                if low <= high {
-                    Self { low, high }
+                let (low_value, high_value) = (bound(low, 0)?, bound(high, after_dash(low))?);
+                if low_value <= high_value {
+                    Self {
+                        low: low_value,
+                        high: high_value,
+                    }
                 } else {
-                    return Err("high end of range less than low end");
+                    return Err(Invalid {
+                        reason: "high end of range less than low end",
+                        // Neither bound is wrong on its own; it is the pair.
+                        span: 0..s.len(),
+                        kind: RangeErrorKind::Inverted,
+                    });
                 }
             }
         })
@@ -79,13 +216,26 @@ impl FromStr for Range {
 
 impl Range {
     /// Parse a list of ranges separated by commas and/or spaces
-    pub fn from_list(list: &str) -> Result<Vec<Self>, String> {
+    ///
+    /// # Returns
+    ///
+    /// On failure, the message as it has always read, and where in `list` the
+    /// item at fault sits, so that a caller may point a caret at it.
+    pub fn from_list(list: &str) -> Result<Vec<Self>, RangeError> {
         let mut ranges = Vec::new();
 
+        // Where the item being read starts inside the whole list. The
+        // separators are one byte each, so stepping over them is enough to
+        // keep count.
+        let mut start = 0;
         for item in list.split(&[',', ' ']) {
-            let range_item = FromStr::from_str(item)
-                .map_err(|e| format!("range {} was invalid: {e}", item.quote()))?;
+            let range_item = Self::parse(item).map_err(|invalid| RangeError {
+                message: format!("range {} was invalid: {}", item.quote(), invalid.reason),
+                span: start + invalid.span.start..start + invalid.span.end,
+                kind: invalid.kind,
+            })?;
             ranges.push(range_item);
+            start += item.len() + 1;
         }
 
         Ok(Self::merge(ranges))

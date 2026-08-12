@@ -87,3 +87,5 @@ numfmt-debug-header-ignored = --header ignoré avec une entrée en ligne de comm
 numfmt-diag-label-number-overflow = ce nombre est trop grand
 numfmt-diag-label-stray-percent = un % littéral doit s'écrire %%
 numfmt-diag-help-format-syntax = un format s'écrit [PRÉFIXE]%[0]['][-][LARGEUR][.PRÉCISION]f[SUFFIXE], comme "%'-10.2f"
+numfmt-diag-label-zero-field = les champs sont numérotés à partir de 1
+numfmt-diag-help-field-syntax = --field prend N, N-M, N- ou -M, séparés par des virgules, comme --field=1,3-5

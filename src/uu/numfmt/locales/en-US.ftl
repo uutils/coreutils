@@ -88,3 +88,5 @@ numfmt-debug-header-ignored = --header ignored with command-line input
 numfmt-diag-label-number-overflow = this number is too large
 numfmt-diag-label-stray-percent = a literal % must be written %%
 numfmt-diag-help-format-syntax = a format is [PREFIX]%[0]['][-][WIDTH][.PRECISION]f[SUFFIX], as in "%'-10.2f"
+numfmt-diag-label-zero-field = fields are numbered from 1
+numfmt-diag-help-field-syntax = --field takes N, N-M, N- or -M, separated by commas, as in --field=1,3-5

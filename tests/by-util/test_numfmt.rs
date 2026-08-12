@@ -1847,3 +1847,44 @@ numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f
             .stderr_only("numfmt: invalid format '%q', directive must be %[0]['][-][N][.][N]f\n");
     }
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod field_diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_inverted_field_range() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--field", "1,3-2", "--to=si", "1"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("numfmt:1:18"), "{stderr}");
+        assert!(
+            stderr.contains("this range ends before it starts"),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_zero_field() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--field=0", "--to=si", "1"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("numfmt:1:16"), "{stderr}");
+        assert!(stderr.contains("fields are numbered from 1"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["--field=0", "--to=si", "1"])
+            .fails_with_code(1)
+            .stderr_contains("range '0' was invalid: fields and positions are numbered from 1");
+    }
+}

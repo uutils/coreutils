@@ -406,6 +406,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 NumfmtError::IllegalArgument(error.message),
             ));
         }
+        // As for a format, a field list knows which of its ranges is at fault.
+        Err(ParseError::Field(error)) => {
+            let reported = format_args
+                .as_ref()
+                .zip(matches.get_one::<String>(FIELD))
+                .is_some_and(|(args, fields)| diagnostics::render_field(args, fields, &error));
+            return Err(quiet_if_reported(
+                reported,
+                NumfmtError::IllegalArgument(error.message),
+            ));
+        }
         Err(ParseError::Other(message)) => {
             return Err(NumfmtError::IllegalArgument(message).into());
         }

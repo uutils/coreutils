@@ -127,3 +127,9 @@ checksum-error-combine-multiple-algorithms = Vous ne pouvez pas combiner plusieu
 checksum-error-need-algorithm-to-hash = Un algorithme de hachage est nécessaire.
     Utilisez --help pour plus d'informations.
 checksum-error-unknown-algorithm = algorithme inconnu : { $algorithm } : clap aurait dû empêcher ce cas
+
+# Étiquettes de diagnostic : ce que le caret désigne dans une liste
+# d'intervalles. Ce qu'une borne nulle a de faux dépend de ce que l'intervalle
+# compte, donc chaque utilitaire le dit avec ses propres mots.
+range-diag-label-too-large = ce nombre est trop grand
+range-diag-label-inverted = cet intervalle se termine avant de commencer
