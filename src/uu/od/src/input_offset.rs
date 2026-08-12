@@ -35,9 +35,12 @@ impl InputOffset {
 
     /// Increase `byte_pos` and `label` if a label is used.
     pub fn increase_position(&mut self, n: u64) {
-        self.byte_pos += n;
+        // Byte offset and label are fixed-width addresses, so they wrap around
+        // like GNU od instead of aborting on overflow (a `--traditional` label
+        // near u64::MAX overflowed the unchecked add). See #13225.
+        self.byte_pos = self.byte_pos.wrapping_add(n);
         if let Some(l) = self.label {
-            self.label = Some(l + n);
+            self.label = Some(l.wrapping_add(n));
         }
     }
 
@@ -93,6 +96,14 @@ fn test_input_offset() {
     sut.increase_position(10);
     sut.set_radix(Radix::Octal);
     assert_eq!("0000036", &sut.format_byte_offset());
+}
+
+#[test]
+fn test_increase_position_wraps_instead_of_overflowing() {
+    // A --traditional label near u64::MAX must wrap, not abort (#13225).
+    let mut sut = InputOffset::new(Radix::Hexadecimal, u64::MAX, Some(u64::MAX));
+    sut.increase_position(16);
+    assert_eq!("00000f (00000f)", &sut.format_byte_offset());
 }
 
 #[test]
