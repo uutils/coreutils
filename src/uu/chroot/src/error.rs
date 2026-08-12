@@ -52,10 +52,6 @@ pub enum ChrootError {
     #[error("{}", translate!("chroot-error-no-such-group"))]
     NoSuchGroup,
 
-    /// The given directory does not exist.
-    #[error("{}", translate!("chroot-error-no-such-directory", "dir" => _0.quote()))]
-    NoSuchDirectory(PathBuf),
-
     /// The call to `setgid()` failed.
     #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]
     SetGidFailed(String, #[source] Error),
