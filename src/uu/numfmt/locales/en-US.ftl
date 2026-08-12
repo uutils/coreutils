@@ -57,6 +57,7 @@ numfmt-help-zero-terminated = line delimiter is NUL, not newline
 numfmt-error-unsupported-unit = Unsupported unit is specified
 numfmt-error-invalid-unit-size = invalid unit size: { $size }
 numfmt-error-invalid-padding = invalid padding value { $value }
+numfmt-error-memory-exhausted = memory exhausted
 numfmt-error-invalid-header = invalid header value { $value }
 numfmt-error-grouping-cannot-be-combined-with-format = --grouping cannot be combined with --format
 numfmt-error-grouping-cannot-be-combined-with-to = grouping cannot be combined with --to

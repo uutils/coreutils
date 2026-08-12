@@ -56,6 +56,7 @@ numfmt-help-zero-terminated = le délimiteur de ligne est NUL, pas retour à la 
 numfmt-error-unsupported-unit = Une unité non prise en charge est spécifiée
 numfmt-error-invalid-unit-size = taille d'unité invalide : { $size }
 numfmt-error-invalid-padding = valeur de remplissage invalide { $value }
+numfmt-error-memory-exhausted = mémoire épuisée
 numfmt-error-invalid-header = valeur d'en-tête invalide { $value }
 numfmt-error-grouping-cannot-be-combined-with-format = --grouping ne peut pas être combiné avec --format
 numfmt-error-grouping-cannot-be-combined-with-to = le groupement ne peut pas être combiné avec --to
