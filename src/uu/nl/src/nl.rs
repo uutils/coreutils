@@ -376,7 +376,10 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_WIDTH)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(usize)),
+                // Bound the width to a C int like GNU. This rejects a huge width
+                // up front instead of letting a later `" ".repeat(width + 1)`
+                // abort with a capacity overflow (#13347).
+                .value_parser(clap::value_parser!(u64).range(..=i32::MAX as u64)),
         )
 }
 
