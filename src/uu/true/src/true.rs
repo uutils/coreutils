@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
-use uucore::{crate_version, translate};
+use uucore::{crate_version, error::strip_errno, translate};
 
 // uucore::main does not support no-result
 pub fn uumain(mut args: impl uucore::Args) -> i32 {
@@ -26,7 +26,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         && e.kind() != io::ErrorKind::BrokenPipe
     {
         // Try to display this error.
-        let _ = writeln!(io::stderr(), "true: {}", uucore::error::strip_errno(&e));
+        let _ = writeln!(io::stderr(), "true: {}", strip_errno(&e));
         // Mirror GNU options. When failing to print warnings or version flags, then we exit
         // with FAIL. This avoids allocation some error information which may result in yet
         // other types of failure.

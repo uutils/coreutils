@@ -13,7 +13,7 @@ use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 #[cfg(not(windows))]
 use uucore::error::ExitCode;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
 #[cfg(not(windows))]
 use uucore::mode;
 use uucore::translate;
@@ -374,7 +374,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
         }
         Err(e) => Err(USimpleError::new(
             1,
-            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => uucore::error::strip_errno(&e)),
+            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => strip_errno(&e)),
         )),
     }
 }

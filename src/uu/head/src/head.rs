@@ -18,7 +18,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
-use uucore::error::{FromIo, UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::line_ending::LineEnding;
 use uucore::show;
 use uucore::translate;
@@ -165,7 +165,7 @@ impl HeadOptions {
 fn wrap_in_stdout_error(err: io::Error) -> io::Error {
     io::Error::new(
         err.kind(),
-        translate!("head-error-writing-stdout", "err" => uucore::error::strip_errno(&err)),
+        translate!("head-error-writing-stdout", "err" => strip_errno(&err)),
     )
 }
 
