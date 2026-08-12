@@ -156,6 +156,8 @@ impl Display for FormatError {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
     Format(FormatError),
+    /// A `--field` list that does not parse, knowing where in the list.
+    Field(uucore::ranges::RangeError),
     Other(String),
 }
 
@@ -168,6 +170,12 @@ impl From<FormatError> for ParseError {
 impl From<String> for ParseError {
     fn from(message: String) -> Self {
         Self::Other(message)
+    }
+}
+
+impl From<uucore::ranges::RangeError> for ParseError {
+    fn from(error: uucore::ranges::RangeError) -> Self {
+        Self::Field(error)
     }
 }
 

@@ -1201,3 +1201,93 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .succeeds()
         .stdout_only("okk\när\nmba\nøys\n");
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_inverted_range() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+
+        // One item of the list is at fault, not the whole of it.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+cut: invalid decreasing range
+   ╭─[ cut:1:10 ]
+   │
+ 1 │ cut -f 1,4-2 /dev/null
+   │          ─┬─
+   │           ╰─── this range ends before it starts
+   │
+   │ Help: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_zero_bound() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f1,0,3", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Glued to the option, so the caret counts the two columns it takes.
+        assert!(stderr.contains("cut:1:9"), "{stderr}");
+        assert!(stderr.contains("counting starts at 1"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_bound_that_is_not_a_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1-3,x", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The message names the item, so a bare underline is enough.
+        assert!(
+            stderr.contains("invalid byte/character position 'x'"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("cut:1:12"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_ignores_a_file_named_like_the_list() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("1,0");
+
+        // The file is named exactly like the list; the caret belongs to the
+        // value of -f.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-f", "1,0", "1,0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("cut:1:10"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let result = new_ucmd!()
+            .args(&["-f", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // The message reads as it always has, and nothing is drawn under it;
+        // the usage hint that follows is cut's own.
+        assert!(
+            stderr.starts_with("cut: invalid decreasing range\n"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
+}

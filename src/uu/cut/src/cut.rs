@@ -19,7 +19,7 @@ use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, MbExactMatcher, WhitespaceMatcher};
-use uucore::ranges::Range;
+use uucore::ranges::{Range, RangeError, RangeErrorKind};
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
 
@@ -99,29 +99,46 @@ fn split_digits(s: &str) -> (&str, &str) {
     s.split_at(s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len()))
 }
 
+/// One item of a range list that does not parse: GNU's wording for it, plus
+/// which label a caret should carry. The span is added by the caller, which is
+/// the only place that knows where in the list the item sat.
+struct ItemError {
+    message: String,
+    kind: RangeErrorKind,
+}
+
 /// Parse one endpoint of a range, `default` standing in for an omitted one.
 /// GNU rejects `usize::MAX` itself, so the highest value taken is `MAX - 1`.
-fn parse_endpoint(digits: &str, default: usize, errors: &RangeErrors) -> Result<usize, String> {
+fn parse_endpoint(digits: &str, default: usize, errors: &RangeErrors) -> Result<usize, ItemError> {
     if digits.is_empty() {
         return Ok(default);
     }
     match digits.parse::<usize>() {
         Ok(n) if n != usize::MAX => Ok(n),
-        _ => Err(about(errors.too_large, digits)),
+        _ => Err(ItemError {
+            message: about(errors.too_large, digits),
+            kind: RangeErrorKind::TooLarge,
+        }),
     }
 }
 
 /// Parse a single `N`, `N-`, `-N` or `N-M` item into a range.
-fn parse_range(item: &str, errors: &RangeErrors) -> Result<Range, String> {
+fn parse_range(item: &str, errors: &RangeErrors) -> Result<Range, ItemError> {
     let (low_digits, rest) = split_digits(item);
     // GNU reports everything it could not consume, not just the first byte.
     if low_digits.is_empty() && !rest.starts_with('-') {
-        return Err(about(errors.invalid_value, item));
+        return Err(ItemError {
+            message: about(errors.invalid_value, item),
+            kind: RangeErrorKind::NotANumber,
+        });
     }
     let Some(high_part) = rest.strip_prefix('-') else {
         // No dash at all: a lone number, or trailing junk after it.
         if !rest.is_empty() {
-            return Err(about(errors.invalid_value, rest));
+            return Err(ItemError {
+                message: about(errors.invalid_value, rest),
+                kind: RangeErrorKind::NotANumber,
+            });
         }
         let n = parse_endpoint(low_digits, 0, errors)?;
         return Ok(Range { low: n, high: n });
@@ -132,19 +149,31 @@ fn parse_range(item: &str, errors: &RangeErrors) -> Result<Range, String> {
         // A second dash makes the item a malformed range, anything else a bad
         // value.
         return Err(if tail.starts_with('-') {
-            translate!(errors.invalid_range)
+            ItemError {
+                message: translate!(errors.invalid_range),
+                kind: RangeErrorKind::NoEndpoint,
+            }
         } else {
-            about(errors.invalid_value, tail)
+            ItemError {
+                message: about(errors.invalid_value, tail),
+                kind: RangeErrorKind::NotANumber,
+            }
         });
     }
     if low_digits.is_empty() && high_digits.is_empty() {
-        return Err(translate!("cut-error-invalid-range-no-endpoint", "range" => item));
+        return Err(ItemError {
+            message: translate!("cut-error-invalid-range-no-endpoint", "range" => item),
+            kind: RangeErrorKind::NoEndpoint,
+        });
     }
 
     let low = parse_endpoint(low_digits, 1, errors)?;
     let high = parse_endpoint(high_digits, usize::MAX - 1, errors)?;
     if low > high {
-        return Err(translate!("cut-error-invalid-decreasing-range"));
+        return Err(ItemError {
+            message: translate!("cut-error-invalid-decreasing-range"),
+            kind: RangeErrorKind::Inverted,
+        });
     }
     Ok(Range { low, high })
 }
@@ -154,23 +183,37 @@ fn parse_range(item: &str, errors: &RangeErrors) -> Result<Range, String> {
 /// GNU distinguishes its messages by mode and by the kind of problem, which the
 /// shared [`Range::from_list`] parser does not, so the list is parsed here and
 /// the resulting ranges are merged directly.
-fn parse_range_list(list: &str, is_field: bool) -> Result<Vec<Range>, String> {
+fn parse_range_list(list: &str, is_field: bool) -> Result<Vec<Range>, RangeError> {
     let errors = if is_field {
         &FIELD_ERRORS
     } else {
         &POSITION_ERRORS
     };
     let mut ranges = Vec::new();
+    // Where the current item starts inside `list`; the separators are one byte
+    // each, so stepping past an item is its length plus one.
+    let mut at = 0;
 
     for item in list.split([',', ' ']) {
+        let span = at..at + item.len();
+        at = span.end + 1;
         // A stray separator leaves an empty item, which GNU reads as position
         // zero -- the same complaint as an explicit `0`.
+        let zero_bound = || RangeError {
+            message: translate!(errors.numbered_from_1),
+            span: span.clone(),
+            kind: RangeErrorKind::ZeroBound,
+        };
         if item.is_empty() {
-            return Err(translate!(errors.numbered_from_1));
+            return Err(zero_bound());
         }
-        let range = parse_range(item, errors)?;
+        let range = parse_range(item, errors).map_err(|e| RangeError {
+            message: e.message,
+            span: span.clone(),
+            kind: e.kind,
+        })?;
         if range.low == 0 {
-            return Err(translate!(errors.numbered_from_1));
+            return Err(zero_bound());
         }
         ranges.push(range);
     }
@@ -178,7 +221,7 @@ fn parse_range_list(list: &str, is_field: bool) -> Result<Vec<Range>, String> {
     Ok(Range::merge(ranges))
 }
 
-fn list_to_ranges(list: &str, complement: bool, is_field: bool) -> Result<Vec<Range>, String> {
+fn list_to_ranges(list: &str, complement: bool, is_field: bool) -> Result<Vec<Range>, RangeError> {
     let ranges = parse_range_list(list, is_field)?;
     Ok(if complement {
         uucore::ranges::complement(&ranges)
@@ -1016,6 +1059,11 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in list diagnostics, which needs the arguments as
+    // they were typed, before the rewrite below edits one of them.
+    let diag_args = uucore::diagnostics::capture(&args);
+
     // GNU `cut` supports `-d=` to set the delimiter to `=`.
     // Clap parsing is limited in this situation, see:
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
@@ -1045,7 +1093,21 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<String>(mode_arg)
         .expect("should be ensured by get_mode_arg");
     let is_field = matches!(mode_arg, options::FIELDS | options::FIELDS_MERGED);
-    let ranges = list_to_ranges(list, complement, is_field).map_err(|e| UUsageError::new(1, e))?;
+    let ranges = list_to_ranges(list, complement, is_field).map_err(|e| {
+        // The list is the value of the option that selected the mode, so the
+        // caret can be put under the one range that is at fault.
+        let reported = diag_args.as_ref().is_some_and(|args| {
+            e.render_option_value(
+                args,
+                list,
+                Some(mode_arg_short(mode_arg)),
+                Some(mode_arg),
+                &translate!("cut-diag-label-zero-bound"),
+                &translate!("cut-diag-help-list-syntax"),
+            )
+        });
+        uucore::error::quiet_if_reported(reported, UUsageError::new(1, e.message))
+    })?;
 
     let mode = match mode_arg {
         options::BYTES => Mode::Bytes(
@@ -1171,6 +1233,16 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
     }
 
     Ok(mode_arg)
+}
+
+/// The short name of a mode option, since the caret has to recognize the value
+/// however it was written: `-f2-`, `-f 2-` or `--fields=2-`.
+fn mode_arg_short(mode_arg: &str) -> char {
+    match mode_arg {
+        options::BYTES => 'b',
+        options::CHARACTERS => 'c',
+        _ => 'f',
+    }
 }
 
 pub fn uu_app() -> Command {
