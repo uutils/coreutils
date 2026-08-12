@@ -19,7 +19,7 @@ use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::fs::is_stdin_directory;
 use uucore::translate;
-use uucore::{format_usage, os_str_as_bytes, show};
+use uucore::{format_usage, os_str_as_bytes};
 
 mod options {
     pub const COMPLEMENT: &str = "complement";
@@ -81,18 +81,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let op = sets[2].quote();
             let msg = translate!("tr-error-extra-operand-simple", "operand" => op);
             return Err(UUsageError::new(1, msg));
-        }
-    }
-
-    if let Some(first) = sets.first() {
-        let slice = os_str_as_bytes(first)?;
-        let trailing_backslashes = slice.iter().rev().take_while(|&&c| c == b'\\').count();
-        if trailing_backslashes % 2 == 1 {
-            // The trailing backslash has a non-backslash character before it.
-            show!(USimpleError::new(
-                0,
-                translate!("tr-warning-unescaped-backslash")
-            ));
         }
     }
 
