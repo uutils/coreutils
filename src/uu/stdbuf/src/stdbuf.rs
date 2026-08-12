@@ -148,8 +148,11 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
-    // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
-    const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+    // cannot use unwrap_or <https://github.com/rust-lang/rust/issues/143874>
+    const LIBSTDBUF_DIR: &str = match option_env!("LIBSTDBUF_DIR") {
+        Some(v) => v,
+        None => "/usr/local/libexec/coreutils",
+    };
 
     let (preload, extension) = preload_strings();
 
