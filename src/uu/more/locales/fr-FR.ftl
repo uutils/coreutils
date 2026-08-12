@@ -12,9 +12,9 @@ more-error-unknown-key = Touche inconnue : '{$key}'. Appuyez sur 'h' pour les in
 
 # Messages d'aide
 more-help-silent = Afficher l'aide au lieu de sonner la cloche lorsqu'une touche illégale est pressée
-more-help-logical = Ne pas faire de pause après une ligne contenant un ^L (saut de page)
+more-help-logical = Compter les lignes logiques plutôt que les lignes d'écran
 more-help-exit-on-eof = Quitter à la fin du fichier
-more-help-no-pause = Compter les lignes logiques plutôt que les lignes d'écran
+more-help-no-pause = Ne pas faire de pause après une ligne contenant un ^L (saut de page)
 more-help-print-over = Ne pas défiler, effacer l'écran et afficher le texte
 more-help-clean-print = Ne pas défiler, afficher le texte et nettoyer les fins de ligne
 more-help-squeeze = Compresser plusieurs lignes vides en une seule

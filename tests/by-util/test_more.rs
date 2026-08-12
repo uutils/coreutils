@@ -79,6 +79,10 @@ fn test_valid_arg() {
         &["--from-line", "0"],
         &["-P", "something"],
         &["--pattern", "-1"],
+        &["-f"],
+        &["--logical"],
+        &["-l"],
+        &["--no-pause"],
     ];
     for args in args_list {
         test_alive(args);

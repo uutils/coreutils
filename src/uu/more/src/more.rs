@@ -220,7 +220,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::LOGICAL)
-                .short('l')
+                .short('f')
                 .long(options::LOGICAL)
                 .action(ArgAction::SetTrue)
                 .help(translate!("more-help-logical")),
@@ -234,7 +234,7 @@ pub fn uu_app() -> Command {
         )
         .arg(
             Arg::new(options::NO_PAUSE)
-                .short('f')
+                .short('l')
                 .long(options::NO_PAUSE)
                 .action(ArgAction::SetTrue)
                 .help(translate!("more-help-no-pause")),

@@ -12,9 +12,9 @@ more-error-unknown-key = Unknown key: '{$key}'. Press 'h' for instructions. (uni
 
 # Help messages
 more-help-silent = Display help instead of ringing bell when an illegal key is pressed
-more-help-logical = Do not pause after any line containing a ^L (form feed)
+more-help-logical = Count logical lines, rather than screen lines
 more-help-exit-on-eof = Exit on End-Of-File
-more-help-no-pause = Count logical lines, rather than screen lines
+more-help-no-pause = Do not pause after any line containing a ^L (form feed)
 more-help-print-over = Do not scroll, clear screen and display text
 more-help-clean-print = Do not scroll, display text and clean line ends
 more-help-squeeze = Squeeze multiple blank lines into one
