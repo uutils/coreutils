@@ -182,7 +182,7 @@ fn test_pathchk_non_utf8_paths() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 fn test_not_a_directory_clean() {
     // https://github.com/uutils/coreutils/issues/13888
     new_ucmd!()
