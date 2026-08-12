@@ -1209,3 +1209,69 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len()
     );
 }
+
+#[test]
+#[cfg(unix)]
+fn test_mktemp_dotdot_prefix() {
+    // Regression test for https://github.com/uutils/coreutils/issues/12312
+    //
+    // `mktemp <dir>/..XXXXXX` should produce a file named `..<random>`
+    // inside <dir>, matching GNU mktemp. Previously, `Path::file_name()`
+    // returned `None` for a path ending in `..`, causing the literal `..`
+    // prefix to be dropped from the output filename.
+    let scene = TestScenario::new(util_name!());
+    let dir = tempdir().unwrap();
+    let template = dir.path().join("..XXXXXX");
+
+    let result = scene.ucmd().arg(template.to_str().unwrap()).succeeds();
+
+    let stdout_path = result.stdout_str().trim();
+    let file_name = std::path::Path::new(stdout_path)
+        .file_name()
+        .expect("output path should have a file name")
+        .to_str()
+        .expect("output path should be UTF-8");
+    assert!(
+        file_name.starts_with("..") && file_name.len() == "..XXXXXX".len(),
+        "expected file name to start with '..' and match template length, got {stdout_path}"
+    );
+    // The created file should live in <dir>, not <dir>/.. (the parent).
+    let parent = std::path::Path::new(stdout_path)
+        .parent()
+        .expect("output path should have a parent");
+    let dir_path = dir.path();
+    assert_eq!(
+        parent, dir_path,
+        "expected file to be created in {dir_path:?}, got {parent:?}"
+    );
+    assert!(
+        std::path::Path::new(stdout_path).exists(),
+        "expected mktemp to actually create {stdout_path}"
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn test_mktemp_dotdot_prefix_with_tmpdir_flag() {
+    // Same fix should apply when the template is passed via --tmpdir / -p.
+    let scene = TestScenario::new(util_name!());
+    let dir = tempdir().unwrap();
+
+    let result = scene
+        .ucmd()
+        .arg("-p")
+        .arg(dir.path())
+        .arg("..XXXXXX")
+        .succeeds();
+
+    let stdout_path = result.stdout_str().trim();
+    let file_name = std::path::Path::new(stdout_path)
+        .file_name()
+        .expect("output path should have a file name")
+        .to_str()
+        .expect("output path should be UTF-8");
+    assert!(
+        file_name.starts_with(".."),
+        "expected file name to start with '..', got {stdout_path}"
+    );
+}
