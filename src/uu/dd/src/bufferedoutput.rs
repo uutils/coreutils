@@ -8,7 +8,7 @@
 //!
 //! Use the [`BufferedOutput`] struct to create a buffered form of the
 //! [`Output`] writer.
-use crate::{Output, WriteStat};
+use crate::{DdError, Output, WriteStat};
 
 /// Buffer partial output blocks until they are completed.
 ///
@@ -57,7 +57,7 @@ impl<'a> BufferedOutput<'a> {
     }
 
     /// Truncate the underlying file to the current stream position, if possible.
-    pub(crate) fn truncate(&mut self) -> std::io::Result<()> {
+    pub(crate) fn truncate(&mut self) -> Result<(), DdError> {
         self.inner.dst.truncate()
     }
 
