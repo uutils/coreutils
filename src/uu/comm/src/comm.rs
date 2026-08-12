@@ -113,12 +113,18 @@ impl OrderChecker {
         }
 
         let is_ordered = *current_line >= *self.last_line;
-        if !is_ordered && !self.has_error {
+        // Print file-level warnings only if --check-order was explicitly passed
+        // (in default mode, these are printed later in the final error reporting)
+        if !is_ordered && !self.has_error && self.check_order {
             let _ = writeln!(
                 stderr(),
                 "{}",
                 translate!("comm-error-file-not-sorted", "file_num" => self.file_num.as_str())
             );
+        }
+
+        // Always mark that we have an error, regardless of check_order flag
+        if !is_ordered && !self.has_error {
             self.has_error = true;
         }
 
@@ -315,8 +321,15 @@ fn comm(
         .map_err_context(|| translate!("comm-error-write"))?;
 
     if should_check_order && (checker1.has_error || checker2.has_error) {
-        // Print the input error message once at the end
-        if input_error {
+        // In default mode, print file-level errors and general message
+        // In explicit check-order mode, file-level errors were already printed by verify_order
+        if !check_order {
+            if checker1.has_error {
+                let _ = writeln!(stderr(), "comm: file 1 is not in sorted order");
+            }
+            if checker2.has_error {
+                let _ = writeln!(stderr(), "comm: file 2 is not in sorted order");
+            }
             let _ = writeln!(stderr(), "{}", translate!("comm-error-input-not-sorted"));
         }
         Err(USimpleError::new(1, ""))
