@@ -89,3 +89,15 @@ mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $op
 mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
 mode-diag-label-invalid-number = n'est pas un mode octal
 mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w
+# Messages d'analyse des chaînes de format (printf, seq, env, ...)
+format-error-invalid-spec = %{ $spec } : spécification de conversion invalide
+format-error-too-many-specs = le format '{ $format }' a trop de directives %
+format-error-no-spec = le format '{ $format }' n'a pas de directive %
+format-error-ends-with-percent = le format { $format } se termine par %
+format-error-invalid-precision = précision invalide : '{ $precision }'
+format-error-wrong-spec-type = type de directive % incorrect
+format-error-write = erreur d'écriture : { $error }
+format-error-no-more-arguments = plus d'arguments
+format-error-invalid-argument = argument invalide
+format-error-missing-hex = nombre hexadécimal manquant dans l'échappement
+format-error-invalid-universal-character = nom de caractère universel invalide \{ $escape }{ $digits }
