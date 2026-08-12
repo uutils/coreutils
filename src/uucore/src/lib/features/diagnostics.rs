@@ -93,6 +93,8 @@ pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
     capture(args.get(1..).unwrap_or_default())
 }
 
+pub use crate::features::diagnostics_boundary::{char_span, floor_boundary};
+
 /// An argument list rendered as a single line, with the position of every
 /// argument inside it.
 pub struct Snapshot {
@@ -417,6 +419,51 @@ impl Snapshot {
         self.report(span, message, label, help)
     }
 
+    /// Write a report pointing at `range` inside `operand`, where `operand` is
+    /// the value of an option.
+    ///
+    /// The pairing of [`Snapshot::index_of_value`] with
+    /// [`Snapshot::render_inside_at`] is what almost every option value needs —
+    /// a `chmod` mode, a `sort` key, a `cut` range, a `head` size — so it is
+    /// written once here rather than in each utility.
+    ///
+    /// # Arguments
+    ///
+    /// * `operand` - The value at fault, as the parser received it.
+    /// * `short` - The option's short name (`'k'` for `-k`), if it has one.
+    /// * `long` - The option's long name (`"key"` for `--key`), if it has one.
+    /// * `range` - Byte range inside `operand` to point at. An empty range
+    ///   marks the character it starts at.
+    /// * `message` - The error message, already localized.
+    /// * `label` - Text placed under the caret, already localized, or `None`
+    ///   for a bare underline.
+    /// * `help` - An optional line of advice, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when no argument carries `operand` as that option's value, or
+    /// when nothing could be rendered, in which case the caller should fall
+    /// back to the plain one-line message.
+    // One more parameter than clippy likes, but every one of them is already
+    // part of `render_inside_at`; folding them into a struct would only move
+    // the list to the call site.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_option_value(
+        &self,
+        operand: &str,
+        short: Option<char>,
+        long: Option<&str>,
+        range: Range<usize>,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
+        let Some(index) = self.index_of_value(operand, short, long) else {
+            return false;
+        };
+        self.render_inside_at(index, operand, range, message, label, help)
+    }
+
     /// Byte range covered by `range` — an offset inside `operand` — within the
     /// argument at `index`.
     fn locate_at(&self, index: usize, operand: &str, range: Range<usize>) -> Option<Range<usize>> {
@@ -455,18 +502,16 @@ impl Snapshot {
         // An empty range means something is missing rather than wrong; give the
         // caret the character it stopped at, or the whole operand if it ran
         // out.
-        match self.text[start..].chars().next() {
-            Some(c) if start < whole.end => start..start + c.len_utf8(),
-            _ => whole,
+        let stopped = char_span(&self.text, start);
+        if start < whole.end && !stopped.is_empty() {
+            return stopped;
         }
+        whole
     }
 
     /// `offset`, moved back to the nearest character boundary.
     fn floor_boundary(&self, offset: usize) -> usize {
-        (0..=offset)
-            .rev()
-            .find(|&i| self.text.is_char_boundary(i))
-            .unwrap_or(0)
+        floor_boundary(&self.text, offset)
     }
 
     /// Translate the word ariadne heads the advice line with.
