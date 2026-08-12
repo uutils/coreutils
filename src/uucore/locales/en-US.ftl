@@ -95,3 +95,15 @@ mode-error-invalid-operator = invalid operator (expected +, -, or =, but found {
 mode-diag-label-missing-operator = this clause says who, but not what to change
 mode-diag-label-invalid-number = not an octal mode
 mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
+# Format string parsing messages (printf, seq, env, ...)
+format-error-invalid-spec = %{ $spec }: invalid conversion specification
+format-error-too-many-specs = format '{ $format }' has too many % directives
+format-error-no-spec = format '{ $format }' has no % directive
+format-error-ends-with-percent = format { $format } ends in %
+format-error-invalid-precision = invalid precision: '{ $precision }'
+format-error-wrong-spec-type = wrong % directive type was given
+format-error-write = write error: { $error }
+format-error-no-more-arguments = no more arguments
+format-error-invalid-argument = invalid argument
+format-error-missing-hex = missing hexadecimal number in escape
+format-error-invalid-universal-character = invalid universal character name \{ $escape }{ $digits }

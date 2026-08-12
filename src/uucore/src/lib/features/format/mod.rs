@@ -45,6 +45,7 @@ use self::{escape::parse_escape_code, num_format::Formatter};
 use crate::{
     NonUtf8OsStrError,
     error::{UError, strip_errno},
+    translate, translate_text,
 };
 pub use spec::Spec;
 use std::{
@@ -133,39 +134,38 @@ impl From<NonUtf8OsStrError> for FormatError {
 
 impl Display for FormatError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::SpecError(s, _) => write!(
-                f,
-                "%{}: invalid conversion specification",
-                String::from_utf8_lossy(s)
-            ),
-            Self::TooManySpecs(s) => write!(
-                f,
-                "format '{}' has too many % directives",
-                String::from_utf8_lossy(s)
-            ),
-            Self::NeedAtLeastOneSpec(s) => write!(
-                f,
-                "format '{}' has no % directive",
-                String::from_utf8_lossy(s)
-            ),
-            Self::EndsWithPercent(s) => {
-                write!(f, "format {} ends in %", String::from_utf8_lossy(s).quote())
+        // Everything quoted below is text the user typed and has to come back
+        // unchanged, hence translate_text! rather than translate!.
+        let message = match self {
+            Self::SpecError(s, _) => {
+                translate_text!("format-error-invalid-spec", "spec" => String::from_utf8_lossy(s))
             }
-            Self::InvalidPrecision(precision) => write!(f, "invalid precision: '{precision}'"),
+            Self::TooManySpecs(s) => {
+                translate_text!("format-error-too-many-specs", "format" => String::from_utf8_lossy(s))
+            }
+            Self::NeedAtLeastOneSpec(s) => {
+                translate_text!("format-error-no-spec", "format" => String::from_utf8_lossy(s))
+            }
+            Self::EndsWithPercent(s) => {
+                translate_text!("format-error-ends-with-percent", "format" => String::from_utf8_lossy(s).quote())
+            }
+            Self::InvalidPrecision(precision) => {
+                translate_text!("format-error-invalid-precision", "precision" => precision)
+            }
             // TODO: Error message below needs some work
-            Self::WrongSpecType => write!(f, "wrong % directive type was given"),
-            Self::IoError(e) => write!(f, "write error: {}", strip_errno(e)),
-            Self::NoMoreArguments => write!(f, "no more arguments"),
-            Self::InvalidArgument(_) => write!(f, "invalid argument"),
-            Self::MissingHex(_) => write!(f, "missing hexadecimal number in escape"),
-            Self::InvalidCharacter(escape_char, digits, _) => write!(
-                f,
-                "invalid universal character name \\{escape_char}{}",
-                String::from_utf8_lossy(digits)
+            Self::WrongSpecType => translate!("format-error-wrong-spec-type"),
+            Self::IoError(e) => translate_text!("format-error-write", "error" => strip_errno(e)),
+            Self::NoMoreArguments => translate!("format-error-no-more-arguments"),
+            Self::InvalidArgument(_) => translate!("format-error-invalid-argument"),
+            Self::MissingHex(_) => translate!("format-error-missing-hex"),
+            Self::InvalidCharacter(escape_char, digits, _) => translate_text!(
+                "format-error-invalid-universal-character",
+                "escape" => escape_char,
+                "digits" => String::from_utf8_lossy(digits)
             ),
-            Self::InvalidEncoding(no) => no.fmt(f),
-        }
+            Self::InvalidEncoding(no) => return no.fmt(f),
+        };
+        f.write_str(&message)
     }
 }
 
