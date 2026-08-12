@@ -20,6 +20,8 @@ use thiserror::Error;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
+use uucore::parser::parse_signed_num::number_offset;
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::show;
 use uucore::translate;
 
@@ -76,19 +78,65 @@ impl Default for Mode {
     }
 }
 
+/// A `-c` or `-n` value that does not parse.
+///
+/// The message is built where it always was; the rest is what a caret needs:
+/// the value as typed, the option it was given to, and what the size parser
+/// made of it.
+pub struct SizeError {
+    pub message: String,
+    value: String,
+    short: char,
+    long: &'static str,
+    error: ParseSizeError,
+}
+
+impl SizeError {
+    /// The error to raise, a caret under the part of the value at fault when
+    /// the arguments as typed were kept.
+    fn into_error(self, diag_args: Option<&[OsString]>) -> Box<dyn UError> {
+        self.error.size_value_error(
+            diag_args,
+            &self.value,
+            // The parser never saw the sign; the caret has to count it back in.
+            number_offset(&self.value),
+            self.short,
+            self.long,
+            &self.message,
+            HeadError::MatchOption(self.message.clone()),
+        )
+    }
+}
+
 impl Mode {
-    fn from(matches: &ArgMatches) -> Result<Self, String> {
+    fn from(matches: &ArgMatches) -> Result<Self, SizeError> {
+        fn failed(
+            value: &str,
+            short: char,
+            long: &'static str,
+            key: &'static str,
+        ) -> impl FnOnce(ParseSizeError) -> SizeError {
+            let value = value.to_string();
+            move |error| SizeError {
+                message: translate!(key, "err" => &error),
+                value,
+                short,
+                long,
+                error,
+            }
+        }
+
         if let Some(v) = matches.get_one::<String>(options::BYTES) {
-            let (n, all_but_last) = parse::parse_num(v)
-                .map_err(|err| translate!("head-error-invalid-bytes", "err" => err))?;
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(failed(v, 'c', "bytes", "head-error-invalid-bytes"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES) {
-            let (n, all_but_last) = parse::parse_num(v)
-                .map_err(|err| translate!("head-error-invalid-lines", "err" => err))?;
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(failed(v, 'n', "lines", "head-error-invalid-lines"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -141,7 +189,7 @@ struct HeadOptions {
 
 impl HeadOptions {
     ///Construct options from matches
-    pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
+    pub fn get_from(matches: &ArgMatches) -> Result<Self, SizeError> {
         let mut options = Self::default();
 
         options.quiet = matches.get_flag(options::QUIET);
@@ -537,8 +585,11 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<_> = arg_iterate(args)?.collect();
+    // Kept for the caret in size diagnostics, which needs the value as typed.
+    let diag_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let options = HeadOptions::get_from(&matches).map_err(HeadError::MatchOption)?;
+    let options =
+        HeadOptions::get_from(&matches).map_err(|e| e.into_error(diag_args.as_deref()))?;
     uu_head(&options)
 }
 
@@ -550,11 +601,12 @@ mod tests {
     use super::*;
 
     fn options(args: &str) -> Result<HeadOptions, String> {
+        // The unit tests compare messages, not the rest of the failure.
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace().map(OsString::from);
         let matches = uu_app()
             .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
-        HeadOptions::get_from(&matches)
+        HeadOptions::get_from(&matches).map_err(|e| e.message)
     }
 
     #[test]

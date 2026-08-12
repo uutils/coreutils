@@ -28,6 +28,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
+[features]
+diagnostics = ["uucore/diagnostics"]
+
 [lints]
 workspace = true
 

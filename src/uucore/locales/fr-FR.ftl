@@ -128,6 +128,11 @@ checksum-error-need-algorithm-to-hash = Un algorithme de hachage est nécessaire
     Utilisez --help pour plus d'informations.
 checksum-error-unknown-algorithm = algorithme inconnu : { $algorithm } : clap aurait dû empêcher ce cas
 
+# Étiquettes de diagnostic : ce que le caret désigne dans une TAILLE
+size-diag-label-invalid-suffix = unité inconnue
+size-diag-label-too-big = ce nombre est trop grand pour être utilisé
+size-diag-help-syntax = une taille est un nombre suivi d'une unité facultative : K, M, G et ainsi de suite pour 1024, KB, MB, GB pour 1000
+
 # Étiquettes de diagnostic : ce que le caret désigne dans une liste
 # d'intervalles. Ce qu'une borne nulle a de faux dépend de ce que l'intervalle
 # compte, donc chaque utilitaire le dit avec ses propres mots.

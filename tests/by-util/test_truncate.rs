@@ -507,3 +507,36 @@ fn test_sign_as_a_size() {
         .fails()
         .stderr_is("truncate: Invalid number: '+'\n");
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_counts_the_mode_character_before_the_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["--size=+2Zx", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The `+` is part of the operand but not of the size, so the caret has
+        // to count it back in to land on the unit.
+        assert!(stderr.contains("truncate:1:19"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        ucmd.args(&["-s", "10fb", "probe"])
+            .fails_with_code(1)
+            .stderr_contains("Invalid number: '10fb'");
+    }
+}
