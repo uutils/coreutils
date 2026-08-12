@@ -129,7 +129,7 @@ fn arg_iterate<'a>(
     }
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq)]
 struct HeadOptions {
     pub quiet: bool,
     pub verbose: bool,
@@ -140,22 +140,21 @@ struct HeadOptions {
 }
 
 impl HeadOptions {
-    ///Construct options from matches
+    /// Construct options from matches
     pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
-        let mut options = Self::default();
-
-        options.quiet = matches.get_flag(options::QUIET);
-        options.verbose = matches.get_flag(options::VERBOSE);
-        options.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
-        options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
-
-        options.mode = Mode::from(matches)?;
-        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
-        options.files = matches
-            .get_many::<OsString>(options::FILES)
-            .unwrap()
-            .cloned()
-            .collect();
+        let options = Self {
+            quiet: matches.get_flag(options::QUIET),
+            verbose: matches.get_flag(options::VERBOSE),
+            line_ending: LineEnding::from_zero_flag(matches.get_flag(options::ZERO)),
+            presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
+            mode: Mode::from(matches)?,
+            // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+            files: matches
+                .get_many::<OsString>(options::FILES)
+                .unwrap()
+                .cloned()
+                .collect(),
+        };
 
         Ok(options)
     }
@@ -602,13 +601,14 @@ mod tests {
 
     #[test]
     fn test_options_correct_defaults() {
-        let opts = HeadOptions::default();
+        let matches = uu_app().get_matches();
+        let opts = HeadOptions::get_from(&matches).unwrap();
 
         assert!(!opts.verbose);
         assert!(!opts.quiet);
         assert_eq!(opts.line_ending, LineEnding::Newline);
         assert_eq!(opts.mode, Mode::FirstLines(10));
-        assert!(opts.files.is_empty());
+        assert_eq!(opts.files, vec!(OsString::from("-")));
     }
 
     fn arg_outputs(src: &str) -> Result<String, ()> {
