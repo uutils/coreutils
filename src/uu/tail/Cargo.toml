@@ -42,6 +42,9 @@ windows-sys = { workspace = true, features = [
 [dev-dependencies]
 rstest = { workspace = true }
 
+[features]
+diagnostics = ["uucore/diagnostics"]
+
 [lints]
 workspace = true
 
