@@ -46,3 +46,7 @@ workspace = true
 [[bench]]
 name = "rm_bench"
 harness = false
+
+[[bench]]
+name = "rm_alloc_count"
+harness = false
