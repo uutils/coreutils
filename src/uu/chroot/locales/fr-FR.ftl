@@ -19,7 +19,6 @@ chroot-error-missing-newroot = Opérande manquant : NOUVRACINE
 chroot-error-no-group-specified = aucun groupe spécifié pour l'uid inconnu : { $uid }
 chroot-error-no-such-user = utilisateur invalide
 chroot-error-no-such-group = groupe invalide
-chroot-error-no-such-directory = impossible de changer le répertoire racine vers { $dir } : aucun répertoire de ce type
 chroot-error-set-gid-failed = impossible de définir le gid à { $gid } : { $err }
 chroot-error-set-groups-failed = impossible de définir les groupes : { $err }
 chroot-error-set-user-failed = impossible de définir l'utilisateur à { $user } : { $err }
