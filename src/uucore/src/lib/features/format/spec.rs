@@ -550,12 +550,29 @@ fn write_padded(
 
     if left {
         writer.write_all(text)?;
-        write!(writer, "{: <padlen$}", "")
+        write_spaces(&mut writer, padlen)
     } else {
-        write!(writer, "{: >padlen$}", "")?;
+        write_spaces(&mut writer, padlen)?;
         writer.write_all(text)
     }
     .map_err(FormatError::IoError)
+}
+
+/// Write `n` space bytes directly to `writer`.
+///
+/// Unlike `write!(writer, "{: <n$}", "")`, this does not feed `n` into Rust's
+/// dynamic-width formatting, which panics with "Formatting argument out of
+/// range" once the width exceeds `u16::MAX`. A `%s`/`%c` field width above that
+/// bound is valid input for `printf`, so it must not panic (#12593, #12900).
+fn write_spaces(mut writer: impl Write, n: usize) -> std::io::Result<()> {
+    const SPACES: [u8; 64] = [b' '; 64];
+    let mut remaining = n;
+    while remaining > 0 {
+        let chunk = remaining.min(SPACES.len());
+        writer.write_all(&SPACES[..chunk])?;
+        remaining -= chunk;
+    }
+    Ok(())
 }
 
 /// Check for a number ending with a '$'
