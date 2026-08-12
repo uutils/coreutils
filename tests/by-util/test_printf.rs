@@ -440,6 +440,19 @@ fn sub_min_width_negative() {
 }
 
 #[test]
+fn sub_string_char_width_above_u16_max_no_panic() {
+    // A %s/%c field width above u16::MAX must not panic (#12593, #12900).
+    new_ucmd!()
+        .args(&["%100000c", "A"])
+        .succeeds()
+        .stdout_only(format!("{}A", " ".repeat(99999)));
+    new_ucmd!()
+        .args(&["%-100000s", "hi"])
+        .succeeds()
+        .stdout_only(format!("hi{}", " ".repeat(99998)));
+}
+
+#[test]
 fn sub_str_max_chars_input() {
     new_ucmd!()
         .args(&["hello %7.2s", "world"])
