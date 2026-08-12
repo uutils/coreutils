@@ -46,14 +46,36 @@ fn test_enter_chroot_fails() {
 }
 
 #[test]
-fn test_no_such_directory() {
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_too_long_name() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+    let long_name = "a".repeat(256);
+
+    ucmd.arg(&long_name)
+        .fails_with_code(125)
+        .stderr_contains(format!(
+            "chroot: cannot chroot to '{long_name}': File name too long", //todo strip errno
+        ));
+}
+
+#[test]
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_no_such() {
+    let (_at, mut ucmd) = at_and_ucmd!();
+
+    ucmd.arg("missing")
+        .fails_with_code(125)
+        .stderr_contains("chroot: cannot chroot to 'missing': No such file or directory"); // todo: strip errno
+}
+
+#[test]
+#[cfg(target_env = "gnu")] // todo: override by proper error message on other platforms
+fn test_not_a_directory() {
     let (at, mut ucmd) = at_and_ucmd!();
-
     at.touch(at.plus_as_string("a"));
-
     ucmd.arg("a")
         .fails_with_code(125)
-        .stderr_is("chroot: cannot change root directory to 'a': no such directory\n");
+        .stderr_contains("chroot: cannot chroot to 'a': Not a directory"); // todo: strip errno
 }
 
 #[test]
