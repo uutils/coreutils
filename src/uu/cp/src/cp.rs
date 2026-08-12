@@ -1873,7 +1873,7 @@ pub(crate) fn copy_attributes(
             #[cfg(not(unix))]
             let source_perms = source_metadata.permissions();
 
-            fs::set_permissions(dest, source_perms)
+            chmod_nofollow(dest, &source_perms)
                 .map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
             // GNU `cp -p` preserves POSIX ACLs as part of mode. On Linux the
             // ACLs are stored as `system.posix_acl_*` xattrs; copy just those
@@ -2498,6 +2498,42 @@ fn calculate_dest_permissions(
 ///
 /// The original permissions of `source` will be copied to `dest`
 /// after a successful copy.
+/// Apply `permissions` to `dest` without following a symlink at the final component.
+///
+/// Both callers test `dest` for being a symlink well before the chmod, so a symlink
+/// swapped in inside that gap would redirect the mode onto the link's target.
+/// `chmod(2)` cannot change a symlink's permissions, so `EOPNOTSUPP` here means
+/// exactly the "do nothing" case the callers' guards describe.
+#[cfg(unix)]
+fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+
+    let (Some(parent), Some(name)) = (dest.parent(), dest.file_name()) else {
+        // `.`, `..` and `/` have no final component to anchor against. They are
+        // always directories and never a symlink themselves, so there is nothing
+        // to be redirected: chmod the directory through its own fd.
+        let dir_fd = DirFd::open(dest, SymlinkBehavior::NoFollow)?;
+        return dir_fd.fchmod(permissions.mode());
+    };
+    // `Path::parent()` yields "" for a bare filename.
+    let parent = if parent.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        parent
+    };
+
+    let dir_fd = DirFd::open(parent, SymlinkBehavior::Follow)?;
+    match dir_fd.chmod_at(name, permissions.mode(), SymlinkBehavior::NoFollow) {
+        Err(e) if matches!(e.raw_os_error(), Some(libc::EOPNOTSUPP) | Some(libc::ELOOP)) => Ok(()),
+        other => other,
+    }
+}
+
+#[cfg(not(unix))]
+fn chmod_nofollow(dest: &Path, permissions: &Permissions) -> io::Result<()> {
+    fs::set_permissions(dest, permissions.clone())
+}
+
 #[allow(clippy::cognitive_complexity, clippy::too_many_arguments)]
 fn copy_file(
     progress_bar: Option<&ProgressBar>,
@@ -2696,7 +2732,7 @@ fn copy_file(
         //
         // FWIW, the OS will throw an error later, on the write op, if
         // the user does not have permission to write to the file.
-        fs::set_permissions(dest, dest_permissions).ok();
+        chmod_nofollow(dest, &dest_permissions).ok();
     }
 
     let copy_attributes_result = if options.dereference(source_in_command_line) {
