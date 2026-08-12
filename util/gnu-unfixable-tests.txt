@@ -40,5 +40,4 @@ id/gnu-zero-uids.log
 cp/nfs-removal-race.log      # overrides __xstat/stat; std uses statx
 dd/fail-ftruncate-fstat.log  # overrides ftruncate/fstat
 df/skip-duplicates.log       # needs HAVE_GETMNTENT, overrides fopen on the mtab
-nproc/nproc-quota.log        # overrides sched_getscheduler
 rm/rm-readdir-fail.log       # overrides readdir; std uses readdir64
