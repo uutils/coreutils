@@ -24,6 +24,9 @@ pub mod diagnostics;
 #[cfg(not(feature = "diagnostics"))]
 #[path = "features/diagnostics_stub.rs"]
 pub mod diagnostics;
+// The part of the diagnostics that is not a no-op without the feature: both
+// `diagnostics` above re-export it rather than each carrying a copy.
+mod diagnostics_boundary;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]

@@ -29,6 +29,12 @@ pub fn operands(_args: &[OsString]) -> Option<Vec<OsString>> {
     None
 }
 
+// Boundary arithmetic is real even when rendering is not: a caller may floor
+// an offset before it knows whether anything will be drawn. It is the one part
+// of this module that is not a no-op, so it is shared with the real one rather
+// than restated here.
+pub use crate::features::diagnostics_boundary::{char_span, floor_boundary};
+
 /// A snapshot of nothing: it finds nothing and renders nothing.
 ///
 /// Deliberately derives nothing the real `Snapshot` does not, so that what a
@@ -84,6 +90,20 @@ impl Snapshot {
         &self,
         _index: usize,
         _operand: &str,
+        _range: Range<usize>,
+        _message: &str,
+        _label: Option<&str>,
+        _help: Option<&str>,
+    ) -> bool {
+        false
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_option_value(
+        &self,
+        _operand: &str,
+        _short: Option<char>,
+        _long: Option<&str>,
         _range: Range<usize>,
         _message: &str,
         _label: Option<&str>,

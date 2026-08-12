@@ -80,11 +80,16 @@ impl ModeError {
         clause_start: usize,
         message: &str,
     ) -> bool {
-        let snapshot = crate::diagnostics::Snapshot::new(args);
-        let Some(index) = snapshot.index_of_value(mode, Some('m'), Some("mode")) else {
-            return false;
-        };
-        self.render_snapshot(&snapshot, index, mode, clause_start, message)
+        let (label, help) = self.describe();
+        crate::diagnostics::Snapshot::new(args).render_option_value(
+            mode,
+            Some('m'),
+            Some("mode"),
+            self.clause_span(clause_start),
+            message,
+            label.as_deref(),
+            help.as_deref(),
+        )
     }
 
     /// Render this error against `args`, with the argument carrying the mode
@@ -112,38 +117,39 @@ impl ModeError {
         clause_start: usize,
         message: &str,
     ) -> bool {
-        self.render_snapshot(
-            &crate::diagnostics::Snapshot::new(args),
+        let (label, help) = self.describe();
+        crate::diagnostics::Snapshot::new(args).render_inside_at(
             index,
             mode,
-            clause_start,
+            self.clause_span(clause_start),
             message,
+            label.as_deref(),
+            help.as_deref(),
         )
     }
 
-    fn render_snapshot(
-        &self,
-        snapshot: &crate::diagnostics::Snapshot,
-        index: usize,
-        mode: &str,
-        clause_start: usize,
-        message: &str,
-    ) -> bool {
+    /// The caret label for this error, translated, and the advice that goes
+    /// under it.
+    ///
+    /// Labelled only where a label would add to the message, per the
+    /// convention in [`crate::diagnostics`].
+    fn describe(&self) -> (Option<String>, Option<String>) {
         let label = match self.kind {
             // The message already names the expected operators.
             ModeErrorKind::InvalidOperator => None,
             ModeErrorKind::MissingOperator => Some("mode-diag-label-missing-operator"),
             ModeErrorKind::InvalidNumber => Some("mode-diag-label-invalid-number"),
         };
-
-        snapshot.render_inside_at(
-            index,
-            mode,
-            clause_start + self.span.start..clause_start + self.span.end,
-            message,
-            label.map(|label| translate!(label)).as_deref(),
-            Some(&translate!("mode-diag-help-syntax")),
+        (
+            label.map(|label| translate!(label)),
+            Some(translate!("mode-diag-help-syntax")),
         )
+    }
+
+    /// Where this error sits inside the whole mode, given where the clause it
+    /// was raised in begins.
+    fn clause_span(&self, clause_start: usize) -> Range<usize> {
+        clause_start + self.span.start..clause_start + self.span.end
     }
 }
 
