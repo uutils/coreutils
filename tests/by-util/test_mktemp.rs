@@ -1209,3 +1209,41 @@ fn test_mktemp_hidden_file_single_dot() {
         template_name.len()
     );
 }
+
+/// When the created path cannot be written to stdout, mktemp must delete it
+/// again (matching GNU) instead of leaving it behind. In dry-run mode nothing
+/// is created, so it must fail cleanly without trying to remove a missing path.
+/// `/dev/full` forces the write failure, so this is Linux-only.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_mktemp_cleanup_on_write_error() {
+    use std::fs::{File, read_dir};
+
+    // (extra args, template): a plain file, a directory, and a dry run.
+    let cases: &[(&[&str], &str)] = &[
+        (&[], "wrfailXXXXXX.dat"),
+        (&["-d"], "wrfailXXXXXX"),
+        (&["-u"], "wrfailXXXXXX.dat"),
+    ];
+
+    for (args, template) in cases {
+        let scene = TestScenario::new(util_name!());
+        let dir = scene.fixtures.as_string();
+
+        scene
+            .ucmd()
+            .env(TMPDIR, &dir)
+            .args(args)
+            .arg(template)
+            .set_stdout(File::create("/dev/full").unwrap())
+            .fails()
+            // Cleanup is best-effort and must not surface a spurious removal error.
+            .stderr_does_not_contain("No such file or directory");
+
+        assert_eq!(
+            read_dir(&dir).unwrap().count(),
+            0,
+            "leftover temp path for args {args:?}"
+        );
+    }
+}
