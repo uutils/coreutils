@@ -720,13 +720,9 @@ fn write_bytes(
             let missing_spacing = output_info
                 .print_width_line
                 .saturating_sub(output_text.chars().count());
-            write!(
-                output_text,
-                "{:>missing_spacing$}  {}",
-                "",
-                format_ascii_dump(input_decoder.get_buffer(0)),
-            )
-            .unwrap();
+            output_text.extend(std::iter::repeat_n(' ', missing_spacing));
+            output_text.push_str("  ");
+            output_text.push_str(&format_ascii_dump(input_decoder.get_buffer(0)));
         }
 
         if first {

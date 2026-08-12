@@ -809,13 +809,11 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-O", "nonexistent_file"])
@@ -855,7 +853,6 @@ fn test_file_owned_by_egid() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_egid() {
     new_ucmd!()
         .args(&["-G", "nonexistent_file"])
@@ -876,6 +873,24 @@ fn test_file_not_owned_by_egid() {
 
     new_ucmd!()
         .args(&["-f", target_file, "-a", "!", "-G", target_file])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_owned_by_current_group_windows() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_not_owned_by_current_token_windows() {
+    // The system directory belongs to TrustedInstaller, so it is owned neither
+    // by the user nor by the Administrators group an elevated shell runs as.
+    let system_root = std::env::var("SystemRoot").expect("SystemRoot is not set");
+
+    new_ucmd!()
+        .args(&["-d", &system_root, "-a", "!", "-O", &system_root])
         .succeeds();
 }
 
@@ -1070,7 +1085,6 @@ fn test_bracket_syntax_version() {
 
 #[test]
 #[allow(non_snake_case)]
-#[cfg(unix)]
 fn test_file_N() {
     use std::{fs::FileTimes, time::Duration};
 
@@ -1086,6 +1100,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH);
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).fails();
 
@@ -1096,6 +1111,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).succeeds();
 }
@@ -1174,4 +1190,214 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     // `-f = a` is string comparison "-f" = "a", not file test
     new_ucmd!().args(&["-f", "=", "a"]).fails_with_code(1);
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
+}
+
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_offending_argument() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2);
+
+        // The whole report: the `test: ` prefix of the plain form, the
+        // expression echoed back, a caret on `zap`, and the operator advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'zap'
+   ╭─[ test:1:7 ]
+   │
+ 1 │ 7 -eq zap
+   │       ─┬─
+   │        ╰─── expected an integer here
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_is_the_default() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2)
+            .stderr_is("test: invalid integer 'zap'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_extra_argument_points_past_the_expression() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["k", "!=", "m", "spare"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: extra argument 'spare'
+   ╭─[ test:1:8 ]
+   │
+ 1 │ k != m spare
+   │        ──┬──
+   │          ╰──── the expression was already complete here
+   │
+   │ Help: an unquoted variable expanding to several words is the usual cause; quote it as \"$var\" to keep it a single operand
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_missing_operand_suggests_quoting_the_variable() {
+        // `test "$empty" -gt 1` with an unset variable ends up here: the
+        // operator is left without a right-hand operand.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["31", "-gt"])
+            .fails_with_code(2);
+
+        // The caret sits on the operator left dangling, and the advice names
+        // the cause rather than restating the error.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: missing argument after '-gt'
+   ╭─[ test:1:4 ]
+   │
+ 1 │ 31 -gt
+   │    ─┬─
+   │     ╰─── nothing follows this
+   │
+   │ Help: an unset or empty variable expands to nothing, leaving the operator without an operand; quote it as \"$var\"
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_missing_operand_plain_message_is_unchanged() {
+        // Piped stderr keeps the one-line form scripts match on.
+        new_ucmd!()
+            .args(&["31", "-gt"])
+            .fails_with_code(2)
+            .stderr_is("test: missing argument after '-gt'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_extra_operand_suggests_quoting_the_variable() {
+        // What `test x = $fruit` looks like when fruit="ripe pear".
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["x", "=", "ripe", "pear"])
+            .fails_with_code(2);
+
+        // The caret lands on the word past the end of the comparison, and the
+        // integer advice — which belongs to another error — stays out of it.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: extra argument 'pear'
+   ╭─[ test:1:10 ]
+   │
+ 1 │ x = ripe pear
+   │          ──┬─
+   │            ╰─── the expression was already complete here
+   │
+   │ Help: an unquoted variable expanding to several words is the usual cause; quote it as \"$var\" to keep it a single operand
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_dash_t_advises_about_descriptors_not_comparisons() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "stdout"])
+            .fails_with_code(2);
+
+        // The message stays the one GNU prints; only the label and the advice
+        // are specific to `-t`, which has nothing to do with `-eq` and friends.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'stdout'
+   ╭─[ test:1:4 ]
+   │
+ 1 │ -t stdout
+   │    ───┬──
+   │       ╰──── expected a file descriptor here
+   │
+   │ Help: -t takes a file descriptor number: 0 is standard input, 1 standard output, 2 standard error
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_integer_comparison_keeps_its_own_advice() {
+        // The counterpart of the test above: the same operand under a real
+        // comparison still gets the operator advice, not the descriptor one.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["1", "-eq", "stdout"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'stdout'
+   ╭─[ test:1:7 ]
+   │
+ 1 │ 1 -eq stdout
+   │       ───┬──
+   │          ╰──── expected an integer here
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_dash_t_plain_message_is_unchanged() {
+        new_ucmd!()
+            .args(&["-t", "stdout"])
+            .fails_with_code(2)
+            .stderr_is("test: invalid integer 'stdout'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bracket_form_reports_under_its_own_name() {
+        // Both the header and the snippet name `[`, and the trailing `]` is
+        // dropped before the expression is echoed back.
+        let result = TestScenario::new("[")
+            .ucmd()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap", "]"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+[: invalid integer 'zap'
+   ╭─[ [:1:7 ]
+   │
+ 1 │ 7 -eq zap
+   │       ─┬─
+   │        ╰─── expected an integer here
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
 }

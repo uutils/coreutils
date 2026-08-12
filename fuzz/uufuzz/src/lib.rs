@@ -15,12 +15,11 @@ use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
 use std::env::temp_dir;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::pipe;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{self, Seek, SeekFrom, Write, pipe};
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
 use std::sync::{Once, atomic::AtomicBool};
-use std::{io, thread};
+use std::thread;
 
 pub mod pretty_print;
 
@@ -41,7 +40,7 @@ pub struct CommandResult {
 static CHECK_GNU: Once = Once::new();
 static IS_GNU: AtomicBool = AtomicBool::new(false);
 
-pub fn is_gnu_cmd(cmd_path: &str) -> Result<(), std::io::Error> {
+pub fn is_gnu_cmd(cmd_path: &str) -> io::Result<()> {
     CHECK_GNU.call_once(|| {
         let version_output = Command::new(cmd_path).arg("--version").output().unwrap();
 
@@ -69,10 +68,8 @@ where
     F: FnOnce(std::vec::IntoIter<OsString>) -> i32 + Send + 'static,
 {
     // Duplicate the stdout and stderr file descriptors to restore later
-    let original_stdout_fd_owned =
-        dup(std::io::stdout()).expect("Failed to duplicate STDOUT_FILENO");
-    let original_stderr_fd_owned =
-        dup(std::io::stderr()).expect("Failed to duplicate STDERR_FILENO");
+    let original_stdout_fd_owned = dup(io::stdout()).expect("Failed to duplicate STDOUT_FILENO");
+    let original_stderr_fd_owned = dup(io::stderr()).expect("Failed to duplicate STDERR_FILENO");
 
     println!("Running test {:?}", &args[0..]);
     let (read_pipe_stdout, write_pipe_stdout) = pipe().expect("Failed to create pipes");
@@ -90,7 +87,7 @@ where
         input_file.seek(SeekFrom::Start(0)).unwrap();
 
         // Redirect stdin to read from the in-memory file
-        let stdin_fd = dup(std::io::stdin()).expect("Failed to duplicate STDIN");
+        let stdin_fd = dup(io::stdin()).expect("Failed to duplicate STDIN");
 
         // Redirect stdin to read from the in-memory file
         dup2_stdin(&input_file).expect("Failed to set up stdin redirection");
@@ -352,7 +349,7 @@ pub fn generate_random_string(max_length: usize) -> String {
 }
 
 #[allow(dead_code)]
-pub fn generate_random_file() -> Result<String, std::io::Error> {
+pub fn generate_random_file() -> io::Result<String> {
     let mut rng = rand::rng();
     let file_name: String = (0..10)
         .map(|_| rng.random_range(b'a'..=b'z') as char)

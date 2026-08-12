@@ -5,11 +5,14 @@
 
 // spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
+mod diagnostics;
 pub(crate) mod error;
 mod parser;
+#[cfg(windows)]
+mod platform;
 
 use clap::Command;
-use error::{ParseError, ParseResult};
+use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
@@ -70,9 +73,23 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // Show actual name with error
         let _ = uu_app().name("test");
     }
-    let result = parse(args).map(|mut stack| eval(&mut stack))??;
+    // `parse` consumes the arguments, so keep a copy for the diagnostic — but
+    // only when one could actually be rendered.
+    let expression = uucore::diagnostics::enabled().then(|| args.clone());
 
-    if result { Ok(()) } else { Err(1.into()) }
+    match parse(args).and_then(|mut stack| eval(&mut stack)) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(1.into()),
+        Err(e) => {
+            if let Some(expression) = &expression
+                && diagnostics::render(expression, &e)
+            {
+                // The diagnostic is already on stderr; exit quietly.
+                return Err(uucore::error::ExitCode::new(2));
+            }
+            Err(e.into())
+        }
+    }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or
@@ -121,7 +138,12 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
                 None => return Ok(true),
-                _ => return Err(ParseError::MissingArgument(op.quote().to_string())),
+                _ => {
+                    return Err(ParseError::at_value(
+                        ParseErrorKind::MissingArgument(op.quote().to_string()),
+                        &op,
+                    ));
+                }
             };
 
             Ok((op == "-z") == s.is_empty())
@@ -158,7 +180,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             if (op == "-a" || op == "-o") && stack.len() < 2 {
-                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+                return Err(ParseError::at_value(
+                    ParseErrorKind::UnaryOperatorExpected(op.quote().to_string()),
+                    &op,
+                ));
             }
 
             let b = eval(stack)?;
@@ -166,7 +191,7 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        _ => Err(ParseError::ExpectedValue),
+        _ => Err(ParseErrorKind::ExpectedValue.into()),
     }
 }
 
@@ -245,10 +270,12 @@ impl PartialOrd for Integer<'_> {
 /// `op` the operation (ex: -eq, -lt, etc)
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
-    let left =
-        Integer::parse(a).ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
-    let right =
-        Integer::parse(b).ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
+    let left = Integer::parse(a).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(a.quote().to_string()), a)
+    })?;
+    let right = Integer::parse(b).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(b.quote().to_string()), b)
+    })?;
 
     // Do the maths
     let order = left.cmp(&right);
@@ -260,7 +287,12 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         Some("-ge") => order.is_ge(),
         Some("-lt") => order.is_lt(),
         Some("-le") => order.is_le(),
-        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        _ => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     })
 }
 
@@ -282,7 +314,12 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
         (Some("-ot"), _, Ok(_)) => true,
         (Some("-ef" | "-nt" | "-ot"), _, _) => false,
-        (_, _, _) => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        (_, _, _) => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     };
 
     Ok(result)
@@ -292,7 +329,12 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .map(str::trim)
         .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
+        .ok_or_else(|| {
+            ParseError::at_value(
+                ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
+                fd,
+            )
+        })
         .map(|i| unsafe { libc::isatty(i) == 1 })
 }
 
@@ -316,6 +358,16 @@ enum PathCondition {
     UserIdFlag,
     Writable,
     Executable,
+}
+
+/// Whether the file was modified more recently than it was last read, the
+/// condition behind `-N`. A timestamp the platform cannot report counts as
+/// "not modified since read" rather than aborting.
+fn modified_since_read(metadata: &fs::Metadata) -> bool {
+    matches!(
+        (metadata.accessed(), metadata.modified()),
+        (Ok(read), Ok(modified)) if read < modified
+    )
 }
 
 #[cfg(not(windows))]
@@ -360,9 +412,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => {
-            metadata.accessed().unwrap() < metadata.modified().unwrap()
-        }
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
@@ -381,6 +431,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
+    use crate::platform::owned_by_current_token;
     use std::fs::metadata;
 
     let Ok(stat) = metadata(path) else {
@@ -390,9 +441,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     match condition {
         PathCondition::Directory => stat.is_dir(),
         PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead
-        | PathCondition::GroupOwns
-        | PathCondition::UserOwns => unimplemented!(),
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&stat),
+        PathCondition::GroupOwns => owned_by_current_token(path, true),
+        PathCondition::UserOwns => owned_by_current_token(path, false),
         PathCondition::Regular => stat.is_file(),
         PathCondition::NonEmpty => stat.len() > 0,
         PathCondition::Writable => !stat.permissions().readonly(),

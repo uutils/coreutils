@@ -30,7 +30,7 @@ expensive_tests = []
 # checksum utilities instead of the pure-Rust crates. Provides large speedups
 # on CPUs without SHA-NI.
 #
-# Enable with: `cargo build --release --features unix,openssl`
+# Enable with: `cargo build --release --features openssl`
 #
 # By default OpenSSL is built from source and statically linked (via the
 # `vendored` feature of the `openssl` crate), mirroring how `expr` links
@@ -39,8 +39,7 @@ expensive_tests = []
 #
 # The `?/openssl` entries propagate the choice into each standalone checksum
 # crate only when that crate is itself enabled, so disabling this feature
-# genuinely turns OpenSSL off everywhere. On Windows the feature is a no-op
-# and the pure-Rust implementations are used regardless.
+# genuinely turns OpenSSL off everywhere.
 openssl = [
   "cksum?/openssl",
   "md5sum?/openssl",
@@ -293,7 +292,7 @@ feat_os_unix_musl = [
   "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
-feat_os_windows = ["feat_Tier1", "stdbuf", "timeout"]
+feat_os_windows = ["feat_Tier1", "kill", "stdbuf", "timeout"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
@@ -397,6 +396,7 @@ version = "0.10.0"
 
 [workspace.dependencies]
 ansi-width = "0.1.0"
+ariadne = "0.6.0"
 base64-simd = "0.8"
 bigdecimal = "0.4"
 binary-heap-plus = "0.5.0"

@@ -210,11 +210,13 @@ fn test_zero_bytes_with_suffix() {
     ts.ucmd()
         .args(&["-c0K"])
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     ts.ucmd()
         .args(&["-c00K"])
         .pipe_in("qwerty")
+        .ignore_stdin_write_error()
         .succeeds()
         .no_output();
     ts.ucmd()
@@ -4097,7 +4099,7 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
     );
     scene
         .ucmd()
-        .args(&["--pid=1000", "data"])
+        .args(&["--pid=0", "data"])
         .stderr_to_stdout()
         .succeeds()
         .stdout_only(expected_stdout);
@@ -5096,6 +5098,15 @@ fn test_failed_write_is_reported() {
         .set_stdout(File::create("/dev/full").unwrap())
         .fails()
         .stderr_is("tail: No space left on device\n");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_failed_warning_write_is_reported() {
+    new_ucmd!()
+        .args(&["--pid=0", "/dev/null"])
+        .set_stderr(File::create("/dev/full").unwrap())
+        .fails_with_code(1);
 }
 
 #[cfg(target_os = "linux")]

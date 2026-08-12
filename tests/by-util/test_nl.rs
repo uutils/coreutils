@@ -754,23 +754,23 @@ fn test_one_byte_section_delimiter() {
 }
 
 #[test]
-fn test_non_ascii_one_char_section_delimiter() {
+fn test_multi_byte_one_char_section_delimiter() {
     for arg in ["-dä", "--section-delimiter=ä"] {
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\näää\nb") // header section
+            .pipe_in("a\nä:ä:ä:\nb") // header section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nää\nb") // body section
+            .pipe_in("a\nä:ä:\nb") // body section
             .succeeds()
             .stdout_is("     1\ta\n\n     1\tb\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nä\nb") // footer section
+            .pipe_in("a\nä:\nb") // footer section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
     }
@@ -929,4 +929,14 @@ fn test_repeated_section_delimiter_flag() {
         .pipe_in("|:|:|:\na\nb\nc")
         .succeeds()
         .stdout_is("\n       a\n       b\n       c\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_skip_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.args(&["/proc/self/mem", "f"])
+        .fails()
+        .stdout_is("     1\thello\n");
 }
