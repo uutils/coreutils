@@ -33,7 +33,7 @@
 //! ───╯
 //! ```
 
-// spell-checker:ignore étage
+// spell-checker:ignore étage replacen
 
 use std::borrow::Cow;
 use std::env;
@@ -45,6 +45,7 @@ use std::ops::Range;
 use ariadne::{CharSet, Color, Config, IndexType, Label, Report, ReportKind, Source};
 
 use crate::display::Quotable;
+use crate::translate;
 
 /// Whether errors should be rendered against their argument list.
 ///
@@ -462,6 +463,41 @@ impl Snapshot {
             .unwrap_or(0)
     }
 
+    /// Translate the word ariadne heads the advice line with.
+    ///
+    /// The advice itself arrives already localized, but ariadne writes its own
+    /// `Help` in front of it, so a translated report would end on a line half
+    /// in English. The word is replaced where ariadne wrote it — on the first
+    /// row below the label, which is the only place it can be — rather than
+    /// everywhere, since an argument the report echoes is free to contain it
+    /// too.
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - The rendered report, its headline already dropped.
+    /// * `has_help` - Whether an advice line was asked for at all.
+    fn localize_help(body: &str, has_help: bool) -> Cow<'_, str> {
+        let localized = translate!("diagnostics-help-label");
+        if !has_help || localized == "Help" {
+            return Cow::Borrowed(body);
+        }
+        let mut lines: Vec<Cow<'_, str>> = body.lines().map(Cow::Borrowed).collect();
+        // Rows 0..=2 are the header, the gutter and the source line; rows 3
+        // and 4 belong to the label.
+        let Some(row) = lines
+            .iter()
+            .skip(5)
+            .position(|line| line.contains("Help"))
+            .map(|row| row + 5)
+        else {
+            // The report is not shaped the way we assumed; hand it back
+            // untouched rather than rebuilding it around a row we never found.
+            return Cow::Borrowed(body);
+        };
+        lines[row] = Cow::Owned(lines[row].replacen("Help", &localized, 1));
+        Cow::Owned(lines.join("\n") + "\n")
+    }
+
     /// Whether `row` is one of the two rows a single label occupies.
     ///
     /// A report with one label on one source line always has the same shape,
@@ -473,15 +509,25 @@ impl Snapshot {
         (SOURCE + 1..=SOURCE + 2).contains(&row)
     }
 
-    fn report(
+    /// The report ariadne draws for `span`, with its headline dropped.
+    ///
+    /// Both [`Self::localize_help`] and [`Self::is_label_row`] count on the
+    /// rows of what this returns, so it is a step of its own: a test can render
+    /// a known report and check the shape those two assume, rather than only
+    /// the finished output.
+    ///
+    /// # Returns
+    ///
+    /// `None` when ariadne could not render, in which case the caller falls
+    /// back to the plain one-line message.
+    fn render_body(
         &self,
         span: Range<usize>,
-        message: &str,
         label: Option<&str>,
         help: Option<&str>,
-    ) -> bool {
+        color: bool,
+    ) -> Option<String> {
         let id = crate::util_name();
-        let color = env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal();
         let config = Config::default()
             // ariadne counts characters unless told otherwise, which would drift
             // on multi-byte arguments.
@@ -508,14 +554,35 @@ impl Snapshot {
             .write((id, Source::from(self.text.as_str())), &mut rendered)
             .is_err()
         {
-            return false;
+            return None;
         }
 
         // ariadne heads every report with its own line — a hardcoded, untranslated
         // "Error:". Drop it and write the utility name instead, so the first line
         // reads exactly like the plain one-line form.
         let rendered = String::from_utf8_lossy(&rendered);
-        let body = rendered.split_once('\n').map_or("", |(_, rest)| rest);
+        Some(
+            rendered
+                .split_once('\n')
+                .map_or("", |(_, rest)| rest)
+                .into(),
+        )
+    }
+
+    fn report(
+        &self,
+        span: Range<usize>,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
+        let id = crate::util_name();
+        let color = env::var_os("NO_COLOR").is_none() && std::io::stderr().is_terminal();
+        let Some(body) = self.render_body(span, label, help, color) else {
+            return false;
+        };
+        let body = Self::localize_help(&body, help.is_some());
+        let body = body.as_ref();
         if label.is_some() {
             eprint!("{id}: {message}\n{body}");
         } else {
@@ -549,6 +616,38 @@ mod tests {
 
     fn snapshot(args: &[&str]) -> Snapshot {
         Snapshot::new(args)
+    }
+
+    /// `localize_help` and `is_label_row` both address ariadne's output by row
+    /// number, which only they know is right. Render a report whose shape is
+    /// known and check it, so that an ariadne that adds or drops a row fails
+    /// here rather than silently deleting a row of somebody's command line.
+    #[test]
+    fn the_rendered_report_has_the_row_shape_the_rewriting_assumes() {
+        let snap = snapshot(&["-k", "1,0"]);
+        let body = snap
+            .render_body(3..6, Some("a label"), Some("some advice"), false)
+            .unwrap();
+        let rows: Vec<&str> = body.lines().collect();
+
+        // Row 2 echoes the arguments; rewriting it would edit what was typed.
+        assert!(rows[2].contains("-k 1,0"), "row 2: {:?}", rows[2]);
+        assert!(!Snapshot::is_label_row(2));
+
+        // Rows 3 and 4 are the underline and the arm carrying the label.
+        assert!(Snapshot::is_label_row(3) && Snapshot::is_label_row(4));
+        assert!(rows[3].contains('┬'), "row 3: {:?}", rows[3]);
+        assert!(
+            rows[4].contains('╰') && rows[4].contains("a label"),
+            "row 4: {:?}",
+            rows[4]
+        );
+
+        // The advice comes below those, where `localize_help` looks for it.
+        assert!(
+            rows.iter().skip(5).any(|row| row.contains("Help")),
+            "no help row below row 4: {rows:?}"
+        );
     }
 
     #[test]
