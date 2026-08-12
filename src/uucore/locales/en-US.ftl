@@ -134,6 +134,11 @@ checksum-error-need-algorithm-to-hash = Needs an algorithm to hash with.
     Use --help for more information.
 checksum-error-unknown-algorithm = unknown algorithm: { $algorithm }: clap should have prevented this case
 
+# Diagnostic labels: what the caret points at in a SIZE
+size-diag-label-invalid-suffix = not a known unit
+size-diag-label-too-big = this number is too large to use
+size-diag-help-syntax = a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+
 # Diagnostic labels: what the caret points at in a list of ranges. What a zero
 # bound got wrong depends on what the range counts, so each utility says that
 # in its own words.

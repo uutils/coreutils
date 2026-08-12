@@ -5265,3 +5265,29 @@ fn test_no_skip_after_error() {
         .fails()
         .stdout_contains("hello");
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("tail:1:10"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-n", "5QQ", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("tail: invalid number of lines: '5QQ'\n");
+    }
+}

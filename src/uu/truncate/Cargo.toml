@@ -20,6 +20,9 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 fluent = { workspace = true }
 
+[features]
+diagnostics = ["uucore/diagnostics"]
+
 [lints]
 workspace = true
 
