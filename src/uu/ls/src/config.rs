@@ -220,9 +220,9 @@ pub struct Config {
     pub(crate) time_format_recent: String, // Time format for recent dates
     pub(crate) time_format_older: Option<String>, // Time format for older dates (optional, if not present, time_format_recent is used)
     pub(crate) context: bool,
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     pub(crate) selinux_supported: bool,
-    #[cfg(all(feature = "smack", target_os = "linux"))]
+    #[cfg(smack)]
     pub(crate) smack_supported: bool,
     pub(crate) group_directories_first: bool,
     pub(crate) line_ending: LineEnding,
@@ -999,9 +999,9 @@ impl Config {
             time_format_recent,
             time_format_older,
             context,
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(selinux)]
             selinux_supported: uucore::selinux::is_selinux_enabled(),
-            #[cfg(all(feature = "smack", target_os = "linux"))]
+            #[cfg(smack)]
             smack_supported: uucore::smack::is_smack_enabled(),
             group_directories_first: options.get_flag(options::GROUP_DIRECTORIES_FIRST),
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),

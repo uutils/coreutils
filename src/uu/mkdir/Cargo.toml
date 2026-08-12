@@ -26,6 +26,9 @@ uucore = { workspace = true, features = [
 ] }
 fluent = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process", "fs"] }
 

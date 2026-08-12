@@ -57,7 +57,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     for f in fifos {
         // Label the FIFO at creation, as GNU does; relabelling after leaves a window.
-        #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+        #[cfg(selinux)]
         let _selinux_guard = {
             let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
             let context = matches.get_one::<String>(options::CONTEXT);
@@ -96,7 +96,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             ));
         } else {
             // Apply SMACK context if requested
-            #[cfg(all(feature = "smack", target_os = "linux"))]
+            #[cfg(smack)]
             {
                 let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
                 let context = matches.get_one::<String>(options::CONTEXT);

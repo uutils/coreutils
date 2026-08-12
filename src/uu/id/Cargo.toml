@@ -22,6 +22,9 @@ rustix = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
 fluent = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
 selinux = { workspace = true, optional = true }
 

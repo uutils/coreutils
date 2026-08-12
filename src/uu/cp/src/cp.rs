@@ -885,11 +885,11 @@ impl Attributes {
         mode: Preserve::Yes { required: true },
         timestamps: Preserve::Yes { required: true },
         context: {
-            #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+            #[cfg(selinux)]
             {
                 Preserve::Yes { required: false }
             }
-            #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+            #[cfg(not(selinux))]
             {
                 Preserve::No { explicit: false }
             }
@@ -1183,7 +1183,7 @@ impl Options {
             }
         }
 
-        #[cfg(not(all(feature = "selinux", any(target_os = "linux", target_os = "android"))))]
+        #[cfg(not(selinux))]
         if let Preserve::Yes { required } = attributes.context {
             let selinux_disabled_error = CpError::Error(translate!("cp-error-selinux-not-enabled"));
             if required {
@@ -1719,7 +1719,7 @@ fn handle_preserve<F: Fn() -> CopyResult<()>>(p: Preserve, f: F) -> CopyResult<(
     Ok(())
 }
 
-#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+#[cfg(selinux)]
 pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> CopyResult<()> {
     if !uucore::selinux::is_selinux_enabled() {
         return Ok(());
@@ -1916,7 +1916,7 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     handle_preserve(attributes.context, || -> CopyResult<()> {
         // Get the source context and apply it to the destination
         let context = selinux::SecurityContext::of_path(source, false, false).map_err(|_| {
@@ -2734,7 +2734,7 @@ fn copy_file(
         fs::File::create(dest).map(|f| f.set_len(0)).ok();
     })?;
 
-    #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
+    #[cfg(selinux)]
     if options.set_selinux_context {
         set_selinux_context(dest, options.context.as_ref())?;
     }

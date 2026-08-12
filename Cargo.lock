@@ -3439,6 +3439,7 @@ dependencies = [
 name = "uu_cp"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "filetime",
@@ -3713,6 +3714,7 @@ dependencies = [
 name = "uu_id"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
@@ -3724,6 +3726,7 @@ dependencies = [
 name = "uu_install"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "file_diff",
  "filetime",
@@ -3794,6 +3797,7 @@ name = "uu_ls"
 version = "0.10.0"
 dependencies = [
  "ansi-width",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",
@@ -3823,6 +3827,7 @@ dependencies = [
 name = "uu_mkdir"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
@@ -3833,6 +3838,7 @@ dependencies = [
 name = "uu_mkfifo"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "libc",
@@ -3844,6 +3850,7 @@ dependencies = [
 name = "uu_mknod"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "nix",
@@ -3877,6 +3884,7 @@ dependencies = [
 name = "uu_mv"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "fluent",
@@ -4239,6 +4247,7 @@ dependencies = [
 name = "uu_stat"
 version = "0.10.0"
 dependencies = [
+ "cfg_aliases",
  "clap",
  "fluent",
  "rustix",
@@ -4568,6 +4577,7 @@ dependencies = [
  "blake2b_simd",
  "blake3",
  "bstr",
+ "cfg_aliases",
  "clap",
  "codspeed-divan-compat",
  "crc-fast",

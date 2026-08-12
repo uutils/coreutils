@@ -58,6 +58,9 @@ divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [[bench]]
 name = "ls_bench"
 harness = false
