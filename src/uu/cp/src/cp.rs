@@ -2606,6 +2606,23 @@ fn copy_file(
         }
     }
 
+    // `--attributes-only` skips `handle_existing_dest` above, so its
+    // same-file check never runs; GNU cp refuses self-copies in this
+    // mode too.
+    if initial_dest_metadata.is_some()
+        && options.attributes_only
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+        && is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line)
+    {
+        return Err(translate!("cp-error-same-file",
+                       "source" => source.quote(),
+                       "dest" => dest.quote())
+        .into());
+    }
+
     if options.attributes_only
         && source_is_symlink
         && !matches!(
