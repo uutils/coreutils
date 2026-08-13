@@ -18,3 +18,14 @@ uname-help-machine = affiche le nom du matériel de la machine.
 uname-help-os = affiche le nom du système d'exploitation.
 uname-help-processor = affiche le type de processeur (non portable)
 uname-help-hardware-platform = affiche la plateforme matérielle (non portable)
+uname-help-all-labeled = comme -a, affiche toutes les informations mais une par ligne, avec étiquette.
+
+# Étiquettes pour --all-labeled
+uname-label-kernel-name = Nom du noyau
+uname-label-nodename = Nom du nœud
+uname-label-kernel-release = Version du noyau
+uname-label-kernel-version = Version détaillée du noyau
+uname-label-machine = Machine
+uname-label-processor = Processeur
+uname-label-hardware-platform = Plateforme matérielle
+uname-label-os = Système d'exploitation
