@@ -110,21 +110,6 @@ fn du_summarize_balanced_tree(
         .bench_values(|args| black_box(uumain(args)));
 }
 
-/// Benchmark du with --max-depth
-#[divan::bench(args = [(6, 4, 10)])]
-fn du_max_depth_balanced_tree(
-    bencher: Bencher,
-    (depth, dirs_per_level, files_per_dir): (usize, usize, usize),
-) {
-    let temp_dir = TempDir::new().unwrap();
-    let temp_path = temp_dir.path();
-    fs_tree::create_balanced_tree(temp_path, depth, dirs_per_level, files_per_dir);
-
-    bencher
-        .with_inputs(|| get_bench_args(&[&"--max-depth=2", &temp_path]).into_iter())
-        .bench_values(|args| black_box(uumain(args)));
-}
-
 fn main() {
     divan::main();
 }
