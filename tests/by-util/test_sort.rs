@@ -649,10 +649,8 @@ fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
         .env("LC_ALL", locale)
         .arg("abmon")
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+        .ok()
+        .filter(|s| s.status.success())?;
     let text = String::from_utf8(output.stdout).ok()?;
     let months: Vec<String> = text
         .trim()
@@ -2102,10 +2100,8 @@ fn test_human_numeric_blank_thousands_sep_locale() {
             .arg("thousands_sep")
             .env("LC_ALL", locale)
             .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
+            .ok()
+            .filter(|s| s.status.success())?;
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
         if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {

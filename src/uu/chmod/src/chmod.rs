@@ -118,7 +118,11 @@ fn extract_negative_modes(mut args: impl uucore::Args) -> (Option<String>, Vec<O
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (parsed_cmode, args) = extract_negative_modes(args.skip(1)); // skip binary name
+    let args: Vec<OsString> = args.skip(1).collect(); // skip binary name
+    // Kept for the caret in mode diagnostics, which needs the mode as typed,
+    // before `extract_negative_modes` replaces a negative mode by a pseudo one.
+    let mode_args = uucore::diagnostics::enabled().then(|| args.clone());
+    let (parsed_cmode, args) = extract_negative_modes(args.into_iter());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let changes = matches.get_flag(options::CHANGES);
@@ -136,6 +140,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let modes = matches.get_one::<String>(options::MODE);
+    // Whether the mode reached us as an option-like operand ("chmod -w f") rather than as an
+    // ordinary positional operand ("chmod -- -w f"). This decides whether the umask diagnostic
+    // below is emitted; see the comment on `option_like_mode`.
+    let option_like_mode = parsed_cmode.is_some();
     let cmode = if let Some(parsed_cmode) = parsed_cmode {
         parsed_cmode
     } else {
@@ -173,8 +181,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         recursive,
         fmode,
         cmode,
+        option_like_mode,
         traverse_symlinks,
         dereference,
+        args: mode_args,
     };
 
     chmoder.chmod(&files)
@@ -270,8 +280,15 @@ struct Chmoder {
     recursive: bool,
     fmode: Option<u32>,
     cmode: Option<String>,
+    /// Set when the mode was given as an option-like operand, e.g. `chmod -w f`, instead of as a
+    /// plain positional operand, e.g. `chmod -- -w f`. GNU only reports a mode whose effect was
+    /// curtailed by the umask for the first spelling: the second one is unambiguous, so there is
+    /// nothing to warn about.
+    option_like_mode: bool,
     traverse_symlinks: TraverseSymlinks,
     dereference: bool,
+    /// The arguments as typed, kept only when a diagnostic may be rendered.
+    args: Option<Vec<OsString>>,
 }
 
 impl Chmoder {
@@ -285,7 +302,13 @@ impl Chmoder {
             let mut new_mode = current_mode;
             let mut naively_expected_new_mode = current_mode;
 
+            // Where the clause being parsed starts inside `cmode_unwrapped`, so
+            // that an error can be pointed back at it.
+            let mut offset = 0;
             for mode in cmode_unwrapped.split(',') {
+                let clause_start = offset;
+                offset += mode.len() + 1; // past the clause and its comma
+
                 let result = if mode.chars().any(|c| c.is_ascii_digit()) {
                     mode::parse_numeric(new_mode, mode, is_dir).map(|v| (v, v))
                 } else {
@@ -303,12 +326,22 @@ impl Chmoder {
                         new_mode = mode;
                         naively_expected_new_mode = naive_mode;
                     }
-                    Err(f) => {
-                        return if self.quiet {
-                            Err(ExitCode::new(1))
-                        } else {
-                            Err(USimpleError::new(1, f))
-                        };
+                    Err(error) => {
+                        if self.quiet {
+                            return Err(ExitCode::new(1));
+                        }
+                        if let Some(args) = &self.args
+                            && error.render(
+                                args,
+                                &cmode_unwrapped,
+                                clause_start,
+                                &error.to_string(),
+                            )
+                        {
+                            // The diagnostic is already on stderr; exit quietly.
+                            return Err(ExitCode::new(1));
+                        }
+                        return Err(USimpleError::new(1, error.to_string()));
                     }
                 }
             }
@@ -365,6 +398,15 @@ impl Chmoder {
                 self.chmod_file_internal(path, false)
             }
         }
+    }
+
+    fn print_neither_changed(file: OsString) -> std::io::Result<()> {
+        use std::io::{Write as _, stdout};
+        writeln!(
+            stdout(),
+            "{}",
+            translate!("chmod-verbose-neither-changed", "file" => file.quote())
+        )
     }
 
     fn chmod(&self, files: &[OsString]) -> UResult<()> {
@@ -771,10 +813,7 @@ impl Chmoder {
                 // Handle dangling symlinks or other errors
                 return if file.is_symlink() && !dereference {
                     if self.verbose {
-                        println!(
-                            "neither symbolic link {} nor referent has been changed",
-                            file.quote()
-                        );
+                        Self::print_neither_changed(file.into())?;
                     }
                     Ok(()) // Skip dangling symlinks
                 } else if err.kind() == std::io::ErrorKind::PermissionDenied {
@@ -791,7 +830,17 @@ impl Chmoder {
 
         // Determine how to apply the permissions
         if let Some(mode) = self.fmode {
-            self.change_file(fperm, mode, file)?;
+            // A symlink reached without dereferencing (for example one met while
+            // walking a `-R` tree) must be left alone: chmod(2) follows the link,
+            // so changing it would change the mode of the referent, which can live
+            // outside the tree. The symbolic/numeric path below already skips it.
+            if file.is_symlink() && !dereference {
+                if self.verbose {
+                    Self::print_neither_changed(file.into())?;
+                }
+            } else {
+                self.change_file(fperm, mode, file)?;
+            }
         } else {
             // Special handling for symlinks when not dereferencing
             if file.is_symlink() && !dereference {
@@ -799,16 +848,17 @@ impl Chmoder {
                 // so changing them has no effect. We skip this operation for compatibility.
                 // Note that "chmod without dereferencing" effectively does nothing on symlinks.
                 if self.verbose {
-                    println!(
-                        "neither symbolic link {} nor referent has been changed",
-                        file.quote()
-                    );
+                    Self::print_neither_changed(file.into())?;
                 }
             } else {
                 self.change_file(fperm, new_mode, file)?;
             }
-            // if a permission would have been removed if umask was 0, but it wasn't because umask was not 0, print an error and fail
-            if (new_mode & !naively_expected_new_mode) != 0 {
+            // A bare mode such as `-w` is umask-relative, so the umask can keep permissions that
+            // the user asked to drop. GNU reports that as an error, but only when the mode was
+            // written in the option-like form (`chmod -w f`), where it doubles as a hint that the
+            // argument was consumed as a mode. After `--` the operand is unambiguous and GNU stays
+            // silent, so the diagnostic is suppressed here too.
+            if self.option_like_mode && (new_mode & !naively_expected_new_mode) != 0 {
                 return Err(ChmodError::NewPermissions(
                     file.into(),
                     display_permissions_unix(new_mode, false),

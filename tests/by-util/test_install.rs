@@ -2935,6 +2935,19 @@ fn test_install_proc_self_mem_as_dst() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_install_dev_full_as_dst() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("/dev/null")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("cannot remove '/dev/full'");
+}
+
+#[test]
 fn test_install_backup_nil_same_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3056,4 +3069,47 @@ fn test_install_backup_custom_suffix_refuses() {
         .fails()
         .stderr_contains("might destroy source");
     assert_eq!(at.read("a.bak"), "source content");
+}
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+mod diagnostics {
+    use super::*;
+    /// Column of the caret in a report header such as `[ install:1:8 ]`.
+    fn caret_column(stderr: &str) -> Option<usize> {
+        let header = stderr.lines().find(|line| line.contains("install:1:"))?;
+        let column = header.rsplit(':').next()?;
+        column.trim_end_matches(" ]").parse().ok()
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(caret_column(stderr), Some(8), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        // The test harness pipes stderr, so the report must not appear.
+        let result = ucmd
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("install: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
 }

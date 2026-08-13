@@ -3,21 +3,24 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled
+// spell-checker:ignore (win-api) WAITABLE Waitable PHANDLER unsignaled JOBOBJECT
 // spell-checker:ignore (signals) CHLD TSTP TTIN TTOU WINCH ESRCH
-// spell-checker:ignore catchable targetable wakeup
+// spell-checker:ignore catchable targetable wakeup unreaped pids LUID luid
 
-//! Windows emulation of POSIX signal delivery for child processes.
+//! Windows emulation of POSIX signal delivery, for child processes, arbitrary
+//! pids ([`send_signal_to_pid`]) and the caller's own process group
+//! ([`send_signal_to_own_group`]).
 //!
 //! Windows has no signals, so this module emulates the POSIX default
 //! dispositions with native primitives: signal numbers follow the Linux
 //! layout (matching `uucore::signals::ALL_SIGNALS`), "terminate" signals
 //! force-exit with exit code `128 + n`, and `INT`/`QUIT` map to a
 //! `CTRL_BREAK_EVENT` on a console process group. [`Job`] gives process-tree
-//! termination, and [`enable_ctrl_forwarding`]/[`take_last_ctrl_signal`]
-//! surface console control events (Ctrl-C, Ctrl-Break, close) as POSIX signal
-//! numbers for forwarding. All raw Win32 calls live in the safe [`sys`]
-//! wrappers.
+//! termination, [`send_signal_to_own_group`] uses the job the caller runs in
+//! as the stand-in for a process group, and
+//! [`enable_ctrl_forwarding`]/[`take_last_ctrl_signal`] surface console
+//! control events (Ctrl-C, Ctrl-Break, close) as POSIX signal numbers for
+//! forwarding. All raw Win32 calls live in the safe [`sys`] wrappers.
 
 use std::io;
 use std::os::windows::io::{AsHandle, BorrowedHandle, OwnedHandle};
@@ -26,32 +29,46 @@ use std::sync::OnceLock;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
+use windows_sys::Win32::Foundation::ERROR_ACCESS_DENIED;
 use windows_sys::Win32::System::Console::{CTRL_BREAK_EVENT, CTRL_C_EVENT, CTRL_CLOSE_EVENT};
-use windows_sys::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, INFINITE};
+use windows_sys::Win32::System::Threading::{
+    CREATE_NEW_PROCESS_GROUP, INFINITE, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+};
 use windows_sys::core::BOOL;
 
 use super::{ChildExt, TimeoutRet};
+use crate::translate;
 
 /// Safe wrappers around the raw Win32 calls used for process control: each
 /// validates results into [`io::Error`] and takes
 /// [`BorrowedHandle`]/[`OwnedHandle`] so callers never touch raw `HANDLE`s.
 pub mod sys {
     use std::io;
-    use std::os::windows::io::{AsRawHandle, BorrowedHandle, HandleOrNull, OwnedHandle};
+    use std::mem::offset_of;
+    use std::os::windows::io::{
+        AsRawHandle, BorrowedHandle, FromRawHandle, HandleOrNull, OwnedHandle,
+    };
 
     use windows_sys::Win32::Foundation::{
-        FALSE, HANDLE, TRUE, WAIT_FAILED, WAIT_OBJECT_0, WAIT_TIMEOUT,
+        ERROR_INVALID_PARAMETER, ERROR_MORE_DATA, FALSE, HANDLE, LUID, TRUE, WAIT_FAILED,
+        WAIT_OBJECT_0, WAIT_TIMEOUT,
+    };
+    use windows_sys::Win32::Security::{
+        AdjustTokenPrivileges, LUID_AND_ATTRIBUTES, LookupPrivilegeValueW, SE_DEBUG_NAME,
+        SE_PRIVILEGE_ENABLED, TOKEN_ADJUST_PRIVILEGES, TOKEN_PRIVILEGES,
     };
     use windows_sys::Win32::System::Console::{
         GenerateConsoleCtrlEvent, PHANDLER_ROUTINE, SetConsoleCtrlHandler,
     };
     use windows_sys::Win32::System::JobObjects::{
-        AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject,
+        AssignProcessToJobObject, CreateJobObjectW, IsProcessInJob,
+        JOBOBJECT_BASIC_PROCESS_ID_LIST, JobObjectBasicProcessIdList, QueryInformationJobObject,
+        TerminateJobObject,
     };
     use windows_sys::Win32::System::Threading::{
-        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW, ResetEvent,
-        SetEvent, SetWaitableTimer, TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects,
-        WaitForSingleObject,
+        CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, CreateEventW, CreateWaitableTimerExW,
+        GetCurrentProcess, OpenProcess, OpenProcessToken, ResetEvent, SetEvent, SetWaitableTimer,
+        TIMER_ALL_ACCESS, TerminateProcess, WaitForMultipleObjects, WaitForSingleObject,
     };
     use windows_sys::core::BOOL;
 
@@ -62,6 +79,13 @@ pub mod sys {
         Object(u32),
         /// The wait interval elapsed first.
         TimedOut,
+    }
+
+    /// The outcome of listing the processes assigned to a job.
+    #[derive(Debug)]
+    pub enum JobProcessIds {
+        Complete(Vec<u32>),
+        Truncated,
     }
 
     /// Convert a Win32 `BOOL` result into an [`io::Result`]: zero (`FALSE`)
@@ -110,11 +134,158 @@ pub mod sys {
         cvt(unsafe { TerminateJobObject(job.as_raw_handle() as HANDLE, exit_code) })
     }
 
+    /// One slot on 64-bit, two on 32-bit.
+    const PID_LIST_HEADER_SLOTS: usize =
+        offset_of!(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList) / size_of::<usize>();
+
+    // `ProcessIdList` is a variable-length trailing array, so its buffers are
+    // allocated as `usize` slices: aligned for the struct by construction, and
+    // readable with bounds-checked indexing rather than pointer arithmetic.
+    // A target where that stops holding is a compile error, not run-time UB.
+    const _: () = assert!(
+        align_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>() == align_of::<usize>()
+            && offset_of!(JOBOBJECT_BASIC_PROCESS_ID_LIST, ProcessIdList) % size_of::<usize>() == 0
+    );
+
+    /// Whether the calling process runs inside any job object.
+    ///
+    /// A null job handle asks "in *a* job", not "in *this* job". Needed
+    /// because the code a job-less caller gets from
+    /// [`query_job_process_ids`] is undocumented.
+    pub fn is_process_in_job() -> io::Result<bool> {
+        let mut in_job: BOOL = FALSE;
+        // SAFETY: the current-process pseudo-handle is always valid, a null
+        // job handle is documented as "any job", and `in_job` is an out-param
+        // valid for the duration of the call.
+        cvt(unsafe { IsProcessInJob(GetCurrentProcess(), std::ptr::null_mut(), &raw mut in_job) })?;
+        Ok(in_job != FALSE)
+    }
+
+    /// List the processes assigned to `job`, with room for `capacity` of them;
+    /// `None` means the job the calling process itself belongs to.
+    ///
+    /// `None` is the only way to reach one's own job — a process cannot open a
+    /// handle to it — and it addresses the immediate job when jobs are nested,
+    /// whose list still covers that job's child jobs. It fails when the caller
+    /// is in no job at all, so check [`is_process_in_job`] first. Truncation
+    /// reports nothing but the fact: the counts and returned length are all
+    /// zero on that path on some Windows 10 builds, so only the caller can
+    /// pick a retry size.
+    pub fn query_job_process_ids(
+        job: Option<BorrowedHandle>,
+        capacity: usize,
+    ) -> io::Result<JobProcessIds> {
+        // `max(1)` keeps the buffer at least one whole struct wide.
+        let mut buffer = vec![0usize; PID_LIST_HEADER_SLOTS + capacity.max(1)];
+        let length = u32::try_from(buffer.len() * size_of::<usize>())
+            .map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))?;
+        let job = job.map_or(std::ptr::null_mut(), |job| job.as_raw_handle());
+        // SAFETY: `job` is null or a valid handle for the duration of the
+        // call; `buffer` is a live `usize` allocation of exactly `length`
+        // bytes, so it is aligned for the struct and as large as we claim; a
+        // null return-length pointer is documented as valid.
+        let result = unsafe {
+            QueryInformationJobObject(
+                job,
+                JobObjectBasicProcessIdList,
+                buffer.as_mut_ptr().cast(),
+                length,
+                std::ptr::null_mut(),
+            )
+        };
+        match cvt(result) {
+            Ok(()) => Ok(JobProcessIds::Complete(process_ids(&buffer))),
+            // How this info class reports STATUS_BUFFER_OVERFLOW.
+            Err(error) if error.raw_os_error() == Some(ERROR_MORE_DATA as i32) => {
+                Ok(JobProcessIds::Truncated)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn process_ids(buffer: &[usize]) -> Vec<u32> {
+        debug_assert!(buffer.len() > PID_LIST_HEADER_SLOTS);
+        // SAFETY: `buffer` is a `usize` allocation at least one whole
+        // `JOBOBJECT_BASIC_PROCESS_ID_LIST` long (its two counts plus one pid
+        // slot), so the read is aligned and in bounds, and every field is an
+        // integer, so any bit pattern read back is a valid value.
+        let header = unsafe {
+            buffer
+                .as_ptr()
+                .cast::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()
+                .read()
+        };
+        buffer[PID_LIST_HEADER_SLOTS..]
+            .iter()
+            .take(header.NumberOfProcessIdsInList as usize)
+            // Pids are `ULONG_PTR`-wide but always fit a `DWORD`, and zero
+            // names no process.
+            .filter_map(|&pid| u32::try_from(pid).ok())
+            .filter(|&pid| pid != 0)
+            .collect()
+    }
+
     /// Terminate the process behind `process` with the given exit code.
     pub fn terminate_process(process: BorrowedHandle, exit_code: u32) -> io::Result<()> {
         // SAFETY: the process handle is valid for the duration of the call;
         // terminating an already-exited process fails cleanly.
         cvt(unsafe { TerminateProcess(process.as_raw_handle() as HANDLE, exit_code) })
+    }
+
+    /// Open `pid` with exactly `desired_access`; the handle is non-inheritable.
+    ///
+    /// Dead, never-allocated and idle (0) pids report `ERROR_INVALID_PARAMETER`,
+    /// reported here as the POSIX ESRCH analog. `ERROR_ACCESS_DENIED` stays raw:
+    /// its kind already renders "Permission denied", like unix EPERM.
+    pub fn open_process(pid: u32, desired_access: u32) -> io::Result<OwnedHandle> {
+        // SAFETY: OpenProcess returns null on failure, otherwise a fresh
+        // handle owned by us — the `cvt_created_handle` contract.
+        unsafe { cvt_created_handle(OpenProcess(desired_access, FALSE, pid)) }.map_err(|error| {
+            if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) {
+                super::no_such_process()
+            } else {
+                error
+            }
+        })
+    }
+
+    /// Request `SeDebugPrivilege` in this process's token.
+    ///
+    /// `Ok` does not mean the privilege is now enabled: `AdjustTokenPrivileges`
+    /// succeeds for a token that does not hold it too, reporting that only
+    /// through `GetLastError`.
+    pub fn enable_debug_privilege() -> io::Result<()> {
+        let mut token: HANDLE = std::ptr::null_mut();
+        // SAFETY: the pseudo-handle is always valid; `token` is an out-param.
+        cvt(unsafe {
+            OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES, &raw mut token)
+        })?;
+        // SAFETY: OpenProcessToken succeeded, so `token` is a fresh owned handle.
+        let token = unsafe { OwnedHandle::from_raw_handle(token) };
+
+        let mut luid = LUID::default();
+        // SAFETY: a null system name means the local system; `luid` is an out-param.
+        cvt(unsafe { LookupPrivilegeValueW(std::ptr::null(), SE_DEBUG_NAME, &raw mut luid) })?;
+
+        let privileges = TOKEN_PRIVILEGES {
+            PrivilegeCount: 1,
+            Privileges: [LUID_AND_ATTRIBUTES {
+                Luid: luid,
+                Attributes: SE_PRIVILEGE_ENABLED,
+            }],
+        };
+        // SAFETY: `privileges` outlives the call; a null previous-state pointer
+        // is documented as valid.
+        cvt(unsafe {
+            AdjustTokenPrivileges(
+                token.as_raw_handle(),
+                FALSE,
+                &raw const privileges,
+                0,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        })
     }
 
     /// Create an unnamed manual-reset event, initially unsignaled.
@@ -299,6 +470,147 @@ pub fn send_signal_to_process(child: &Child, signal: usize) -> io::Result<()> {
             terminate_with_signal(child.as_handle(), signal)
         }
     }
+}
+
+const PROBE_ACCESS: u32 = PROCESS_SYNCHRONIZE;
+// SYNCHRONIZE tells "already exited" apart from a real denial after a failed
+// TerminateProcess (both report ERROR_ACCESS_DENIED).
+const TERMINATE_ACCESS: u32 = PROCESS_TERMINATE | PROCESS_SYNCHRONIZE;
+
+fn no_such_process() -> io::Error {
+    io::Error::new(io::ErrorKind::NotFound, translate!("error-no-such-process"))
+}
+
+/// A process handle becomes signaled when the process exits.
+fn has_exited(handle: BorrowedHandle) -> io::Result<bool> {
+    Ok(matches!(
+        sys::wait_for_one(handle, 0)?,
+        sys::WaitOutcome::Object(_)
+    ))
+}
+
+/// Request `SeDebugPrivilege` once per process; with it, opening a process
+/// bypasses the target's security descriptor.
+///
+/// Silent and best-effort: only an elevated administrator's token holds the
+/// privilege, and tokens without it are left untouched.
+pub fn enable_debug_privilege() {
+    static REQUESTED: OnceLock<()> = OnceLock::new();
+    REQUESTED.get_or_init(|| {
+        let _ = sys::enable_debug_privilege();
+    });
+}
+
+/// Deliver `signal` (POSIX numbering) to the arbitrary process `pid`,
+/// emulating `kill(2)` for `pid > 0`.
+pub fn send_signal_to_pid(pid: u32, signal: usize) -> io::Result<()> {
+    match disposition(signal)? {
+        Disposition::Probe | Disposition::Ignore => probe_pid(pid),
+        Disposition::Interrupt | Disposition::Terminate => terminate_pid(pid, signal),
+    }
+}
+
+/// Ok while `pid` runs, "No such process" once it has exited, even if open
+/// handles still pin its pid.
+fn probe_pid(pid: u32) -> io::Result<()> {
+    let handle = sys::open_process(pid, PROBE_ACCESS)?;
+    if has_exited(handle.as_handle())? {
+        return Err(no_such_process());
+    }
+    Ok(())
+}
+
+fn terminate_pid(pid: u32, signal: usize) -> io::Result<()> {
+    let handle = sys::open_process(pid, TERMINATE_ACCESS)?;
+    match terminate_with_signal(handle.as_handle(), signal) {
+        // An already-exited target also reports ERROR_ACCESS_DENIED; it
+        // counts as delivered, like unix kill on an unreaped process.
+        Err(e)
+            if e.raw_os_error() == Some(ERROR_ACCESS_DENIED as i32)
+                && has_exited(handle.as_handle()).unwrap_or(false) =>
+        {
+            Ok(())
+        }
+        result => result,
+    }
+}
+
+/// Pids in the first attempt at listing a job, doubling up to [`JOB_PID_MAX`].
+///
+/// A job whose list does not fit can report a zero size to retry with
+/// (Windows 10, notably under WOW64), so the growth cannot be driven by the
+/// kernel's numbers.
+const JOB_PID_CAPACITY: usize = 64;
+const JOB_PID_MAX: usize = 128 * 1024;
+
+fn job_process_ids(job: Option<BorrowedHandle>) -> io::Result<Vec<u32>> {
+    let mut capacity = JOB_PID_CAPACITY;
+    while capacity <= JOB_PID_MAX {
+        match sys::query_job_process_ids(job, capacity)? {
+            sys::JobProcessIds::Complete(pids) => return Ok(pids),
+            sys::JobProcessIds::Truncated => capacity *= 2,
+        }
+    }
+    Err(io::Error::other(format!(
+        "job process list did not fit in {JOB_PID_MAX} entries"
+    )))
+}
+
+/// `members` with `own_pid` present exactly once, at the end, so a terminating
+/// signal reaches every other member before it kills this process.
+///
+/// Split out because an empty `members` *is* the job-less case, which no test
+/// can reproduce by spawning (a child created with `CREATE_BREAKAWAY_FROM_JOB`
+/// leaves only its immediate job; an ancestor job still claims it).
+fn with_self_last(mut members: Vec<u32>, own_pid: u32) -> Vec<u32> {
+    members.retain(|&pid| pid != own_pid);
+    members.push(own_pid);
+    members
+}
+
+/// Deliver `signal` to `pids` in order, succeeding if any one delivery did.
+///
+/// Reports the first failure rather than the last, since later ones can be
+/// consequences of earlier deliveries.
+fn send_signal_to_each(pids: &[u32], signal: usize) -> io::Result<()> {
+    let mut delivered = false;
+    let mut first_error = None;
+    for &pid in pids {
+        match send_signal_to_pid(pid, signal) {
+            Ok(()) => delivered = true,
+            Err(error) => {
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    if delivered {
+        Ok(())
+    } else {
+        Err(first_error.unwrap_or_else(no_such_process))
+    }
+}
+
+/// Deliver `signal` (POSIX numbering) to every process in the caller's own
+/// process group, emulating `kill(2)` for `pid == 0`.
+///
+/// The group is the caller's job object, which is broader than a POSIX process
+/// group: a terminal, IDE or CI agent that runs this process inside a job puts
+/// everything else it manages in the same group. A process in no job is a
+/// group of one. This process is signalled last, so a terminating signal ends
+/// it with exit code `128 + signal` instead of returning.
+///
+/// Like `kill(0, sig)`, succeeds as soon as one member was signalled: members
+/// this process may not touch, and members that exit between enumeration and
+/// delivery, do not fail the call.
+pub fn send_signal_to_own_group(signal: usize) -> io::Result<()> {
+    // Fail fast, before enumerating anything.
+    disposition(signal)?;
+    let members = if sys::is_process_in_job()? {
+        job_process_ids(None)?
+    } else {
+        Vec::new()
+    };
+    send_signal_to_each(&with_self_last(members, std::process::id()), signal)
 }
 
 /// Deliver `signal` (POSIX numbering) to the console process group led by
@@ -550,6 +862,14 @@ mod tests {
         )
     }
 
+    fn spawn_child() -> Child {
+        Command::new("ping")
+            .args(["-n", "10", "127.0.0.1"])
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap()
+    }
+
     /// `LAST_CTRL_SIGNAL` and `WAKE_EVENT` are process-global, so every phase
     /// runs inside this single test to keep them free of cross-test races
     /// (cargo runs tests on parallel threads).
@@ -583,11 +903,7 @@ mod tests {
         // Phase 5: `wait_or_timeout` consumes a latched console event: it
         // returns `Interrupted` promptly with the child still running, and
         // leaves latch and event clear so they cannot satisfy a later wait.
-        let mut child = Command::new("ping")
-            .args(["-n", "10", "127.0.0.1"])
-            .stdout(Stdio::null())
-            .spawn()
-            .unwrap();
+        let mut child = spawn_child();
         // SAFETY: as above.
         assert_eq!(unsafe { console_ctrl_handler(CTRL_C_EVENT) }, 1);
         let started = Instant::now();
@@ -600,5 +916,131 @@ mod tests {
         assert!(!wake_event_signaled());
         child.kill().unwrap();
         child.wait().unwrap();
+    }
+
+    // The send_signal_to_pid tests touch no process-global state (unlike the
+    // ctrl-forwarding lifecycle above), so they can run in parallel.
+
+    #[test]
+    fn send_signal_to_pid_terminates_with_128_plus_signal() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 15).unwrap();
+        assert_eq!(child.wait().unwrap().code(), Some(143));
+    }
+
+    #[test]
+    fn send_signal_to_pid_probe_ignore_and_exited_semantics() {
+        let mut child = spawn_child();
+        send_signal_to_pid(child.id(), 0).unwrap();
+        send_signal_to_pid(child.id(), 17).unwrap();
+        assert!(child.try_wait().unwrap().is_none(), "CHLD must be a no-op");
+
+        child.kill().unwrap();
+        child.wait().unwrap();
+        // `child` still holds the process handle, pinning the pid: the checks
+        // below cannot race a pid reuse.
+        // The message text is asserted end-to-end in tests/by-util/test_kill.rs;
+        // unit tests run without localization initialized.
+        let err = send_signal_to_pid(child.id(), 0).unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::NotFound);
+        send_signal_to_pid(child.id(), 9).unwrap();
+    }
+
+    #[test]
+    fn send_signal_to_pid_rejects_invalid_signal_before_any_open() {
+        assert_eq!(
+            send_signal_to_pid(std::process::id(), 64)
+                .unwrap_err()
+                .kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    #[test]
+    fn enable_debug_privilege_is_silent_whether_or_not_the_token_holds_it() {
+        enable_debug_privilege();
+        enable_debug_privilege();
+    }
+
+    #[test]
+    fn send_signal_to_pid_reports_idle_pid_as_missing() {
+        // OpenProcess rejects the System Idle Process like any pid that names
+        // no process.
+        assert_eq!(
+            send_signal_to_pid(0, 9).unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+    }
+
+    // Nothing below assigns the *current* process to a job: joining one is
+    // irreversible and process-global, so it would rewrite what every other
+    // test in this binary sees (cargo runs them on parallel threads) — the same
+    // hazard that forces the ctrl-forwarding phases into a single test above.
+    //
+    // For the same reason, never pass a terminating signal to
+    // `send_signal_to_own_group` here: this process's group is whatever job the
+    // test runner provides. That path is covered in tests/by-util/test_kill.rs,
+    // inside a job the test creates itself.
+
+    #[test]
+    fn with_self_last_puts_this_process_exactly_once_at_the_end() {
+        // Empty members *is* the job-less case.
+        assert_eq!(with_self_last(vec![], 7), vec![7]);
+        assert_eq!(with_self_last(vec![3, 7], 7), vec![3, 7]);
+        assert_eq!(with_self_last(vec![7, 3, 5], 7), vec![3, 5, 7]);
+        // Listed twice, signalled once, so the loop cannot kill itself early.
+        assert_eq!(with_self_last(vec![7, 3, 7], 7), vec![3, 7]);
+    }
+
+    /// Also the canary for `QueryInformationJobObject(NULL, ...)`: if the
+    /// null-handle query were ever denied inside a job we do not own, this
+    /// fails on CI instead of `kill 0` failing in the field.
+    #[test]
+    fn send_signal_to_own_group_probe_and_ignore_are_no_ops() {
+        let mut child = spawn_child();
+        send_signal_to_own_group(0).unwrap();
+        send_signal_to_own_group(17).unwrap();
+        assert!(
+            child.try_wait().unwrap().is_none(),
+            "the group probe terminated a process"
+        );
+        child.kill().unwrap();
+        child.wait().unwrap();
+    }
+
+    #[test]
+    fn send_signal_to_own_group_rejects_invalid_signal_before_enumerating() {
+        assert_eq!(
+            send_signal_to_own_group(64).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
+    }
+
+    /// Against a job whose membership we control; the caller's own job (`None`)
+    /// is whatever the machine running the tests happens to provide.
+    #[test]
+    fn job_process_ids_lists_members_and_reports_truncation() {
+        let job = Job::new().unwrap();
+        let mut children = [spawn_child(), spawn_child()];
+        for child in &children {
+            job.assign(child).unwrap();
+        }
+        let handle = job.0.as_handle();
+
+        let pids = job_process_ids(Some(handle)).unwrap();
+        for child in &children {
+            assert!(pids.contains(&child.id()));
+        }
+
+        // Two processes cannot fit a one-pid buffer.
+        assert!(matches!(
+            sys::query_job_process_ids(Some(handle), 1).unwrap(),
+            sys::JobProcessIds::Truncated
+        ));
+
+        for child in &mut children {
+            child.kill().unwrap();
+            child.wait().unwrap();
+        }
     }
 }

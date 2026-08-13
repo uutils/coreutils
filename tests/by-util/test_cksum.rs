@@ -3489,7 +3489,7 @@ fn test_locale_aware_error_filename_escaping() {
     // 'Ã' is valid UTF-8, invalid ASCII.
     let filename = "file_Ã";
 
-    // The characted is valid and not escaped in UTF-8
+    // The character is valid and not escaped in UTF-8
     new_ucmd!()
         .env("LC_ALL", "en_US.UTF-8")
         .arg(filename)

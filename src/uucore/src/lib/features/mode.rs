@@ -7,21 +7,124 @@
 
 // spell-checker:ignore (vars) fperm srwx
 
+use std::fmt::{self, Display};
+use std::ops::Range;
+
 #[cfg(windows)]
 use libc::umask;
 
 use crate::translate;
 
-pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Result<u32, String> {
+/// A mode string that does not parse, and the part of it that is at fault.
+///
+/// `span` is a byte range inside the mode string that was handed to the parser,
+/// so that a caller can point a caret at the one clause — often the one
+/// character — that broke it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModeError {
+    pub message: String,
+    pub span: Range<usize>,
+    pub kind: ModeErrorKind,
+}
+
+/// What went wrong, for callers that want to say more than the message does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeErrorKind {
+    /// Something other than `+`, `-` or `=` where an operator was expected.
+    InvalidOperator,
+    /// Who the clause applies to, and then nothing.
+    MissingOperator,
+    /// A numeric mode that is not octal, or is out of range.
+    InvalidNumber,
+}
+
+impl ModeError {
+    fn new(message: String, span: Range<usize>, kind: ModeErrorKind) -> Self {
+        Self {
+            message,
+            span,
+            kind,
+        }
+    }
+
+    /// Move the range so that it is relative to a string starting `offset`
+    /// bytes earlier.
+    fn shift(self, offset: usize) -> Self {
+        Self {
+            span: self.span.start + offset..self.span.end + offset,
+            ..self
+        }
+    }
+
+    /// Render this error against `args`, with a caret under the part of the
+    /// mode that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `args` - The argument list the mode came from.
+    /// * `mode` - The whole mode operand.
+    /// * `clause_start` - Where the clause that failed begins inside `mode`,
+    ///   since a mode is parsed one comma-separated clause at a time.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when the mode cannot be found among the arguments, in which case
+    /// the caller should fall back to the plain one-line message.
+    pub fn render(
+        &self,
+        args: &[std::ffi::OsString],
+        mode: &str,
+        clause_start: usize,
+        message: &str,
+    ) -> bool {
+        let label = match self.kind {
+            ModeErrorKind::InvalidOperator => "mode-diag-label-invalid-operator",
+            ModeErrorKind::MissingOperator => "mode-diag-label-missing-operator",
+            ModeErrorKind::InvalidNumber => "mode-diag-label-invalid-number",
+        };
+
+        crate::diagnostics::Snapshot::new(args).render_inside(
+            mode,
+            clause_start + self.span.start..clause_start + self.span.end,
+            message,
+            &translate!(label),
+            Some(&translate!("mode-diag-help-syntax")),
+        )
+    }
+}
+
+impl Display for ModeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ModeError {}
+
+pub fn parse_numeric(fperm: u32, mode: &str, considering_dir: bool) -> Result<u32, ModeError> {
+    let original = mode;
     let (op, pos) = parse_op(mode).map_or_else(|_| (None, 0), |(op, pos)| (Some(op), pos));
-    mode = mode[pos..].trim();
+    let digits = mode[pos..].trim();
+    let mode = digits;
     let change = if mode.is_empty() {
         0
     } else {
-        u32::from_str_radix(mode, 8).map_err(|e| e.to_string())?
+        let at = original.len() - original.trim_end().len();
+        u32::from_str_radix(mode, 8).map_err(|e| {
+            ModeError::new(
+                e.to_string(),
+                pos..original.len() - at,
+                ModeErrorKind::InvalidNumber,
+            )
+        })?
     };
     if change > 0o7777 {
-        Err(format!("mode is too large ({change:o} > 7777)"))
+        Err(ModeError::new(
+            format!("mode is too large ({change:o} > 7777)"),
+            0..original.len(),
+            ModeErrorKind::InvalidNumber,
+        ))
     } else {
         Ok(match op {
             Some('+') => fperm | change,
@@ -37,18 +140,28 @@ pub fn parse_numeric(fperm: u32, mut mode: &str, considering_dir: bool) -> Resul
 
 pub fn parse_symbolic(
     mut fperm: u32,
-    mut mode: &str,
+    mode: &str,
     umask: u32,
     considering_dir: bool,
-) -> Result<u32, String> {
+) -> Result<u32, ModeError> {
+    let original = mode;
+    // Everything below is a suffix of `original`, so how much is left is also
+    // where we are.
+    let at = |rest: &str| original.len() - rest.len();
+
     let (mask, pos) = parse_levels(mode);
     if pos == mode.len() {
-        return Err(format!("invalid mode ({mode})"));
+        // Who the clause applies to, and then nothing: no operator followed.
+        return Err(ModeError::new(
+            format!("invalid mode ({mode})"),
+            0..mode.len(),
+            ModeErrorKind::MissingOperator,
+        ));
     }
     let respect_umask = pos == 0;
-    mode = &mode[pos..];
+    let mut mode = &mode[pos..];
     while !mode.is_empty() {
-        let (op, pos) = parse_op(mode)?;
+        let (op, pos) = parse_op(mode).map_err(|err| err.shift(at(mode)))?;
         mode = &mode[pos..];
         let (mut srwx, pos) = parse_change(mode, fperm, considering_dir);
         if respect_umask {
@@ -90,14 +203,21 @@ fn parse_levels(mode: &str) -> (u32, usize) {
     (mask, pos)
 }
 
-fn parse_op(mode: &str) -> Result<(char, usize), String> {
-    let ch = mode
-        .chars()
-        .next()
-        .ok_or_else(|| translate!("mode-error-unexpected-end"))?;
+fn parse_op(mode: &str) -> Result<(char, usize), ModeError> {
+    let Some(ch) = mode.chars().next() else {
+        return Err(ModeError::new(
+            translate!("mode-error-unexpected-end"),
+            0..0,
+            ModeErrorKind::MissingOperator,
+        ));
+    };
     match ch {
         '+' | '-' | '=' => Ok((ch, 1)),
-        _ => Err(translate!("mode-error-invalid-operator", "operator" => ch)),
+        _ => Err(ModeError::new(
+            translate!("mode-error-invalid-operator", "operator" => ch),
+            0..ch.len_utf8(),
+            ModeErrorKind::InvalidOperator,
+        )),
     }
 }
 
@@ -145,28 +265,34 @@ pub fn parse_chmod(
     mode_string: &str,
     considering_dir: bool,
     umask: u32,
-) -> Result<u32, String> {
+) -> Result<u32, ModeError> {
     let mut new_mode: u32 = current_mode;
 
     // Split by commas and process each mode part sequentially
-    for mode_part in mode_string.split(',') {
-        let mode_part = mode_part.trim();
+    let mut offset = 0;
+    for raw_part in mode_string.split(',') {
+        let start = offset + (raw_part.len() - raw_part.trim_start().len());
+        // Past the part and the comma that followed it.
+        offset += raw_part.len() + 1;
+
+        let mode_part = raw_part.trim();
         if mode_part.is_empty() {
             continue;
         }
 
         new_mode = if mode_part.chars().any(|c| c.is_ascii_digit()) {
-            parse_numeric(new_mode, mode_part, considering_dir)?
+            parse_numeric(new_mode, mode_part, considering_dir)
         } else {
-            parse_symbolic(new_mode, mode_part, umask, considering_dir)?
-        };
+            parse_symbolic(new_mode, mode_part, umask, considering_dir)
+        }
+        .map_err(|err| err.shift(start))?;
     }
 
     Ok(new_mode)
 }
 
 /// Takes a user-supplied string and tries to parse to u32 mode bitmask.
-pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, String> {
+pub fn parse(mode_string: &str, considering_dir: bool, umask: u32) -> Result<u32, ModeError> {
     parse_chmod(0, mode_string, considering_dir, umask)
 }
 
