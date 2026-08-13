@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (formats) cymdhm cymdhms datetime mdhm mdhms mktime strtime ymdhm ymdhms
+// spell-checker:ignore (formats) cymdhm cymdhms datetime filestat mdhm mdhms mktime preopen strtime tzdb ymdhm ymdhms
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
@@ -166,6 +166,10 @@ fn test_touch_2_digit_years_2038() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_2_digit_years_69() {
     // 69 and after are 19xx
     let (at, mut ucmd) = at_and_ucmd!();
@@ -623,6 +627,10 @@ fn test_touch_set_date7() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
 fn test_touch_set_date_without_leading_zeroes() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_set_date_without_leading_zeroes";
@@ -645,7 +653,11 @@ fn test_touch_set_date_without_leading_zeroes() {
 /// expected by the old nix-based implementation. After switching to rustix
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";
@@ -780,6 +792,10 @@ fn test_touch_mtime_dst_succeeds() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so DST validation is skipped"
+)]
 fn test_touch_mtime_dst_fails() {
     let file = "test_touch_set_mtime_dst_fails";
 
@@ -797,6 +813,10 @@ fn test_touch_mtime_dst_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
 fn test_touch_system_fails() {
     let file = "/";
     new_ucmd!()
@@ -874,6 +894,7 @@ fn test_touch_no_such_file_error_msg() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -896,6 +917,10 @@ fn test_touch_changes_time_of_file_in_stdout() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
+)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1016,6 +1041,7 @@ fn test_touch_no_dereference_dangling() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_dash() {
     new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
 }
@@ -1124,6 +1150,7 @@ fn test_touch_f_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_touch_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1140,6 +1167,7 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
@@ -1155,6 +1183,10 @@ fn test_touch_device_files() {
 // check in util/check-safe-traversal.sh.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_does_not_truncate_symlink_target() {
     use std::os::unix::fs::symlink;
 
@@ -1170,6 +1202,10 @@ fn test_touch_does_not_truncate_symlink_target() {
 // Touching a dangling symlink creates its target as an empty file, like GNU.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_through_dangling_symlink_creates_target() {
     use std::os::unix::fs::symlink;
 

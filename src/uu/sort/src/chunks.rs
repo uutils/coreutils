@@ -9,10 +9,11 @@
 #![allow(dead_code)]
 // Ignores non-used warning for `borrow_buffer` in `Chunk`
 
+#[cfg(not(wasi_no_threads))]
+use std::sync::mpsc::SyncSender;
 use std::{
     io::{ErrorKind, Read},
     ops::Range,
-    sync::mpsc::SyncSender,
 };
 
 use memchr::memchr_iter;
@@ -157,30 +158,13 @@ impl RecycledChunk {
     }
 }
 
-/// Read a chunk, parse lines and send them.
+/// Read a chunk from the input, parse lines, and return it directly.
 ///
-/// No empty chunk will be sent. If we reach the end of the input, `false` is returned.
-/// However, if this function returns `true`, it is not guaranteed that there is still
-/// input left: If the input fits _exactly_ into a buffer, we will only notice that there's
-/// nothing more to read at the next invocation. In case there is no input left, nothing will
-/// be sent.
-///
-/// # Arguments
-///
-/// (see also `read_to_chunk` for a more detailed documentation)
-///
-/// * `sender`: The sender to send the lines to the sorter.
-/// * `recycled_chunk`: The recycled chunk, as returned by `Chunk::recycle`.
-///   (i.e. `buffer.len()` should be equal to `buffer.capacity()`)
-/// * `max_buffer_size`: How big `buffer` can be.
-/// * `carry_over`: The bytes that must be carried over in between invocations.
-/// * `file`: The current file.
-/// * `next_files`: What `file` should be updated to next.
-/// * `separator`: The line separator.
-/// * `settings`: The global settings.
+/// Returns `(Some(chunk), should_continue)` if data was read, or
+/// `(None, false)` if the input was empty. The `should_continue` flag
+/// indicates whether more data may remain.
 #[allow(clippy::too_many_arguments)]
-pub fn read<T: Read>(
-    sender: &SyncSender<Chunk>,
+pub fn read_to_chunk<T: Read>(
     recycled_chunk: RecycledChunk,
     max_buffer_size: Option<usize>,
     carry_over: &mut Vec<u8>,
@@ -188,7 +172,7 @@ pub fn read<T: Read>(
     next_files: &mut impl Iterator<Item = UResult<T>>,
     separator: u8,
     settings: &GlobalSettings,
-) -> UResult<bool> {
+) -> UResult<(Option<Chunk>, bool)> {
     let RecycledChunk {
         lines,
         selections,
@@ -202,7 +186,6 @@ pub fn read<T: Read>(
         mut buffer,
     } = recycled_chunk;
     if buffer.len() < carry_over.len() {
-        // Separate carry_over and copy them to avoid cost of 0 fill buffer
         buffer.extend_from_slice(&carry_over[buffer.len()..]);
     }
     buffer[..carry_over.len()].copy_from_slice(carry_over);
@@ -218,7 +201,7 @@ pub fn read<T: Read>(
     carry_over.extend_from_slice(&buffer[read..]);
 
     if read != 0 {
-        let payload: UResult<Chunk> = Chunk::try_new(buffer, |buffer| {
+        let chunk: UResult<Chunk> = Chunk::try_new(buffer, |buffer| {
             let selections = unsafe {
                 // SAFETY: It is safe to transmute to an empty vector of selections with shorter lifetime.
                 // It was only temporarily transmuted to a Vec<Line<'static>> to make recycling possible.
@@ -254,7 +237,38 @@ pub fn read<T: Read>(
                 line_count_hint,
             })
         });
-        sender.send(payload?).unwrap();
+        Ok((Some(chunk?), should_continue))
+    } else {
+        Ok((None, should_continue))
+    }
+}
+
+/// Read a chunk, parse lines and send them via channel.
+///
+/// Wrapper around [`read_to_chunk`] for the threaded code path.
+#[cfg(not(wasi_no_threads))]
+#[allow(clippy::too_many_arguments)]
+pub fn read<T: Read>(
+    sender: &SyncSender<Chunk>,
+    recycled_chunk: RecycledChunk,
+    max_buffer_size: Option<usize>,
+    carry_over: &mut Vec<u8>,
+    file: &mut T,
+    next_files: &mut impl Iterator<Item = UResult<T>>,
+    separator: u8,
+    settings: &GlobalSettings,
+) -> UResult<bool> {
+    let (chunk, should_continue) = read_to_chunk(
+        recycled_chunk,
+        max_buffer_size,
+        carry_over,
+        file,
+        next_files,
+        separator,
+        settings,
+    )?;
+    if let Some(chunk) = chunk {
+        sender.send(chunk).unwrap();
     }
     Ok(should_continue)
 }
@@ -429,34 +443,5 @@ fn read_to_buffer<T: Read>(
             }
             Err(e) => return Err(USimpleError::new(2, e.to_string())),
         }
-    }
-}
-
-/// Parse a buffer into a `ChunkContents` suitable for `Chunk::try_new`.
-/// Used by the WASI single-threaded sort path.
-#[cfg(target_os = "wasi")]
-pub fn parse_into_chunk<'a>(
-    buffer: &'a [u8],
-    separator: u8,
-    settings: &GlobalSettings,
-) -> ChunkContents<'a> {
-    let mut lines = Vec::new();
-    let mut line_data = LineData::default();
-    let mut token_buffer = Vec::new();
-    let mut line_count_hint = 0;
-    parse_lines(
-        buffer,
-        &mut lines,
-        &mut line_data,
-        &mut token_buffer,
-        &mut line_count_hint,
-        separator,
-        settings,
-    );
-    ChunkContents {
-        lines,
-        line_data,
-        token_buffer,
-        line_count_hint,
     }
 }

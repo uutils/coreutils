@@ -450,6 +450,7 @@ fn test_is_dir() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_sorted() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -481,6 +482,7 @@ fn test_sorted_check_order() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_both_inputs_out_of_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -500,6 +502,7 @@ fn test_both_inputs_out_of_order() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data")]
 fn test_both_inputs_out_of_order_last_pair() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

@@ -5,7 +5,7 @@
 
 //! Set of functions to manage regular files, special files, and links.
 
-// spell-checker:ignore backport Ioctl absolutized
+// spell-checker:ignore backport Ioctl absolutized preopen
 
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use libc::{major, makedev, minor};
@@ -232,6 +232,26 @@ pub enum ResolveMode {
 
     /// Resolve '..' elements before symlinks
     Logical,
+}
+
+/// WASI fallback used when neither `--tmp-dir` nor `TMPDIR` is set and
+/// `env::temp_dir()` would be inapplicable.
+///
+/// The WASI sandbox only exposes explicitly preopened directories, and
+/// `/tmp` is not one by default. This returns `/tmp` when a host preopen
+/// has made it visible as a directory, and the current directory otherwise
+/// — the current directory is always accessible under a preopen mapped
+/// to `/`.
+///
+/// Callers on WASI should prefer `--tmp-dir` and `TMPDIR` before falling
+/// back to this helper.
+#[cfg(target_os = "wasi")]
+pub fn wasi_default_tmp_dir() -> PathBuf {
+    if fs::metadata("/tmp").is_ok_and(|m| m.is_dir()) {
+        PathBuf::from("/tmp")
+    } else {
+        PathBuf::from(".")
+    }
 }
 
 /// Normalize a path by removing relative information
