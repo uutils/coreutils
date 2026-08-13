@@ -18,3 +18,14 @@ uname-help-machine = print the machine hardware name.
 uname-help-os = print the operating system name.
 uname-help-processor = print the processor type (non-portable)
 uname-help-hardware-platform = print the hardware platform (non-portable)
+uname-help-all-labeled = like -a, print all information but one item per line, labeled.
+
+# Labels for --all-labeled
+uname-label-kernel-name = Kernel name
+uname-label-nodename = Node name
+uname-label-kernel-release = Kernel release
+uname-label-kernel-version = Kernel version
+uname-label-machine = Machine
+uname-label-processor = Processor
+uname-label-hardware-platform = Hardware platform
+uname-label-os = Operating system
