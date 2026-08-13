@@ -395,7 +395,8 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     loop {
         line.clear();
         // reads up to and including b'\n'; returns 0 on EOF
-        let n = match reader.read_until(b'\n', &mut line) {
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) => break,
             Ok(bytes_read) => bytes_read,
             Err(err) => {
                 show_error!(
@@ -406,9 +407,6 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                 break;
             }
         };
-        if n == 0 {
-            break;
-        }
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
