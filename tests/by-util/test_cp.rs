@@ -28,7 +28,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
-#[cfg(not(windows))]
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
@@ -924,6 +923,11 @@ fn test_cp_arg_symlink() {
         .succeeds();
 
     assert!(at.is_symlink(TEST_HELLO_WORLD_DEST));
+    assert_eq!(
+        std::fs::read_link(at.plus(TEST_HELLO_WORLD_DEST)).unwrap(),
+        Path::new(TEST_HELLO_WORLD_SOURCE)
+    );
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
 }
 
 // Recursively copying a tree that contains a symlink must not run chmod through

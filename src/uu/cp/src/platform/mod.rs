@@ -33,3 +33,8 @@ pub(crate) use self::windows::copy_on_write;
 mod other;
 #[cfg(not(any(unix, target_os = "windows")))]
 pub(crate) use self::other::copy_on_write;
+
+#[cfg(target_os = "wasi")]
+mod wasi;
+#[cfg(target_os = "wasi")]
+pub(crate) use self::wasi::create_symlink;
