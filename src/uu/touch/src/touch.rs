@@ -3,10 +3,11 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) datelike datetime filetime lpszfilepath mktime strtime timelike utime DATETIME UTIME futimens
+// spell-checker:ignore (ToDO) datelike datetime filetime mktime strtime timelike utime DATETIME UTIME futimens
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT ENXIO RDONLY utimensat
 
 pub mod error;
+mod platform;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
@@ -43,6 +44,10 @@ use uucore::translate;
 use uucore::{format_usage, show};
 
 use crate::error::TouchError;
+#[cfg(not(unix))]
+use crate::platform::pathbuf_from_stdout;
+#[cfg(target_os = "wasi")]
+use crate::platform::{set_file_times, set_symlink_file_times};
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -710,47 +715,6 @@ fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> s
     futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
-/// WASI replacement for `filetime::set_file_times`.
-///
-/// The `filetime` crate has an unimplemented stub on `wasm32-wasi`. WASI
-/// supports setting both atime and mtime via `utimensat`, which we reach
-/// through `rustix`.
-#[cfg(target_os = "wasi")]
-fn set_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
-    wasi_utimensat(path, atime, mtime, false)
-}
-
-/// WASI replacement for `filetime::set_symlink_file_times`.
-#[cfg(target_os = "wasi")]
-fn set_symlink_file_times(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
-    wasi_utimensat(path, atime, mtime, true)
-}
-
-#[cfg(target_os = "wasi")]
-fn wasi_utimensat(
-    path: &Path,
-    atime: FileTime,
-    mtime: FileTime,
-    no_follow: bool,
-) -> std::io::Result<()> {
-    let timestamps = rustix::fs::Timestamps {
-        last_access: rustix::fs::Timespec {
-            tv_sec: atime.unix_seconds(),
-            tv_nsec: atime.nanoseconds() as _,
-        },
-        last_modification: rustix::fs::Timespec {
-            tv_sec: mtime.unix_seconds(),
-            tv_nsec: mtime.nanoseconds() as _,
-        },
-    };
-    let flags = if no_follow {
-        rustix::fs::AtFlags::SYMLINK_NOFOLLOW
-    } else {
-        rustix::fs::AtFlags::empty()
-    };
-    rustix::fs::utimensat(rustix::fs::CWD, path, &timestamps, flags).map_err(Error::from)
-}
-
 /// Get metadata of the provided path
 /// If `follow` is `true`, the function will try to follow symlinks. Errors if the symlink is dangling, otherwise defaults to symlink metadata.
 /// If `follow` is `false`, the function will return metadata of the symlink itself
@@ -939,83 +903,17 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     Ok(timestamp_to_filetime(local.timestamp()))
 }
 
-// TODO: this may be a good candidate to put in fsext.rs
 /// Returns a [`PathBuf`] to stdout.
-///
-/// On Windows, uses `GetFinalPathNameByHandleW` to attempt to get the path
-/// from the stdout handle.
-#[cfg_attr(
-    not(any(windows, target_os = "wasi")),
-    expect(clippy::unnecessary_wraps)
-)]
+#[cfg(unix)]
+#[expect(clippy::unnecessary_wraps)]
 fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
-    #[cfg(all(unix, not(target_os = "android")))]
+    #[cfg(not(target_os = "android"))]
     {
         Ok(PathBuf::from("/dev/stdout"))
     }
     #[cfg(target_os = "android")]
     {
         Ok(PathBuf::from("/proc/self/fd/1"))
-    }
-    #[cfg(target_os = "wasi")]
-    return Err(TouchError::UnsupportedPlatformFeature(translate!(
-        "touch-error-stdout-unsupported"
-    )));
-    #[cfg(windows)]
-    {
-        use std::os::windows::prelude::AsRawHandle;
-        use windows_sys::Win32::Foundation::{
-            ERROR_INVALID_PARAMETER, ERROR_NOT_ENOUGH_MEMORY, ERROR_PATH_NOT_FOUND, GetLastError,
-            HANDLE, MAX_PATH,
-        };
-        use windows_sys::Win32::Storage::FileSystem::{
-            FILE_NAME_OPENED, GetFinalPathNameByHandleW,
-        };
-
-        let handle = std::io::stdout().lock().as_raw_handle() as HANDLE;
-        let mut file_path_buffer: [u16; MAX_PATH as usize] = [0; MAX_PATH as usize];
-
-        // https://docs.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfinalpathnamebyhandlea#examples
-        // SAFETY: We transmute the handle to be able to cast *mut c_void into a
-        // HANDLE (i32) so rustc will let us call GetFinalPathNameByHandleW. The
-        // reference example code for GetFinalPathNameByHandleW implies that
-        // it is safe for us to leave lpszfilepath uninitialized, so long as
-        // the buffer size is correct. We know the buffer size (MAX_PATH) at
-        // compile time. MAX_PATH is a small number (260) so we can cast it
-        // to a u32.
-        let ret = unsafe {
-            GetFinalPathNameByHandleW(
-                handle,
-                file_path_buffer.as_mut_ptr(),
-                file_path_buffer.len() as u32,
-                FILE_NAME_OPENED,
-            )
-        };
-
-        let buffer_size = match ret {
-            ERROR_PATH_NOT_FOUND | ERROR_NOT_ENOUGH_MEMORY | ERROR_INVALID_PARAMETER => {
-                return Err(TouchError::WindowsStdoutPathError(
-                    translate!("touch-error-windows-stdout-path-failed", "code" => ret),
-                ));
-            }
-            0 => {
-                return Err(TouchError::WindowsStdoutPathError(translate!(
-                "touch-error-windows-stdout-path-failed",
-                    "code".to_string() =>
-                    format!(
-                        "{}",
-                        // SAFETY: GetLastError is thread-safe and has no documented memory unsafety.
-                        unsafe { GetLastError() }
-                    ),
-                )));
-            }
-            e => e as usize,
-        };
-
-        // Don't include the null terminator
-        Ok(String::from_utf16(&file_path_buffer[0..buffer_size])
-            .map_err(|e| TouchError::WindowsStdoutPathError(e.to_string()))?
-            .into())
     }
 }
 
