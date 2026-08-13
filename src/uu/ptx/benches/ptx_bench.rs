@@ -53,7 +53,6 @@ fn ptx_input_references_long_lines(bencher: Bencher, num_lines: usize) {
     bench_ptx(bencher, &fixed_size_data(num_lines), &["-r"]);
 }
 
-
 fn tex_special_data(num_lines: usize) -> Vec<u8> {
     let lines = [
         "the permuted index of \\alpha sorted around each keyword",
