@@ -37,7 +37,11 @@ id/gnu-zero-uids.log
 # through that same symbol - in df's case dropping /proc/self/mountinfo for
 # getmntent/mtab - purely so the interception lands.
 
-cp/nfs-removal-race.log      # overrides __xstat/stat; std uses statx
-dd/fail-ftruncate-fstat.log  # overrides ftruncate/fstat
-df/skip-duplicates.log       # needs HAVE_GETMNTENT, overrides fopen on the mtab
-rm/rm-readdir-fail.log       # overrides readdir; std uses readdir64
+# overrides __xstat/stat; std uses statx
+cp/nfs-removal-race.log
+# overrides ftruncate/fstat
+dd/fail-ftruncate-fstat.log
+# needs HAVE_GETMNTENT, overrides fopen on the mtab
+df/skip-duplicates.log
+# overrides readdir; std uses readdir64
+rm/rm-readdir-fail.log
