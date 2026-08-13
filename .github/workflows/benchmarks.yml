@@ -65,7 +65,8 @@ jobs:
           uu_date,
           uu_csplit,
           uu_true,
-          uu_false
+          uu_false,
+          uu_ptx
         ]
     steps:
       - uses: actions/checkout@v7.0.1

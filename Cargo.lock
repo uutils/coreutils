@@ -4028,6 +4028,7 @@ name = "uu_ptx"
 version = "0.10.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
  "regex",
  "thiserror 2.0.20",
