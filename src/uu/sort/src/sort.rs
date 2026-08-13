@@ -2937,20 +2937,14 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     // freeze seed for --random-source
     let mut hasher = FoldHasher::with_seed(1, SharedSeed::global_fixed());
 
-    loop {
-        let n = reader
-            .read(&mut buf)
-            .map_err(|error| SortError::ReadFailed {
-                path: path.to_owned(),
-                error,
-            })?;
-        if n == 0 {
-            break;
-        }
-        let remaining = MAX_BYTES.saturating_sub(total);
-        if remaining == 0 {
-            break;
-        }
+    while let n @ 1.. = reader
+        .read(&mut buf)
+        .map_err(|error| SortError::ReadFailed {
+            path: path.to_owned(),
+            error,
+        })?
+        && let remaining @ 1.. = MAX_BYTES.saturating_sub(total)
+    {
         let take = n.min(remaining);
         hasher.write(&buf[..take]);
         total = total.saturating_add(take);
