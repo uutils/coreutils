@@ -31,8 +31,14 @@ pub fn init_collator(opts: CollatorOptions) {
 }
 
 /// Check if locale collation should be used.
+///
+/// The result is cached, since `DEFAULT_LOCALE` is a `const` that materializes a
+/// fresh heap-backed `Locale` on every evaluation. Comparing against it on each
+/// call (e.g. once per comparison in a sort) is measurably expensive, so we
+/// compute the decision once and reuse it.
 pub fn should_use_locale_collation() -> bool {
-    get_collating_locale().0 != DEFAULT_LOCALE
+    static USE_LOCALE_COLLATION: OnceLock<bool> = OnceLock::new();
+    *USE_LOCALE_COLLATION.get_or_init(|| get_collating_locale().0 != DEFAULT_LOCALE)
 }
 
 /// Initialize the collator for locale-aware string comparison if needed.
@@ -88,13 +94,15 @@ pub fn compute_sort_key_utf8(input: &[u8], buf: &mut Vec<u8>) {
 
 /// Compare both strings with regard to the current locale.
 pub fn locale_cmp(left: &[u8], right: &[u8]) -> Ordering {
-    // If the detected locale is 'C', just do byte-wise comparison
-    if get_collating_locale().0 == DEFAULT_LOCALE {
-        left.cmp(right)
-    } else {
+    // If the detected locale is 'C', just do byte-wise comparison.
+    // `should_use_locale_collation` caches this decision, avoiding the
+    // construction of a fresh `DEFAULT_LOCALE` on every call (hot path in sort).
+    if should_use_locale_collation() {
         // Fall back to byte comparison if collator is not available
         COLLATOR
             .get()
             .map_or_else(|| left.cmp(right), |c| c.compare_utf8(left, right))
+    } else {
+        left.cmp(right)
     }
 }
