@@ -275,6 +275,7 @@ fn main() -> io::Result<()> {
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
+        \t* [Error diagnostics](extensions-errors.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
