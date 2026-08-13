@@ -651,23 +651,19 @@ fn unexpand_file(
         pending_wide: Vec::new(),
     };
 
-    loop {
-        match input.read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                for line in buf[..n].split_inclusive(|b| *b == b'\n') {
-                    unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
-                    if let Some(b'\n') = line.last() {
-                        print_state.new_line();
-                    }
-                }
+    while let n @ 1.. = input
+        .read(buf)
+        .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
+    {
+        for line in buf[..n].split_inclusive(|b| *b == b'\n') {
+            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            if let Some(b'\n') = line.last() {
+                print_state.new_line();
             }
-            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
     }
     // write out anything remaining
-    write_tabs(output, tab_config, &mut print_state, options.aflag)?;
-    Ok(())
+    write_tabs(output, tab_config, &mut print_state, options.aflag)
 }
 
 fn unexpand(options: &Options) -> UResult<()> {
