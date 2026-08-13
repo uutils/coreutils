@@ -30,9 +30,6 @@ uucore = { workspace = true, features = ["benchmark"] }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(unix)'.dev-dependencies]
-rustix = { workspace = true, features = ["stdio"] }
-
 [lints]
 workspace = true
 
