@@ -596,8 +596,8 @@ mod tests {
 
     #[test]
     fn test_options_errors() {
-        assert!(options("-n IsThisTheRealLife?").is_err());
-        assert!(options("-c IsThisJustFantasy").is_err());
+        options("-n IsThisTheRealLife?").unwrap_err();
+        options("-c IsThisJustFantasy").unwrap_err();
     }
 
     #[test]
@@ -642,9 +642,9 @@ mod tests {
             Ok("head -q -z -c 123".to_owned())
         );
         //test that bad obsoletes are an error
-        assert!(arg_outputs("head -123FooBar").is_err());
+        arg_outputs("head -123FooBar").unwrap_err();
         //test overflow
-        assert!(arg_outputs("head -100000000000000000000000000000000000000000").is_ok());
+        arg_outputs("head -100000000000000000000000000000000000000000").unwrap();
         //test that empty args remain unchanged
         assert_eq!(arg_outputs("head"), Ok("head".to_owned()));
     }

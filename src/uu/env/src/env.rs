@@ -1298,7 +1298,6 @@ mod tests {
 
         // Test EnvBackslashCNotAllowedInDoubleQuotes
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \c""#));
-        assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
             "'\\c' must not appear in double-quoted -S string at position 13"
@@ -1306,7 +1305,6 @@ mod tests {
 
         // Test EnvInvalidBackslashAtEndOfStringInMinusS
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \"#));
-        assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
             "no terminating quote in -S string at position 13 for quote '\"'"
@@ -1314,7 +1312,6 @@ mod tests {
 
         // Test EnvInvalidSequenceBackslashXInMinusS
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo \x""#));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
@@ -1324,7 +1321,6 @@ mod tests {
 
         // Test EnvMissingClosingQuote
         let result = parse_args_from_str(&NCvt::convert(r#"sh -c "echo "#));
-        assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().to_string(),
             "no terminating quote in -S string at position 12 for quote '\"'"
@@ -1332,7 +1328,6 @@ mod tests {
 
         // Test variable-related errors
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO"));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
@@ -1341,7 +1336,6 @@ mod tests {
         );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO:-value}"));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
@@ -1350,7 +1344,6 @@ mod tests {
         );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo $FOO"));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
@@ -1358,7 +1351,6 @@ mod tests {
                 .contains("only ${VARNAME} expansion is supported")
         );
         let result = parse_args_from_str(&NCvt::convert(r"echo ${1FOO}"));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()
@@ -1367,7 +1359,6 @@ mod tests {
         );
 
         let result = parse_args_from_str(&NCvt::convert(r"echo ${FOO?}"));
-        assert!(result.is_err());
         assert!(
             result
                 .unwrap_err()

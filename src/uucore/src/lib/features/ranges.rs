@@ -34,11 +34,11 @@ impl FromStr for Range {
     /// assert_eq!(Range::from_str("4-"), Ok(Range { low: 4, high: usize::MAX - 1 }));
     /// assert_eq!(Range::from_str("-4"), Ok(Range { low: 1, high: 4 }));
     /// assert_eq!(Range::from_str("2-4"), Ok(Range { low: 2, high: 4 }));
-    /// assert!(Range::from_str("0-4").is_err());
-    /// assert!(Range::from_str("4-2").is_err());
-    /// assert!(Range::from_str("-").is_err());
-    /// assert!(Range::from_str("a").is_err());
-    /// assert!(Range::from_str("a-b").is_err());
+    /// Range::from_str("0-4").unwrap_err();
+    /// Range::from_str("4-2").unwrap_err();
+    /// Range::from_str("-").unwrap_err();
+    /// Range::from_str("a").unwrap_err();
+    /// Range::from_str("a-b").unwrap_err();
     /// ```
     fn from_str(s: &str) -> Result<Self, &'static str> {
         fn parse(s: &str) -> Result<usize, &'static str> {

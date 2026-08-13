@@ -298,8 +298,8 @@ mod tests {
 
         // Things that look like a signal but aren't must error, not fall
         // through to be read as a negative PID and signalled with SIGTERM.
-        assert!(handle_obsolete(&mut args(&["kill", "-65", "123"])).is_err());
-        assert!(handle_obsolete(&mut args(&["kill", "-NOPESIG", "123"])).is_err());
+        handle_obsolete(&mut args(&["kill", "-65", "123"])).unwrap_err();
+        handle_obsolete(&mut args(&["kill", "-NOPESIG", "123"])).unwrap_err();
 
         // A lowercase leading char is never an obsolete signal; leave args as-is.
         let mut a = args(&["kill", "-foo", "123"]);

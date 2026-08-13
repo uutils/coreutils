@@ -139,7 +139,7 @@ impl Number {
     /// let mut number = Number::FixedWidth(FixedWidthNumber::new(3, 1));
     /// number.increment().unwrap();  // from 0 to 1
     /// number.increment().unwrap();  // from 1 to 2
-    /// assert!(number.increment().is_err());
+    /// number.increment().unwrap_err();
     /// ```
     pub fn increment(&mut self) -> Result<(), Overflow> {
         match self {
@@ -515,7 +515,7 @@ mod tests {
         assert_eq!(n.digits(), vec![2, 1]);
         n.increment().unwrap();
         assert_eq!(n.digits(), vec![2, 2]);
-        assert!(n.increment().is_err());
+        n.increment().unwrap_err();
     }
 
     #[test]
@@ -541,7 +541,7 @@ mod tests {
         assert_eq!(format!("{}", num(26 * 25 - 1).unwrap()), "yz");
         assert_eq!(format!("{}", num(26 * 25).unwrap()), "za");
         assert_eq!(format!("{}", num(26 * 26 - 1).unwrap()), "zz");
-        assert!(num(26 * 26).is_err());
+        num(26 * 26).unwrap_err();
     }
 
     #[test]
@@ -560,7 +560,7 @@ mod tests {
         assert_eq!(format!("{}", num(10 * 9 - 1).unwrap()), "89");
         assert_eq!(format!("{}", num(10 * 9).unwrap()), "90");
         assert_eq!(format!("{}", num(10 * 10 - 1).unwrap()), "99");
-        assert!(num(10 * 10).is_err());
+        num(10 * 10).unwrap_err();
     }
 
     #[test]
@@ -579,7 +579,7 @@ mod tests {
         assert_eq!(format!("{}", num(16 * 15 - 1).unwrap()), "ef");
         assert_eq!(format!("{}", num(16 * 15).unwrap()), "f0");
         assert_eq!(format!("{}", num(16 * 16 - 1).unwrap()), "ff");
-        assert!(num(16 * 16).is_err());
+        num(16 * 16).unwrap_err();
     }
 
     #[test]
@@ -598,7 +598,7 @@ mod tests {
 
     #[test]
     fn test_fixed_width_number_large_width_does_not_allocate() {
-        assert!(FixedWidthNumber::new(26, usize::MAX, 0).is_ok());
+        FixedWidthNumber::new(26, usize::MAX, 0).unwrap();
     }
 
     #[test]

@@ -588,32 +588,26 @@ mod tests {
 
     #[test]
     fn test_parse_num_when_sign_is_given() {
-        let result = parse_num("+0");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::PlusZero);
+        let result = parse_num("+0").unwrap();
+        assert_eq!(result, Signum::PlusZero);
 
-        let result = parse_num("+1");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::Positive(1));
+        let result = parse_num("+1").unwrap();
+        assert_eq!(result, Signum::Positive(1));
 
-        let result = parse_num("-0");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::MinusZero);
+        let result = parse_num("-0").unwrap();
+        assert_eq!(result, Signum::MinusZero);
 
-        let result = parse_num("-1");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::Negative(1));
+        let result = parse_num("-1").unwrap();
+        assert_eq!(result, Signum::Negative(1));
     }
 
     #[test]
     fn test_parse_num_when_no_sign_is_given() {
-        let result = parse_num("0");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::MinusZero);
+        let result = parse_num("0"),unwrap();
+        assert_eq!(result, Signum::MinusZero);
 
-        let result = parse_num("1");
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), Signum::Negative(1));
+        let result = parse_num("1").unwrap();
+        assert_eq!(result, Signum::Negative(1));
     }
 
     #[test]

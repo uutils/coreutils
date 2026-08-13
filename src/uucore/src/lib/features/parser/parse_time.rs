@@ -51,7 +51,7 @@ use std::time::Duration;
 /// assert_eq!(from_str("123", true), Ok(Duration::from_secs(123)));
 /// assert_eq!(from_str("123", false), Ok(Duration::from_secs(123)));
 /// assert_eq!(from_str("2d", true), Ok(Duration::from_secs(60 * 60 * 24 * 2)));
-/// assert!(from_str("2d", false).is_err());
+/// from_str("2d", false).unwrap_err();
 /// ```
 pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> {
     const NANOS_PER_SEC: u32 = 1_000_000_000;
@@ -133,7 +133,7 @@ mod tests {
             from_str("2d", true),
             Ok(Duration::from_secs(60 * 60 * 24 * 2))
         );
-        assert!(from_str("2d", false).is_err());
+        from_str("2d", false).unwrap_err();
     }
 
     #[test]
@@ -227,38 +227,38 @@ mod tests {
 
     #[test]
     fn test_error_empty() {
-        assert!(from_str("", true).is_err());
-        assert!(from_str("", false).is_err());
+        from_str("", true).unwrap_err();
+        from_str("", false).unwrap_err();
     }
 
     #[test]
     fn test_error_invalid_unit() {
-        assert!(from_str("123X", true).is_err());
-        assert!(from_str("123X", false).is_err());
+        from_str("123X", true).unwrap_err();
+        from_str("123X", false).unwrap_err();
     }
 
     #[test]
     fn test_error_multi_bytes_characters() {
-        assert!(from_str("10€", true).is_err());
-        assert!(from_str("10€", false).is_err());
+        from_str("10€", true).unwrap_err();
+        from_str("10€", false).unwrap_err();
     }
 
     #[test]
     fn test_error_invalid_magnitude() {
-        assert!(from_str("12abc3s", true).is_err());
-        assert!(from_str("12abc3s", false).is_err());
+        from_str("12abc3s", true).unwrap_err();
+        from_str("12abc3s", false).unwrap_err();
     }
 
     #[test]
     fn test_error_only_point() {
-        assert!(from_str(".", true).is_err());
-        assert!(from_str(".", false).is_err());
+        from_str(".", true).unwrap_err();
+        from_str(".", false).unwrap_err();
     }
 
     #[test]
     fn test_negative() {
-        assert!(from_str("-1", true).is_err());
-        assert!(from_str("-1", false).is_err());
+        from_str("-1", true).unwrap_err();
+        from_str("-1", false).unwrap_err();
     }
 
     #[test]
@@ -276,24 +276,24 @@ mod tests {
 
     #[test]
     fn test_nan() {
-        assert!(from_str("nan", true).is_err());
-        assert!(from_str("nans", true).is_err());
-        assert!(from_str("-nanh", true).is_err());
-        assert!(from_str("NAN", true).is_err());
-        assert!(from_str("-NAN", true).is_err());
+        from_str("nan", true).unwrap_err();
+        from_str("nans", true).unwrap_err();
+        from_str("-nanh", true).unwrap_err();
+        from_str("NAN", true).unwrap_err();
+        from_str("-NAN", true).unwrap_err();
 
-        assert!(from_str("nan", false).is_err());
-        assert!(from_str("NAN", false).is_err());
-        assert!(from_str("-NAN", false).is_err());
+        from_str("nan", false).unwrap_err();
+        from_str("NAN", false).unwrap_err();
+        from_str("-NAN", false).unwrap_err();
     }
 
     /// Test that capital letters are not allowed in suffixes.
     #[test]
     fn test_no_capital_letters() {
-        assert!(from_str("1S", true).is_err());
-        assert!(from_str("1M", true).is_err());
-        assert!(from_str("1H", true).is_err());
-        assert!(from_str("1D", true).is_err());
-        assert!(from_str("INFD", true).is_err());
+        from_str("1S", true).unwrap_err();
+        from_str("1M", true).unwrap_err();
+        from_str("1H", true).unwrap_err();
+        from_str("1D", true).unwrap_err();
+        from_str("INFD", true).unwrap_err();
     }
 }
