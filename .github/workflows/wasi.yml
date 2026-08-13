@@ -70,6 +70,10 @@ jobs:
         cargo test --test tests -- \
           test_base32:: test_base64:: test_basenc:: test_basename:: \
           test_cp::test_cp_arg_symlink \
+          test_cp::test_cp_wasi_preserve_dereferenced_symlink_timestamps \
+          test_cp::test_cp_wasi_preserve_file_timestamps \
+          test_cp::test_cp_wasi_preserve_symlink_timestamps \
+          test_cp::test_cp_wasi_preserve_timestamps_with_symbolic_link \
           test_comm:: test_cut:: test_dirname:: test_echo:: \
           test_expand:: test_factor:: test_false:: test_fold:: \
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \

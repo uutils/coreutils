@@ -2577,6 +2577,146 @@ fn test_cp_preserve_timestamps() {
 }
 
 #[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_file_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let previous_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let previous_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    filetime::set_file_times(
+        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
+        previous_atime,
+        previous_mtime,
+    )
+    .unwrap();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--preserve=timestamps")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    let metadata = std_fs::metadata(at.plus(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
+    assert_eq!(FileTime::from_last_access_time(&metadata), previous_atime);
+    assert_eq!(
+        FileTime::from_last_modification_time(&metadata),
+        previous_mtime
+    );
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_symlink_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let link_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let link_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let target_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let target_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 10_800, ts.nanosecond());
+
+    at.write("target", "contents");
+    at.relative_symlink_file("target", "source-link");
+    filetime::set_file_times(at.plus("target"), target_atime, target_mtime).unwrap();
+    filetime::set_symlink_file_times(at.plus("source-link"), link_atime, link_mtime).unwrap();
+
+    ucmd.args(&[
+        "-P",
+        "--progress",
+        "--preserve=timestamps",
+        "source-link",
+        "dest-link",
+    ])
+    .succeeds();
+
+    let link_metadata = std_fs::symlink_metadata(at.plus("dest-link")).unwrap();
+    assert!(link_metadata.file_type().is_symlink());
+    assert_eq!(FileTime::from_last_access_time(&link_metadata), link_atime);
+    assert_eq!(
+        FileTime::from_last_modification_time(&link_metadata),
+        link_mtime
+    );
+    assert_eq!(
+        std_fs::read_link(at.plus("dest-link")).unwrap(),
+        std_fs::read_link(at.plus("source-link")).unwrap()
+    );
+
+    let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
+    assert_eq!(
+        FileTime::from_last_access_time(&target_metadata),
+        target_atime
+    );
+    assert_eq!(
+        FileTime::from_last_modification_time(&target_metadata),
+        target_mtime
+    );
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_timestamps_with_symbolic_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let source_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let source_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("source", "contents");
+    filetime::set_file_times(at.plus("source"), source_atime, source_mtime).unwrap();
+
+    ucmd.args(&[
+        "--symbolic-link",
+        "--preserve=timestamps",
+        "source",
+        "destination",
+    ])
+    .succeeds();
+
+    let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
+    assert!(destination_metadata.file_type().is_symlink());
+    assert_eq!(
+        FileTime::from_last_access_time(&destination_metadata),
+        source_atime
+    );
+    assert_eq!(
+        FileTime::from_last_modification_time(&destination_metadata),
+        source_mtime
+    );
+    assert_eq!(
+        std_fs::read_link(at.plus("destination")).unwrap(),
+        Path::new("source")
+    );
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_dereferenced_symlink_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let link_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let link_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let target_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let target_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 10_800, ts.nanosecond());
+
+    at.write("target", "contents");
+    at.relative_symlink_file("target", "source-link");
+    filetime::set_file_times(at.plus("target"), target_atime, target_mtime).unwrap();
+    filetime::set_symlink_file_times(at.plus("source-link"), link_atime, link_mtime).unwrap();
+
+    ucmd.args(&["-L", "--preserve=timestamps", "source-link", "destination"])
+        .succeeds();
+
+    let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
+    assert!(!destination_metadata.file_type().is_symlink());
+    assert_eq!(at.read("destination"), "contents");
+    assert_eq!(
+        FileTime::from_last_access_time(&destination_metadata),
+        target_atime
+    );
+    assert_eq!(
+        FileTime::from_last_modification_time(&destination_metadata),
+        target_mtime
+    );
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();

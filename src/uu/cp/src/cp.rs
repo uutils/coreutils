@@ -21,6 +21,7 @@ use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
+#[cfg(not(target_os = "wasi"))]
 use filetime::FileTime;
 use indicatif::{ProgressBar, ProgressStyle};
 #[cfg(unix)]
@@ -28,6 +29,8 @@ use nix::sys::stat::{Mode, SFlag, dev_t, mknod as nix_mknod, mode_t};
 use thiserror::Error;
 
 use platform::copy_on_write;
+#[cfg(target_os = "wasi")]
+use platform::set_timestamps;
 use uucore::backup_control::backup_would_destroy_source;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
@@ -1429,6 +1432,14 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     // we can't use copied_files as it is because the key is the source file's information.
     let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
     let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
+    #[cfg(target_os = "wasi")]
+    let initial_source_metadata: Vec<_> = match options.attributes.timestamps {
+        Preserve::Yes { .. } => sources
+            .iter()
+            .map(|source| fs::symlink_metadata(source).ok())
+            .collect(),
+        Preserve::No { .. } => Vec::new(),
+    };
 
     let progress_bar = if options.progress_bar {
         let pb = ProgressBar::new(disk_usage(sources, options.recursive)?)
@@ -1445,7 +1456,9 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         None
     };
 
-    for source in sources {
+    for (source_index, source) in sources.iter().enumerate() {
+        #[cfg(not(target_os = "wasi"))]
+        let _ = source_index;
         let normalized_source = normalize_path(source);
         if options.backup == BackupMode::None && seen_sources.contains(&normalized_source) {
             let file_type = if source.symlink_metadata()?.file_type().is_dir() {
@@ -1458,6 +1471,10 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
         } else {
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
+            #[cfg(target_os = "wasi")]
+            let initial_source_metadata = initial_source_metadata
+                .get(source_index)
+                .and_then(Option::as_ref);
 
             if FileInformation::from_path(&dest, true).is_ok()
                 && !fs::symlink_metadata(&dest).is_ok_and(|m| m.file_type().is_symlink())
@@ -1494,6 +1511,8 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
                 &copied_destinations,
                 &mut copied_files,
                 &mut created_parent_dirs,
+                #[cfg(target_os = "wasi")]
+                initial_source_metadata,
             ) {
                 show_error_if_needed(&error);
                 if !matches!(error, CpError::Skipped(false)) {
@@ -1569,6 +1588,7 @@ fn copy_source(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
+    #[cfg(target_os = "wasi")] initial_source_metadata: Option<&Metadata>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1597,6 +1617,8 @@ fn copy_source(
             copied_files,
             created_parent_dirs,
             true,
+            #[cfg(target_os = "wasi")]
+            initial_source_metadata,
         );
         if options.parents {
             for (x, y) in aligned_ancestors(source, dest.as_path()) {
@@ -1794,6 +1816,26 @@ pub(crate) fn copy_attributes(
     let context = &*format!("{} -> {}", source.quote(), dest.quote());
     let source_metadata =
         fs::symlink_metadata(source).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
+    copy_attributes_from_metadata(
+        source,
+        dest,
+        &source_metadata,
+        attributes,
+        dest_is_freshly_created_dir,
+        skip_selinux_xattr,
+    )
+}
+
+#[allow(unused_variables)]
+fn copy_attributes_from_metadata(
+    source: &Path,
+    dest: &Path,
+    source_metadata: &Metadata,
+    attributes: &Attributes,
+    dest_is_freshly_created_dir: bool,
+    skip_selinux_xattr: bool,
+) -> CopyResult<()> {
+    let context = &*format!("{} -> {}", source.quote(), dest.quote());
 
     let mode_explicitly_disabled = matches!(attributes.mode, Preserve::No { explicit: true });
 
@@ -1888,9 +1930,10 @@ pub(crate) fn copy_attributes(
         Ok(())
     })?;
 
+    #[cfg(not(target_os = "wasi"))]
     handle_preserve(attributes.timestamps, || -> CopyResult<()> {
-        let atime = FileTime::from_last_access_time(&source_metadata);
-        let mtime = FileTime::from_last_modification_time(&source_metadata);
+        let atime = FileTime::from_last_access_time(source_metadata);
+        let mtime = FileTime::from_last_modification_time(source_metadata);
         // `set_file_times` opens the destination (O_RDONLY) before calling
         // futimens; opening a FIFO or device with no peer blocks forever, and a
         // socket cannot be opened at all. For symlinks and these special files
@@ -1914,6 +1957,11 @@ pub(crate) fn copy_attributes(
         }
 
         Ok(())
+    })?;
+
+    #[cfg(target_os = "wasi")]
+    handle_preserve(attributes.timestamps, || {
+        set_timestamps(source_metadata, dest).map_err(CpError::from)
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -1954,6 +2002,38 @@ pub(crate) fn copy_attributes(
     })?;
 
     Ok(())
+}
+
+fn copy_attributes_after_copy(
+    source: &Path,
+    dest: &Path,
+    #[cfg(target_os = "wasi")] source_metadata: &Metadata,
+    attributes: &Attributes,
+    dest_is_freshly_created_dir: bool,
+    skip_selinux_xattr: bool,
+) -> CopyResult<()> {
+    #[cfg(target_os = "wasi")]
+    {
+        copy_attributes_from_metadata(
+            source,
+            dest,
+            source_metadata,
+            attributes,
+            dest_is_freshly_created_dir,
+            skip_selinux_xattr,
+        )
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        copy_attributes(
+            source,
+            dest,
+            attributes,
+            dest_is_freshly_created_dir,
+            skip_selinux_xattr,
+        )
+    }
 }
 
 fn symlink_file(
@@ -2507,7 +2587,14 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
+    #[cfg(target_os = "wasi")] initial_source_metadata: Option<&Metadata>,
 ) -> CopyResult<()> {
+    #[cfg(target_os = "wasi")]
+    let source_is_symlink = initial_source_metadata.map_or_else(
+        || source.is_symlink(),
+        |metadata| metadata.file_type().is_symlink(),
+    );
+    #[cfg(not(target_os = "wasi"))]
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
     let dest_is_symlink = initial_dest_metadata
@@ -2642,7 +2729,15 @@ fn copy_file(
         let result = if options.dereference(source_in_command_line) {
             fs::metadata(source)
         } else {
-            fs::symlink_metadata(source)
+            #[cfg(target_os = "wasi")]
+            {
+                initial_source_metadata
+                    .map_or_else(|| fs::symlink_metadata(source), |m| Ok(m.clone()))
+            }
+            #[cfg(not(target_os = "wasi"))]
+            {
+                fs::symlink_metadata(source)
+            }
         };
         // this is just for gnu tests compatibility
         result.map_err(|err| {
@@ -2704,9 +2799,11 @@ fn copy_file(
             .ok()
             .filter(|p| p.exists())
             .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes(
+        copy_attributes_after_copy(
             &src_for_attrs,
             dest,
+            #[cfg(target_os = "wasi")]
+            &source_metadata,
             &options.attributes,
             false,
             options.set_selinux_context,
@@ -2718,9 +2815,11 @@ fn copy_file(
         // copy function (see `copy_stream` under platform/linux.rs).
         Ok(())
     } else {
-        copy_attributes(
+        copy_attributes_after_copy(
             source,
             dest,
+            #[cfg(target_os = "wasi")]
+            &source_metadata,
             &options.attributes,
             false,
             options.set_selinux_context,
@@ -2852,7 +2951,14 @@ fn copy_helper(
     }
 
     if source_metadata.is_symlink() {
-        copy_link(source, dest, symlinked_files, options)?;
+        copy_link(
+            source,
+            dest,
+            #[cfg(target_os = "wasi")]
+            source_metadata,
+            symlinked_files,
+            options,
+        )?;
     } else {
         // Use O_NOFOLLOW on the source open iff cp is in no-dereference mode.
         // In that case source_metadata was obtained via lstat, so a path swap
@@ -2931,6 +3037,7 @@ fn copy_node(
 fn copy_link(
     source: &Path,
     dest: &Path,
+    #[cfg(target_os = "wasi")] source_metadata: &Metadata,
     symlinked_files: &mut HashSet<FileInformation>,
     options: &Options,
 ) -> CopyResult<()> {
@@ -2942,9 +3049,11 @@ fn copy_link(
         delete_path(dest, options)?;
     }
     symlink_file(&link, dest, symlinked_files)?;
-    copy_attributes(
+    copy_attributes_after_copy(
         source,
         dest,
+        #[cfg(target_os = "wasi")]
+        source_metadata,
         &options.attributes,
         false,
         options.set_selinux_context,

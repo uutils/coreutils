@@ -319,6 +319,8 @@ fn copy_direntry(
             copied_files,
             created_parent_dirs,
             false,
+            #[cfg(target_os = "wasi")]
+            None,
         )
     {
         if preserve_hard_links {
@@ -385,6 +387,8 @@ pub(crate) fn copy_directory(
             copied_files,
             created_parent_dirs,
             source_in_command_line,
+            #[cfg(target_os = "wasi")]
+            None,
         );
     }
 
