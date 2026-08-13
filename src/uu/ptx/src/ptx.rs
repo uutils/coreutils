@@ -578,19 +578,25 @@ fn get_output_chunks(
     (tail, before, after, head)
 }
 
-fn tex_mapper(x: char) -> String {
-    match x {
-        '\\' => "\\backslash{}".to_owned(),
-        '$' | '%' | '#' | '&' | '_' => format!("\\{x}"),
-        '}' | '{' => format!("$\\{x}$"),
-        _ => x.to_string(),
-    }
-}
-
 /// Escape special characters for TeX.
 fn format_tex_field(s: &str) -> String {
-    let mapped_chunks: Vec<String> = s.chars().map(tex_mapper).collect();
-    mapped_chunks.join("")
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '\\' => out.push_str("\\backslash{}"),
+            '$' | '%' | '#' | '&' | '_' => {
+                out.push('\\');
+                out.push(c);
+            }
+            '}' | '{' => {
+                out.push_str("$\\");
+                out.push(c);
+                out.push('$');
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 fn format_tex_line(
