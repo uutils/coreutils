@@ -72,8 +72,10 @@ jobs:
           test_cp::test_cp_arg_symlink \
           test_cp::test_cp_wasi_preserve_dereferenced_symlink_timestamps \
           test_cp::test_cp_wasi_preserve_file_timestamps \
+          test_cp::test_cp_wasi_preserve_timestamps_through_destination_symlink \
           test_cp::test_cp_wasi_preserve_symlink_timestamps \
           test_cp::test_cp_wasi_preserve_timestamps_with_symbolic_link \
+          test_cp::test_cp_wasi_refreshes_timestamps_for_later_source \
           test_comm:: test_cut:: test_dirname:: test_echo:: \
           test_expand:: test_factor:: test_false:: test_fold:: \
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \

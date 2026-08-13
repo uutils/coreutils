@@ -37,4 +37,6 @@ pub(crate) use self::other::copy_on_write;
 #[cfg(target_os = "wasi")]
 mod wasi;
 #[cfg(target_os = "wasi")]
-pub(crate) use self::wasi::{create_symlink, set_timestamps};
+pub(crate) use self::wasi::{
+    SourceTimestampSnapshot, SourceTimestamps, TimestampOptions, create_symlink, set_timestamps,
+};

@@ -2717,6 +2717,69 @@ fn test_cp_wasi_preserve_dereferenced_symlink_timestamps() {
 }
 
 #[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_timestamps_through_destination_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let source_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let source_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("source", "new contents");
+    at.write("target", "old contents");
+    at.relative_symlink_file("target", "destination");
+    filetime::set_file_times(at.plus("source"), source_atime, source_mtime).unwrap();
+
+    ucmd.args(&["--preserve=timestamps", "source", "destination"])
+        .succeeds();
+
+    assert!(at.is_symlink("destination"));
+    let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
+    assert_eq!(
+        FileTime::from_last_access_time(&target_metadata),
+        source_atime
+    );
+    assert_eq!(
+        FileTime::from_last_modification_time(&target_metadata),
+        source_mtime
+    );
+    assert_eq!(at.read("target"), "new contents");
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_refreshes_timestamps_for_later_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let first_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let second_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let shared_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("first", "first contents");
+    at.write("second", "second contents");
+    at.mkdir("destination");
+    std_fs::hard_link(at.plus("second"), at.plus("destination/first")).unwrap();
+    filetime::set_file_times(at.plus("first"), first_atime, shared_mtime).unwrap();
+    filetime::set_file_times(at.plus("second"), second_atime, shared_mtime).unwrap();
+
+    ucmd.args(&[
+        "--progress",
+        "--preserve=timestamps",
+        "first",
+        "second",
+        "destination",
+    ])
+    .succeeds();
+
+    let metadata = std_fs::metadata(at.plus("destination/second")).unwrap();
+    assert_eq!(FileTime::from_last_access_time(&metadata), first_atime);
+    assert_eq!(
+        FileTime::from_last_modification_time(&metadata),
+        shared_mtime
+    );
+    assert_eq!(at.read("destination/second"), "first contents");
+}
+
+#[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
