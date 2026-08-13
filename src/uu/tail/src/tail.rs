@@ -531,20 +531,19 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                if let Some(bytes) = chunk.fill(reader)? {
-                    let bytes: u64 = bytes as u64;
-                    match bytes.cmp(&num_skip) {
-                        Ordering::Less => num_skip -= bytes,
-                        Ordering::Equal => {
-                            break;
-                        }
-                        Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
-                            break;
-                        }
-                    }
-                } else {
+                let Some(bytes) = chunk.fill(reader)? else {
                     return Ok(());
+                };
+                let bytes: u64 = bytes as u64;
+                match bytes.cmp(&num_skip) {
+                    Ordering::Less => num_skip -= bytes,
+                    Ordering::Equal => {
+                        break;
+                    }
+                    Ordering::Greater => {
+                        writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                        break;
+                    }
                 }
             }
 
