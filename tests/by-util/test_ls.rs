@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE newfstatat fchdir
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
@@ -7624,6 +7624,52 @@ fn test_ls_recursive_no_fd_leak() {
         .limit(Resource::NOFILE, 20, 20)
         .succeeds()
         .stderr_is("");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_dot_orphaned_directory() {
+    use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
+    use std::process::Command;
+    use uucore::libc;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("z");
+
+    // Hold fd on `z` while its a directory
+    let dir_fd = at.open("z");
+    let raw_fd = dir_fd.as_raw_fd();
+
+    // Delete and replace it with a file of the same name
+    at.rmdir("z");
+    at.touch("z");
+
+    // Run `ls` with cwd set on the fd to operate on the old orphaned dir in fs tree
+    let mut cmd = Command::new(&scene.bin_path);
+    cmd.arg(&scene.util_name).arg("-la");
+    unsafe {
+        cmd.pre_exec(move || {
+            if libc::fchdir(raw_fd) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let output = cmd.output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let has_dot_entries = stdout.lines().any(|line| {
+        let trimmed = line.trim_end();
+        trimmed.ends_with(" .") || trimmed.ends_with(" ..")
+    });
+
+    assert!(
+        !has_dot_entries,
+        "expected no '.'/'..' entries. got:\n{stdout}"
+    );
 }
 
 #[test]

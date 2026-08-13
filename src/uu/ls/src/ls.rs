@@ -1275,6 +1275,8 @@ fn dotdot_path(parent: &Path) -> PathBuf {
 }
 
 fn is_still_linked(path_data: &PathData) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
     let Some(self_metadata) = path_data.metadata() else {
         return false;
     };
