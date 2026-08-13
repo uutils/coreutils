@@ -2373,3 +2373,11 @@ dd: Unrecognized operand 'bsx=1'
             .stderr_is("dd: Unrecognized operand 'bsx=1'\n");
     }
 }
+
+#[test]
+fn test_invalid_status_level() {
+    new_ucmd!()
+        .args(&["status=invalid"])
+        .fails()
+        .stderr_contains("dd: invalid status level: ‘invalid’");
+}
