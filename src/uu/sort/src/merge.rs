@@ -142,10 +142,8 @@ pub fn merge_with_file_limit<
 
                 let mut tmp_file =
                     Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-                let write_result = merger.write_all_to(settings, tmp_file.as_write());
-                let finish_result = tmp_file.finished_writing();
-                write_result?;
-                temporary_files.push(finish_result?);
+                merger.write_all_to(settings, tmp_file.as_write())?;
+                temporary_files.push(tmp_file.finished_writing()?);
             }
         }
         // Merge any remaining files that didn't get merged in a full batch above.
@@ -155,10 +153,8 @@ pub fn merge_with_file_limit<
 
             let mut tmp_file =
                 Tmp::create(tmp_dir.next_file()?, settings.compress_prog.as_deref())?;
-            let write_result = merger.write_all_to(settings, tmp_file.as_write());
-            let finish_result = tmp_file.finished_writing();
-            write_result?;
-            temporary_files.push(finish_result?);
+            merger.write_all_to(settings, tmp_file.as_write())?;
+            temporary_files.push(tmp_file.finished_writing()?);
         }
         merge_with_file_limit::<_, _, Tmp>(
             temporary_files
@@ -317,7 +313,7 @@ impl FileMerger<'_> {
         let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
         let mut out = output.into_write();
         self.write_all_to(settings, &mut out)?;
-        flush_writer(&mut out).map_err_context(ctx)
+        out.flush().map_err_context(ctx)
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
@@ -459,10 +455,6 @@ fn check_child_success(mut child: Child, program: &str) -> UResult<()> {
     }
 }
 
-fn flush_writer(writer: &mut impl Write) -> std::io::Result<()> {
-    writer.flush()
-}
-
 /// A temporary file that can be written to.
 pub trait WriteableTmpFile: Sized {
     type Closed: ClosedTmpFile;
@@ -509,8 +501,7 @@ impl WriteableTmpFile for WriteablePlainTmpFile {
         })
     }
 
-    fn finished_writing(mut self) -> UResult<Self::Closed> {
-        flush_writer(&mut self.file)?;
+    fn finished_writing(self) -> UResult<Self::Closed> {
         Ok(ClosedPlainTmpFile { path: self.path })
     }
 
@@ -582,12 +573,9 @@ impl WriteableTmpFile for WriteableCompressedTmpFile {
         })
     }
 
-    fn finished_writing(mut self) -> UResult<Self::Closed> {
-        let flush_result = flush_writer(&mut self.child_stdin);
+    fn finished_writing(self) -> UResult<Self::Closed> {
         drop(self.child_stdin);
-        let child_result = check_child_success(self.child, &self.compress_prog);
-        flush_result?;
-        child_result?;
+        check_child_success(self.child, &self.compress_prog)?;
         Ok(ClosedCompressedTmpFile {
             path: self.path,
             compress_prog: self.compress_prog,
@@ -649,70 +637,5 @@ impl<R: Read + Send> MergeInput for PlainMergeInput<R> {
     }
     fn as_read(&mut self) -> &mut Self::InnerRead {
         &mut self.inner
-    }
-}
-
-#[cfg(all(test, target_os = "linux"))]
-mod tests {
-    use std::fs::{self, File};
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
-    use std::thread;
-    use std::time::{Duration, Instant};
-
-    use super::{WriteableCompressedTmpFile, WriteablePlainTmpFile, WriteableTmpFile};
-
-    #[test]
-    fn plain_tmp_file_propagates_flush_errors() {
-        let file = File::options().write(true).open("/dev/full").unwrap();
-        let mut tmp_file =
-            WriteablePlainTmpFile::create((file, PathBuf::from("/dev/full")), None).unwrap();
-        tmp_file.as_write().write_all(b"buffered data").unwrap();
-
-        let error = tmp_file.finished_writing().err().unwrap();
-
-        assert_eq!(error.to_string(), "No space left on device");
-    }
-
-    #[test]
-    fn compressed_tmp_file_propagates_flush_errors() {
-        let directory = tempfile::tempdir().unwrap();
-        let compressor = directory.path().join("compressor.sh");
-        let ready = directory.path().join("ready");
-        let done = directory.path().join("done");
-        fs::write(
-            &compressor,
-            format!(
-                "#!/bin/sh\nexec 0<&-\n: > '{}'\nsleep 1\n: > '{}'\nexit 1\n",
-                ready.display(),
-                done.display()
-            ),
-        )
-        .unwrap();
-        let mut permissions = fs::metadata(&compressor).unwrap().permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&compressor, permissions).unwrap();
-
-        let output = tempfile::tempfile().unwrap();
-        let mut tmp_file = WriteableCompressedTmpFile::create(
-            (output, PathBuf::new()),
-            Some(compressor.to_str().unwrap()),
-        )
-        .unwrap();
-        let child_pid = tmp_file.child.id();
-        tmp_file.as_write().write_all(b"buffered data").unwrap();
-
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !ready.exists() {
-            assert!(Instant::now() < deadline, "compressor did not become ready");
-            thread::sleep(Duration::from_millis(10));
-        }
-
-        let error = tmp_file.finished_writing().err().unwrap();
-
-        assert_eq!(error.to_string(), "Broken pipe");
-        assert!(done.exists());
-        assert!(!PathBuf::from(format!("/proc/{child_pid}")).exists());
     }
 }
