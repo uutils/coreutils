@@ -648,7 +648,7 @@ fn parse_funky_string(
 
     let mut state = State::Ground;
     loop {
-        let byte = if idx < bytes.len() { bytes[idx] } else { 0 };
+        let byte = bytes.get(idx).unwrap_or(&0);
         match state {
             State::Ground => match byte {
                 b':' | 0 => return Ok(idx),
