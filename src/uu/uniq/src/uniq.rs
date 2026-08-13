@@ -723,7 +723,9 @@ pub fn uu_app() -> Command {
                 .value_name("delimit-method")
                 .num_args(0..=1)
                 .default_missing_value("none")
-                .require_equals(true),
+                .require_equals(true)
+                // GNU accepts a repeated -D/--all-repeated and uses the last one.
+                .overrides_with(options::ALL_REPEATED),
         )
         .arg(
             Arg::new(options::GROUP)

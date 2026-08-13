@@ -163,6 +163,22 @@ fn test_stdin_all_repeated() {
 }
 
 #[test]
+fn test_all_repeated_repeated_last_wins() {
+    // GNU uniq accepts a repeated -D/--all-repeated and uses the last occurrence,
+    // instead of rejecting the second one.
+    new_ucmd!()
+        .args(&["-D", "--all-repeated=separate"])
+        .pipe_in("a\na\nb\nb\nc\n")
+        .succeeds()
+        .stdout_is("a\na\n\nb\nb\n");
+    new_ucmd!()
+        .args(&["-D", "-D"])
+        .pipe_in("a\na\n")
+        .succeeds()
+        .stdout_is("a\na\n");
+}
+
+#[test]
 fn test_all_repeated_followed_by_filename() {
     let filename = "test.txt";
     let (at, mut ucmd) = at_and_ucmd!();
