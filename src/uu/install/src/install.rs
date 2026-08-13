@@ -1070,7 +1070,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => {
             // Follow GNU's behavior: if strip fails, removes the target
             let _ = fs::remove_file(to);
-            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            return Err(InstallError::StripProgramFailed(strip_errno(&e)).into());
         }
     }
     Ok(())

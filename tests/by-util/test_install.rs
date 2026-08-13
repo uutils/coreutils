@@ -992,7 +992,7 @@ fn test_install_and_strip_with_non_existent_program() {
         .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
-        .stderr_contains("No such file or directory");
+        .stderr_only("install: strip program failed: No such file or directory\n");
     assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
