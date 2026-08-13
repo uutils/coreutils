@@ -28,6 +28,10 @@ pub enum TouchError {
     #[error("{}", translate!("touch-error-windows-stdout-path-failed", "code" => .0.clone()))]
     WindowsStdoutPathError(String),
 
+    /// A feature that is not available on the current platform
+    #[error("{0}")]
+    UnsupportedPlatformFeature(String),
+
     /// An error encountered on a specific file
     #[error("{error}")]
     TouchFileError {
