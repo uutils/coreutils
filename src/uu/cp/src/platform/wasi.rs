@@ -10,29 +10,30 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use rustix::fs::{AtFlags, CWD, FileType, Timespec, Timestamps, lstat, stat, utimensat};
 
-pub(crate) struct SourceTimestampSnapshot {
-    timestamps: SourceTimestamps,
+#[derive(Clone, Copy)]
+pub(crate) struct SourceTimesSnapshot {
+    times: SourceTimes,
     device: u64,
     inode: u64,
     file_type: FileType,
 }
 
-impl SourceTimestampSnapshot {
-    pub(crate) fn from_path(path: &Path) -> io::Result<Self> {
-        let stat = lstat(path)?;
+impl SourceTimesSnapshot {
+    pub(crate) fn from_path(path: &Path, dereference: bool) -> io::Result<Self> {
+        let stat = if dereference {
+            stat(path)?
+        } else {
+            lstat(path)?
+        };
         Ok(Self {
-            timestamps: SourceTimestamps::from_stat(&stat),
+            times: SourceTimes::from_stat(&stat),
             device: stat.st_dev,
             inode: stat.st_ino,
             file_type: FileType::from_raw_mode(stat.st_mode),
         })
     }
 
-    pub(crate) fn current_timestamps(
-        &self,
-        path: &Path,
-        dereference: bool,
-    ) -> Option<SourceTimestamps> {
+    pub(crate) fn times_if_unchanged(&self, path: &Path, dereference: bool) -> Option<SourceTimes> {
         let stat = if dereference {
             stat(path).ok()?
         } else {
@@ -42,42 +43,38 @@ impl SourceTimestampSnapshot {
         if stat.st_dev != self.device
             || stat.st_ino != self.inode
             || file_type != self.file_type
-            || !self
-                .timestamps
-                .matches_stat(&stat, !self.file_type.is_symlink())
+            || !self.times.matches_stat(&stat, !self.file_type.is_symlink())
         {
             return None;
         }
-        Some(self.timestamps)
+        Some(self.times)
     }
 }
 
 #[derive(Clone, Copy)]
-pub(crate) struct SourceTimestamps {
-    accessed: SystemTime,
-    modified: SystemTime,
+pub(crate) struct SourceTimes {
+    accessed: Timespec,
+    modified: Timespec,
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct TimestampOptions {
-    pub(crate) source: Option<SourceTimestamps>,
-    pub(crate) no_follow: bool,
-}
-
-impl SourceTimestamps {
+impl SourceTimes {
     pub(crate) fn from_metadata(metadata: &Metadata) -> io::Result<Self> {
         Ok(Self {
-            accessed: metadata.accessed()?,
-            modified: metadata.modified()?,
+            accessed: to_timespec(metadata.accessed()?)?,
+            modified: to_timespec(metadata.modified()?)?,
         })
     }
 
     fn from_stat(stat: &rustix::fs::Stat) -> Self {
         Self {
-            accessed: UNIX_EPOCH
-                + std::time::Duration::new(stat.st_atim.tv_sec as u64, stat.st_atim.tv_nsec as u32),
-            modified: UNIX_EPOCH
-                + std::time::Duration::new(stat.st_mtim.tv_sec as u64, stat.st_mtim.tv_nsec as u32),
+            accessed: Timespec {
+                tv_sec: stat.st_atim.tv_sec,
+                tv_nsec: stat.st_atim.tv_nsec,
+            },
+            modified: Timespec {
+                tv_sec: stat.st_mtim.tv_sec,
+                tv_nsec: stat.st_mtim.tv_nsec,
+            },
         }
     }
 
@@ -93,18 +90,18 @@ pub(crate) fn create_symlink(source: &Path, dest: &Path) -> io::Result<()> {
 }
 
 pub(crate) fn set_timestamps(
-    source_timestamps: SourceTimestamps,
+    source_times: SourceTimes,
     dest: &Path,
-    no_follow: bool,
+    follow_destination: bool,
 ) -> io::Result<()> {
     let timestamps = Timestamps {
-        last_access: to_timespec(source_timestamps.accessed)?,
-        last_modification: to_timespec(source_timestamps.modified)?,
+        last_access: source_times.accessed,
+        last_modification: source_times.modified,
     };
-    let flags = if no_follow {
-        AtFlags::SYMLINK_NOFOLLOW
-    } else {
+    let flags = if follow_destination {
         AtFlags::empty()
+    } else {
+        AtFlags::SYMLINK_NOFOLLOW
     };
     utimensat(CWD, dest, &timestamps, flags).map_err(io::Error::from)
 }

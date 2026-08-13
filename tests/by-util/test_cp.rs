@@ -2576,6 +2576,12 @@ fn test_cp_preserve_timestamps() {
     assert_eq!(creation, creation2);
 }
 
+#[cfg(wasi_runner)]
+fn assert_timestamps(metadata: &std_fs::Metadata, accessed: FileTime, modified: FileTime) {
+    assert_eq!(FileTime::from_last_access_time(metadata), accessed);
+    assert_eq!(FileTime::from_last_modification_time(metadata), modified);
+}
+
 #[test]
 #[cfg(wasi_runner)]
 fn test_cp_wasi_preserve_file_timestamps() {
@@ -2596,11 +2602,7 @@ fn test_cp_wasi_preserve_file_timestamps() {
         .succeeds();
 
     let metadata = std_fs::metadata(at.plus(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
-    assert_eq!(FileTime::from_last_access_time(&metadata), previous_atime);
-    assert_eq!(
-        FileTime::from_last_modification_time(&metadata),
-        previous_mtime
-    );
+    assert_timestamps(&metadata, previous_atime, previous_mtime);
 }
 
 #[test]
@@ -2629,25 +2631,14 @@ fn test_cp_wasi_preserve_symlink_timestamps() {
 
     let link_metadata = std_fs::symlink_metadata(at.plus("dest-link")).unwrap();
     assert!(link_metadata.file_type().is_symlink());
-    assert_eq!(FileTime::from_last_access_time(&link_metadata), link_atime);
-    assert_eq!(
-        FileTime::from_last_modification_time(&link_metadata),
-        link_mtime
-    );
+    assert_timestamps(&link_metadata, link_atime, link_mtime);
     assert_eq!(
         std_fs::read_link(at.plus("dest-link")).unwrap(),
         std_fs::read_link(at.plus("source-link")).unwrap()
     );
 
     let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
-    assert_eq!(
-        FileTime::from_last_access_time(&target_metadata),
-        target_atime
-    );
-    assert_eq!(
-        FileTime::from_last_modification_time(&target_metadata),
-        target_mtime
-    );
+    assert_timestamps(&target_metadata, target_atime, target_mtime);
 }
 
 #[test]
@@ -2671,14 +2662,7 @@ fn test_cp_wasi_preserve_timestamps_with_symbolic_link() {
 
     let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
     assert!(destination_metadata.file_type().is_symlink());
-    assert_eq!(
-        FileTime::from_last_access_time(&destination_metadata),
-        source_atime
-    );
-    assert_eq!(
-        FileTime::from_last_modification_time(&destination_metadata),
-        source_mtime
-    );
+    assert_timestamps(&destination_metadata, source_atime, source_mtime);
     assert_eq!(
         std_fs::read_link(at.plus("destination")).unwrap(),
         Path::new("source")
@@ -2700,20 +2684,19 @@ fn test_cp_wasi_preserve_dereferenced_symlink_timestamps() {
     filetime::set_file_times(at.plus("target"), target_atime, target_mtime).unwrap();
     filetime::set_symlink_file_times(at.plus("source-link"), link_atime, link_mtime).unwrap();
 
-    ucmd.args(&["-L", "--preserve=timestamps", "source-link", "destination"])
-        .succeeds();
+    ucmd.args(&[
+        "-L",
+        "--progress",
+        "--preserve=timestamps",
+        "source-link",
+        "destination",
+    ])
+    .succeeds();
 
     let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
     assert!(!destination_metadata.file_type().is_symlink());
     assert_eq!(at.read("destination"), "contents");
-    assert_eq!(
-        FileTime::from_last_access_time(&destination_metadata),
-        target_atime
-    );
-    assert_eq!(
-        FileTime::from_last_modification_time(&destination_metadata),
-        target_mtime
-    );
+    assert_timestamps(&destination_metadata, target_atime, target_mtime);
 }
 
 #[test]
@@ -2734,14 +2717,7 @@ fn test_cp_wasi_preserve_timestamps_through_destination_symlink() {
 
     assert!(at.is_symlink("destination"));
     let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
-    assert_eq!(
-        FileTime::from_last_access_time(&target_metadata),
-        source_atime
-    );
-    assert_eq!(
-        FileTime::from_last_modification_time(&target_metadata),
-        source_mtime
-    );
+    assert_timestamps(&target_metadata, source_atime, source_mtime);
     assert_eq!(at.read("target"), "new contents");
 }
 
@@ -2771,11 +2747,7 @@ fn test_cp_wasi_refreshes_timestamps_for_later_source() {
     .succeeds();
 
     let metadata = std_fs::metadata(at.plus("destination/second")).unwrap();
-    assert_eq!(FileTime::from_last_access_time(&metadata), first_atime);
-    assert_eq!(
-        FileTime::from_last_modification_time(&metadata),
-        shared_mtime
-    );
+    assert_timestamps(&metadata, first_atime, shared_mtime);
     assert_eq!(at.read("destination/second"), "first contents");
 }
 

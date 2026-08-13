@@ -30,7 +30,7 @@ use thiserror::Error;
 
 use platform::copy_on_write;
 #[cfg(target_os = "wasi")]
-use platform::{SourceTimestampSnapshot, SourceTimestamps, TimestampOptions, set_timestamps};
+use platform::{SourceTimes, SourceTimesSnapshot, set_timestamps};
 use uucore::backup_control::backup_would_destroy_source;
 use uucore::display::Quotable;
 use uucore::error::{UError, UResult, UUsageError, set_exit_code, strip_errno};
@@ -53,6 +53,13 @@ use crate::copydir::copy_directory;
 
 mod copydir;
 mod platform;
+
+#[cfg(target_os = "wasi")]
+#[derive(Clone, Copy)]
+struct WasiTimestampContext {
+    captured_source: Option<SourceTimes>,
+    follow_destination: bool,
+}
 
 #[derive(Debug, Error)]
 pub enum CpError {
@@ -1434,11 +1441,13 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
     let mut copied_destinations: HashSet<PathBuf> = HashSet::with_capacity(sources.len());
     let mut created_parent_dirs: HashSet<PathBuf> = HashSet::new();
     #[cfg(target_os = "wasi")]
-    let initial_source_timestamps = match (options.progress_bar, options.attributes.timestamps) {
+    let initial_source_snapshots = match (options.progress_bar, options.attributes.timestamps) {
         (true, Preserve::Yes { .. }) => Some(
             sources
                 .iter()
-                .map(|source| SourceTimestampSnapshot::from_path(source).ok())
+                .map(|source| {
+                    SourceTimesSnapshot::from_path(source, options.dereference(true)).ok()
+                })
                 .collect::<Vec<_>>(),
         ),
         _ => None,
@@ -1475,17 +1484,11 @@ pub fn copy(sources: &[PathBuf], target: &Path, options: &Options) -> CopyResult
             let dest = construct_dest_path(source, target, target_type, options)
                 .unwrap_or_else(|_| target.to_path_buf());
             #[cfg(target_os = "wasi")]
-            let current_source_snapshot;
-            #[cfg(target_os = "wasi")]
             let initial_source_snapshot = match options.attributes.timestamps {
-                Preserve::Yes { .. } => {
-                    if let Some(snapshots) = initial_source_timestamps.as_ref() {
-                        snapshots.get(source_index).and_then(Option::as_ref)
-                    } else {
-                        current_source_snapshot = SourceTimestampSnapshot::from_path(source).ok();
-                        current_source_snapshot.as_ref()
-                    }
-                }
+                Preserve::Yes { .. } => match initial_source_snapshots.as_ref() {
+                    Some(snapshots) => snapshots.get(source_index).copied().flatten(),
+                    None => SourceTimesSnapshot::from_path(source, options.dereference(true)).ok(),
+                },
                 Preserve::No { .. } => None,
             };
 
@@ -1601,7 +1604,7 @@ fn copy_source(
     copied_destinations: &HashSet<PathBuf>,
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
-    #[cfg(target_os = "wasi")] initial_source_snapshot: Option<&SourceTimestampSnapshot>,
+    #[cfg(target_os = "wasi")] initial_source_snapshot: Option<SourceTimesSnapshot>,
 ) -> CopyResult<()> {
     let source_path = Path::new(&source);
     if source_path.is_dir() && (options.dereference || !source_path.is_symlink()) {
@@ -1834,9 +1837,9 @@ pub(crate) fn copy_attributes(
         dest,
         &source_metadata,
         #[cfg(target_os = "wasi")]
-        TimestampOptions {
-            source: None,
-            no_follow: dest.is_symlink(),
+        WasiTimestampContext {
+            captured_source: None,
+            follow_destination: !dest.is_symlink(),
         },
         attributes,
         dest_is_freshly_created_dir,
@@ -1849,7 +1852,7 @@ fn copy_attributes_from_metadata(
     source: &Path,
     dest: &Path,
     source_metadata: &Metadata,
-    #[cfg(target_os = "wasi")] timestamp_options: TimestampOptions,
+    #[cfg(target_os = "wasi")] timestamp_context: WasiTimestampContext,
     attributes: &Attributes,
     dest_is_freshly_created_dir: bool,
     skip_selinux_xattr: bool,
@@ -1980,10 +1983,11 @@ fn copy_attributes_from_metadata(
 
     #[cfg(target_os = "wasi")]
     handle_preserve(attributes.timestamps, || {
-        let timestamps = timestamp_options
-            .source
-            .map_or_else(|| SourceTimestamps::from_metadata(source_metadata), Ok)?;
-        set_timestamps(timestamps, dest, timestamp_options.no_follow).map_err(CpError::from)
+        let source_times = timestamp_context
+            .captured_source
+            .map_or_else(|| SourceTimes::from_metadata(source_metadata), Ok)?;
+        set_timestamps(source_times, dest, timestamp_context.follow_destination)
+            .map_err(CpError::from)
     })?;
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -2024,40 +2028,6 @@ fn copy_attributes_from_metadata(
     })?;
 
     Ok(())
-}
-
-fn copy_attributes_after_copy(
-    source: &Path,
-    dest: &Path,
-    #[cfg(target_os = "wasi")] source_metadata: &Metadata,
-    #[cfg(target_os = "wasi")] timestamp_options: TimestampOptions,
-    attributes: &Attributes,
-    dest_is_freshly_created_dir: bool,
-    skip_selinux_xattr: bool,
-) -> CopyResult<()> {
-    #[cfg(target_os = "wasi")]
-    {
-        copy_attributes_from_metadata(
-            source,
-            dest,
-            source_metadata,
-            timestamp_options,
-            attributes,
-            dest_is_freshly_created_dir,
-            skip_selinux_xattr,
-        )
-    }
-
-    #[cfg(not(target_os = "wasi"))]
-    {
-        copy_attributes(
-            source,
-            dest,
-            attributes,
-            dest_is_freshly_created_dir,
-            skip_selinux_xattr,
-        )
-    }
 }
 
 fn symlink_file(
@@ -2611,7 +2581,7 @@ fn copy_file(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
-    #[cfg(target_os = "wasi")] initial_source_snapshot: Option<&SourceTimestampSnapshot>,
+    #[cfg(target_os = "wasi")] initial_source_snapshot: Option<SourceTimesSnapshot>,
 ) -> CopyResult<()> {
     let source_is_symlink = source.is_symlink();
     let initial_dest_metadata = dest.symlink_metadata().ok();
@@ -2759,8 +2729,8 @@ fn copy_file(
     };
 
     #[cfg(target_os = "wasi")]
-    let initial_source_timestamps = initial_source_snapshot.and_then(|snapshot| {
-        snapshot.current_timestamps(source, options.dereference(source_in_command_line))
+    let captured_source_times = initial_source_snapshot.and_then(|snapshot| {
+        snapshot.times_if_unchanged(source, options.dereference(source_in_command_line))
     });
 
     let dest_metadata = dest.symlink_metadata().ok();
@@ -2789,7 +2759,10 @@ fn copy_file(
     let created_symlink_output =
         source_metadata.file_type().is_symlink() || options.copy_mode == CopyMode::SymLink;
     #[cfg(target_os = "wasi")]
-    let no_follow_timestamps = created_symlink_output;
+    let timestamp_context = WasiTimestampContext {
+        captured_source: captured_source_times,
+        follow_destination: !created_symlink_output,
+    };
 
     if options.verbose && performed_action != PerformedAction::Skipped {
         print_verbose_output(options.parents, progress_bar, source, dest)?;
@@ -2812,48 +2785,45 @@ fn copy_file(
         fs::set_permissions(dest, dest_permissions).ok();
     }
 
-    let copy_attributes_result = if options.dereference(source_in_command_line) {
-        // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
-        // fall back to the original source path
-        let src_for_attrs = canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
-            .ok()
-            .filter(|p| p.exists())
-            .unwrap_or_else(|| source.to_path_buf());
-        copy_attributes_after_copy(
-            &src_for_attrs,
-            dest,
-            #[cfg(target_os = "wasi")]
-            &source_metadata,
-            #[cfg(target_os = "wasi")]
-            TimestampOptions {
-                source: initial_source_timestamps,
-                no_follow: no_follow_timestamps,
-            },
-            &options.attributes,
-            false,
-            options.set_selinux_context,
-        )
-    } else if source_is_stream && !source.exists() {
+    let copy_attributes_result = if source_is_stream && !source.exists() {
         // Some stream files may not exist after we have copied it,
         // like anonymous pipes. Thus, we can't really copy its
         // attributes. However, this is already handled in the stream
         // copy function (see `copy_stream` under platform/linux.rs).
         Ok(())
     } else {
-        copy_attributes_after_copy(
-            source,
+        // Try to canonicalize, but if it fails (e.g., due to inaccessible parent directories),
+        // fall back to the original source path
+        let source_for_attributes = if options.dereference(source_in_command_line) {
+            canonicalize(source, MissingHandling::Normal, ResolveMode::Physical)
+                .ok()
+                .filter(|path| path.exists())
+                .unwrap_or_else(|| source.to_path_buf())
+        } else {
+            source.to_path_buf()
+        };
+
+        #[cfg(target_os = "wasi")]
+        let result = copy_attributes_from_metadata(
+            &source_for_attributes,
             dest,
-            #[cfg(target_os = "wasi")]
             &source_metadata,
-            #[cfg(target_os = "wasi")]
-            TimestampOptions {
-                source: initial_source_timestamps,
-                no_follow: no_follow_timestamps,
-            },
+            timestamp_context,
             &options.attributes,
             false,
             options.set_selinux_context,
-        )
+        );
+
+        #[cfg(not(target_os = "wasi"))]
+        let result = copy_attributes(
+            &source_for_attributes,
+            dest,
+            &options.attributes,
+            false,
+            options.set_selinux_context,
+        );
+
+        result
     };
 
     // GNU cp truncates the destination when a required attribute cannot be preserved
