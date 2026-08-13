@@ -48,9 +48,29 @@ fn ptx_input_references_short_lines(bencher: Bencher, num_lines: usize) {
 }
 
 /// Benchmark -r on long lines
-#[divan::bench(args = [100])]
+#[divan::bench(args = [1000])]
 fn ptx_input_references_long_lines(bencher: Bencher, num_lines: usize) {
     bench_ptx(bencher, &fixed_size_data(num_lines), &["-r"]);
+}
+
+
+fn tex_special_data(num_lines: usize) -> Vec<u8> {
+    let lines = [
+        "the permuted index of \\alpha sorted around each keyword",
+        "context $x$ lines paired with file_name and A&B output",
+        "roughly 50% of {group} entries escaped as #1 or x_1 here",
+        "each \\ref and $y$ carries a file_name style suffix too",
+        "sorted A&B context around 90% of the {group} keywords",
+        "index entries with x_1 and #1 spread across the \\alpha line",
+    ];
+    text_data::generate_data_from_words(&lines, num_lines)
+}
+
+/// Benchmark -T on many short lines.
+#[divan::bench(args = [10000])]
+fn ptx_tex(bencher: Bencher, num_lines: usize) {
+    let data = tex_special_data(num_lines);
+    bench_ptx(bencher, &data, &["-T"]);
 }
 
 fn main() {
