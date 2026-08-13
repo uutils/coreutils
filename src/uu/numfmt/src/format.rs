@@ -206,6 +206,14 @@ fn parse_number_part(s: &str, input: &str) -> Result<ParsedNumber> {
         return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
     }
 
+    // GNU rejects a leading '+' and scientific notation, which Rust's parsers accept.
+    if s.starts_with('+') {
+        return Err(translate!("numfmt-error-invalid-number", "input" => input.quote()));
+    }
+    if s.bytes().any(|b| b == b'e' || b == b'E') {
+        return Err(translate!("numfmt-error-invalid-suffix", "input" => input.quote()));
+    }
+
     if let Ok(n) = s.parse::<i128>() {
         return Ok(ParsedNumber::ExactInt(n));
     }
