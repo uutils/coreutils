@@ -450,7 +450,7 @@ fn test_field_with_multibyte_whitespace_separator() {
 #[test]
 fn test_from_multibyte_decimal_separator_invalid_suffix() {
     new_ucmd!()
-        .env("LC_ALL", "ar_SA.UTF-8")
+        .env("LC_ALL", "fr_FR. UTF-8")
         .args(&["--from=si", "1٫€K"])
         .fails_with_code(2)
         .stderr_only("numfmt: invalid suffix in input '1٫€K': '€K'\n");
