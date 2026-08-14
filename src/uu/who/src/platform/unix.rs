@@ -209,8 +209,15 @@ impl Who {
                 .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
-            println!("{}", users.join(" "));
-            println!("{}", translate!("who-user-count", "count" => users.len()));
+            // `println!` panics on a write error; the rest of this file surfaces
+            // it through `?` instead so the caller can report it and exit
+            // non-zero, matching GNU (#13388).
+            writeln!(stdout(), "{}", users.join(" "))?;
+            writeln!(
+                stdout(),
+                "{}",
+                translate!("who-user-count", "count" => users.len())
+            )?;
         } else {
             let records = utmpx::Utmpx::iter_all_records_from(f);
 

@@ -292,3 +292,22 @@ fn test_piped_to_dev_full() {
         .fails()
         .stderr_is("who: No space left on device\n");
 }
+
+// `-q` took a separate branch that printed with `println!`, which aborts the
+// process on a write error instead of reporting it (#13388).
+#[cfg(target_os = "linux")]
+#[test]
+fn test_short_list_piped_to_dev_full() {
+    let ts = TestScenario::new(util_name!());
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .arg("-q")
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_is("who: No space left on device\n");
+}
