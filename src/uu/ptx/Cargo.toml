@@ -19,6 +19,7 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 regex = { workspace = true }
+rustc-hash = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
