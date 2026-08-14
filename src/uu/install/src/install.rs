@@ -9,7 +9,6 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
-use filetime::{FileTime, set_file_times};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -1126,10 +1125,14 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
-    let modified_time = FileTime::from_last_modification_time(&meta);
-    let accessed_time = FileTime::from_last_access_time(&meta);
+    let modified_time = meta.modified()?;
+    let accessed_time = meta.accessed()?;
 
-    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+    let times = fs::FileTimes::new()
+        .set_accessed(accessed_time)
+        .set_modified(modified_time);
+    let file = File::options().write(true).open(to)?;
+    if let Err(e) = file.set_times(times) {
         show_error!("{e}");
         // ignore error
     }
