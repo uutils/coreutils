@@ -365,10 +365,8 @@ fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
         return 1.into();
     }
     // Otherwise defer to the standard clap handling (incl. `--help`/`--version`).
-    match uucore::clap_localization::handle_clap_result(uu_app(), args.iter()) {
-        Ok(_) => 1.into(),
-        Err(e) => e,
-    }
+    uucore::clap_localization::handle_clap_result(uu_app(), args.iter())
+        .map_or_else(|e| e, |_| 1.into())
 }
 
 pub fn uu_app() -> Command {
