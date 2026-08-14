@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore renamer fsetxattr
 
 mod error;
 #[cfg(unix)]
@@ -1166,8 +1167,15 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
+    // Retrieve xattrs through a file descriptor so a concurrent renamer cannot
+    // redirect the list/get calls to a different inode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
+    let xattrs = {
+        use std::fs::File;
+        File::open(from)
+            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
+            .unwrap_or_else(|_| FxHashMap::default())
+    };
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1182,8 +1190,18 @@ fn rename_dir_fallback(
         display_manager,
     );
 
+    // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
+    // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
+    // for cross-device moves).
+    //
+    // The fd is opened read-only: a directory cannot be opened for writing, and
+    // fsetxattr checks write permission on the inode, not the open mode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::apply_xattrs(to, xattrs)?;
+    {
+        use std::fs::File;
+        let dest = File::open(to)?;
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+    }
 
     result?;
 
