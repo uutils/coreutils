@@ -1,0 +1,47 @@
+# GNU test-suite entries left out of the uutils pass/fail percentages.
+#
+# They do not check observable behavior, they check that the binary is built
+# like GNU's: they place gdb breakpoints in GNU's own C sources, or interpose a
+# specific libc entry point with LD_PRELOAD and give up when it is not called.
+# Passing them would mean reshaping our internals to match GNU's rather than
+# fixing anything a user can see.
+#
+# The list is consumed by the tracking repo
+# (https://github.com/uutils/coreutils-tracking) so the numbers describe the
+# tests we can actually influence. Tests that are merely hard, unimplemented or
+# intermittent do NOT belong here - they stay counted on purpose. See
+# https://github.com/uutils/coreutils/issues/13841
+#
+# Format: one "<util>/<test>.log" entry per line, '#' starts a comment. That is
+# the log name the results are keyed by; the source in the GNU tree is the same
+# path with a .sh (or .pl) extension.
+
+
+# --- Structurally impossible ---------------------------------------------
+# Nothing we can write in Rust makes these run.
+
+# Both grep a line number out of GNU's C source ("^excise" in src/remove.c,
+# "^tail_forever_inotify" in src/tail.c) and break there, so the breakpoint can
+# only resolve for a binary compiled from those files.
+rm/r-root.log
+tail/inotify-race.log
+tail/inotify-race2.log
+
+# require_gnu_ is "test $(uname) = GNU"; skipped on Linux for GNU coreutils too.
+id/gnu-zero-uids.log
+
+
+# --- Require matching GNU's libc entry points ----------------------------
+# LD_PRELOAD does fire for Rust binaries, but each of these overrides the one
+# symbol GNU happens to call and self-skips otherwise. We would have to route
+# through that same symbol - in df's case dropping /proc/self/mountinfo for
+# getmntent/mtab - purely so the interception lands.
+
+# overrides __xstat/stat; std uses statx
+cp/nfs-removal-race.log
+# overrides ftruncate/fstat
+dd/fail-ftruncate-fstat.log
+# needs HAVE_GETMNTENT, overrides fopen on the mtab
+df/skip-duplicates.log
+# overrides readdir; std uses readdir64
+rm/rm-readdir-fail.log
