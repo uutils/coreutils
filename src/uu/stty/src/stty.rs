@@ -159,6 +159,17 @@ enum ArgOptions<'a> {
     SavedState(Vec<u32>),
 }
 
+impl ArgOptions<'_> {
+    /// Whether applying this argument changes the terminal settings.
+    ///
+    /// `Print` arguments only query the terminal, so a command built entirely out of them must
+    /// not call `tcsetattr`: doing so raises `SIGTTOU` in a background process group, which
+    /// stops the process instead of answering the query.
+    fn modifies_termios(&self) -> bool {
+        !matches!(self, ArgOptions::Print(_))
+    }
+}
+
 impl<'a> From<AllFlags<'a>> for ArgOptions<'a> {
     fn from(flag: AllFlags<'a>) -> Self {
         ArgOptions::Flags(flag)
@@ -436,7 +447,10 @@ fn stty(opts: &Options) -> UResult<()> {
                 }
             }
         }
-        tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+        // A query-only invocation such as `stty size` must not write the settings back.
+        if valid_args.iter().any(ArgOptions::modifies_termios) {
+            tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+        }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
@@ -1345,6 +1359,18 @@ mod tests {
     use super::*;
 
     // Essential unit tests for complex internal parsing and logic functions.
+
+    #[test]
+    fn test_print_settings_do_not_modify_termios() {
+        // `stty size` and `stty --help`-style queries must not reach `tcsetattr`, otherwise
+        // they raise SIGTTOU and hang when run from a background process group.
+        assert!(!ArgOptions::Print(PrintSetting::Size).modifies_termios());
+
+        // Anything that actually applies a setting still has to be written back.
+        assert!(ArgOptions::Mapping((S::VEOF, 4)).modifies_termios());
+        assert!(ArgOptions::SavedState(vec![0; 3]).modifies_termios());
+        assert!(ArgOptions::Special(SpecialSetting::Rows(24)).modifies_termios());
+    }
 
     // Control character parsing tests
     #[test]
