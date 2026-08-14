@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 #[cfg(unix)]
 use libc::S_IWUSR;
-use rand::{RngExt as _, rngs::StdRng};
+use rand::{rngs::StdRng, RngExt as _};
 use std::cell::RefCell;
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -63,30 +63,17 @@ const ZERO_PATTERN: Pattern = Pattern {
     flip_sector: false,
 };
 
-/// Pass-group descriptor table for overwrite scheduling.
+/// Overwrite schedule: packed groups of Gutmann 12-bit codes.
 ///
-/// Layout (public Gutmann / shred design):
-/// - `k > 0`: the next `k` entries are fixed pattern codes to include as a group
-/// - `k < 0`: schedule `-k` random passes
-/// - `k == 0`: end of table (restart from the beginning when more passes remain)
-///
-/// Pattern codes use the lower 12 bits as the repeating 3-byte bit pattern. Bit
-/// `0x1000` marks the sector-phase variant: the first byte of every 512-byte
-/// sector is XOR'd with `0x80` when the pass is written.
+/// A positive count takes that many following codes as one group. A negative
+/// count reserves that many random slots. Zero wraps to the start of the table.
+/// Low 12 bits are the repeating three-byte pattern; `0x1000` flips the first
+/// byte of every 512-byte sector when the pass is written.
 const PASS_GROUPS: &[i32] = &[
-    -2, // 2 random passes
-    2, 0x000, 0xFFF, // 1-bit
-    2, 0x555, 0xAAA, // 2-bit
-    -1,    // 1 random pass
-    6, 0x249, 0x492, 0x6DB, 0x924, 0xB6D, 0xDB6, // 3-bit
-    12, 0x111, 0x222, 0x333, 0x444, 0x666, 0x777, 0x888, 0x999, 0xBBB, 0xCCC, 0xDDD,
-    0xEEE, // 4-bit
-    -1,    // 1 random pass
-    // First bit of each 512-byte sector flipped (phase variants)
-    8, 0x1000, 0x1249, 0x1492, 0x16DB, 0x1924, 0x1B6D, 0x1DB6, 0x1FFF, 14, 0x1111, 0x1222, 0x1333,
-    0x1444, 0x1555, 0x1666, 0x1777, 0x1888, 0x1999, 0x1AAA, 0x1BBB, 0x1CCC, 0x1DDD, 0x1EEE,
-    -1, // 1 random pass
-    0,  // end
+    -2, 2, 0x000, 0xFFF, 2, 0x555, 0xAAA, -1, 6, 0x249, 0x492, 0x6DB, 0x924, 0xB6D, 0xDB6, 12,
+    0x111, 0x222, 0x333, 0x444, 0x666, 0x777, 0x888, 0x999, 0xBBB, 0xCCC, 0xDDD, 0xEEE, -1, 8,
+    0x1000, 0x1249, 0x1492, 0x16DB, 0x1924, 0x1B6D, 0x1DB6, 0x1FFF, 14, 0x1111, 0x1222, 0x1333,
+    0x1444, 0x1555, 0x1666, 0x1777, 0x1888, 0x1999, 0x1AAA, 0x1BBB, 0x1CCC, 0x1DDD, 0x1EEE, -1, 0,
 ];
 
 /// Fixed overwrite pattern: three repeating bytes, optionally with the per-sector
@@ -492,10 +479,6 @@ impl PassRng for StdRng {
 
 /// Schedule `num` overwrite passes: select pattern groups, then interleave random
 /// passes with a Bresenham-style spacing and shuffle the fixed patterns.
-///
-/// Clean-room reimplementation of the publicly documented shred pass scheduling
-/// design (Gutmann pattern groups + evenly spaced random passes), not a
-/// translation of GNU coreutils source.
 fn genpattern(num: usize, rng: &mut impl PassRng) -> Result<Vec<PassType>, io::Error> {
     if num == 0 {
         return Ok(Vec::new());
@@ -988,8 +971,8 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
 #[cfg(test)]
 mod tests {
     use super::{
-        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassRng, PassType, Pattern, SECTOR_SIZE,
-        genpattern, pass_name, split_on_blocks,
+        genpattern, pass_name, split_on_blocks, BytesWriter, PassRng, PassType, Pattern,
+        BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, SECTOR_SIZE,
     };
     use std::io;
 
