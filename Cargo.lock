@@ -3746,7 +3746,6 @@ version = "0.10.0"
 dependencies = [
  "clap",
  "file_diff",
- "filetime",
  "fluent",
  "rustix",
  "selinux",
