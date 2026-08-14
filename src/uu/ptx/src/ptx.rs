@@ -7,7 +7,7 @@
 
 use std::cmp;
 use std::cmp::PartialEq;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as FmtWrite;
 use std::fs::File;
@@ -16,6 +16,7 @@ use std::path::Path;
 
 use clap::{Arg, ArgAction, Command, value_parser};
 use regex::Regex;
+use rustc_hash::FxHashSet;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -66,7 +67,7 @@ impl Default for Config {
 fn read_word_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
-) -> std::io::Result<HashSet<String>> {
+) -> std::io::Result<FxHashSet<String>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
@@ -76,7 +77,7 @@ fn read_word_filter_file(
         let file = File::open(Path::new(filename))?;
         Box::new(file)
     });
-    let mut words: HashSet<String> = HashSet::new();
+    let mut words: FxHashSet<String> = FxHashSet::default();
     for word in reader.lines() {
         words.insert(word?);
     }
@@ -87,7 +88,7 @@ fn read_word_filter_file(
 fn read_char_filter_file(
     matches: &clap::ArgMatches,
     option: &str,
-) -> std::io::Result<HashSet<char>> {
+) -> std::io::Result<FxHashSet<char>> {
     let filename = matches
         .get_one::<OsString>(option)
         .expect("parsing options failed!");
@@ -106,29 +107,29 @@ fn read_char_filter_file(
 struct WordFilter {
     only_specified: bool,
     ignore_specified: bool,
-    only_set: HashSet<String>,
-    ignore_set: HashSet<String>,
+    only_set: FxHashSet<String>,
+    ignore_set: FxHashSet<String>,
     word_regex: String,
 }
 
 impl WordFilter {
     #[allow(clippy::cognitive_complexity)]
     fn new(matches: &clap::ArgMatches, config: &Config) -> UResult<Self> {
-        let (o, oset): (bool, HashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
+        let (o, oset): (bool, FxHashSet<String>) = if matches.contains_id(options::ONLY_FILE) {
             let words =
                 read_word_filter_file(matches, options::ONLY_FILE).map_err_context(String::new)?;
             (true, words)
         } else {
-            (false, HashSet::new())
+            (false, FxHashSet::default())
         };
-        let (i, iset): (bool, HashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
+        let (i, iset): (bool, FxHashSet<String>) = if matches.contains_id(options::IGNORE_FILE) {
             let words = read_word_filter_file(matches, options::IGNORE_FILE)
                 .map_err_context(String::new)?;
             (true, words)
         } else {
-            (false, HashSet::new())
+            (false, FxHashSet::default())
         };
-        let break_set: Option<HashSet<char>> = if matches.contains_id(options::BREAK_FILE)
+        let break_set: Option<FxHashSet<char>> = if matches.contains_id(options::BREAK_FILE)
             && !matches.contains_id(options::WORD_REGEXP)
         {
             let mut chars =
