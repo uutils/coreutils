@@ -3,7 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore dirattr dirvalue setfattr getfattr
 
 use filetime::FileTime;
 use rstest::rstest;
@@ -3053,6 +3054,64 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Cross-device mv of a directory must preserve the directory's own xattrs.
+/// The fd-based xattr path has to open the destination read-only: a directory
+/// cannot be opened for writing, so a write-mode open would silently drop them.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_xattr_preserved() {
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("src_dir");
+    at.write("src_dir/file.txt", "content");
+
+    if !Command::new("setfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "-v",
+            "dirvalue",
+            &at.plus_as_string("src_dir"),
+        ])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("test skipped: setfattr failed");
+        return;
+    }
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_dir"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let out = Command::new("getfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "--only-values",
+            dst_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run getfattr on the moved directory");
+    assert!(
+        out.status.success(),
+        "directory xattr was not preserved across devices: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"dirvalue");
 }
 
 /// Cross-device mv of a symlink onto an existing file must replace the
