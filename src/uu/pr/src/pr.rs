@@ -427,7 +427,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 fn recreate_arguments(args: &[String]) -> Vec<String> {
     let num_regex = Regex::new(r"^[^-]\d*$").unwrap();
     let n_regex = Regex::new(r"^-n\s*$").unwrap();
-    let e_regex = Regex::new(r"^-e").unwrap();
+    // `-e` ends a cluster of short flags that take no value of their own, as in `-tre`.
+    // Options that do take a value are excluded so that `-se` keeps meaning `-s e`.
+    let e_regex = Regex::new(r"^-[dtTrFfabmJ]*e$").unwrap();
     let mut arguments = args.to_owned();
     let num_option = args
         .iter()
@@ -442,16 +444,15 @@ fn recreate_arguments(args: &[String]) -> Vec<String> {
         arguments.insert(pos + 2, could_be_file);
     }
 
-    // To ensure not to accidentally delete the next argument after a short flag for -e we insert
-    // the default values for the -e flag is '-e' is present without direct arguments.
+    // `-e` takes an optional attached argument, which clap cannot express, so it is filled in
+    // here. Without it clap would report a missing value for `-tre`, or swallow the following
+    // argument, usually a file name, for a bare `-e`.
     let expand_tabs_option = arguments
         .iter()
         .take_while(|arg| arg.as_str() != "--")
         .find_position(|x| e_regex.is_match(x.trim()));
-    if let Some((pos, value)) = expand_tabs_option
-        && value.trim().len() <= 2
-    {
-        arguments[pos] = "-e\t8".to_string();
+    if let Some((pos, value)) = expand_tabs_option {
+        arguments[pos] = format!("{}\t8", value.trim());
     }
 
     // Remove only whole-token legacy operands before clap parsing.
