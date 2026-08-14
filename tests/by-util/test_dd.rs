@@ -1495,7 +1495,10 @@ fn test_sync_delayed_reader() {
             .unwrap();
         for _ in 0..8 {
             fifo.write_all(&[0xF; 8]).unwrap();
-            sleep(Duration::from_millis(10));
+            // Each write must be read as its own short record, so leave dd
+            // enough time to drain the pipe: if two writes pile up, it reads a
+            // full 16-byte block, pads nothing and the output no longer matches.
+            sleep(Duration::from_millis(100));
         }
     }
     // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
