@@ -946,6 +946,34 @@ fn test_simple_expand_tab() {
 }
 
 #[test]
+fn test_expand_tab_at_end_of_short_flag_cluster() {
+    // `-e` closing a cluster of value-less short flags carries no attached argument, so it has
+    // to fall back to the defaults rather than report a missing value.
+    for (arg, expected) in [
+        ("-tre", "oi\n"),
+        ("-tre8", "oi\n"),
+        ("-tfre", "oi\n\x0c"),
+        ("-tfre8", "oi\n\x0c"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("oi\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_expand_tab_does_not_consume_following_operand() {
+    // A bare `-e` must leave the file operand alone.
+    new_ucmd!()
+        .args(&["-t", "-e"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_only("a       b\n");
+}
+
+#[test]
 fn test_simple_expand_tab_with_digit_argument() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
