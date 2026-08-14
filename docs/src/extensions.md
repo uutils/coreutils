@@ -82,6 +82,7 @@ numbers. GNU coreutils uses `long double`, whose actual size may be [double prec
 [quadruple precision 128-bit float](https://en.wikipedia.org/wiki/Quadruple-precision_floating-point_format) (e.g. arm64).
 
 Practically, this means that printing a number with high precision will remain exact:
+
 ```
 printf "%.48f\n" 0.1
 0.100000000000000000000000000000000000000000000000 << uutils on all platforms
@@ -116,6 +117,7 @@ before the decimal point, 15 after).
 
 Practically, this means that the default hexadecimal floating point output is
 identical to x86(-64) GNU coreutils:
+
 ```
 printf "%a\n" 0.1
 0xc.ccccccccccccccdp-7 << uutils on all platforms
@@ -126,6 +128,7 @@ printf "%a\n" 0.1
 
 We _can_ print an arbitrary number of digits if a larger precision is requested,
 and the leading digit will still be in the `0x8`-`0xf` range:
+
 ```
 printf "%.32a\n" 0.1
 0xc.cccccccccccccccccccccccccccccccdp-7 << uutils on all platforms
