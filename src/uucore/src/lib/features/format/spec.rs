@@ -511,7 +511,10 @@ fn resolve_asterisk_width(
         Some(CanAsterisk::Asterisk(loc)) => {
             let nb = args.next_i64(loc);
             if nb < 0 {
-                Some((usize::try_from(-(nb as isize)).ok().unwrap_or(0), true))
+                // A negative width means left alignment; its magnitude is the
+                // width. Use unsigned_abs so that i64::MIN (which has no positive
+                // counterpart as an i64) does not overflow when negated.
+                Some((usize::try_from(nb.unsigned_abs()).ok().unwrap_or(0), true))
             } else {
                 Some((usize::try_from(nb).ok().unwrap_or(0), false))
             }

@@ -440,6 +440,17 @@ fn sub_min_width_negative() {
 }
 
 #[test]
+fn sub_asterisk_width_i64_min_no_panic() {
+    // A dynamic width of i64::MIN must not panic with "attempt to negate with
+    // overflow" (#13766). Its magnitude exceeds the maximum width, so printf
+    // fails cleanly with exit code 1 rather than aborting (which would be 134).
+    new_ucmd!()
+        .args(&["%*d", "-9223372036854775808", "1"])
+        .fails_with_code(1)
+        .stderr_contains("width too large");
+}
+
+#[test]
 fn sub_str_max_chars_input() {
     new_ucmd!()
         .args(&["hello %7.2s", "world"])
