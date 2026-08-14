@@ -29,7 +29,6 @@ compare = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
-rayon = { workspace = true }
 self_cell = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
@@ -46,6 +45,12 @@ foldhash = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
 rustix = { workspace = true, features = ["system", "process"] }
+
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
+rayon = { workspace = true }
+
+[target.wasm32-wasip1-threads.dependencies]
+rayon = { workspace = true }
 
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
