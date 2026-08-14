@@ -6,7 +6,6 @@
 // spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
 // spell-checker:ignore dirattr dirvalue setfattr getfattr
 
-use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
@@ -1171,6 +1170,7 @@ fn test_mv_backup_conflicting_options() {
 
 #[test]
 fn test_mv_update_option() {
+    use std::fs::{File, FileTimes};
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
@@ -1179,10 +1179,22 @@ fn test_mv_update_option() {
     at.touch(file_a);
     at.touch(file_b);
     let ts = time::OffsetDateTime::now_utc();
-    let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
-    let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
-    filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
-    filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
+    let now = ts.into();
+    let later = (ts + time::Duration::seconds(3600)).into();
+    let times_now = FileTimes::new().set_accessed(now).set_modified(now);
+    let times_later = FileTimes::new().set_accessed(now).set_modified(later);
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_a))
+        .unwrap()
+        .set_times(times_now)
+        .unwrap();
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_b))
+        .unwrap()
+        .set_times(times_later)
+        .unwrap();
 
     scene
         .ucmd()
