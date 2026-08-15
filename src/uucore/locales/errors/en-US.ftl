@@ -41,6 +41,7 @@ checksum-error-text-after-tag = --tag does not support --text mode
 checksum-error-algorithm-not-supported-with-check = --check is not supported with --algorithm={"{"}bsd,sysv,crc,crc32b{"}"}
 checksum-error-combine-multiple-algorithms = You cannot combine multiple hash algorithms!
 checksum-error-need-algorithm-to-hash = Needs an algorithm to hash with.
+    Use --help for more information.
 checksum-error-unknown-algorithm = unknown algorithm: { $algorithm }: clap should have prevented this case
 
 # Diagnostic labels: what the caret points at in a SIZE
