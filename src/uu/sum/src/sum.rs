@@ -86,11 +86,11 @@ fn open(name: &OsString) -> UResult<Reader> {
                     ));
                 }
             }
-            Err(err) => {
-                if err.kind() == ErrorKind::NotFound {
+            Err(e) => {
+                if e.kind() == ErrorKind::NotFound {
                     return Err(USimpleError::new(
                         1,
-                        translate!("sum-error-no-such-file-or-directory", "name" => name.maybe_quote()),
+                        format!("{}: {}", name.maybe_quote(), strip_errno(&e)),
                     ));
                 } else if path.to_string_lossy().ends_with(['/', '\\']) {
                     return Err(USimpleError::new(
