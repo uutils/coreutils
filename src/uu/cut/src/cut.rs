@@ -18,7 +18,7 @@ use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
 
 use self::searcher::Searcher;
-use matcher::{ExactMatcher, Matcher, WhitespaceMatcher};
+use matcher::{ExactMatcher, Matcher, MbExactMatcher, WhitespaceMatcher};
 use uucore::ranges::Range;
 use uucore::translate;
 use uucore::{format_usage, show_error, show_if_err};
@@ -322,6 +322,10 @@ impl CharCut<'_> {
         // already consumed. The ranges are sorted and disjoint, so one pass
         // over the line is enough and each range maps to a contiguous slice.
         let (mut idx, mut pos) = (0, 0);
+        // End of the previous range, and end of the last range before the run
+        // of adjacent ranges the current one belongs to (1-based, `0` for
+        // none), plus whether a delimiter is owed to the next character.
+        let (mut prev_high, mut before_run_high, mut delim_pending) = (0, 0, false);
         for &Range { low, high } in self.ranges {
             // A character position is never below its own byte offset, so a
             // range starting past the last byte selects nothing, and so do the
@@ -334,21 +338,56 @@ impl CharCut<'_> {
             if idx == line.len() {
                 break;
             }
-            if print_delim {
-                out.write_all(self.out_delim)?;
-            } else if self.explicit_delim {
-                print_delim = true;
+            // Adjacent ranges select a contiguous stretch of the line, so they
+            // form one run as far as characters are concerned.
+            if prev_high + 1 != low {
+                before_run_high = prev_high;
             }
+            // A range boundary only separates characters when it falls between
+            // two of them; the delimiter is owed to whichever character prints
+            // next, possibly from a later range. Positions are byte offsets
+            // here, so all this only concerns `-b -n`: a character position
+            // can never land inside a character.
+            if self.by_char || idx >= prev_high {
+                delim_pending = true;
+            }
+            // The selected bytes of a character must reach its end without a
+            // hole, so one an earlier run reached into is dropped even though
+            // its last byte falls here, taking the owed delimiter with it.
+            if !self.by_char && idx < before_run_high {
+                delim_pending = false;
+                let len = self.encoding.char_len(&line[idx..]);
+                idx += len;
+                pos += len;
+                if idx >= line.len() {
+                    break;
+                }
+            }
+            prev_high = high;
             let start = idx;
             if high >= line.len() {
                 // The range reaches past the end of the line, so it covers
                 // every character left and none of them needs to be decoded.
                 // The ranges after it start further away still.
+                if print_delim && delim_pending {
+                    out.write_all(self.out_delim)?;
+                }
                 return out.write_all(&line[start..]);
             }
-            // At least one character is taken: `pos` is below `high` and there
-            // are bytes left, so this always moves `idx` forward.
             (idx, pos) = self.advance(line, idx, pos, high);
+            // A range covering only part of a multi-byte character selects
+            // nothing, and leaves the delimiter it owes to the next one.
+            if idx == start {
+                continue;
+            }
+            if print_delim {
+                if delim_pending {
+                    out.write_all(self.out_delim)?;
+                }
+            } else if self.explicit_delim {
+                print_delim = true;
+            }
+            delim_pending = false;
             out.write_all(&line[start..idx])?;
         }
         Ok(())
@@ -743,6 +782,38 @@ fn cut_fields_whitespace_trimmed<R: Read, W: Write>(
     Ok(())
 }
 
+/// Run field cutting with the given matcher, choosing the explicit- or
+/// implicit-output-delimiter routine.
+fn cut_fields_with_matcher<R: Read, W: Write, M: Matcher>(
+    reader: R,
+    out: &mut W,
+    matcher: &M,
+    ranges: &[Range],
+    only_delimited: bool,
+    newline_char: u8,
+    out_delimiter: Option<&[u8]>,
+) -> UResult<()> {
+    match out_delimiter {
+        Some(out_delim) => cut_fields_explicit_out_delim(
+            reader,
+            out,
+            matcher,
+            ranges,
+            only_delimited,
+            newline_char,
+            out_delim,
+        ),
+        None => cut_fields_implicit_out_delim(
+            reader,
+            out,
+            matcher,
+            ranges,
+            only_delimited,
+            newline_char,
+        ),
+    }
+}
+
 fn cut_fields<R: Read, W: Write>(
     reader: R,
     out: &mut W,
@@ -763,28 +834,27 @@ fn cut_fields<R: Read, W: Write>(
                 field_opts.only_delimited,
             )
         }
-        Delimiter::Slice(delim) => {
-            let matcher = ExactMatcher::new(delim);
-            match opts.out_delimiter {
-                Some(out_delim) => cut_fields_explicit_out_delim(
-                    reader,
-                    out,
-                    &matcher,
-                    ranges,
-                    field_opts.only_delimited,
-                    newline_char,
-                    out_delim,
-                ),
-                None => cut_fields_implicit_out_delim(
-                    reader,
-                    out,
-                    &matcher,
-                    ranges,
-                    field_opts.only_delimited,
-                    newline_char,
-                ),
-            }
-        }
+        // An ASCII single-byte delimiter can never occur inside a multi-byte
+        // character, so the fast byte-wise matcher is correct in every locale.
+        // Otherwise match the delimiter as a whole character.
+        Delimiter::Slice(delim) if delim.len() == 1 && delim[0] <= 0x7F => cut_fields_with_matcher(
+            reader,
+            out,
+            &ExactMatcher::new(delim),
+            ranges,
+            field_opts.only_delimited,
+            newline_char,
+            opts.out_delimiter,
+        ),
+        Delimiter::Slice(delim) => cut_fields_with_matcher(
+            reader,
+            out,
+            &MbExactMatcher::new(delim),
+            ranges,
+            field_opts.only_delimited,
+            newline_char,
+            opts.out_delimiter,
+        ),
         Delimiter::Whitespace => {
             let out_delim = opts.out_delimiter.unwrap_or(b"\t");
             if field_opts.whitespace_trimmed {
@@ -891,14 +961,14 @@ fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>
             if os_string.is_empty() {
                 Delimiter::Slice(b"\0")
             } else {
-                // The delimiter must be a single character. We accept a single
-                // UTF-8 character (e.g. an emoji), a single byte (including a
-                // non-UTF-8 byte like `b"\xFF"`), or a single character of the
-                // current locale's encoding (e.g. a 2-byte GB18030 character).
+                // The delimiter must be a single character in the *current locale's*
+                // encoding: a multi-byte UTF-8 character in a UTF-8 locale, a 2-byte
+                // GB18030 character, or any single byte like `b"\xAD"`. In a C/POSIX
+                // (single-byte) locale even a valid UTF-8 multibyte sequence counts
+                // as several characters, matching GNU.
                 let bytes = os_str_as_bytes(os_string)?;
-                let single_utf8_char = os_string.to_str().is_some_and(|s| s.chars().count() == 1);
-                let single_locale_char = mb_char_len(bytes) == bytes.len();
-                if !single_utf8_char && !single_locale_char {
+                let is_single_char = mb_char_len(bytes) == bytes.len();
+                if !is_single_char {
                     return Err(UUsageError::new(
                         1,
                         translate!("cut-error-delimiter-must-be-single-character"),
@@ -1039,8 +1109,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     Ok(())
 }
 
-// Only one, and only one of cutting mode arguments, i.e. `-b`, `-c`, `-f`,
-// `-F`, is expected.
+// Exactly one of the cutting mode arguments `-b`, `-c`, `-f` or `-F` must be
+// given.
 //
 // Returns `options::BYTES`, `options::CHARACTERS`, `options::FIELDS`, or
 // `options::FIELDS_MERGED`.
