@@ -584,9 +584,10 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<_> = arg_iterate(args)?.collect();
-    // Kept for the caret in size diagnostics, which needs the value as typed.
-    let diag_args = uucore::diagnostics::capture(&args);
+    let raw_args: Vec<_> = args.collect();
+    // Capture before obsolete options such as `-5` are rewritten to `-n 5`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let args: Vec<_> = arg_iterate(raw_args.into_iter())?.collect();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
     let options =
         HeadOptions::get_from(&matches).map_err(|e| e.into_error(diag_args.as_deref()))?;
