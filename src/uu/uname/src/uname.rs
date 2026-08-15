@@ -75,9 +75,9 @@ impl UNameOutput {
             ("uname-label-os", self.os.as_ref()),
         ] {
             let Some(value) = value else { continue };
-            out.push(translate!(label));
-            out.push(": ");
-            out.push(value);
+            out.push(OsStr::new(
+                &translate!(label, "value" => value.to_string_lossy()),
+            ));
             out.push("\n");
         }
         out
