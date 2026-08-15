@@ -41,7 +41,7 @@ use std::mem::zeroed;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::{
@@ -952,30 +952,12 @@ impl EnvAppData {
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
-            match execvp(&prog_cstring, &argv) {
-                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
-                Err(nix::errno::Errno::EACCES) => {
-                    uucore::show_error!(
-                        "{}",
-                        translate!(
-                            "env-error-permission-denied",
-                            "program" => prog.quote()
-                        )
-                    );
+            // unwrap_err since execvp should never return on success
+            match execvp(&prog_cstring, &argv).unwrap_err() {
+                nix::errno::Errno::ENOENT => Err(self.make_error_no_such_file_or_dir(&prog)),
+                e => {
+                    uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
                     Err(126.into())
-                }
-                Err(_) => {
-                    uucore::show_error!(
-                        "{}",
-                        translate!(
-                            "env-error-unknown",
-                            "error" => "execvp failed"
-                        )
-                    );
-                    Err(126.into())
-                }
-                Ok(_) => {
-                    unreachable!("execvp should never return on success")
                 }
             }
         }
@@ -988,25 +970,18 @@ impl EnvAppData {
 
             match cmd.status() {
                 Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
-                Err(ref err) => match err.kind() {
-                    io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
-                        Err(self.make_error_no_such_file_or_dir(&prog))
-                    }
-                    io::ErrorKind::PermissionDenied => {
-                        uucore::show_error!(
-                            "{}",
-                            translate!("env-error-permission-denied", "program" => prog.quote())
-                        );
-                        Err(126.into())
-                    }
-                    _ => {
-                        uucore::show_error!(
-                            "{}",
-                            translate!("env-error-unknown", "error" => format!("{err:?}"))
-                        );
-                        Err(126.into())
-                    }
-                },
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::NotFound | io::ErrorKind::InvalidInput
+                    ) =>
+                {
+                    Err(self.make_error_no_such_file_or_dir(&prog))
+                }
+                Err(e) => {
+                    uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e));
+                    Err(126.into())
+                }
                 Ok(_) => Ok(()),
             }
         }
