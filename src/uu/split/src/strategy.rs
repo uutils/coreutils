@@ -7,6 +7,7 @@
 
 use crate::cli::options;
 use clap::{ArgMatches, parser::ValueSource};
+use std::ffi::OsString;
 use thiserror::Error;
 use uucore::{
     display::Quotable,
@@ -201,16 +202,28 @@ pub enum Strategy {
     Number(NumberType),
 }
 
+/// The option a failing SIZE was given to, and the value as typed.
+///
+/// Kept next to the error so that a caret knows which argument to point at;
+/// `None` for a size that did not come from an option, such as the obsolete
+/// `split -22` spelling.
+#[derive(Debug)]
+pub struct SizeOrigin {
+    value: String,
+    short: char,
+    long: &'static str,
+}
+
 /// An error when parsing a chunking strategy from command-line arguments.
 #[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
     #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]
-    Lines(ParseSizeError),
+    Lines(ParseSizeError, Option<SizeOrigin>),
 
     /// Invalid number of bytes.
     #[error("{}", translate!("split-error-invalid-number-of-bytes", "error" => .0))]
-    Bytes(ParseSizeError),
+    Bytes(ParseSizeError, Option<SizeOrigin>),
 
     /// Invalid number type.
     #[error("{0}")]
@@ -221,21 +234,60 @@ pub enum StrategyError {
     MultipleWays,
 }
 
+impl StrategyError {
+    /// Draw a caret under the part of the SIZE that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, program name included.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when this error is not about a SIZE given to an option, or when
+    /// nothing could be drawn; the caller then falls back to the plain
+    /// one-line message.
+    pub fn render(&self, diag_args: &[OsString], message: &str) -> bool {
+        let (Self::Lines(error, origin) | Self::Bytes(error, origin)) = self else {
+            return false;
+        };
+        let Some(origin) = origin else {
+            return false;
+        };
+        error.render_size_value(
+            diag_args,
+            &origin.value,
+            0,
+            Some(origin.short),
+            Some(origin.long),
+            message,
+        )
+    }
+}
+
 impl Strategy {
     /// Parse a strategy from the command-line arguments.
     pub fn from(matches: &ArgMatches, obs_lines: Option<&str>) -> Result<Self, StrategyError> {
         fn get_and_parse(
             matches: &ArgMatches,
-            option: &str,
+            option: &'static str,
+            short: char,
             strategy: fn(u64) -> Strategy,
-            error: fn(ParseSizeError) -> StrategyError,
+            error: fn(ParseSizeError, Option<SizeOrigin>) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let n = parse_size_u64_max(s).map_err(error)?;
+            let origin = || {
+                Some(SizeOrigin {
+                    value: s.clone(),
+                    short,
+                    long: option,
+                })
+            };
+            let n = parse_size_u64_max(s).map_err(|e| error(e, origin()))?;
             if n > 0 {
                 Ok(strategy(n))
             } else {
-                Err(error(ParseSizeError::ParseFailure(s.to_owned())))
+                Err(error(ParseSizeError::ParseFailure(s.to_owned()), origin()))
             }
         }
         // Check that the user is not specifying more than one strategy.
@@ -251,26 +303,36 @@ impl Strategy {
         ) {
             (Some(v), false, false, false, false) => {
                 let v = parse_size_u64_max(v).map_err(|_| {
-                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()))
+                    StrategyError::Lines(ParseSizeError::ParseFailure(v.to_string()), None)
                 })?;
                 if v > 0 {
                     Ok(Self::Lines(v))
                 } else {
-                    Err(StrategyError::Lines(ParseSizeError::ParseFailure(
-                        v.to_string(),
-                    )))
+                    Err(StrategyError::Lines(
+                        ParseSizeError::ParseFailure(v.to_string()),
+                        None,
+                    ))
                 }
             }
             (None, false, false, false, false) => Ok(Self::Lines(1000)),
-            (None, true, false, false, false) => {
-                get_and_parse(matches, options::LINES, Self::Lines, StrategyError::Lines)
-            }
-            (None, false, true, false, false) => {
-                get_and_parse(matches, options::BYTES, Self::Bytes, StrategyError::Bytes)
-            }
+            (None, true, false, false, false) => get_and_parse(
+                matches,
+                options::LINES,
+                'l',
+                Self::Lines,
+                StrategyError::Lines,
+            ),
+            (None, false, true, false, false) => get_and_parse(
+                matches,
+                options::BYTES,
+                'b',
+                Self::Bytes,
+                StrategyError::Bytes,
+            ),
             (None, false, false, true, false) => get_and_parse(
                 matches,
                 options::LINE_BYTES,
+                'C',
                 Self::LineBytes,
                 StrategyError::Bytes,
             ),
