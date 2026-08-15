@@ -249,7 +249,7 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
                 _ => {
                     // Unknown escape: strip backslash, use the following character(s)
                     let remaining = &bytes[i..];
-                    let len = mb_char_len(remaining).min(remaining.len());
+                    let len = mb_char_len(remaining);
                     vec.push(Box::from(&bytes[i..i + len]));
                     i += len;
                     continue;
@@ -258,7 +258,7 @@ fn parse_delimiters(delimiters: &OsString) -> UResult<Box<[Box<[u8]>]>> {
             i += 1;
         } else {
             let remaining = &bytes[i..];
-            let len = mb_char_len(remaining).min(remaining.len());
+            let len = mb_char_len(remaining);
             vec.push(Box::from(&bytes[i..i + len]));
             i += len;
         }
