@@ -244,7 +244,10 @@ impl BytesWriter {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Kept for the caret in size diagnostics, which needs the size as typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
 
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(
@@ -290,7 +293,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let size_arg = matches
         .get_one::<String>(options::SIZE)
         .map(ToOwned::to_owned);
-    let size = get_size(size_arg);
+    let size = get_size(size_arg, diag_args.as_deref())?;
     let exact = matches.get_flag(options::EXACT) || size.is_some();
     let zero = matches.get_flag(options::ZERO);
     let verbose = matches.get_flag(options::VERBOSE);
@@ -399,21 +402,33 @@ pub fn uu_app() -> Command {
         )
 }
 
-fn get_size(size_str_opt: Option<String>) -> Option<u64> {
-    size_str_opt
-        .as_ref()
-        .and_then(|size| parse_size_u64(size.as_str()).ok())
-        .or_else(|| {
-            if let Some(size) = size_str_opt {
-                show_error!(
-                    "{}",
-                    translate!("shred-invalid-file-size", "size" => size.quote())
-                );
-                // TODO: replace with our error management
-                std::process::exit(1);
-            }
-            None
-        })
+/// The value of `-s`/`--size` as a number of bytes.
+///
+/// # Arguments
+///
+/// * `size_str_opt` - The value as typed, or `None` when the option was not
+///   given.
+/// * `diag_args` - The arguments as typed, for the caret, or `None` when they
+///   were not kept.
+fn get_size(size_str_opt: Option<String>, diag_args: Option<&[OsString]>) -> UResult<Option<u64>> {
+    let Some(size) = size_str_opt else {
+        return Ok(None);
+    };
+    match parse_size_u64(&size) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) => {
+            let message = translate!("shred-invalid-file-size", "size" => size.quote());
+            Err(error.size_value_error(
+                diag_args,
+                &size,
+                0,
+                's',
+                options::SIZE,
+                &message,
+                USimpleError::new(1, message.clone()),
+            ))
+        }
+    }
 }
 
 fn pass_name(pass_type: &PassType) -> String {

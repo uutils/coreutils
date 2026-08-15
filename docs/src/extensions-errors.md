@@ -282,6 +282,7 @@ the difference:
 | `env`    | the failing part of a `-S`/`--split-string` string | [`env -S 'echo ${1FOO}'`](https://uutils.org/playground/?cmd=env+-S+%27echo+%24%7B1FOO%7D%27) |
 | `cut`    | the failing range in the list given to `-b`, `-c`, `-f` or `-F` | [`cut -f 1,4-2 fruits.txt`](https://uutils.org/playground/?cmd=cut+-f+1%2C4-2+fruits.txt) |
 | `split`  | the failing part of the SIZE given to `-b`, `-C` or `-l` | [`split -b 7zq fruits.txt`](https://uutils.org/playground/?cmd=split+-b+7zq+fruits.txt) |
+| `shred`  | the failing part of the SIZE given to `-s`/`--size` | [`shred -s 4vv fruits.txt`](https://uutils.org/playground/?cmd=shred+-s+4vv+fruits.txt) |
 | `head`   | the failing part of the SIZE given to `-c` or `-n` | [`head -c 1fb fruits.txt`](https://uutils.org/playground/?cmd=head+-c+1fb+fruits.txt) |
 | `tail`   | the failing part of the SIZE given to `-c` or `-n` | [`tail -c 1fb fruits.txt`](https://uutils.org/playground/?cmd=tail+-c+1fb+fruits.txt) |
 | `truncate` | the failing part of the SIZE given to `-s`/`--size` | [`truncate -s 10fb fruits.txt`](https://uutils.org/playground/?cmd=truncate+-s+10fb+fruits.txt) |
@@ -332,8 +333,8 @@ repeated per utility. Three parsers work this way:
 - **Range lists** (`uucore::ranges`), for `cut`'s `-b`, `-c` and `-f` and for
   `numfmt --field`. `Range::from_list` reports which item of the list failed
   and where it sat.
-- **Sizes** (`uucore::parser::parse_size`), for `head`, `tail`, `truncate` and
-  `split` today, and available to the other callers of the parser.
+- **Sizes** (`uucore::parser::parse_size`), for `head`, `tail`, `truncate`,
+  `split` and `shred` today, and available to the other callers of the parser.
   `ParseSizeError::span` works out from the operand which of its two parts —
   the number or the unit — was rejected, so the error type keeps the shape its
   callers build by hand.
