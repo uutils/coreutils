@@ -161,7 +161,28 @@ fn embed_single_utility_locale(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
+    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
+
     Ok(())
+}
+
+/// Embed the strings only an error path asks for.
+///
+/// They are embedded like any other component but parsed only when something
+/// actually looks one up, so the common bundle every utility builds at startup
+/// stays small.
+///
+/// # Errors
+///
+/// Returns an error if writing to the `embedded_file` fails.
+fn embed_error_locales(
+    embedded_file: &mut File,
+    project_root: &Path,
+    locales_to_embed: &(String, Option<String>),
+) -> Result<(), Box<dyn std::error::Error>> {
+    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
+        project_root.join(format!("src/uucore/locales/errors/{locale}.ftl"))
+    })
 }
 
 /// Embed locale files for all utilities (multicall binary).
@@ -211,6 +232,8 @@ fn embed_all_utility_locales(
         project_root.join(format!("src/uucore/locales/{locale}.ftl"))
     })?;
 
+    embed_error_locales(embedded_file, project_root, locales_to_embed)?;
+
     embedded_file.flush()?;
     Ok(())
 }
@@ -240,6 +263,10 @@ fn embed_static_utility_locales(
     // First, try to embed uucore locales - critical for common translations like "Usage:"
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
+    })?;
+
+    embed_component_locales(embedded_file, locales_to_embed, "uucore-errors", |locale| {
+        Path::new(&manifest_dir).join(format!("locales/errors/{locale}.ftl"))
     })?;
 
     // Collect and sort for deterministic builds

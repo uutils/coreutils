@@ -102,13 +102,81 @@ impl Localizer {
                 .to_string();
         }
 
+        // Only now, once nothing common has matched, is it worth parsing the
+        // strings that only an error path asks for.
+        if let Some(message) = errors_message(self.primary_bundle.locales.as_slice(), id, args) {
+            return message;
+        }
+
         // Return the key ID if not found anywhere
         id.to_string()
     }
 }
 
+/// Look `id` up among the strings only an error path ever asks for.
+///
+/// Their resource is deliberately not part of the bundle every utility builds
+/// at startup: parsing it costs every binary, while almost no run reads one of
+/// these. It is parsed here instead, on the first lookup that reaches it, and
+/// kept for the rest of the process.
+fn errors_message(
+    locales: &[LanguageIdentifier],
+    id: &str,
+    args: Option<&FluentArgs>,
+) -> Option<String> {
+    ERRORS_BUNDLE.with(|cell| {
+        let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
+        let message = bundle.get_message(id)?.value()?;
+        let mut errs = Vec::new();
+        Some(bundle.format_pattern(message, args, &mut errs).to_string())
+    })
+}
+
+/// The error strings for `locale`, from the locales directory when there is
+/// one to read and from the embedded copy otherwise.
+fn errors_resource(locale: &LanguageIdentifier) -> Option<String> {
+    let from_disk = get_locales_dir("uucore")
+        .ok()
+        .and_then(|dir| fs::read_to_string(dir.join("errors").join(format!("{locale}.ftl"))).ok());
+    from_disk
+        .or_else(|| get_embedded_locale(&format!("uucore-errors/{locale}.ftl")).map(str::to_owned))
+}
+
+/// Build the bundle behind [`errors_message`]: English underneath, so a locale
+/// that has not translated one of these still says something, and the
+/// requested locale over the top of it.
+fn build_errors_bundle(
+    locales: &[LanguageIdentifier],
+) -> Option<FluentBundle<&'static FluentResource>> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    let locale = locales.first().unwrap_or(&default_locale).clone();
+
+    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    bundle.set_use_isolating(false);
+
+    let mut any = false;
+    if let Some(content) = errors_resource(&default_locale)
+        && let Ok(resource) = parse_fluent_resource(&content, &ERRORS_FLUENT_EN)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+    if locale != default_locale
+        && let Some(content) = errors_resource(&locale)
+        && let Ok(resource) = parse_fluent_resource(&content, &ERRORS_FLUENT)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+
+    any.then_some(bundle)
+}
+
 // Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
 static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
+static ERRORS_FLUENT: OnceLock<FluentResource> = OnceLock::new();
+static ERRORS_FLUENT_EN: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
@@ -120,6 +188,17 @@ thread_local! {
         )
     )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
+    /// Built on the first lookup that misses every ordinary bundle; `None`
+    /// when there are no error strings to be found at all.
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<&'static FluentResource>>> =
+        const { OnceLock::new() };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
