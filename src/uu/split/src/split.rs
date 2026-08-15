@@ -26,20 +26,29 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin}
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
+use uucore::error::{
+    FromIo, UResult, USimpleError, UUsageError, quiet_if_reported, set_exit_code, strip_errno,
+};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (args, obs_lines) = handle_obsolete(args);
+    let raw_args: Vec<OsString> = args.collect();
+    // Capture before the obsolete `-22` spelling is rewritten to `-l 22`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let (args, obs_lines) = handle_obsolete(raw_args.into_iter());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        let message = format!("{e}");
         if e.requires_usage() {
-            UUsageError::new(1, format!("{e}"))
+            UUsageError::new(1, message)
         } else {
-            USimpleError::new(1, format!("{e}"))
+            let reported = diag_args
+                .as_deref()
+                .is_some_and(|args| e.render(args, &message));
+            quiet_if_reported(reported, USimpleError::new(1, message))
         }
     })?;
 
@@ -271,6 +280,15 @@ enum SettingsError {
 }
 
 impl SettingsError {
+    /// Draw a caret under the part of the argument that is at fault, when this
+    /// error is one that knows where it came from.
+    fn render(&self, diag_args: &[OsString], message: &str) -> bool {
+        match self {
+            Self::Strategy(error) => error.render(diag_args, message),
+            _ => false,
+        }
+    }
+
     /// Whether the error demands a usage message.
     fn requires_usage(&self) -> bool {
         matches!(
