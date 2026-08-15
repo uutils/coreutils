@@ -195,7 +195,14 @@ impl Settings {
         settings
     }
 
-    pub fn from(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+    pub fn from(matches: &ArgMatches) -> UResult<Self> {
+        Self::from_with_diagnostics(matches, None)
+    }
+
+    fn from_with_diagnostics(
+        matches: &ArgMatches,
+        diag_args: Option<&[OsString]>,
+    ) -> UResult<Self> {
         // We're parsing --follow, -F and --retry under the following conditions:
         // * -F sets --retry and --follow=name
         // * plain --follow or short -f is the same like specifying --follow=descriptor
@@ -424,7 +431,7 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let clap_result = match clap_args {
         // Kept for the caret in size diagnostics, which needs the value as
         // typed.
-        Ok(matches) => Ok(Settings::from(
+        Ok(matches) => Ok(Settings::from_with_diagnostics(
             &matches,
             uucore::diagnostics::capture(&args_vec).as_deref(),
         )?),
@@ -676,7 +683,7 @@ mod tests {
         #[case] expected_retry: bool,
     ) {
         let settings =
-            Settings::from(&uu_app().no_binary_name(true).get_matches_from(args), None).unwrap();
+            Settings::from(&uu_app().no_binary_name(true).get_matches_from(args)).unwrap();
         assert_eq!(settings.follow, expected_follow_mode);
         assert_eq!(settings.retry, expected_retry);
     }

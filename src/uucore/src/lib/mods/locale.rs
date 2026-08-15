@@ -145,26 +145,33 @@ fn errors_resource(locale: &LanguageIdentifier) -> Option<String> {
 /// Build the bundle behind [`errors_message`]: English underneath, so a locale
 /// that has not translated one of these still says something, and the
 /// requested locale over the top of it.
-fn build_errors_bundle(
+fn build_errors_bundle(locales: &[LanguageIdentifier]) -> Option<FluentBundle<FluentResource>> {
+    build_errors_bundle_with(locales, errors_resource)
+}
+
+fn build_errors_bundle_with(
     locales: &[LanguageIdentifier],
-) -> Option<FluentBundle<&'static FluentResource>> {
+    mut resource_for: impl FnMut(&LanguageIdentifier) -> Option<String>,
+) -> Option<FluentBundle<FluentResource>> {
     let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
         .expect("Default locale should always be valid");
     let locale = locales.first().unwrap_or(&default_locale).clone();
 
-    let mut bundle: FluentBundle<&'static FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    // Own the resources in this thread-local bundle so one thread's requested
+    // locale cannot populate a process-wide cache used by another locale.
+    let mut bundle: FluentBundle<FluentResource> = FluentBundle::new(vec![locale.clone()]);
     bundle.set_use_isolating(false);
 
     let mut any = false;
-    if let Some(content) = errors_resource(&default_locale)
-        && let Ok(resource) = parse_fluent_resource(&content, &ERRORS_FLUENT_EN)
+    if let Some(content) = resource_for(&default_locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
     {
         bundle.add_resource_overriding(resource);
         any = true;
     }
     if locale != default_locale
-        && let Some(content) = errors_resource(&locale)
-        && let Ok(resource) = parse_fluent_resource(&content, &ERRORS_FLUENT)
+        && let Some(content) = resource_for(&locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
     {
         bundle.add_resource_overriding(resource);
         any = true;
@@ -175,8 +182,6 @@ fn build_errors_bundle(
 
 // Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
 static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
-static ERRORS_FLUENT: OnceLock<FluentResource> = OnceLock::new();
-static ERRORS_FLUENT_EN: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
@@ -197,7 +202,7 @@ thread_local! {
             reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
         )
     )]
-    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<&'static FluentResource>>> =
+    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
         const { OnceLock::new() };
 }
 
@@ -319,18 +324,8 @@ fn init_localization(
     Ok(())
 }
 
-/// Helper function to parse FluentResource from content string
-fn parse_fluent_resource(
-    content: &str,
-    cache: &'static OnceLock<FluentResource>,
-) -> Result<&'static FluentResource, LocalizationError> {
-    // global cache breaks unit tests
-    #[cfg(not(test))]
-    if let Some(res) = cache.get() {
-        return Ok(res);
-    }
-
-    let resource = FluentResource::try_new(content.to_string()).map_err(
+fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, LocalizationError> {
+    FluentResource::try_new(content.to_string()).map_err(
         |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
             if let Some(first_err) = errs.into_iter().next() {
                 let snippet = first_err
@@ -347,7 +342,21 @@ fn parse_fluent_resource(
                 LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
-    )?;
+    )
+}
+
+/// Helper function to parse FluentResource from content string
+fn parse_fluent_resource(
+    content: &str,
+    cache: &'static OnceLock<FluentResource>,
+) -> Result<&'static FluentResource, LocalizationError> {
+    // global cache breaks unit tests
+    #[cfg(not(test))]
+    if let Some(res) = cache.get() {
+        return Ok(res);
+    }
+
+    let resource = parse_fluent_resource_owned(content)?;
     // global cache breaks unit tests
     if cfg!(not(test)) {
         Ok(cache.get_or_init(|| resource))
@@ -646,6 +655,13 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     {
         // During development, use the project's locales directory
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        if p == "uucore" {
+            let uucore_path = PathBuf::from(manifest_dir).join("locales");
+            if uucore_path.exists() {
+                return Ok(uucore_path);
+            }
+        }
+
         // from uucore path, load the locales directory from the program directory
         let dev_path = PathBuf::from(manifest_dir)
             .join("../uu")
@@ -1482,6 +1498,56 @@ invalid-syntax = This is { $missing
         } else {
             panic!("Expected LocalizationError::ParseResource with snippet");
         }
+    }
+
+    #[test]
+    fn test_lazy_error_resources_follow_runtime_locale() {
+        fn resource_for(locale: &LanguageIdentifier) -> Option<String> {
+            match locale.to_string().as_str() {
+                "en-US" => Some(include_str!("../../../locales/errors/en-US.ftl").to_string()),
+                "fr-FR" => Some(include_str!("../../../locales/errors/fr-FR.ftl").to_string()),
+                _ => None,
+            }
+        }
+
+        fn message_for(locale: &str, id: &str) -> String {
+            let locale = LanguageIdentifier::from_str(locale).unwrap();
+            let bundle = build_errors_bundle_with(&[locale], resource_for).unwrap();
+            let message = bundle
+                .get_message(id)
+                .and_then(|message| message.value())
+                .unwrap();
+            let mut errors = Vec::new();
+            bundle
+                .format_pattern(message, None, &mut errors)
+                .to_string()
+        }
+
+        assert_eq!(
+            message_for("en-US", "size-diag-label-invalid-suffix"),
+            "not a known unit"
+        );
+        assert_eq!(
+            message_for("fr-FR", "size-diag-label-invalid-suffix"),
+            "unité inconnue"
+        );
+        assert_eq!(
+            message_for("en-US", "checksum-error-need-algorithm-to-hash"),
+            "Needs an algorithm to hash with.\nUse --help for more information."
+        );
+        assert_eq!(
+            message_for("fr-FR", "checksum-error-need-algorithm-to-hash"),
+            "Un algorithme de hachage est nécessaire.\nUtilisez --help pour plus d'informations."
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn test_uucore_locale_directory_in_development() {
+        assert_eq!(
+            get_locales_dir("uucore").unwrap(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
+        );
     }
 
     #[test]

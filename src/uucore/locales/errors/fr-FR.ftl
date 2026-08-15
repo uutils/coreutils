@@ -41,6 +41,7 @@ checksum-error-text-after-tag = --tag ne prend pas en charge le mode --text
 checksum-error-algorithm-not-supported-with-check = --check n'est pas pris en charge avec --algorithm={"{"}bsd,sysv,crc,crc32b{"}"}
 checksum-error-combine-multiple-algorithms = Vous ne pouvez pas combiner plusieurs algorithmes de hachage !
 checksum-error-need-algorithm-to-hash = Un algorithme de hachage est nécessaire.
+    Utilisez --help pour plus d'informations.
 checksum-error-unknown-algorithm = algorithme inconnu : { $algorithm } : clap aurait dû empêcher ce cas
 
 # Étiquettes de diagnostic : ce que le caret désigne dans une TAILLE
