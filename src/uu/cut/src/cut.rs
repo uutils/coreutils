@@ -1096,12 +1096,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let ranges = list_to_ranges(list, complement, is_field).map_err(|e| {
         // The list is the value of the option that selected the mode, so the
         // caret can be put under the one range that is at fault.
+        let (short, long) = mode_arg_names(mode_arg);
         let reported = diag_args.as_ref().is_some_and(|args| {
             e.render_option_value(
                 args,
                 list,
-                Some(mode_arg_short(mode_arg)),
-                Some(mode_arg),
+                Some(short),
+                long,
                 &translate!("cut-diag-label-zero-bound"),
                 &translate!("cut-diag-help-list-syntax"),
             )
@@ -1235,13 +1236,15 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
     Ok(mode_arg)
 }
 
-/// The short name of a mode option, since the caret has to recognize the value
+/// The names of a mode option, since the caret has to recognize the value
 /// however it was written: `-f2-`, `-f 2-` or `--fields=2-`.
-fn mode_arg_short(mode_arg: &str) -> char {
+fn mode_arg_names(mode_arg: &str) -> (char, Option<&str>) {
     match mode_arg {
-        options::BYTES => 'b',
-        options::CHARACTERS => 'c',
-        _ => 'f',
+        options::BYTES => ('b', Some(options::BYTES)),
+        options::CHARACTERS => ('c', Some(options::CHARACTERS)),
+        options::FIELDS => ('f', Some(options::FIELDS)),
+        options::FIELDS_MERGED => ('F', None),
+        _ => unreachable!("unknown cut mode option"),
     }
 }
 

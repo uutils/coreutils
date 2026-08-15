@@ -1231,6 +1231,21 @@ cut: invalid decreasing range
     }
 
     #[test]
+    fn test_snippet_finds_fields_merged_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-F", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ cut -F 1,4-2 /dev/null"), "{stderr}");
+        assert!(
+            stderr.contains("this range ends before it starts"),
+            "{stderr}"
+        );
+    }
+
+    #[test]
     fn test_snippet_points_at_the_zero_bound() {
         let result = new_ucmd!()
             .terminal_sim_stderr()

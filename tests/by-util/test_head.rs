@@ -1137,6 +1137,18 @@ head: invalid number of bytes: '1fb'
     }
 
     #[test]
+    fn test_snippet_preserves_obsolete_option_spelling() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-5", "-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ head -5 -c 1fb /dev/null"), "{stderr}");
+        assert!(!stderr.contains("head -n 5 -c"), "{stderr}");
+    }
+
+    #[test]
     fn test_plain_message_when_stderr_is_a_pipe() {
         new_ucmd!()
             .args(&["-c", "1fb", "/dev/null"])
