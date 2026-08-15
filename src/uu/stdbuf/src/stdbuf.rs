@@ -7,12 +7,14 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
+#[cfg(not(feature = "feat_external_libstdbuf"))]
+use std::fs::Permissions;
+#[cfg(not(feature = "feat_external_libstdbuf"))]
+use std::os::unix::fs::PermissionsExt;
 #[cfg(unix)]
-use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process;
 use tempfile::TempDir;
-use tempfile::tempdir;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError, UUsageError, quiet_if_reported, strip_errno};
@@ -266,9 +268,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
-    let tmp_dir = tempdir()
-        .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
-    let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
+    // When embedding the library, create a private (0700) temporary directory.
+    // The TempDir is kept alive until after the child exits so that the dynamic
+    // linker can load the .so, then dropped automatically.
+    // We create with default permissions and immediately restrict them to 0700
+    // (bypassing umask) so other users on the system cannot race to replace the .so.
+    #[cfg(not(feature = "feat_external_libstdbuf"))]
+    let _tmp_dir = {
+        let d = tempfile::tempdir()
+            .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
+        std::fs::set_permissions(d.path(), Permissions::from_mode(0o700)).map_err(|e| {
+            UUsageError::new(125, format!("failed to set temp dir permissions: {e}"))
+        })?;
+        d
+    };
+    #[cfg(not(feature = "feat_external_libstdbuf"))]
+    let (preload_env, libstdbuf) = get_preload_env(&_tmp_dir)?;
+    #[cfg(feature = "feat_external_libstdbuf")]
+    let (preload_env, libstdbuf) =
+        get_preload_env(&tempfile::tempdir().map_err(|e| {
+            UUsageError::new(125, format!("failed to create temp directory: {e}"))
+        })?)?;
     // The preload variable is a colon-separated list with no escaping mechanism,
     // so a path containing ':' does not round-trip: the dynamic loader splits it
     // and treats the leading component as a library to load. Since the temp
@@ -287,18 +307,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    // Replace the current process with the target program (no fork) using exec.
-    #[cfg(unix)]
-    let e = command.exec();
-    #[cfg(windows)]
+    // Spawn a child so the TempDir destructor fires in the parent, cleaning up
+    // the temporary directory. exec() would replace this process before the
+    // destructor runs, leaking the dir on every invocation.
     let e = match command.spawn() {
         Ok(mut child) => {
             let status = child.wait().unwrap();
+            #[cfg(not(feature = "feat_external_libstdbuf"))]
+            drop(_tmp_dir); // cleanup after child exits — .so no longer needed
             process::exit(status.code().unwrap_or(0));
         }
         Err(err) => err,
     };
-    // exec() only returns if there was an error
     let exit_code = match e.kind() {
         std::io::ErrorKind::PermissionDenied => 126,
         std::io::ErrorKind::NotFound => 127,
