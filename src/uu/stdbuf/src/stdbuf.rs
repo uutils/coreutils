@@ -15,7 +15,7 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -236,20 +236,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) => err,
     };
     // exec() only returns if there was an error
-    match e.kind() {
-        std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
-            126,
-            translate!("stdbuf-error-permission-denied"),
-        )),
-        std::io::ErrorKind::NotFound => Err(USimpleError::new(
-            127,
-            translate!("stdbuf-error-no-such-file"),
-        )),
-        _ => Err(USimpleError::new(
-            1,
-            translate!("stdbuf-error-failed-to-execute", "error" => e),
-        )),
-    }
+    let exit_code = match e.kind() {
+        std::io::ErrorKind::PermissionDenied => 126,
+        std::io::ErrorKind::NotFound => 127,
+        _ => 1,
+    };
+    Err(USimpleError::new(
+        exit_code,
+        translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&e)),
+    ))
 }
 
 pub fn uu_app() -> Command {
