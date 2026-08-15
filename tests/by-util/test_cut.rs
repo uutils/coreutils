@@ -747,6 +747,84 @@ fn test_whitespace_delimited_long_and_trimmed() {
 }
 
 #[test]
+fn test_whitespace_delimited_trimmed_zero_terminated() {
+    // The record terminator must not count as a non-blank when trimming, or the
+    // trailing blanks of a record would survive and add a phantom field. NUL is
+    // the interesting case: unlike `\n` it is not whitespace to begin with.
+    new_ucmd!()
+        .args(&["-z", "--whitespace-delimited=trimmed", "-f2"])
+        .pipe_in(&b"  red  blue  \0 green  pink \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"blue\0pink\0"[..]);
+    // Asking past the last field yields an empty record, not the stray blanks.
+    new_ucmd!()
+        .args(&["-z", "--whitespace-delimited=trimmed", "-f3"])
+        .pipe_in(&b"  red  blue  \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"\0"[..]);
+    // A blank-only record has no delimiter left after trimming, so -s drops it.
+    new_ucmd!()
+        .args(&["-z", "-s", "--whitespace-delimited=trimmed", "-f1"])
+        .pipe_in(&b"\t \0 amber violet \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"amber\0"[..]);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_byte_no_split_partially_selected_char() {
+    // -b -n: the selected bytes of a character must reach its end without a
+    // hole. "🗿" (f0 9f 97 bf) spans bytes 1-4, "w" is byte 5.
+    let stone = &b"\xf0\x9f\x97\xbfw\n"[..];
+    // Byte 3 is left out, so the character is split and dropped.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1-2,4-5", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(b"w\n");
+    // The same holds when the hole comes from a single-byte range.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b2,4", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(b"\n");
+    // Selecting only the tail of the character still prints it whole.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b3-", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(stone);
+    // Adjacent ranges cover it without a hole, and the boundary inside the
+    // character emits no output delimiter.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1-3,4-5", "-n", "--output-d=|"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(stone);
+    // "q€é r": q is byte 1, € (e2 82 ac) bytes 2-4, é (c3 a9) bytes 5-6.
+    let mixed = &b"q\xe2\x82\xac\xc3\xa9r\n"[..];
+    // The delimiter a range owes is carried to whatever prints next, and only
+    // a boundary between two printed characters produces one.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,2,5-7", "-n", "--output-d=|"])
+        .pipe_in(mixed)
+        .succeeds()
+        .stdout_only_bytes(&b"q|\xc3\xa9r\n"[..]);
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,2-4,5-6", "-n", "--output-d=|"])
+        .pipe_in(mixed)
+        .succeeds()
+        .stdout_only_bytes(&b"q|\xe2\x82\xac|\xc3\xa9\n"[..]);
+}
+
+#[test]
 fn test_unset_locale_is_byte_oriented() {
     // With no locale set the POSIX default is C, so characters are bytes.
     // "ж" is d0 b6, and -c3 must take just the b6.
@@ -769,13 +847,90 @@ fn test_newline_delim_suppress_missing_field() {
 }
 
 #[test]
-fn test_emoji_delim() {
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_byte_no_split_with_output_delimiter() {
+    // -b -n with an output delimiter: a range covering only part of a
+    // multibyte character contributes nothing and emits no delimiter.
+    // "ü" (c3 bc) spans bytes 1-2; byte 1 alone selects no whole character.
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,3", "-n", "--output-d=|"])
+        .pipe_in(&b"\xc3\xbcZ\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"Z\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_field_delimiter_not_split_inside_multibyte_char() {
+    use std::os::unix::ffi::OsStrExt;
+    // In a UTF-8 locale, a delimiter byte that is part of a multibyte character
+    // must not split it. Here U+20AC (€ = e2 82 ac) contains 0xac, and 0xac is
+    // also used as a standalone delimiter byte.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .arg("-d")
+        .arg(std::ffi::OsStr::from_bytes(b"\xac"))
+        .arg("-f2")
+        .pipe_in(&b"1\xe2\x82\xac2\xac3\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"3\n");
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .arg("-d")
+        .arg(std::ffi::OsStr::from_bytes(b"\xac"))
+        .arg("-f1")
+        .pipe_in(&b"1\xe2\x82\xac2\xac3\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"1\xe2\x82\xac2\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_whitespace_delimiter_unicode_blank() {
+    // U+2002 (EN SPACE) is a Unicode blank and splits fields under -w.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w", "-f2"])
+        .pipe_in(&b"x\xe2\x80\x82y\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"y\n");
+    // U+2007 (FIGURE SPACE) is not a blank: the line stays a single field and
+    // is suppressed by -s.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-s", "-w", "-f2"])
+        .pipe_in(&b"x\xe2\x80\x87y\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"");
+}
+
+#[test]
+fn test_delimiter_multibyte_rejected_in_c_locale() {
+    // In the C locale a valid UTF-8 multibyte sequence is several characters.
+    // The delimiter is passed as ordinary text so this also runs on Windows.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-d", "\u{20ac}", "-f1"])
+        .fails_with_code(1)
+        .stderr_contains("cut: the delimiter must be a single character");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_emoji_delim() {
+    // A multibyte delimiter is only a single character in a UTF-8 locale.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["-d🗿", "-f1"])
         .pipe_in("💐🗿🌹\n")
         .succeeds()
         .stdout_only("💐\n");
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["-d🗿", "-f2"])
         .pipe_in("💐🗿🌹\n")
         .succeeds()
