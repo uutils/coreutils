@@ -14,7 +14,7 @@ use std::io::{IsTerminal, stdin};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::FromIo;
+use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::show_error;
@@ -133,7 +133,7 @@ pub fn safe_remove_file(
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
-                show_error!("cannot remove {}: Permission denied", path.quote());
+                show_error!("cannot remove {}: {}", path.quote(), strip_errno(&e));
             } else {
                 let _ = show_removal_error(e, path);
             }
