@@ -824,12 +824,24 @@ fn test_kill_windows_exited_target_with_held_handle() {
         .stderr_contains("No such process");
 }
 
+/// Some CI containers leave real-time signals ignored; children inherit that,
+/// so `kill` succeeds but the target survives and exits 0 on its own.
 #[cfg(any(target_os = "linux", target_os = "android"))]
-// Flaky on the i686 CI runner: the target sometimes exits on its own (exit
-// status, no signal) before the kill lands, so only assert this on 64-bit.
-#[cfg_attr(target_arch = "x86", ignore = "flaky on i686 CI")]
+fn is_ignored(signal: i32) -> bool {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: a null new-action only queries the current disposition.
+    unsafe {
+        libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) == 0
+            && action.assume_init().sa_sigaction == libc::SIG_IGN
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_kill_realtime_signal() {
+    if is_ignored(libc::SIGRTMIN()) {
+        return;
+    }
     let mut target = Target::new();
     // kill -s RTMIN should send SIGRTMIN and terminate the process
     new_ucmd!()
@@ -845,6 +857,9 @@ fn test_kill_realtime_signal() {
 fn test_kill_with_rtmax_offset() {
     let (_, rtmax) = realtime_signal_bounds().unwrap();
     let sig: i32 = (rtmax as i32) - 7;
+    if is_ignored(sig) {
+        return;
+    }
 
     let mut target = Target::new();
     new_ucmd!()
@@ -860,6 +875,9 @@ fn test_kill_with_rtmax_offset() {
 fn test_kill_with_rtmin_offset() {
     let (rtmin, _) = realtime_signal_bounds().unwrap();
     let sig: i32 = (rtmin as i32) + 7;
+    if is_ignored(sig) {
+        return;
+    }
 
     let mut target = Target::new();
     new_ucmd!()
