@@ -789,3 +789,52 @@ fn test_no_such_directory_message() {
         .fails_with_code(1)
         .stderr_is("stat: cannot statx 'a': No such file or directory\n");
 }
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_directive() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "%d%.3", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first directive is fine; the caret takes the second one alone.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+stat: '%.3': invalid directive
+   ╭─[ stat:1:11 ]
+   │
+ 1 │ stat -c %d%.3 /dev/null
+   │           ───
+   │
+   │ Help: a directive is %[FLAGS][WIDTH][.PRECISION]LETTER, as in %-10.2s; a literal % is written %%
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_printf_format() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--printf=%12", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("stat:1:15"), "{stderr}");
+        assert!(stderr.contains("'%12': invalid directive"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-c", "%d%.3", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("stat: '%.3': invalid directive\n");
+    }
+}
