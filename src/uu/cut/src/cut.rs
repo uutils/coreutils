@@ -6,7 +6,8 @@
 // spell-checker:ignore (ToDO) delim foxjumping sourcefiles undelimited xacfoxjumping
 
 use bstr::io::BufReadExt;
-use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser};
+use clap::builder::{PossibleValue, ValueParser};
+use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
@@ -16,6 +17,7 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
+use uucore::parser::shortcut_value_parser::ShortcutValueParser;
 
 use self::searcher::Searcher;
 use matcher::{ExactMatcher, Matcher, MbExactMatcher, WhitespaceMatcher};
@@ -989,9 +991,7 @@ where
 /// Get delimiter and output delimiter from `-d`/`--delimiter` and `--output-delimiter` options respectively
 /// Allow either delimiter to have a value that is neither UTF-8 nor ASCII to align with GNU behavior
 fn get_delimiters(matches: &ArgMatches) -> UResult<(Delimiter<'_>, Option<&[u8]>)> {
-    let whitespace_delimited = matches
-        .get_one::<String>(options::WHITESPACE_DELIMITED)
-        .is_some();
+    let whitespace_delimited = matches.contains_id(options::WHITESPACE_DELIMITED);
     let delim_opt = matches.get_one::<OsString>(options::DELIMITER);
     let delim = match delim_opt {
         Some(_) if whitespace_delimited => {
@@ -1086,7 +1086,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // `--whitespace-delimited[=trimmed]` (`-w`): the optional value selects trimming.
     let whitespace_trimmed = matches
         .get_one::<String>(options::WHITESPACE_DELIMITED)
-        .is_some_and(|value| value == "trimmed");
+        .is_some();
 
     let mode_arg = get_mode_arg(&matches)?;
     let list = matches
@@ -1215,9 +1215,7 @@ fn get_mode_arg(matches: &ArgMatches) -> UResult<&str> {
             ),
             (
                 // GNU words `-w` as a delimiter too, so it shares the message.
-                matches
-                    .get_one::<String>(options::WHITESPACE_DELIMITED)
-                    .is_some(),
+                matches.contains_id(options::WHITESPACE_DELIMITED),
                 "cut-error-delimiter-only-with-fields",
             ),
             (
@@ -1296,10 +1294,9 @@ pub fn uu_app() -> Command {
                 .long(options::WHITESPACE_DELIMITED)
                 .help(translate!("cut-help-whitespace-delimited"))
                 .value_name("trimmed")
-                .value_parser(["", "trimmed"])
+                .value_parser(ShortcutValueParser::new([PossibleValue::new("trimmed")]))
                 .num_args(0..=1)
                 .require_equals(true)
-                .default_missing_value("")
                 .action(ArgAction::Set),
         )
         .arg(
