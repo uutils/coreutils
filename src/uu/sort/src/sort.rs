@@ -2228,8 +2228,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
-        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
-            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
+            let message = format_error_message(&error, size_str, options::BUF_SIZE);
+            error.size_value_error(
+                key_args.as_deref(),
+                size_str,
+                0,
+                'S',
+                options::BUF_SIZE,
+                &message,
+                USimpleError::new(2, message.clone()),
+            )
         })?;
         settings.buffer_size_is_explicit = true;
     } else {
