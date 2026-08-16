@@ -1512,7 +1512,7 @@ fn test_du_invalid_threshold() {
 
 #[test]
 fn test_du_threshold_error_handling() {
-    // Test missing threshold value - the specific case from GNU test
+    // Test missing threshold value
     new_ucmd!()
         .arg("--threshold")
         .fails()
@@ -2333,7 +2333,7 @@ fn test_du_symlink_depth_tracking() {
 #[test]
 #[cfg(target_os = "linux")]
 fn test_du_long_path_from_unreadable() {
-    // Test the specific scenario from GNU's long-from-unreadable.sh test
+    // Test du behavior with unreadable directories
     // This verifies that du can handle very long paths when the current directory is unreadable
     use std::env;
     use std::fs;
@@ -2342,7 +2342,7 @@ fn test_du_long_path_from_unreadable() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    // Create a deep hierarchy similar to the GNU test
+    // Create a deep hierarchy
     // Use a more reasonable depth for unit tests
     let dir_name = "x".repeat(200);
     let mut current_path = String::new();

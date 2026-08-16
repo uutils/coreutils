@@ -26,7 +26,7 @@ fn test_get_var() {
 
 #[test]
 fn test_ignore_equal_var() {
-    // tested by gnu/tests/misc/printenv.sh
+    // Basic printenv functionality
     new_ucmd!().env("a=b", "c").arg("a=b").fails().no_stdout();
 }
 

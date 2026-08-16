@@ -1750,7 +1750,7 @@ fn test_split_non_utf8_argument_windows() {
     ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
-// Test '--separator' / '-t' option following GNU tests example
+// Test '--separator' / '-t' option
 // test separators: '\n' , '\0' , ';'
 // test with '--lines=2' , '--line-bytes=4' , '--number=l/3' , '--number=r/3' , '--number=l/1/3' , '--number=r/1/3'
 #[test]

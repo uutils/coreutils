@@ -2315,7 +2315,7 @@ mod inter_partition_copying {
         );
     }
 
-    // Test the exact GNU test scenario: hardlinks within directories being moved
+    // Test hardlinks within directories being moved
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
@@ -2715,7 +2715,7 @@ fn test_special_file_different_filesystem() {
 }
 
 /// Test cross-device move with permission denied error
-/// This test mimics the scenario from the GNU part-fail test where
+/// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
 #[test]
 #[cfg(target_os = "linux")]

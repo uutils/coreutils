@@ -1016,7 +1016,7 @@ fn test_parse_valid_hexadecimal_float_three_args() {
 
 #[test]
 fn test_parse_float_gnu_coreutils() {
-    // some values from GNU coreutils tests
+    // Known sequence values for verification
     new_ucmd!()
         .args(&[".89999", "1e-7", ".8999901"])
         .succeeds()

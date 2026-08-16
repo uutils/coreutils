@@ -681,7 +681,7 @@ fn test_deeply_nested_length() {
     new_ucmd!().args(&args).succeeds().stdout_is("1\n");
 }
 
-/// Regroup the testcases of the GNU test expr.pl
+/// Test cases for expr arithmetic and string operations
 mod gnu_expr {
     use uutests::new_ucmd;
 

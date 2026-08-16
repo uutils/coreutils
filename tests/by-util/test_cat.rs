@@ -649,7 +649,7 @@ fn test_write_to_self() {
     );
 }
 
-/// Test derived from the following GNU test in `tests/cat/cat-self.sh`:
+/// Test that cat handles self-referential input gracefully.
 ///
 /// `cat fxy2 fy 1<>fxy2`
 // TODO: make this work on windows
@@ -674,7 +674,7 @@ fn test_successful_write_to_read_write_self() {
     assert_eq!(fxy2_contents, "xy");
 }
 
-/// Test derived from the following GNU test in `tests/cat/cat-self.sh`:
+/// Test that cat handles self-referential input gracefully.
 ///
 /// `cat fx fx3 1<>fx3`
 #[test]

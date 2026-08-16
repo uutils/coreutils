@@ -690,7 +690,7 @@ fn test_header_formatting_with_custom_date_format() {
 
     let test_file_path = "test_one_page.log";
 
-    // Set a specific date format like in the GNU test
+    // Set a specific date format for consistent output
     let output = new_ucmd!()
         .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
         .succeeds()
