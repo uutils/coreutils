@@ -11,12 +11,13 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 
-use uucore::error::{FromIo, UResult};
+use uucore::error::{FromIo, UResult, quiet_if_reported};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
 use uucore::{fast_inc::fast_inc, format_usage};
 
+mod diagnostics;
 mod error;
 
 // public to allow fuzzing
@@ -94,8 +95,14 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches =
-        uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Captured before `-f%q` is split into two arguments, so that the caret
+    // echoes the command line as it was typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(
+        uu_app(),
+        split_short_args_with_value(raw_args.into_iter()),
+    )?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -152,11 +159,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
     let (format, padding, fast_allowed) = if let Some(str) = options.format {
-        (
-            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
-            0,
-            false,
-        )
+        let format =
+            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str).map_err(|error| {
+                let reported = diag_args
+                    .as_deref()
+                    .is_some_and(|args| diagnostics::render(args, str, &error));
+                quiet_if_reported(reported, error)
+            })?;
+        (format, 0, false)
     } else {
         let precision = select_precision(&first, &increment, &last);
 
