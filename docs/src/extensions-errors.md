@@ -283,6 +283,7 @@ the difference:
 | `stat`   | the failing directive of a `-c`/`--format` or `--printf` format | [`stat -c %d%.3 fruits.txt`](https://uutils.org/playground/?cmd=stat+-c+%25d%25.3+fruits.txt) |
 | `env`    | the failing part of a `-S`/`--split-string` string | [`env -S 'echo ${1FOO}'`](https://uutils.org/playground/?cmd=env+-S+%27echo+%24%7B1FOO%7D%27) |
 | `dd`     | the failing key, value or flag of a `KEY=VALUE` operand | [`dd conv=ucase,zap`](https://uutils.org/playground/?cmd=dd+conv%3Ducase%2Czap) |
+| `join`   | the failing field of the output format given to `-o` | [`join -o 1.2,2.x fruits.txt fruits.txt`](https://uutils.org/playground/?cmd=join+-o+1.2%2C2.x+fruits.txt+fruits.txt) |
 | `cut`    | the failing range in the list given to `-b`, `-c`, `-f` or `-F` | [`cut -f 1,4-2 fruits.txt`](https://uutils.org/playground/?cmd=cut+-f+1%2C4-2+fruits.txt) |
 | `split`  | the failing part of the SIZE given to `-b`, `-C` or `-l` | [`split -b 7zq fruits.txt`](https://uutils.org/playground/?cmd=split+-b+7zq+fruits.txt) |
 | `shred`  | the failing part of the SIZE given to `-s`/`--size` | [`shred -s 4vv fruits.txt`](https://uutils.org/playground/?cmd=shred+-s+4vv+fruits.txt) |
