@@ -682,143 +682,143 @@ fn test_deeply_nested_length() {
 }
 
 /// Test cases for expr arithmetic and string operations
-mod gnu_expr {
+mod expr_arithmetic {
     use uutests::new_ucmd;
 
     #[test]
-    fn test_a() {
+    fn test_addition() {
         new_ucmd!()
-            .args(&["5", "+", "6"])
-            .succeeds()
-            .stdout_only("11\n");
-    }
-
-    #[test]
-    fn test_b() {
-        new_ucmd!()
-            .args(&["5", "-", "6"])
-            .succeeds()
-            .stdout_only("-1\n");
-    }
-
-    #[test]
-    fn test_c() {
-        new_ucmd!()
-            .args(&["5", "*", "6"])
-            .succeeds()
-            .stdout_only("30\n");
-    }
-
-    #[test]
-    fn test_d() {
-        new_ucmd!()
-            .args(&["100", "/", "6"])
-            .succeeds()
-            .stdout_only("16\n");
-    }
-
-    #[test]
-    fn test_e() {
-        new_ucmd!()
-            .args(&["100", "%", "6"])
-            .succeeds()
-            .stdout_only("4\n");
-    }
-
-    #[test]
-    fn test_f() {
-        new_ucmd!()
-            .args(&["3", "+", "-2"])
-            .succeeds()
-            .stdout_only("1\n");
-    }
-
-    #[test]
-    fn test_g() {
-        new_ucmd!()
-            .args(&["-2", "+", "-2"])
-            .succeeds()
-            .stdout_only("-4\n");
-    }
-
-    #[test]
-    fn test_opt1() {
-        new_ucmd!()
-            .args(&["--", "-11", "+", "12"])
-            .succeeds()
-            .stdout_only("1\n");
-    }
-
-    #[test]
-    fn test_opt2() {
-        new_ucmd!()
-            .args(&["-11", "+", "12"])
-            .succeeds()
-            .stdout_only("1\n");
-    }
-
-    #[test]
-    fn test_opt3() {
-        new_ucmd!()
-            .args(&["--", "-1", "+", "2"])
-            .succeeds()
-            .stdout_only("1\n");
-    }
-
-    #[test]
-    fn test_opt4() {
-        new_ucmd!()
-            .args(&["-1", "+", "2"])
-            .succeeds()
-            .stdout_only("1\n");
-    }
-
-    #[test]
-    fn test_opt5() {
-        new_ucmd!()
-            .args(&["--", "2", "+", "2"])
-            .succeeds()
-            .stdout_only("4\n");
-    }
-
-    #[test]
-    fn test_paren1() {
-        new_ucmd!()
-            .args(&["(", "100", "%", "6", ")"])
-            .succeeds()
-            .stdout_only("4\n");
-    }
-
-    #[test]
-    fn test_paren2() {
-        new_ucmd!()
-            .args(&["(", "100", "%", "6", ")", "-", "8"])
-            .succeeds()
-            .stdout_only("-4\n");
-    }
-
-    #[test]
-    fn test_paren3() {
-        new_ucmd!()
-            .args(&["9", "/", "(", "100", "%", "6", ")", "-", "8"])
-            .succeeds()
-            .stdout_only("-6\n");
-    }
-
-    #[test]
-    fn test_paren4() {
-        new_ucmd!()
-            .args(&["9", "/", "(", "(", "100", "%", "6", ")", "-", "8", ")"])
-            .succeeds()
-            .stdout_only("-2\n");
-    }
-
-    #[test]
-    fn test_paren5() {
-        new_ucmd!()
-            .args(&["9", "+", "(", "100", "%", "6", ")"])
+            .args(&["8", "+", "5"])
             .succeeds()
             .stdout_only("13\n");
+    }
+
+    #[test]
+    fn test_subtraction() {
+        new_ucmd!()
+            .args(&["9", "-", "4"])
+            .succeeds()
+            .stdout_only("5\n");
+    }
+
+    #[test]
+    fn test_multiplication() {
+        new_ucmd!()
+            .args(&["7", "*", "6"])
+            .succeeds()
+            .stdout_only("42\n");
+    }
+
+    #[test]
+    fn test_integer_division() {
+        new_ucmd!()
+            .args(&["120", "/", "8"])
+            .succeeds()
+            .stdout_only("15\n");
+    }
+
+    #[test]
+    fn test_modulo_remainder() {
+        new_ucmd!()
+            .args(&["120", "%", "7"])
+            .succeeds()
+            .stdout_only("1\n");
+    }
+
+    #[test]
+    fn test_add_with_negative() {
+        new_ucmd!()
+            .args(&["6", "+", "-4"])
+            .succeeds()
+            .stdout_only("2\n");
+    }
+
+    #[test]
+    fn test_two_negatives_added() {
+        new_ucmd!()
+            .args(&["-3", "+", "-5"])
+            .succeeds()
+            .stdout_only("-8\n");
+    }
+
+    #[test]
+    fn test_double_dash_neg_large() {
+        new_ucmd!()
+            .args(&["--", "-7", "+", "15"])
+            .succeeds()
+            .stdout_only("8\n");
+    }
+
+    #[test]
+    fn test_neg_large_no_dash() {
+        new_ucmd!()
+            .args(&["-7", "+", "15"])
+            .succeeds()
+            .stdout_only("8\n");
+    }
+
+    #[test]
+    fn test_double_dash_neg_small() {
+        new_ucmd!()
+            .args(&["--", "-2", "+", "9"])
+            .succeeds()
+            .stdout_only("7\n");
+    }
+
+    #[test]
+    fn test_neg_small_no_dash() {
+        new_ucmd!()
+            .args(&["-2", "+", "9"])
+            .succeeds()
+            .stdout_only("7\n");
+    }
+
+    #[test]
+    fn test_double_dash_positive() {
+        new_ucmd!()
+            .args(&["--", "3", "+", "6"])
+            .succeeds()
+            .stdout_only("9\n");
+    }
+
+    #[test]
+    fn test_parens_simple_mod() {
+        new_ucmd!()
+            .args(&["(", "120", "%", "7", ")"])
+            .succeeds()
+            .stdout_only("1\n");
+    }
+
+    #[test]
+    fn test_parens_mod_minus() {
+        new_ucmd!()
+            .args(&["(", "120", "%", "7", ")", "-", "8"])
+            .succeeds()
+            .stdout_only("-7\n");
+    }
+
+    #[test]
+    fn test_parens_div_mod_minus() {
+        new_ucmd!()
+            .args(&["18", "/", "(", "120", "%", "7", ")", "-", "6"])
+            .succeeds()
+            .stdout_only("12\n");
+    }
+
+    #[test]
+    fn test_parens_div_nested_mod() {
+        new_ucmd!()
+            .args(&["24", "/", "(", "(", "120", "%", "7", ")", "+", "5", ")"])
+            .succeeds()
+            .stdout_only("4\n");
+    }
+
+    #[test]
+    fn test_parens_add_mod() {
+        new_ucmd!()
+            .args(&["9", "+", "(", "120", "%", "7", ")"])
+            .succeeds()
+            .stdout_only("10\n");
     }
 
     #[test]
