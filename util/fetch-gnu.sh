@@ -8,6 +8,7 @@ backport=(
   cat/splice.sh # split tests
   misc/uname-labeled.sh # uname -A/--all-labeled, added after $ver
   nproc/nproc-quota.sh # remove LD_PRELOAD
+  misc/empty-backup-suffix.sh
 )
 for f in "${backport[@]}"
   do curl -L ${repo}/raw/refs/heads/master/tests/$f > tests/$f
