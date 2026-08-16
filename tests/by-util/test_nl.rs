@@ -255,6 +255,17 @@ fn test_negative_starting_line_number() {
 }
 
 #[test]
+fn test_negative_starting_line_number_space_separated() {
+    // GNU nl accepts a negative value passed as a separate argument, e.g.
+    // `nl -v -10`. Without `allow_hyphen_values` clap rejected the `-10` token.
+    new_ucmd!()
+        .args(&["-v", "-10"])
+        .pipe_in("test")
+        .succeeds()
+        .stdout_is("   -10\ttest\n");
+}
+
+#[test]
 fn test_invalid_starting_line_number() {
     for arg in ["-vinvalid", "--starting-line-number=invalid"] {
         new_ucmd!()
@@ -296,6 +307,16 @@ fn test_negative_line_increment() {
             .succeeds()
             .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
     }
+}
+
+#[test]
+fn test_negative_line_increment_space_separated() {
+    // GNU nl accepts `nl -i -10` with the value as a separate argument.
+    new_ucmd!()
+        .args(&["-i", "-10"])
+        .pipe_in("a\nb\nc")
+        .succeeds()
+        .stdout_is("     1\ta\n    -9\tb\n   -19\tc\n");
 }
 
 #[test]
