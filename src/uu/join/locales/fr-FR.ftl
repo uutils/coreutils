@@ -33,3 +33,6 @@ join-error-invalid-field-number = numéro de champ invalide : { $value }
 join-error-incompatible-fields = champs de jointure incompatibles { $field1 }, { $field2 }
 join-error-not-sorted = { $file }:{ $line_num } : n'est pas trié : { $content }
 join-error-input-not-sorted = l'entrée n'est pas dans l'ordre trié
+
+# Diagnostics
+join-diag-help-format = un champ de sortie s'écrit NUMFICHIER.CHAMP, comme dans -o 1.2,2.1 ; 0 désigne le champ de jointure

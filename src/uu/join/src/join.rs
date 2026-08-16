@@ -17,7 +17,7 @@ use std::num::IntErrorKind;
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, quiet_if_reported, set_exit_code};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -764,7 +764,7 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
 /// This function takes the matches from the command-line arguments, processes them,
 /// and returns a `Settings` struct that encapsulates the configuration for the program.
 #[allow(clippy::field_reassign_with_default)]
-fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
+fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Settings> {
     let keys = get_and_parse_field_number(matches, "j")?;
     let key1 = get_and_parse_field_number(matches, "1")?;
     let key2 = get_and_parse_field_number(matches, "2")?;
@@ -788,8 +788,27 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
+            // Where the current field sits in the value, so that the caret can
+            // take the one field that is at fault out of a long list.
+            let mut at = 0;
             for part in format.split([' ', ',', '\t']) {
-                specs.push(Spec::parse(part)?);
+                specs.push(Spec::parse(part).map_err(|error| {
+                    let message = error.to_string();
+                    let reported = diag_args.is_some_and(|args| {
+                        uucore::diagnostics::Snapshot::with_program(args).render_option_value(
+                            format,
+                            Some('o'),
+                            None,
+                            at..at + part.len(),
+                            &message,
+                            None,
+                            Some(&translate!("join-diag-help-format")),
+                        )
+                    });
+                    quiet_if_reported(reported, error)
+                })?);
+                // Every separator is one byte wide.
+                at += part.len() + 1;
             }
             settings.format = specs;
         }
@@ -818,13 +837,16 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Kept for the caret in `-o` diagnostics, which needs the list as typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
     let _ = try_init_collator(opts);
 
-    let settings = parse_settings(&matches)?;
+    let settings = parse_settings(&matches, diag_args.as_deref())?;
 
     let file1 = matches.get_one::<OsString>("file1").unwrap();
     let file2 = matches.get_one::<OsString>("file2").unwrap();
