@@ -1237,7 +1237,7 @@ fn test_touch_through_dangling_symlink_creates_target() {
 // touch must be able to update the times of an owned file that is neither
 // readable nor writable (mode 0). Setting explicit times via utimensat-by-path
 // only requires ownership, so this succeeds even though the file cannot be
-// opened. Regression test for GNU tests/touch/no-rights.sh.
+// opened. Regression test: touch should fail gracefully on unwritable directory.
 #[test]
 #[cfg(unix)]
 fn test_touch_set_time_on_unreadable_unwritable_file() {

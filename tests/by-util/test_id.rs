@@ -176,7 +176,7 @@ fn test_id_multiple_users() {
         VERSION_MIN_MULTIPLE_USERS
     ));
 
-    // Same typical users that GNU test suite is using.
+    // Typical users commonly found on Unix systems.
     let test_users = ["root", "man", "postfix", "sshd", &whoami()];
 
     let ts = TestScenario::new(util_name!());
@@ -447,7 +447,7 @@ fn test_id_context() {
 
 #[test]
 fn test_id_no_specified_user_posixly() {
-    // gnu/tests/id/no-context.sh
+    // Test id output without security context
 
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().env("POSIXLY_CORRECT", "1").run();

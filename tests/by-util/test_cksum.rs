@@ -2239,7 +2239,7 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
         .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
 }
 
-/// This module reimplements the cksum-base64.pl GNU test.
+/// Tests for cksum with base64 output encoding.
 mod gnu_cksum_base64 {
     use super::*;
     use uutests::util::log_info;
@@ -2386,7 +2386,7 @@ mod gnu_cksum_base64 {
     }
 }
 
-/// This module reimplements the cksum-base64-untagged.sh GNU test.
+/// Tests for cksum with base64 output encoding (untagged mode).
 mod gnu_cksum_base64_untagged {
     use super::*;
 
@@ -2499,7 +2499,7 @@ mod gnu_cksum_base64_untagged {
     decl_blake_test!(blake2b_504, 504);
     decl_blake_test!(blake2b_512, 512);
 }
-/// This module reimplements the cksum-c.sh GNU test.
+/// Tests for cksum check mode (-c/--check).
 mod gnu_cksum_c {
     use super::*;
 
