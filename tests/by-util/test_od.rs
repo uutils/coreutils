@@ -1433,3 +1433,68 @@ fn test_od_strings_with_n_flag() {
         .success()
         .stdout_only("0000000 foo\n0000004 bar\n");
 }
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_read_bytes() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not. The headline keeps the
+        // option spelled the way it was typed.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+od: invalid suffix in -N argument '3zz'
+   ╭─[ od:1:8 ]
+   │
+ 1 │ od -N 3zz /dev/null
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_width_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--width=4qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("od:1:13"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_hexadecimal_offset_that_does_not_parse() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-j", "0x1zz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("od:1:7"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("od: invalid suffix in -N argument '3zz'\n");
+    }
+}
