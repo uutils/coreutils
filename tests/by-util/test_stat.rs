@@ -11,8 +11,9 @@ use uutests::unwrap_or_return;
 use uutests::util::{TestScenario, expected_result};
 use uutests::util_name;
 
-use std::fs::metadata;
+use std::fs::{File, FileTimes, metadata};
 use std::os::unix::fs::MetadataExt;
+use std::time::{Duration, UNIX_EPOCH};
 
 #[test]
 fn test_invalid_arg() {
@@ -200,12 +201,6 @@ fn test_char() {
 #[cfg(target_os = "linux")]
 #[test]
 fn test_printf_atime_ctime_mtime_precision() {
-    // TODO Higher precision numbers (`%.3Y`, `%.4Y`, etc.) are
-    // formatted correctly, but we are not precise enough when we do
-    // some `mtime` computations, so we get `.7640` instead of
-    // `.7639`. This can be fixed by being more careful when
-    // transforming the number from `Metadata::mtime_nsec()` to the form
-    // used in rendering.
     let args = ["-c", "%.0Y %.1Y %.2X %.2Y %.2Z", "/dev/pts/ptmx"];
     let ts = TestScenario::new(util_name!());
     let expected_stdout = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
@@ -256,6 +251,53 @@ fn test_timestamp_format() {
             "Format '{format_str}' failed.\nExpected: '{expected}'\nGot: '{result}'",
         );
     }
+}
+
+#[test]
+fn test_timestamp_format_preserves_nanoseconds() {
+    let ts = TestScenario::new(util_name!());
+    let path = ts.fixtures.plus("timestamp");
+    let file = File::create(&path).unwrap();
+
+    let timestamp = UNIX_EPOCH + Duration::new(1_755_300_000, 123_456_789);
+    file.set_times(
+        FileTimes::new()
+            .set_accessed(timestamp)
+            .set_modified(timestamp),
+    )
+    .unwrap();
+
+    let metadata = metadata(&path).unwrap();
+    let expected = format!(
+        "1755300000.123456789 1755300000.123456789 {}.{:09}\n",
+        metadata.ctime(),
+        metadata.ctime_nsec()
+    );
+
+    ts.ucmd()
+        .args(&["-c", "%.9X %.9Y %.9Z", "timestamp"])
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
+fn test_timestamp_format_before_epoch() {
+    let ts = TestScenario::new(util_name!());
+    let path = ts.fixtures.plus("timestamp");
+    let file = File::create(&path).unwrap();
+
+    let timestamp = UNIX_EPOCH - Duration::new(0, 876_543_211);
+    file.set_times(
+        FileTimes::new()
+            .set_accessed(timestamp)
+            .set_modified(timestamp),
+    )
+    .unwrap();
+
+    ts.ucmd()
+        .args(&["-c", "%.1X %.3X %.9X %.1Y %.3Y %.9Y", "timestamp"])
+        .succeeds()
+        .stdout_is("-0.9 -0.877 -0.876543211 -0.9 -0.877 -0.876543211\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
@@ -411,7 +453,7 @@ fn test_stdin_redirect() {
     at.touch("f");
     ts.ucmd()
         .arg("-")
-        .set_stdin(std::fs::File::open(at.plus("f")).unwrap())
+        .set_stdin(File::open(at.plus("f")).unwrap())
         .succeeds()
         .no_stderr()
         .stdout_contains("regular empty file")
