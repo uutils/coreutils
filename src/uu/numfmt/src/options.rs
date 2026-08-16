@@ -139,6 +139,8 @@ pub enum FormatErrorKind {
     MissingDirective,
     /// A character that has no place in a directive.
     UnexpectedCharacter,
+    /// A directive ending on something other than `f`, such as `%d` or `%e`.
+    UnexpectedConversion,
     /// A width or precision that does not fit.
     NumberOverflow,
     /// A `%` in the suffix that is not part of a `%%` pair.
@@ -151,6 +153,22 @@ impl Display for FormatError {
     }
 }
 
+/// An option value that does not parse as a whole — a unit name, a unit size,
+/// a padding — so that the caret can underline it where it was typed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OptionValueError {
+    pub message: String,
+    /// Long name of the option the value came from, as in `from-unit`.
+    pub option: &'static str,
+    /// The value as given, which is how it is found among the arguments.
+    pub value: String,
+    /// Fluent identifier of the label under the caret, when one would add to
+    /// the message.
+    pub label: Option<&'static str>,
+    /// Fluent identifier of the line of advice under the report.
+    pub help: &'static str,
+}
+
 /// Why option parsing failed: a format error that still knows where in the
 /// format string it happened, or a plain message.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,7 +176,15 @@ pub enum ParseError {
     Format(FormatError),
     /// A `--field` list that does not parse, knowing where in the list.
     Field(uucore::ranges::RangeError),
+    /// An option value that is wrong from end to end.
+    Value(Box<OptionValueError>),
     Other(String),
+}
+
+impl From<OptionValueError> for ParseError {
+    fn from(error: OptionValueError) -> Self {
+        Self::Value(Box::new(error))
+    }
 }
 
 impl From<FormatError> for ParseError {
@@ -331,10 +357,18 @@ impl FromStr for FormatOptions {
         if let Some((_, 'f')) = iter.peek() {
             iter.next();
         } else {
+            // Only the character standing where the conversion belongs is at
+            // fault: whatever follows it would have been a valid suffix. At end
+            // of input there is no conversion to name, only one missing.
+            let kind = if iter.peek().is_none() {
+                FormatErrorKind::MissingDirective
+            } else {
+                FormatErrorKind::UnexpectedConversion
+            };
             return Err(error(
                 translate!("numfmt-error-invalid-format-directive", "format" => s),
                 at(&mut iter, s),
-                FormatErrorKind::UnexpectedCharacter,
+                kind,
             ));
         }
 

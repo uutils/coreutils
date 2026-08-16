@@ -100,6 +100,65 @@ fn valid_end_with_unit_separator(
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
 
+/// Length of the leading part of `s` that reads as a number, suffix included.
+fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
+    let Some(number_prefix) = find_valid_number_with_suffix(s, unit) else {
+        return 0;
+    };
+
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
+        valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
+            .unwrap_or(number_prefix.len())
+    } else {
+        number_prefix.len()
+    }
+}
+
+/// Byte range of the part of a refused `input` a caret should point at: what
+/// follows the number that could be read, or the whole of it when there is
+/// none. Surrounding whitespace, reproduced rather than converted, is left out.
+pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usize> {
+    let start = input.len() - input.trim_start().len();
+    let mut end = input.trim_end().len();
+
+    // Whitespace only: there is no number to point past, and the two offsets
+    // above have crossed — `start` is the whole length, `end` is zero.
+    if start >= end {
+        return 0..input.len();
+    }
+
+    // A declared --suffix is stripped before parsing, so it is not at fault.
+    if let Some(suffix) = &options.suffix
+        && !suffix.is_empty()
+        && let Some(stripped) = input[start..end].strip_suffix(suffix.as_str())
+    {
+        end = start + stripped.len();
+    }
+
+    let valid = valid_prefix_len(
+        &input[start..end],
+        options.transform.from,
+        &options.unit_separator,
+    );
+    start + valid..end.max(start + valid)
+}
+
+/// Whether `input` begins with something that reads as a number, so that advice
+/// about what may follow one is only given where there is one. A lone sign or
+/// decimal separator is the leading part of a number, but not yet a number.
+pub fn holds_number(input: &str) -> bool {
+    find_numeric_beginning(input.trim_start()).is_some_and(|number| {
+        number
+            .replace(locale_decimal_separator(), ".")
+            .parse::<f64>()
+            .is_ok()
+    })
+}
+
 fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
@@ -117,19 +176,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
         return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
     }
 
-    // When a unit separator is in use, the valid part may extend beyond the
-    // contiguous number+suffix found by find_valid_number_with_suffix.
-    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
-    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
-    let valid_end =
-        if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
-            valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
-                .unwrap_or(number_prefix.len())
-        } else {
-            number_prefix.len()
-        };
-
-    let valid_part = &s[..valid_end];
+    let valid_part = &s[..valid_prefix_len(s, unit, unit_separator)];
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
