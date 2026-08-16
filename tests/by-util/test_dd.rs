@@ -2255,3 +2255,106 @@ fn test_stats_are_reported_when_a_write_fails() {
     result.stderr_contains("786432 bytes");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
 }
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unrecognized_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+
+        // The caret takes the key alone: the value is fine, it is the operand
+        // name that dd does not know.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+dd: Unrecognized operand 'bsx=1'
+   ╭─[ dd:1:4 ]
+   │
+ 1 │ dd bsx=1
+   │    ───
+   │
+   │ Help: an operand is KEY=VALUE, as in if=file bs=4k count=10
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Only the second flag is wrong, and the caret says so.
+        assert!(stderr.contains("dd:1:15"), "{stderr}");
+        assert!(stderr.contains("1 │ dd conv=ucase,zap"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_and_not_the_one_it_starts() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=notrunc,not"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // `not` also opens the `notrunc` in front of it, and the caret belongs
+        // on the flag that failed rather than on the one that parsed.
+        assert!(stderr.contains("dd:1:17"), "{stderr}");
+        assert!(
+            stderr.contains("1 \u{2502} dd conv=notrunc,not"),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_value_of_a_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["count=8x"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        assert!(stderr.contains("a number may be followed by"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_drops_the_try_help_hint_of_a_flag_message() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The report ends with advice of its own, so the hint would be noise
+        // in the middle of it.
+        assert!(!stderr.contains("--help"), "{stderr}");
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_is("dd: Unrecognized operand 'bsx=1'\n");
+    }
+}
