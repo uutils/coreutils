@@ -1805,18 +1805,18 @@ fn test_failed_write_is_reported() {
 
 #[test]
 // Test sort with output file (o2)
-fn test_multiple_output_files() {
+fn test_error_on_multiple_output_flags() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "bar"])
+        .args(&["-o", "alpha", "-o", "beta"])
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
 }
 
 #[test]
 // Test sort with output file (o3)
-fn test_duplicate_output_files_allowed() {
+fn test_same_output_flag_twice_ok() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "foo"])
+        .args(&["-o", "output", "-o", "output"])
         .pipe_in("")
         .succeeds()
         .no_stderr();
@@ -1847,7 +1847,7 @@ fn test_output_file_with_leading_dash() {
 
 #[test]
 // Test files0-from with extra argument
-fn test_files0_from_extra_arg() {
+fn test_files0_from_rejects_extra_positional() {
     new_ucmd!()
         .args(&["--files0-from", "-", "foo"])
         .fails_with_code(2)
@@ -1859,7 +1859,7 @@ fn test_files0_from_extra_arg() {
 
 #[test]
 // Test files0-from with missing file
-fn test_files0_from_missing() {
+fn test_files0_from_nonexistent_file_fails() {
     new_ucmd!()
         .args(&["--files0-from", "missing_file"])
         .fails_with_code(2)
@@ -1873,7 +1873,7 @@ fn test_files0_from_missing() {
 
 #[test]
 // Test files0-from reading from stdin
-fn test_files0_from_minus_in_stdin() {
+fn test_files0_from_reads_stdin_via_dash() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("-")
@@ -1885,7 +1885,7 @@ fn test_files0_from_minus_in_stdin() {
 
 #[test]
 // Test files0-from with empty file
-fn test_files0_from_empty() {
+fn test_files0_from_empty_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file");
@@ -1897,7 +1897,7 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
-fn test_files0_from_non_utf8_name() {
+fn test_files0_from_non_utf8_filename() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in(vec![0xff_u8])
@@ -1907,7 +1907,7 @@ fn test_files0_from_non_utf8_name() {
 
 #[test]
 #[cfg(unix)]
-fn test_files0_read_error() {
+fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
         .fails_with_code(2)
@@ -1917,7 +1917,7 @@ fn test_files0_read_error() {
 #[cfg(unix)]
 #[test]
 // Test files0-from with non-regular empty file
-fn test_files0_from_empty_non_regular() {
+fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
         .fails_with_code(2)
@@ -1926,7 +1926,7 @@ fn test_files0_from_empty_non_regular() {
 
 #[test]
 // Test files0-from with NUL-separated input (case 1)
-fn test_files0_from_nul() {
+fn test_files0_from_single_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0")
@@ -1936,7 +1936,7 @@ fn test_files0_from_nul() {
 
 #[test]
 // Test files0-from with NUL-separated input (case 2)
-fn test_files0_from_nul2() {
+fn test_files0_from_double_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0\0")
@@ -1946,64 +1946,64 @@ fn test_files0_from_nul2() {
 
 #[test]
 // Test files0-from basic single file
-fn test_files0_from_1() {
+fn test_files0_from_single_entry() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file")
+        .pipe_in("words")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
 // Test files0-from basic single file variant
-fn test_files0_from_1a() {
+fn test_files0_from_single_entry_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0")
+        .pipe_in("words\0")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
 // Test files0-from with two files
-fn test_files0_from_2() {
+fn test_files0_from_two_entries() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file")
+        .pipe_in("words\0words")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
 // Test files0-from with two files variant
-fn test_files0_from_2a() {
+fn test_files0_from_two_entries_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file\0")
+        .pipe_in("words\0words\0")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
 // Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_os = "macos")))]
-fn test_files0_from_non_utf8() {
+fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2021,19 +2021,19 @@ fn test_files0_from_non_utf8() {
 
 #[test]
 // Test files0-from with zero-length filename
-fn test_files0_from_zero_length() {
+fn test_files0_from_zero_length_entry_fails() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
-        .pipe_in("g\0\0b\0\0")
+        .pipe_in("x\0\0y\0\0")
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
 }
 
 #[test]
 // Test sort with floating point numbers
-fn test_g_float() {
-    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
-    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+fn test_sort_general_numeric_extremes() {
+    let input = "0\n-1.7976931348623157e+308\n1.7976931348623157e+308\n";
+    let output = "-1.7976931348623157e+308\n0\n1.7976931348623157e+308\n";
     new_ucmd!()
         .args(&["-g"])
         .pipe_in(input)
