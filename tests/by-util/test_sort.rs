@@ -1864,7 +1864,7 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o2"
+// Test sort with output file (o2)
 fn test_multiple_output_files() {
     new_ucmd!()
         .args(&["-o", "foo", "-o", "bar"])
@@ -1873,7 +1873,7 @@ fn test_multiple_output_files() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o3"
+// Test sort with output file (o3)
 fn test_duplicate_output_files_allowed() {
     new_ucmd!()
         .args(&["-o", "foo", "-o", "foo"])
@@ -1906,7 +1906,7 @@ fn test_output_file_with_leading_dash() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
+// Test files0-from with extra argument
 fn test_files0_from_extra_arg() {
     new_ucmd!()
         .args(&["--files0-from", "-", "foo"])
@@ -1918,7 +1918,7 @@ fn test_files0_from_extra_arg() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "missing"
+// Test files0-from with missing file
 fn test_files0_from_missing() {
     new_ucmd!()
         .args(&["--files0-from", "missing_file"])
@@ -1932,7 +1932,7 @@ fn test_files0_from_missing() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "minus-in-stdin"
+// Test files0-from reading from stdin
 fn test_files0_from_minus_in_stdin() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -1944,7 +1944,7 @@ fn test_files0_from_minus_in_stdin() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty"
+// Test files0-from with empty file
 fn test_files0_from_empty() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -1976,7 +1976,7 @@ fn test_files0_read_error() {
 
 #[cfg(unix)]
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
+// Test files0-from with non-regular empty file
 fn test_files0_from_empty_non_regular() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
@@ -1985,7 +1985,7 @@ fn test_files0_from_empty_non_regular() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-1"
+// Test files0-from with NUL-separated input (case 1)
 fn test_files0_from_nul() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -1995,7 +1995,7 @@ fn test_files0_from_nul() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-2"
+// Test files0-from with NUL-separated input (case 2)
 fn test_files0_from_nul2() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -2005,7 +2005,7 @@ fn test_files0_from_nul2() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1"
+// Test files0-from basic single file
 fn test_files0_from_1() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2019,7 +2019,7 @@ fn test_files0_from_1() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1a"
+// Test files0-from basic single file variant
 fn test_files0_from_1a() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2033,7 +2033,7 @@ fn test_files0_from_1a() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2"
+// Test files0-from with two files
 fn test_files0_from_2() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2047,7 +2047,7 @@ fn test_files0_from_2() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2a"
+// Test files0-from with two files variant
 fn test_files0_from_2a() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2061,7 +2061,7 @@ fn test_files0_from_2a() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+// Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_files0_from_non_utf8() {
     use std::os::unix::ffi::OsStringExt;
@@ -2080,7 +2080,7 @@ fn test_files0_from_non_utf8() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "zero-len"
+// Test files0-from with zero-length filename
 fn test_files0_from_zero_length() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
@@ -2090,7 +2090,7 @@ fn test_files0_from_zero_length() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-float.sh
+// Test sort with floating point numbers
 fn test_g_float() {
     let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
     let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";

@@ -32,7 +32,7 @@ fn test_invalid_arg() {
 #[test]
 fn test_invalid_negative_arg_shows_tip() {
     // Test that factor shows a tip when given an invalid negative argument
-    // This replicates the GNU test issue where "-1" was interpreted as an invalid option
+    // Test that "-1" is not misinterpreted as an invalid option
     new_ucmd!()
         .arg("-1")
         .fails()
@@ -160,7 +160,7 @@ fn test_first_1000_integers_with_exponents() {
         .pipe_in(input_string.as_bytes())
         .succeeds();
 
-    // Using factor from GNU Coreutils 9.2
+    // Known factorizations for verification
     // `seq 0 1000 | factor -h | sha1sum` => "45f5f758a9319870770bd1fec2de23d54331944d"
     let mut hasher = Sha1::new();
     hasher.update(result.stdout());
