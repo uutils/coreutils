@@ -36,6 +36,97 @@ fn test_basic() {
 
 #[test]
 #[cfg(unix)]
+fn test_size_from_background_process_group() {
+    use std::env;
+    use std::io;
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+
+    const HELPER_ENV: &str = "UUTILS_STTY_BACKGROUND_HELPER";
+    const TEST_NAME: &str = "test_stty::test_size_from_background_process_group";
+
+    if env::var_os(HELPER_ENV).is_some() {
+        let mut command = Command::new(uutests::util::get_tests_binary());
+        command.args(["stty", "size"]);
+        // SAFETY: setpgid and signal are async-signal-safe and do not access memory shared with
+        // the parent between fork and exec.
+        unsafe {
+            command.pre_exec(|| {
+                if libc::setpgid(0, 0) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                libc::signal(libc::SIGTTOU, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+
+        let mut child = command.spawn().expect("failed to start stty");
+        let pid = child.id() as libc::pid_t;
+        let mut status = 0;
+        // SAFETY: pid belongs to child and status points to a valid integer for waitpid to fill.
+        assert_eq!(
+            unsafe { libc::waitpid(pid, &raw mut status, libc::WUNTRACED) },
+            pid
+        );
+
+        if libc::WIFSTOPPED(status) {
+            let signal = libc::WSTOPSIG(status);
+            // SAFETY: pid is also the process-group ID established by setpgid above.
+            unsafe {
+                libc::kill(-pid, libc::SIGKILL);
+            }
+            child.wait().expect("failed to reap stopped stty");
+            assert_ne!(
+                signal,
+                libc::SIGTTOU,
+                "`stty size` was stopped by SIGTTOU in a background process group"
+            );
+            panic!("`stty size` was stopped by signal {signal}");
+        }
+
+        // waitpid already reaped a child that exited normally; calling wait keeps Child's
+        // lifecycle explicit and should therefore report that no child remains.
+        let _ = child.wait();
+
+        assert!(
+            libc::WIFEXITED(status),
+            "`stty size` ended with {status:#x}"
+        );
+        assert_eq!(libc::WEXITSTATUS(status), 0);
+        return;
+    }
+
+    let (_path, _controller, replica) = pty_path();
+    let mut helper = Command::new(env::current_exe().unwrap());
+    helper
+        .args([TEST_NAME, "--exact", "--nocapture"])
+        .env(HELPER_ENV, "1")
+        .stdin(Stdio::from(replica));
+    // SAFETY: these libc calls are async-signal-safe. They give the helper its own session and
+    // make the fresh PTY on stdin its controlling terminal before exec.
+    unsafe {
+        helper.pre_exec(|| {
+            if libc::setsid() == -1
+                || libc::ioctl(0, libc::TIOCSCTTY as libc::c_ulong, 0) == -1
+                || libc::tcsetpgrp(0, libc::getpgrp()) == -1
+            {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+
+    let output = helper.output().expect("failed to start test helper");
+    assert!(
+        output.status.success(),
+        "background process-group helper failed:\n{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+#[cfg(unix)]
 fn test_all_flag() {
     let (path, _controller, _replica) = pty_path();
     let result = new_ucmd!().args(&["--all", "--file", &path]).succeeds();
