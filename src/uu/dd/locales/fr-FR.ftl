@@ -160,3 +160,9 @@ dd-progress-bytes-copied-si-iec = { $bytes } octets ({ $si }, { $iec }) copiés,
 # Warnings
 dd-warning-zero-multiplier = { $zero } est un multiplicateur zéro ; utilisez { $alternative } si c'est voulu
 dd-warning-signal-handler = Avertissement dd interne : Impossible d'enregistrer le gestionnaire de signal
+
+# Diagnostics
+dd-diag-help-operand = un opérande s'écrit CLÉ=VALEUR, comme dans if=fichier bs=4k count=10
+dd-diag-help-flags = conv=, iflag= et oflag= acceptent des indicateurs séparés par des virgules, comme dans conv=ucase,sync
+dd-diag-help-status = status= vaut none, noxfer ou progress
+dd-diag-help-number = un nombre peut être suivi d'un multiplicateur : c, w, b, puis K, M, G et ainsi de suite pour 1024, kB, MB, GB pour 1000

@@ -9,6 +9,7 @@ mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
 mod datastructures;
+mod diagnostics;
 mod numbers;
 mod parseargs;
 mod progress;
@@ -1493,12 +1494,16 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Kept for the caret in operand diagnostics, which echoes the command line.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
 
-    let settings: Settings = Parser::new().parse(
+    let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
+        diag_args.as_deref(),
     )?;
 
     #[cfg(unix)]
