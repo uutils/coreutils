@@ -3362,6 +3362,29 @@ sort: invalid number at field start: invalid count at start of 'sort'
     }
 
     #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_a_buffer_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid suffix in --buffer-size argument '8zz'
+   ╭─[ sort:1:10 ]
+   │
+ 1 │ sort -S 8zz /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
     fn test_plain_message_when_stderr_is_not_a_terminal() {
         // The test harness pipes stderr, so the report must not appear.
         new_ucmd!()
@@ -3370,6 +3393,10 @@ sort: invalid number at field start: invalid count at start of 'sort'
             .stderr_only(
                 "sort: stray character in field spec: invalid field specification '2.3q'\n",
             );
+        new_ucmd!()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2)
+            .stderr_only("sort: invalid suffix in --buffer-size argument '8zz'\n");
     }
 }
 
