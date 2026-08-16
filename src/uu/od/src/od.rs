@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (clap) dont
-// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset nrofbytes partialreader odfunc multifile exitcode
 // spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
 mod formatter_item_info;
 mod input_decoder;
 mod input_offset;
-#[cfg(test)]
-mod mockstream;
 mod multifile_reader;
 mod output_info;
 mod parse_formats;
