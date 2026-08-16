@@ -1326,7 +1326,7 @@ fn test_bytes_for_funny_unix_files() {
 }
 
 #[test]
-fn test_retry1() {
+fn test_retry_warn_without_follow() {
     // Test tail --retry behavior
     // Ensure --retry without --follow results in a warning.
 
@@ -1344,12 +1344,12 @@ fn test_retry1() {
 }
 
 #[test]
-fn test_retry2() {
+fn test_retry_missing_file_error() {
     // Test tail --retry behavior
     // The same as test_retry2 with a missing file: expect error message and exit 1.
 
     let ts = TestScenario::new(util_name!());
-    let missing = "missing";
+    let missing = "absent";
 
     ts.ucmd()
         .arg(missing)
@@ -1357,7 +1357,7 @@ fn test_retry2() {
         .fails_with_code(1)
         .stderr_is(
             "tail: warning: --retry ignored; --retry is useful only when following\n\
-                tail: cannot open 'missing' for reading: No such file or directory\n",
+                tail: cannot open 'absent' for reading: No such file or directory\n",
         );
 }
 
@@ -1369,17 +1369,17 @@ fn test_retry2() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_retry3() {
+fn test_retry_follow_name_waits_for_creation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=name` waits for the file to appear.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let missing = "missing";
+    let missing = "watchme";
 
-    let expected_stderr = "tail: cannot open 'missing' for reading: No such file or directory\n\
-        tail: 'missing' has appeared;  following new file\n";
-    let expected_stdout = "X\n";
+    let expected_stderr = "tail: cannot open 'watchme' for reading: No such file or directory\n\
+        tail: 'watchme' has appeared;  following new file\n";
+    let expected_stdout = "hello\n";
 
     let mut delay = 1500;
     let mut args = vec!["--follow=name", "--retry", missing, "--use-polling"];
@@ -1391,7 +1391,7 @@ fn test_retry3() {
         at.touch(missing);
         p.delay(delay);
 
-        at.truncate(missing, "X\n");
+        at.truncate(missing, "hello\n");
         p.delay(delay);
 
         p.kill()
@@ -1414,20 +1414,20 @@ fn test_retry3() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_retry4() {
+fn test_retry_descriptor_detects_truncation() {
     // Test tail --retry behavior
     // Ensure that `tail --retry --follow=descriptor` waits for the file to appear.
     // Ensure truncation is detected.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let missing = "missing";
+    let missing = "watchme";
 
     let expected_stderr = "tail: warning: --retry only effective for the initial open\n\
-        tail: cannot open 'missing' for reading: No such file or directory\n\
-        tail: 'missing' has appeared;  following new file\n\
-        tail: missing: file truncated\n";
-    let expected_stdout = "X1\nX\n";
+        tail: cannot open 'watchme' for reading: No such file or directory\n\
+        tail: 'watchme' has appeared;  following new file\n\
+        tail: watchme: file truncated\n";
+    let expected_stdout = "greetings\nhi\n";
     let mut args = vec![
         "-s.1",
         "--max-unchanged-stats=1",
@@ -1445,10 +1445,11 @@ fn test_retry4() {
         at.touch(missing);
         p.delay(delay);
 
-        at.truncate(missing, "X1\n");
+        at.truncate(missing, "greetings\n");
         p.delay(delay);
 
-        at.truncate(missing, "X\n");
+        // shorter than the previous content, so tail sees the shrink as a truncation
+        at.truncate(missing, "hi\n");
         p.delay(delay);
 
         p.make_assertion().is_alive();
@@ -1472,17 +1473,17 @@ fn test_retry4() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_retry5() {
+fn test_retry_descriptor_gives_up_on_untailable() {
     // Test tail --retry behavior
     // Ensure that `tail --follow=descriptor --retry` exits when the file appears untailable.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let missing = "missing";
+    let missing = "watchme";
 
     let expected_stderr = "tail: warning: --retry only effective for the initial open\n\
-        tail: cannot open 'missing' for reading: No such file or directory\n\
-        tail: 'missing' has been replaced with an untailable file; giving up on this name\n\
+        tail: cannot open 'watchme' for reading: No such file or directory\n\
+        tail: 'watchme' has been replaced with an untailable file; giving up on this name\n\
         tail: no files remaining\n";
 
     let mut delay = 1500;
@@ -1513,25 +1514,25 @@ fn test_retry5() {
 // >X
 #[test]
 #[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
-fn test_retry6() {
+fn test_descriptor_no_retry_skips_late_file() {
     // Test tail --retry behavior
     // Ensure that --follow=descriptor (without --retry) does *not* try
     // to open a file after an initial fail, even when there are other tailable files.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let missing = "missing";
-    let existing = "existing";
+    let missing = "nofile";
+    let existing = "active";
     at.touch(existing);
 
-    let expected_stderr = "tail: cannot open 'missing' for reading: No such file or directory\n";
-    let expected_stdout = "==> existing <==\nX\n";
+    let expected_stderr = "tail: cannot open 'nofile' for reading: No such file or directory\n";
+    let expected_stdout = "==> active <==\nhere\n";
 
     let mut p = ts
         .ucmd()
         .arg("--follow=descriptor")
-        .arg("missing")
-        .arg("existing")
+        .arg("nofile")
+        .arg("active")
         .run_no_wait();
 
     #[cfg(target_vendor = "apple")]
@@ -1540,10 +1541,10 @@ fn test_retry6() {
     let delay = 1000;
     p.make_assertion_with_delay(delay).is_alive();
 
-    at.truncate(missing, "Y\n");
+    at.truncate(missing, "gone\n");
     p.delay(delay);
 
-    at.truncate(existing, "X\n");
+    at.truncate(existing, "here\n");
     p.delay(delay);
 
     p.make_assertion().is_alive();
@@ -1562,21 +1563,21 @@ fn test_retry6() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_retry7() {
+fn test_capital_f_recovers_after_dir_swap() {
     // Test tail --retry behavior
     // Ensure that `tail -F` retries when the file is initially untailable.
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let untailable = "untailable";
+    let untailable = "dir_node";
 
-    let expected_stderr = "tail: error reading 'untailable': Is a directory\n\
-        tail: untailable: cannot follow end of this type of file\n\
-        tail: 'untailable' has become accessible\n\
-        tail: 'untailable' has become inaccessible: No such file or directory\n\
-        tail: 'untailable' has been replaced with an untailable file\n\
-        tail: 'untailable' has become accessible\n";
-    let expected_stdout = "foo\nbar\n";
+    let expected_stderr = "tail: error reading 'dir_node': Is a directory\n\
+        tail: dir_node: cannot follow end of this type of file\n\
+        tail: 'dir_node' has become accessible\n\
+        tail: 'dir_node' has become inaccessible: No such file or directory\n\
+        tail: 'dir_node' has been replaced with an untailable file\n\
+        tail: 'dir_node' has become accessible\n";
+    let expected_stdout = "alpha\nbeta\n";
 
     let mut args = vec![
         "-s.1",
@@ -1598,22 +1599,22 @@ fn test_retry7() {
         // or (The first is the common case, "has appeared" arises with slow rmdir):
         // tail: 'untailable' has appeared;  following new file
         at.rmdir(untailable);
-        at.truncate(untailable, "foo\n");
+        at.truncate(untailable, "alpha\n");
         p.delay(delay);
 
         // NOTE: GNU's `tail` only shows "become inaccessible"
         // if there's a delay between rm and mkdir.
-        // tail: 'untailable' has become inaccessible: No such file or directory
+        // tail: 'dir_node' has become inaccessible: No such file or directory
         at.remove(untailable);
         p.delay(delay);
 
-        // tail: 'untailable' has been replaced with an untailable file\n";
+        // tail: 'dir_node' has been replaced with an untailable file\n";
         at.mkdir(untailable);
         p.delay(delay);
 
         // full circle, back to the beginning
         at.rmdir(untailable);
-        at.truncate(untailable, "bar\n");
+        at.truncate(untailable, "beta\n");
         p.delay(delay);
 
         p.make_assertion().is_alive();
@@ -1961,28 +1962,28 @@ fn test_follow_descriptor_vs_rename2() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_follow_name_retry_headers() {
+fn test_follow_name_shows_headers_on_creation() {
     // Test -F flag with file headers
     // Ensure tail -F distinguishes output with the
     // correct headers for created/renamed files
 
     /*
-    $ tail --follow=descriptor -s.1 --max-unchanged-stats=1 -F a b
-    tail: cannot open 'a' for reading: No such file or directory
-    tail: cannot open 'b' for reading: No such file or directory
-    tail: 'a' has appeared;  following new file
-    ==> a <==
-    x
-    tail: 'b' has appeared;  following new file
+    $ tail --follow=descriptor -s.1 --max-unchanged-stats=1 -F log1 log2
+    tail: cannot open 'log1' for reading: No such file or directory
+    tail: cannot open 'log2' for reading: No such file or directory
+    tail: 'log1' has appeared;  following new file
+    ==> log1 <==
+    ping
+    tail: 'log2' has appeared;  following new file
 
-    ==> b <==
-    y
+    ==> log2 <==
+    pong
     */
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
-    let file_a = "a";
-    let file_b = "b";
+    let file_a = "log1";
+    let file_b = "log2";
 
     let mut args = vec![
         "-F",
@@ -1999,17 +2000,17 @@ fn test_follow_name_retry_headers() {
 
         p.make_assertion_with_delay(delay).is_alive();
 
-        at.truncate(file_a, "x\n");
+        at.truncate(file_a, "ping\n");
         p.delay(delay);
 
-        at.truncate(file_b, "y\n");
+        at.truncate(file_b, "pong\n");
         p.delay(delay);
 
-        let expected_stderr = "tail: cannot open 'a' for reading: No such file or directory\n\
-                tail: cannot open 'b' for reading: No such file or directory\n\
-                tail: 'a' has appeared;  following new file\n\
-                tail: 'b' has appeared;  following new file\n";
-        let expected_stdout = "\n==> a <==\nx\n\n==> b <==\ny\n";
+        let expected_stderr = "tail: cannot open 'log1' for reading: No such file or directory\n\
+                tail: cannot open 'log2' for reading: No such file or directory\n\
+                tail: 'log1' has appeared;  following new file\n\
+                tail: 'log2' has appeared;  following new file\n";
+        let expected_stdout = "\n==> log1 <==\nping\n\n==> log2 <==\npong\n";
 
         p.make_assertion().is_alive();
         p.kill()
@@ -2237,7 +2238,7 @@ fn test_follow_name_truncate4() {
 
 #[test]
 #[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
-fn test_follow_truncate_fast() {
+fn test_follow_detects_file_truncation() {
     // Test tail behavior on file truncation
     // Ensure all logs are output upon file truncation
 
@@ -2253,7 +2254,12 @@ fn test_follow_truncate_fast() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
-    let mut args = vec!["-s.1", "--max-unchanged-stats=1", "f", "---disable-inotify"];
+    let mut args = vec![
+        "-s.1",
+        "--max-unchanged-stats=1",
+        "data",
+        "---disable-inotify",
+    ];
     let follow = vec!["-f", "-F"];
 
     let mut delay = 1000;
@@ -2261,19 +2267,19 @@ fn test_follow_truncate_fast() {
         for mode in &follow {
             args.push(mode);
 
-            at.truncate("f", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
+            at.truncate("data", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
 
             let mut p = ts.ucmd().args(&args).run_no_wait();
             p.make_assertion_with_delay(delay).is_alive();
 
-            at.truncate("f", "11\n12\n13\n14\n15\n");
+            at.truncate("data", "11\n12\n13\n14\n15\n");
             p.delay(delay);
 
             p.make_assertion().is_alive();
             p.kill()
                 .make_assertion()
                 .with_all_output()
-                .stderr_is("tail: f: file truncated\n")
+                .stderr_is("tail: data: file truncated\n")
                 .stdout_is("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n13\n14\n15\n");
 
             args.pop();
@@ -2347,9 +2353,9 @@ fn test_follow_name_move_create1() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_follow_name_move_create2() {
-    // Test inotify hash table under heavy file churn
-    // Exercise an abort-inducing flaw in inotify-enabled tail -F
+fn test_follow_name_hash_table_stress() {
+    // Test inotify hash table under heavy file churn by watching 9 files simultaneously.
+    // Exercises an abort-inducing flaw in inotify-enabled tail -F
 
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2383,7 +2389,7 @@ fn test_follow_name_move_create2() {
         at.truncate("9", "x\n");
         p.delay(delay);
 
-        at.rename("1", "f");
+        at.rename("1", "moved");
         p.delay(delay);
 
         at.truncate("1", "a\n");
@@ -2411,7 +2417,7 @@ fn test_follow_name_move_create2() {
             .stderr_is(expected_stderr)
             .stdout_is(expected_stdout);
 
-        at.remove("f");
+        at.remove("moved");
         if i == 0 {
             args.push("---disable-inotify");
         }
@@ -2637,7 +2643,7 @@ fn test_follow_name_move_retry1() {
     not(target_os = "freebsd"),
     not(target_os = "openbsd")
 ))] // FIXME: for currently not working platforms
-fn test_follow_name_move_retry2() {
+fn test_follow_name_rename_chain() {
     // Test -F flag behavior across file renames
     // Similar to test_follow_name_move2 (move to a name that's already monitored)
     // but with `--retry` (`-F`)

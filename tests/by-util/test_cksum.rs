@@ -2240,7 +2240,7 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
 }
 
 /// Tests for cksum with base64 output encoding.
-mod gnu_cksum_base64 {
+mod cksum_base64_encoding {
     use super::*;
     use uutests::util::log_info;
 
@@ -2285,7 +2285,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_generating() {
+    fn test_cksum_base64_generating() {
         // Ensure that each algorithm works with `--base64`.
         let scene = make_scene();
 
@@ -2303,7 +2303,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk() {
+    fn test_cksum_base64_verify() {
         // For each algorithm that accepts `--check`,
         // ensure that it works with base64 digests.
         let scene = make_scene();
@@ -2335,7 +2335,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk_eq1() {
+    fn test_cksum_base64_verify_truncated_eq1() {
         // For digests ending with '=', ensure `--check` fails if '=' is removed.
         let scene = make_scene();
 
@@ -2361,7 +2361,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk_eq2() {
+    fn test_cksum_base64_verify_truncated_eq2() {
         // For digests ending with '==',
         // ensure `--check` fails if '==' is removed.
         let scene = make_scene();
@@ -2387,7 +2387,7 @@ mod gnu_cksum_base64 {
 }
 
 /// Tests for cksum with base64 output encoding (untagged mode).
-mod gnu_cksum_base64_untagged {
+mod cksum_base64_untagged_encoding {
     use super::*;
 
     macro_rules! decl_sha_test {
@@ -2500,7 +2500,7 @@ mod gnu_cksum_base64_untagged {
     decl_blake_test!(blake2b_512, 512);
 }
 /// Tests for cksum check mode (-c/--check).
-mod gnu_cksum_c {
+mod cksum_check_mode {
     use super::*;
 
     const INVALID_SUM: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaafdb57c725157cb40b5aee8d937b8351477e";

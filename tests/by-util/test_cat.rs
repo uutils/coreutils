@@ -655,49 +655,51 @@ fn test_write_to_self() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-fn test_successful_write_to_read_write_self() {
+fn test_cat_rw_self_succeeds() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.write("fy", "y");
-    at.write("fxy2", "x");
+    at.write("extra", "world");
+    at.write("combined", "hello");
 
     // Open `rw_file` as both stdin and stdout (read/write)
-    let fxy2_file_path = at.plus("fxy2");
-    let fxy2_file = OpenOptions::new()
+    let combined_file_path = at.plus("combined");
+    let combined_file = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&fxy2_file_path)
+        .open(&combined_file_path)
         .unwrap();
-    ucmd.args(&["fxy2", "fy"]).set_stdout(fxy2_file).succeeds();
+    ucmd.args(&["combined", "extra"])
+        .set_stdout(combined_file)
+        .succeeds();
 
-    // The contents of `fxy2` and `fy` files should be merged
-    let fxy2_contents = read_to_string(fxy2_file_path).unwrap();
-    assert_eq!(fxy2_contents, "xy");
+    // The contents of `combined` and `extra` files should be merged
+    let combined_contents = read_to_string(combined_file_path).unwrap();
+    assert_eq!(combined_contents, "helloworld");
 }
 
 /// Test that cat handles self-referential input gracefully.
 ///
 /// `cat fx fx3 1<>fx3`
 #[test]
-fn test_failed_write_to_read_write_self() {
+fn test_cat_rw_self_conflict_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.write("fx", "g");
-    at.write("fx3", "bold");
+    at.write("source", "a");
+    at.write("dest", "bcde");
 
     // Open `rw_file` as both stdin and stdout (read/write)
-    let fx3_file_path = at.plus("fx3");
-    let fx3_file = OpenOptions::new()
+    let dest_file_path = at.plus("dest");
+    let dest_file = OpenOptions::new()
         .read(true)
         .write(true)
-        .open(&fx3_file_path)
+        .open(&dest_file_path)
         .unwrap();
-    ucmd.args(&["fx", "fx3"])
-        .set_stdout(fx3_file)
+    ucmd.args(&["source", "dest"])
+        .set_stdout(dest_file)
         .fails_with_code(1)
-        .stderr_only("cat: fx3: input file is output file\n");
+        .stderr_only("cat: dest: input file is output file\n");
 
-    // The contents of `fx` should have overwritten the beginning of `fx3`
-    let fx3_contents = read_to_string(fx3_file_path).unwrap();
-    assert_eq!(fx3_contents, "gold");
+    // The contents of `source` should have overwritten the beginning of `dest`
+    let dest_contents = read_to_string(dest_file_path).unwrap();
+    assert_eq!(dest_contents, "acde");
 }
 
 #[test]
