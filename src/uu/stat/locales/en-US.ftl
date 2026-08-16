@@ -114,3 +114,6 @@ stat-word-birth = Birth
 stat-selinux-failed-get-context = failed to get security context
 stat-selinux-unsupported-system = unsupported on this system
 stat-selinux-unsupported-os = unsupported for this operating system
+
+# Diagnostics
+stat-diag-help-directive = a directive is %[FLAGS][WIDTH][.PRECISION]LETTER, as in %-10.2s; a literal % is written %%

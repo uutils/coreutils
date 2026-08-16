@@ -4,7 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
-use uucore::error::{UError, UResult, USimpleError};
+use std::ops::Range;
+use uucore::error::{UError, UResult, USimpleError, quiet_if_reported};
 use uucore::i18n::UEncoding;
 use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
 use uucore::translate;
@@ -82,20 +83,82 @@ struct Flags {
 /// checks if the string is within the specified bound,
 /// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
-fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
+fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> Result<(), DirectiveError> {
     if end >= bound {
         // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
         // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
         let directive: String = slice.chars().skip(beg).take(end - beg).collect();
-        return Err(USimpleError::new(
-            1,
-            StatError::InvalidDirective {
-                directive: directive.quote().to_string(),
-            }
-            .to_string(),
-        ));
+        return Err(DirectiveError::new(slice, &directive, beg, end));
     }
     Ok(())
+}
+
+/// A directive stat does not know, and where it sat in the format string.
+///
+/// The message is the one stat always printed; the byte range is what a caret
+/// needs to point inside the format rather than at all of it.
+#[derive(Debug)]
+struct DirectiveError {
+    directive: String,
+    span: Range<usize>,
+}
+
+impl DirectiveError {
+    /// # Arguments
+    ///
+    /// * `format_str` - The format string the directive came from.
+    /// * `directive` - The directive as written, without its quotes.
+    /// * `beg`, `end` - Its char indices in `format_str`; `end` may sit past
+    ///   the end, for a directive the format stops in the middle of.
+    fn new(format_str: &str, directive: &str, beg: usize, end: usize) -> Self {
+        let byte_of = |char_index: usize| {
+            format_str
+                .char_indices()
+                .nth(char_index)
+                .map_or(format_str.len(), |(byte_index, _)| byte_index)
+        };
+        Self {
+            directive: directive.quote().to_string(),
+            span: byte_of(beg)..byte_of(end.min(format_str.chars().count())),
+        }
+    }
+
+    /// The error to raise, a caret under the directive when the format was
+    /// given on the command line and stderr is a terminal.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, or `None` when they were not
+    ///   kept.
+    /// * `format_str` - The format the directive came from, as typed.
+    /// * `option` - The short and long names of the option the format was
+    ///   given to, or `None` for a format stat built itself, which is not on
+    ///   the command line and has nothing to point at.
+    fn into_error(
+        self,
+        diag_args: Option<&[OsString]>,
+        format_str: &str,
+        option: Option<(Option<char>, &str)>,
+    ) -> Box<dyn UError> {
+        let message = StatError::InvalidDirective {
+            directive: self.directive,
+        }
+        .to_string();
+        let reported = option.is_some_and(|(short, long)| {
+            diag_args.is_some_and(|args| {
+                uucore::diagnostics::Snapshot::with_program(args).render_option_value(
+                    format_str,
+                    short,
+                    Some(long),
+                    self.span.clone(),
+                    &message,
+                    None,
+                    Some(&translate!("stat-diag-help-directive")),
+                )
+            })
+        });
+        quiet_if_reported(reported, USimpleError::new(1, message))
+    }
 }
 
 enum Padding {
@@ -775,7 +838,7 @@ impl Stater {
         i: &mut usize,
         bound: usize,
         format_str: &str,
-    ) -> UResult<Token> {
+    ) -> Result<Token, DirectiveError> {
         let old = *i;
 
         *i += 1;
@@ -801,13 +864,13 @@ impl Stater {
 
             // Reject directives like `%<NUMBER>` by checking if width has been parsed.
             if j >= bound || chars[j] == '%' {
-                let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
-                return Err(USimpleError::new(
-                    1,
-                    StatError::InvalidDirective {
-                        directive: invalid_directive.quote().to_string(),
-                    }
-                    .to_string(),
+                let end = j.min(bound - 1);
+                let invalid_directive: String = chars[old..=end].iter().collect();
+                return Err(DirectiveError::new(
+                    format_str,
+                    &invalid_directive,
+                    old,
+                    end + 1,
                 ));
             }
         }
@@ -921,7 +984,7 @@ impl Stater {
         }
     }
 
-    fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
+    fn generate_tokens(format_str: &str, use_printf: bool) -> Result<Vec<Token>, DirectiveError> {
         let mut tokens = Vec::new();
         let chars = format_str.chars().collect::<Vec<char>>();
         let bound = chars.len();
@@ -973,7 +1036,7 @@ impl Stater {
         Ok(mount_list)
     }
 
-    fn new(matches: &ArgMatches) -> UResult<Self> {
+    fn new(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
@@ -995,13 +1058,24 @@ impl Stater {
         let terse = matches.get_flag(options::TERSE);
         let show_fs = matches.get_flag(options::FILE_SYSTEM);
 
-        let default_tokens = if format_str.is_empty() {
-            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
+        // Only the format the user typed can be pointed at; the ones stat
+        // builds for itself never fail, and are not on the command line.
+        // `--printf` has no short form; `--format` also answers to `-c`.
+        let given_option = if use_printf {
+            (None, options::PRINTF)
         } else {
-            Self::generate_tokens(format_str, use_printf)?
+            (Some('c'), options::FORMAT)
+        };
+        let default_tokens = if format_str.is_empty() {
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)
+                .map_err(|e| e.into_error(diag_args, format_str, None))?
+        } else {
+            Self::generate_tokens(format_str, use_printf)
+                .map_err(|e| e.into_error(diag_args, format_str, Some(given_option)))?
         };
         let default_dev_tokens =
-            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)
+                .map_err(|e| e.into_error(diag_args, format_str, None))?;
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
@@ -1379,9 +1453,12 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Kept for the caret in format diagnostics, which needs the format as typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
 
-    let stater = Stater::new(&matches)?;
+    let stater = Stater::new(&matches, diag_args.as_deref())?;
     let exit_status = stater.exec();
     if exit_status == 0 {
         Ok(())
