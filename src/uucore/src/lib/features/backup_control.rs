@@ -251,17 +251,17 @@ pub mod arguments {
 /// This function directly takes [`ArgMatches`] as argument and looks for
 /// the '-S' and '--suffix' arguments itself.
 pub fn determine_backup_suffix(matches: &ArgMatches) -> String {
-    let supplied_suffix = matches.get_one::<String>(arguments::OPT_SUFFIX);
-    let suffix = if let Some(suffix) = supplied_suffix {
-        String::from(suffix)
-    } else {
-        env::var("SIMPLE_BACKUP_SUFFIX").unwrap_or_else(|_| DEFAULT_BACKUP_SUFFIX.to_owned())
-    };
-    if suffix.is_empty() || suffix.contains('/') {
-        DEFAULT_BACKUP_SUFFIX.to_owned()
-    } else {
-        suffix
-    }
+    matches
+        .get_one::<String>(arguments::OPT_SUFFIX)
+        .map_or_else(
+            || {
+                env::var("SIMPLE_BACKUP_SUFFIX")
+                    .ok()
+                    .filter(|s| !s.is_empty() && !s.contains('/'))
+                    .unwrap_or(DEFAULT_BACKUP_SUFFIX.to_owned())
+            },
+            String::from,
+        )
 }
 
 /// Determine the "mode" for the backup operation to perform, if any.
