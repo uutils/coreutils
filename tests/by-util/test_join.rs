@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) autoformat nocheck
+// spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -661,4 +661,51 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_failing_field_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first field is fine; only the second one is at fault.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+join: invalid field number: 'x'
+   ╭─[ join:1:13 ]
+   │
+ 1 │ join -o 1.2,2.x /dev/null /dev/null
+   │             ───
+   │
+   │ Help: an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o1.2,0.4", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("join:1:12"), "{stderr}");
+        assert!(stderr.contains("invalid field specifier"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("join: invalid field number: 'x'\n");
+    }
 }
