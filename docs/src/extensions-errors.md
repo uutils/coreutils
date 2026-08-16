@@ -276,7 +276,7 @@ the difference:
 | `mknod`  | the failing part of the mode given to `-m`/`--mode` | [`mknod -m u+q mydev c 1 3`](https://uutils.org/playground/?cmd=mknod+-m+u%2Bq+mydev+c+1+3) |
 | `install`| the failing part of the mode given to `-m`/`--mode` | [`install -m u+q fruits.txt dest`](https://uutils.org/playground/?cmd=install+-m+u%2Bq+fruits.txt+dest) |
 | `tr`     | the part of a set that is at fault (bad class, backwards range, bad repeat count, …) | [`tr 'qw[y-b]' x`](https://uutils.org/playground/?cmd=tr+%27qw%5By-b%5D%27+x) |
-| `sort`   | the failing part of a `-k`/`--key` or field specification | [`sort -k2.3x fruits.txt`](https://uutils.org/playground/?cmd=sort+-k2.3x+fruits.txt) |
+| `sort`   | the failing part of a `-k`/`--key` or field specification, or of the SIZE given to `-S` | [`sort -k2.3x fruits.txt`](https://uutils.org/playground/?cmd=sort+-k2.3x+fruits.txt) |
 | `numfmt` | the failing part of a `--field` or `--format` specification | [`numfmt --format=%q 1000`](https://uutils.org/playground/?cmd=numfmt+--format%3D%25q+1000) |
 | `printf` | the failing conversion or escape in the format string | [`printf %5.2c q`](https://uutils.org/playground/?cmd=printf+%255.2c+q) |
 | `env`    | the failing part of a `-S`/`--split-string` string | [`env -S 'echo ${1FOO}'`](https://uutils.org/playground/?cmd=env+-S+%27echo+%24%7B1FOO%7D%27) |
@@ -335,7 +335,7 @@ repeated per utility. Three parsers work this way:
   `numfmt --field`. `Range::from_list` reports which item of the list failed
   and where it sat.
 - **Sizes** (`uucore::parser::parse_size`), for `head`, `tail`, `truncate`,
-  `split`, `shred` and `stdbuf` today, and available to the other callers of the parser.
+  `split`, `shred`, `stdbuf` and `sort` today, and available to the other callers of the parser.
   `ParseSizeError::span` works out from the operand which of its two parts —
   the number or the unit — was rejected, so the error type keeps the shape its
   callers build by hand.
