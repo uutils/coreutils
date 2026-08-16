@@ -721,12 +721,15 @@ fn test_whitespace_delimited_long_and_trimmed() {
         .pipe_in("   alpha beta\n")
         .succeeds()
         .stdout_only("\talpha\n");
-    // =trimmed strips leading/trailing blanks before splitting.
-    new_ucmd!()
-        .args(&["--whitespace-delimited=trimmed", "-f1,2"])
-        .pipe_in("  hello world  \n")
-        .succeeds()
-        .stdout_only("hello\tworld\n");
+    // =trimmed (or it's shortcuts) strips leading/trailing blanks before splitting.
+    for trimmed in ["trimmed", "tri", ""] {
+        new_ucmd!()
+            .arg(format!("--whitespace-delimited={trimmed}"))
+            .arg("-f1,2")
+            .pipe_in("  hello world  \n")
+            .succeeds()
+            .stdout_only("hello\tworld\n");
+    }
     // With -s a single (undelimited) field is suppressed.
     new_ucmd!()
         .args(&["-s", "--whitespace-delimited=trimmed", "-f1"])
