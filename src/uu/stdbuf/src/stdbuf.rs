@@ -15,9 +15,9 @@ use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
+use uucore::error::{UResult, USimpleError, UUsageError, quiet_if_reported, strip_errno};
 use uucore::format_usage;
-use uucore::parser::parse_size::parse_size_u64;
+use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::translate;
 
 mod options {
@@ -64,21 +64,62 @@ impl TryFrom<&ArgMatches> for ProgramOptions {
 
     fn try_from(matches: &ArgMatches) -> Result<Self, Self::Error> {
         Ok(Self {
-            stdin: check_option(matches, options::INPUT)?,
-            stdout: check_option(matches, options::OUTPUT)?,
-            stderr: check_option(matches, options::ERROR)?,
+            stdin: check_option(matches, options::INPUT, options::INPUT_SHORT)?,
+            stdout: check_option(matches, options::OUTPUT, options::OUTPUT_SHORT)?,
+            stderr: check_option(matches, options::ERROR, options::ERROR_SHORT)?,
         })
     }
+}
+
+/// A buffering mode that did not parse as a size, and where it came from.
+///
+/// The message is built where it always was; the rest is what a caret needs:
+/// the mode as typed, the option it was given to, and what the size parser
+/// made of it.
+#[derive(Debug)]
+struct ModeError {
+    value: String,
+    short: char,
+    long: &'static str,
+    error: ParseSizeError,
 }
 
 #[derive(Debug, Error)]
 enum ProgramOptionsError {
     #[error("{}", translate!("stdbuf-error-line-buffering-stdin-meaningless"))]
     LineBufferingStdinMeaningless,
-    #[error("{}", translate!("stdbuf-error-invalid-mode", "error" => _0.clone()))]
-    InvalidMode(String),
+    #[error("{}", translate!("stdbuf-error-invalid-mode", "error" => _0.error.to_string()))]
+    InvalidMode(Box<ModeError>),
     #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0.clone()))]
     ValueTooLarge(String),
+}
+
+impl ProgramOptionsError {
+    /// Draw a caret under the part of the mode that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, program name included.
+    /// * `message` - The headline, already localized.
+    ///
+    /// # Returns
+    ///
+    /// `false` when this error is not about a mode that failed to parse as a
+    /// size, or when nothing could be drawn; the caller then falls back to the
+    /// plain one-line message.
+    fn render(&self, diag_args: &[OsString], message: &str) -> bool {
+        let Self::InvalidMode(mode) = self else {
+            return false;
+        };
+        mode.error.render_size_value(
+            diag_args,
+            &mode.value,
+            0,
+            Some(mode.short),
+            Some(mode.long),
+            message,
+        )
+    }
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
@@ -96,7 +137,11 @@ fn preload_strings() -> (&'static str, &'static str) {
     ("LD_PRELOAD", "dll")
 }
 
-fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramOptionsError> {
+fn check_option(
+    matches: &ArgMatches,
+    name: &'static str,
+    short: char,
+) -> Result<BufferType, ProgramOptionsError> {
     match matches.get_one::<String>(name) {
         Some(value) => match value.as_str() {
             "L" => {
@@ -107,7 +152,14 @@ fn check_option(matches: &ArgMatches, name: &str) -> Result<BufferType, ProgramO
                 }
             }
             x => parse_size_u64(x).map_or_else(
-                |e| Err(ProgramOptionsError::InvalidMode(e.to_string())),
+                |error| {
+                    Err(ProgramOptionsError::InvalidMode(Box::new(ModeError {
+                        value: x.to_string(),
+                        short,
+                        long: name,
+                        error,
+                    })))
+                },
                 |m| {
                     Ok(BufferType::Size(m.try_into().map_err(|_| {
                         ProgramOptionsError::ValueTooLarge(x.to_string())
@@ -191,11 +243,19 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let raw_args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
     let matches =
-        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
+        uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), raw_args, 125)?;
 
-    let options =
-        ProgramOptions::try_from(&matches).map_err(|e| UUsageError::new(125, e.to_string()))?;
+    let options = ProgramOptions::try_from(&matches).map_err(|e| {
+        let message = e.to_string();
+        let reported = diag_args
+            .as_deref()
+            .is_some_and(|args| e.render(args, &message));
+        quiet_if_reported(reported, UUsageError::new(125, message))
+    })?;
 
     let mut command_values = matches
         .get_many::<OsString>(options::COMMAND)

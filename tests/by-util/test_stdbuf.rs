@@ -433,3 +433,53 @@ fn test_stdbuf_no_fork_regression() {
     child.kill().ok();
     child.wait().ok();
 }
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+stdbuf: invalid mode '6pq'
+   ╭─[ stdbuf:1:12 ]
+   │
+ 1 │ stdbuf -o 6pq head
+   │            ─┬
+   │             ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_inside_a_long_option_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--error=pq", "head"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("stdbuf:1:16"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125)
+            .usage_error("invalid mode '6pq'");
+    }
+}
