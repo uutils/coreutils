@@ -3,7 +3,7 @@ cut-usage = cut OPTION... [FILE]...
 cut-after-help = Each call must specify a mode (what to use for columns),
   a sequence (which columns to print), and provide a data source
 
-  ### Specifying a mode
+  Specifying a mode:
 
   Use --bytes (-b) or --characters (-c) to specify byte mode
 
@@ -11,7 +11,7 @@ cut-after-help = Each call must specify a mode (what to use for columns),
   fields identified by a delimiter character. For example for a typical CSV
   you could use this in combination with setting comma as the delimiter
 
-  ### Specifying a sequence
+  Specifying a sequence:
 
   A sequence is a group of 1 or more numbers or inclusive ranges separated
   by a commas.
@@ -40,7 +40,7 @@ cut-after-help = Each call must specify a mode (what to use for columns),
 
   will display the every field but the 4th, 5th, and 6th
 
-  ### Specifying a data source
+  Specifying a data source:
 
   If no sourcefile arguments are specified, stdin is used as the source of
   lines to print
@@ -53,11 +53,11 @@ cut-after-help = Each call must specify a mode (what to use for columns),
   To print columns from both STDIN and a file argument, use - (dash) as a
   sourcefile argument to represent stdin.
 
-  ### Field Mode options
+  Field mode options:
 
   The fields in each line are identified by a delimiter (separator)
 
-  #### Set the delimiter
+  Set the delimiter:
 
   Set the delimiter which separates fields in the file using the
   --delimiter (-d) option. Setting the delimiter is optional.
@@ -68,19 +68,19 @@ cut-after-help = Each call must specify a mode (what to use for columns),
   be a Tab unless explicitly specified. Only one of -d or -w option can be specified.
   This is an extension adopted from FreeBSD.
 
-  #### Optionally Filter based on delimiter
+  Optionally filter based on delimiter:
 
   If the --only-delimited (-s) flag is provided, only lines which
   contain the delimiter will be printed
 
-  #### Replace the delimiter
+  Replace the delimiter:
 
   If the --output-delimiter option is provided, the argument used for
   it will replace the delimiter character in each line printed. This is
   useful for transforming tabular data - e.g. to convert a CSV to a
   TSV (tab-separated file)
 
-  ### Line endings
+  Line endings:
 
   When the --zero-terminated (-z) option is used, cut sees \\0 (null) as the
   'line ending' character (both for the purposes of reading lines and

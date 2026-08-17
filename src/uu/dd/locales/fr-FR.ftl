@@ -1,7 +1,7 @@
 dd-about = Copier, et optionnellement convertir, une ressource du système de fichiers
 dd-usage = dd [OPÉRANDE]...
   dd OPTION
-dd-after-help = ### Opérandes
+dd-after-help = Opérandes :
 
   - bs=OCTETS : lire et écrire jusqu'à OCTETS octets à la fois (par défaut : 512) ;
      remplace ibs et obs.
@@ -33,7 +33,6 @@ dd-after-help = ### Opérandes
 
     Quand non spécifié, dd affichera les statistiques à la fin. Un exemple est ci-dessous.
 
-    ```plain
       6+0 enregistrements en entrée
       16+0 enregistrements en sortie
       8192 octets (8.2 kB, 8.0 KiB) copiés, 0.00057009 s,
@@ -55,7 +54,7 @@ dd-after-help = ### Opérandes
     ou le signal USR1. Définir la variable d'environnement POSIXLY_CORRECT à n'importe quelle valeur
     (y compris une valeur vide) fera ignorer le signal USR1.
 
-  ### Options de conversion
+  Options de conversion :
 
   - ascii : convertir d'EBCDIC vers ASCII. C'est l'inverse de l'option ebcdic.
     Implique conv=unblock.
@@ -89,19 +88,19 @@ dd-after-help = ### Opérandes
   - fdatasync : les données seront écrites avant la fin.
   - fsync : les données et les métadonnées seront écrites avant la fin.
 
-  ### Indicateurs d'entrée
+  Indicateurs d'entrée :
 
   - count_bytes : une valeur pour count=N sera interprétée comme des octets.
   - skip_bytes : une valeur pour skip=N sera interprétée comme des octets.
   - fullblock : attendre ibs octets de chaque lecture. les lectures de longueur zéro sont toujours
     considérées comme EOF.
 
-  ### Indicateurs de sortie
+  Indicateurs de sortie :
 
   - append : ouvrir le fichier en mode ajout. Considérez définir conv=notrunc aussi.
   - seek_bytes : une valeur pour seek=N sera interprétée comme des octets.
 
-  ### Indicateurs généraux
+  Indicateurs généraux :
 
   - direct : utiliser les E/S directes pour les données.
   - directory : échouer sauf si l'entrée donnée (si utilisée comme iflag) ou
