@@ -362,7 +362,7 @@ fn test_shred_non_utf8_paths() {
 }
 
 #[test]
-fn test_gnu_shred_passes_20() {
+fn test_shred_twenty_passes_with_known_random_source() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400]; // 100K of 'U' bytes
@@ -371,8 +371,7 @@ fn test_gnu_shred_passes_20() {
     let file = "f";
     at.write(file, "1"); // Single byte file
 
-    // Test 20 passes with deterministic random source
-    // This should produce the exact same sequence as GNU shred
+    // Run with a deterministic random source so the pass sequence is reproducible
     let result = ucmd
         .arg("-v")
         .arg("-u")
@@ -382,7 +381,6 @@ fn test_gnu_shred_passes_20() {
         .arg(file)
         .succeeds();
 
-    // Verify the exact pass sequence matches GNU's behavior
     let expected_passes = [
         "pass 1/20 (random)",
         "pass 2/20 (ffffff)",
@@ -420,7 +418,7 @@ fn test_gnu_shred_passes_20() {
 }
 
 #[test]
-fn test_gnu_shred_passes_different_counts() {
+fn test_shred_nineteen_passes_first_and_last_are_random() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     let us_data = vec![0x55; 102_400];
