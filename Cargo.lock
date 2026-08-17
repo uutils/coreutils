@@ -3966,6 +3966,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "memchr",
+ "rustix",
  "thiserror 2.0.20",
  "uucore",
 ]
