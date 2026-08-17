@@ -1,4 +1,4 @@
-# spell-checker:ignore wasip wasmtime
+# spell-checker:ignore wasip wasmtime oniguruma sysroot
 name: WASI
 
 # spell-checker:ignore TRIGGERPATH
@@ -36,6 +36,15 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         key: "${{ matrix.job.target }}"
+    - name: Install WASI sysroot
+      run: |
+        # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
+        WASI_SDK=wasi-sdk-25.0-x86_64-linux
+        curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
+        for abi in wasip1 wasip2; do
+          echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
+          echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
+        done
     - name: Install wasmtime
       run: |
         curl https://wasmtime.dev/install.sh -sSf | bash
@@ -46,7 +55,7 @@ jobs:
         CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
       run: |
         # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
-        EXCLUDE="df|du|env|expr|more|tac|test"
+        EXCLUDE="df|du|env|more|tac"
         UTILS=$(./util/show-utils.sh | tr ' ' '\n' | grep -vE "^($EXCLUDE)$" | sed 's/^/-p uu_/' | tr '\n' ' ')
         cargo test --target ${{ matrix.job.target }} --no-default-features $UTILS
     - name: Run integration tests via wasmtime
@@ -74,8 +83,9 @@ jobs:
           test_base32:: test_base64:: test_basenc:: test_basename:: \
           test_cp::test_cp_arg_symlink \
           test_comm:: test_cut:: test_dirname:: test_echo:: \
-          test_expand:: test_factor:: test_false:: test_fold:: \
+          test_expand:: test_expr:: test_factor:: test_false:: test_fold:: \
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \
           test_od:: test_paste:: test_printf:: test_shuf:: test_sum:: \
-          test_tee:: test_touch:: test_tr:: test_true:: test_truncate:: \
+          test_tee:: test_test:: test_touch:: test_tr:: test_true:: \
+          test_truncate:: \
           test_unexpand:: test_unlink:: test_wc:: test_yes::
