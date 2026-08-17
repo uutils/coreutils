@@ -440,8 +440,18 @@ impl DirFd {
     }
 
     /// Open a file for writing relative to this directory
-    /// Creates the file if it doesn't exist, truncates if it does
+    /// Creates the file if it doesn't exist, truncates if it does.
     pub fn open_file_at(&self, name: &OsStr) -> io::Result<fs::File> {
+        self.open_file_at_with_mode(name, 0o666)
+    }
+
+    /// Open a file for writing with an explicit creation mode.
+    ///
+    /// The mode is used only when creating a new file; an existing file keeps
+    /// its current permissions. Callers that will apply final permissions
+    /// later should use a restrictive initial mode so failures cannot leave a
+    /// partially-created file overly permissive.
+    pub fn open_file_at_with_mode(&self, name: &OsStr, mode: u32) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
         // O_NOFOLLOW: `openat` anchors the *directory*, not the final component,
@@ -453,7 +463,7 @@ impl DirFd {
             | OFlag::O_TRUNC
             | OFlag::O_CLOEXEC
             | OFlag::O_NOFOLLOW;
-        let mode = Mode::from_bits_truncate(0o666); // Default file permissions
+        let mode = Mode::from_bits_truncate(mode as libc::mode_t);
 
         let fd: OwnedFd = openat(self.fd.as_fd(), name_cstr.as_c_str(), flags, mode)
             .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
@@ -1275,6 +1285,26 @@ mod tests {
 
         let content = fs::read_to_string(temp_dir.path().join("new_file.txt")).unwrap();
         assert_eq!(content, "test content");
+    }
+
+    #[test]
+    fn test_open_file_at_with_mode_uses_requested_initial_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_fd = DirFd::open(temp_dir.path(), SymlinkBehavior::Follow).unwrap();
+
+        let file = dir_fd
+            .open_file_at_with_mode(OsStr::new("safe_file.txt"), 0o600)
+            .unwrap();
+        drop(file);
+
+        let mode = fs::metadata(temp_dir.path().join("safe_file.txt"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o600);
     }
 
     #[test]

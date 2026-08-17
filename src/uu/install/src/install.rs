@@ -978,7 +978,7 @@ fn perform_backup(from: &Path, to: &Path, b: &Behavior) -> UResult<Option<PathBu
 ///
 /// Note: This function and `copy_file` share similar logic but cannot easily
 /// be consolidated because they use fundamentally different APIs:
-/// - `copy_file_safe` uses fd-based `DirFd::open_file_at()` (openat syscall)
+/// - `copy_file_safe` uses fd-based `DirFd::open_file_at_with_mode()` (openat syscall)
 /// - `copy_file` uses path-based `OpenOptions::new().create_new().open()`
 #[cfg(unix)]
 fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsStr) -> UResult<()> {
@@ -996,7 +996,7 @@ fn copy_file_safe(from: &Path, to_parent_fd: &DirFd, to_filename: &std::ffi::OsS
     }
 
     let mut src = File::open(from)?;
-    let mut dst = to_parent_fd.open_file_at(to_filename)?;
+    let mut dst = to_parent_fd.open_file_at_with_mode(to_filename, 0o600)?;
     copy_fast(&mut src, &mut dst)?;
 
     Ok(())
