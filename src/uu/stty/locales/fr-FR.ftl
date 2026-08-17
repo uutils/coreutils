@@ -16,6 +16,7 @@ stty-error-invalid-speed = {$arg} invalide '{$speed}'
 stty-error-invalid-argument = argument invalide '{$arg}'
 stty-error-invalid-integer-argument = argument entier invalide : {$value}
 stty-error-invalid-integer-argument-value-too-large = argument entier invalide : {$value} : Valeur trop grande pour le type de données défini
+stty-error-write-error = erreur d'écriture
 
 # Chaînes de format de sortie
 stty-output-speed = vitesse {$speed} bauds ;
