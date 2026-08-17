@@ -1228,9 +1228,10 @@ mod diagnostics {
             .fails_with_code(1);
 
         // One item of the list is at fault, not the whole of it.
-        assert_eq!(
-            result.stderr_as_displayed(),
-            "\
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
 cut: invalid decreasing range
    ╭─[ cut:1:10 ]
    │
@@ -1240,6 +1241,14 @@ cut: invalid decreasing range
    │
    │ Help: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
 ───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("cut --help' for more information."),
+            "{stderr}"
         );
     }
 
