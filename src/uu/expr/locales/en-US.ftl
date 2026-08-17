@@ -1,8 +1,7 @@
 expr-about = Print the value of EXPRESSION to standard output
 expr-usage = expr [EXPRESSION]
   expr [OPTIONS]
-expr-after-help = Print the value of EXPRESSION to standard output. A blank line below
-  separates increasing precedence groups.
+expr-after-help = A blank line below separates increasing precedence groups.
 
   EXPRESSION may be:
 
