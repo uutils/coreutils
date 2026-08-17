@@ -2335,7 +2335,7 @@ dd: Unrecognized operand 'bsx=1'
 
     #[cfg(unix)]
     #[test]
-    fn test_snippet_drops_the_try_help_hint_of_a_flag_message() {
+    fn test_snippet_keeps_the_try_help_hint_of_a_flag_message() {
         let result = new_ucmd!()
             .terminal_sim_stderr()
             .args(&["iflag=nope"])
@@ -2343,10 +2343,25 @@ dd: Unrecognized operand 'bsx=1'
             .fails_with_code(1);
         let stderr = result.stderr_as_displayed();
 
-        // The report ends with advice of its own, so the hint would be noise
-        // in the middle of it.
-        assert!(!stderr.contains("--help"), "{stderr}");
         assert!(stderr.contains("dd:1:10"), "{stderr}");
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr
+                .trim_end()
+                .ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_keeps_the_try_help_hint_of_a_flag_message() {
+        new_ucmd!()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: invalid input flag: \u{2018}nope\u{2019}")
+            .stderr_contains("--help' for more information.");
     }
 
     #[test]

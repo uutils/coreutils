@@ -89,16 +89,11 @@ fn render(args: &[OsString], operand: &str, error: &ParseError) -> bool {
     let Some(index) = snapshot.index_of(OsStr::new(operand)) else {
         return false;
     };
-    // Some messages end with a "Try --help" hint of their own; the report
-    // closes with advice about the very syntax that failed, so only the
-    // headline is kept.
-    let message = error.to_string();
-    let headline = message.lines().next().unwrap_or_default();
     snapshot.render_inside_at(
         index,
         operand,
         span,
-        headline,
+        &error.to_string(),
         None,
         Some(&translate!(help)),
     )

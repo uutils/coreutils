@@ -135,7 +135,6 @@ dd-error-multiple-case = Seul un seul de conv=lcase ou conv=ucase peut être sp�
 dd-error-multiple-block = Seul un seul de conv=block ou conv=unblock peut être spécifié
 dd-error-multiple-excl = Seul un seul de conv=excl ou conv=nocreat peut être spécifié
 dd-error-invalid-flag = indicateur d'entrée invalide : '{ $flag }'
-  Essayez '{ $cmd } --help' pour plus d'informations.
 dd-error-conv-flag-no-match = conv=CONV non reconnu -> { $flag }
 dd-error-multiplier-parse-failure = nombre invalide : ‘{ $input }‘
 dd-error-multiplier-overflow = La chaîne de multiplicateur déborderait sur le système actuel -> { $input }
