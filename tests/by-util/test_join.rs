@@ -707,6 +707,33 @@ fn test_locale_collation() {
         .stdout_contains("ab:d 1 x");
 }
 
+#[test]
+fn test_incompatible_fields_reports_exact_field_number() {
+    // An out-of-range field clamps to usize::MAX, which used to overflow the
+    // one-based increment. Field numbers past 2^53 also used to be rounded on
+    // their way through the localization layer.
+    for (field, expected) in [
+        ("3", "incompatible join fields 3, 5"),
+        (
+            "9007199254740993",
+            "incompatible join fields 9007199254740993, 5",
+        ),
+        (
+            "18446744073709551615",
+            "incompatible join fields 18446744073709551615, 5",
+        ),
+        (
+            "99999999999999999999999",
+            "incompatible join fields 18446744073709551615, 5",
+        ),
+    ] {
+        new_ucmd!()
+            .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
+            .fails()
+            .stderr_contains(expected);
+    }
+}
+
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
