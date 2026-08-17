@@ -26,9 +26,7 @@ use std::io::{BufRead, BufReader, ErrorKind, Read, Seek, SeekFrom, Write, stdin}
 use std::path::Path;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{
-    FromIo, UResult, USimpleError, UUsageError, quiet_if_reported, set_exit_code, strip_errno,
-};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
 
@@ -43,13 +41,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
         let message = format!("{e}");
         if e.requires_usage() {
-            UUsageError::new(1, message)
-        } else {
-            let reported = diag_args
-                .as_deref()
-                .is_some_and(|args| e.render(args, &message));
-            quiet_if_reported(reported, USimpleError::new(1, message))
+            return UUsageError::new(1, message);
         }
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            USimpleError::new(1, message.clone()),
+            |args, _| match &e {
+                SettingsError::Strategy(error) => error.render(args, &message),
+                // The rest is about how the options combine rather than about
+                // one of them, so there is nothing to point a caret at.
+                _ => false,
+            },
+        )
     })?;
 
     // When using --filter, we write to a child process's stdin which may
@@ -280,15 +283,6 @@ enum SettingsError {
 }
 
 impl SettingsError {
-    /// Draw a caret under the part of the argument that is at fault, when this
-    /// error is one that knows where it came from.
-    fn render(&self, diag_args: &[OsString], message: &str) -> bool {
-        match self {
-            Self::Strategy(error) => error.render(diag_args, message),
-            _ => false,
-        }
-    }
-
     /// Whether the error demands a usage message.
     fn requires_usage(&self) -> bool {
         matches!(

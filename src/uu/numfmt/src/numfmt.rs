@@ -19,7 +19,7 @@ use std::io::{BufRead, Write as _, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::{UResult, quiet_if_reported};
+use uucore::error::UResult;
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -132,10 +132,13 @@ fn handle_args<'a>(
             // Only this mode stops on the first bad number; the others carry
             // on, where a report per line would bury the output.
             Err(error) => {
-                let reported = snapshot.is_some_and(|args| {
-                    diagnostics::render_input(args, l, n, &error.to_string(), options)
-                });
-                return Err(quiet_if_reported(reported, error));
+                return Err(uucore::diagnostics::error_after_report(
+                    snapshot,
+                    error,
+                    |args, error| {
+                        diagnostics::render_input(args, l, n, &error.to_string(), options)
+                    },
+                ));
             }
         }
     }
@@ -443,34 +446,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // A format error still knows where in the format string it happened,
         // so it is the one error worth a caret.
         Err(ParseError::Format(error)) => {
-            let reported = format_args
-                .as_ref()
-                .zip(matches.get_one::<String>(FORMAT))
-                .is_some_and(|(args, format)| diagnostics::render(args, format, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| {
+                    matches
+                        .get_one::<String>(FORMAT)
+                        .is_some_and(|format| diagnostics::render(args, format, &error))
+                },
             ));
         }
         // As for a format, a field list knows which of its ranges is at fault.
         Err(ParseError::Field(error)) => {
-            let reported = format_args
-                .as_ref()
-                .zip(matches.get_one::<String>(FIELD))
-                .is_some_and(|(args, fields)| diagnostics::render_field(args, fields, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| {
+                    matches
+                        .get_one::<String>(FIELD)
+                        .is_some_and(|fields| diagnostics::render_field(args, fields, &error))
+                },
             ));
         }
         // An option value that is wrong as a whole: underline it where typed.
         Err(ParseError::Value(error)) => {
-            let reported = format_args
-                .as_ref()
-                .is_some_and(|args| diagnostics::render_value(args, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| diagnostics::render_value(args, &error),
             ));
         }
         Err(ParseError::Other(message)) => {

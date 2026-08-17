@@ -82,12 +82,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     match parse(args).and_then(|mut stack| eval(&mut stack)) {
         Ok(true) => Ok(()),
         Ok(false) => Err(1.into()),
-        Err(e) => {
-            let reported = expression
-                .as_ref()
-                .is_some_and(|expression| diagnostics::render(expression, &e));
-            Err(uucore::error::quiet_if_reported(reported, e))
-        }
+        Err(e) => Err(uucore::diagnostics::error_after_report(
+            expression.as_deref(),
+            e,
+            diagnostics::render,
+        )),
     }
 }
 
