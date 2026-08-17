@@ -896,15 +896,15 @@ fn expand_locale_specifiers(format: &str) -> Cow<'_, str> {
 
     let mut s = format.replace("%%", PLACEHOLDER);
 
-    if s.contains("%x") {
-        if let Some(date_fmt) = locale::get_locale_date_format() {
-            s = s.replace("%x", &date_fmt);
-        }
+    if s.contains("%x")
+        && let Some(date_fmt) = locale::get_locale_date_format()
+    {
+        s = s.replace("%x", &date_fmt);
     }
-    if s.contains("%X") {
-        if let Some(time_fmt) = locale::get_locale_time_format() {
-            s = s.replace("%X", &time_fmt);
-        }
+    if s.contains("%X")
+        && let Some(time_fmt) = locale::get_locale_time_format()
+    {
+        s = s.replace("%X", &time_fmt);
     }
     if s.contains("%r") {
         let ampm = locale::get_locale_time_ampm_format();

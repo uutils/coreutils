@@ -97,6 +97,14 @@ cfg_langinfo! {
 
 cfg_langinfo! {
     fn query_nl_langinfo(item: libc::nl_item) -> Option<String> {
+        query_nl_langinfo_inner(item, false)
+    }
+
+    fn query_nl_langinfo_allow_empty(item: libc::nl_item) -> Option<String> {
+        query_nl_langinfo_inner(item, true)
+    }
+
+    fn query_nl_langinfo_inner(item: libc::nl_item, allow_empty: bool) -> Option<String> {
         #[cfg(test)]
         let _lock = LOCALE_MUTEX.lock().unwrap();
 
@@ -109,7 +117,7 @@ cfg_langinfo! {
             }
 
             let s = CStr::from_ptr(ptr).to_str().ok()?;
-            if s.is_empty() {
+            if s.is_empty() && !allow_empty {
                 return None;
             }
 
@@ -127,15 +135,22 @@ cfg_langinfo! {
         query_nl_langinfo(T_FMT_ITEM)
     }
 
-    /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
-    /// GNU date falls back to `%I:%M:%S %p` if it's completely undefined.
-    /// However, if a locale explicitly defines it as empty (like French), it uses `%H:%M:%S`.
-    pub fn get_locale_time_ampm_format() -> String {
-        let fmt = query_nl_langinfo(T_FMT_AMPM_ITEM);
-        match fmt.as_deref() {
-            Some("") | None => "%H:%M:%S".to_string(),
-            Some(s) => s.to_string(),
+    /// Resolve a locale's `T_FMT_AMPM`, distinguishing an explicitly empty
+    /// value from an unavailable value.
+    fn ampm_format_or_default(format: Option<String>) -> String {
+        match format.as_deref() {
+            Some("") => "%H:%M:%S".to_string(),
+            None => "%I:%M:%S %p".to_string(),
+            Some(value) => value.to_string(),
         }
+    }
+
+    /// Returns the locale 12-hour time format (`T_FMT_AMPM`) used by `%r`.
+    /// GNU date falls back to `%I:%M:%S %p` if it is unavailable.
+    /// However, if a locale explicitly defines it as empty (like French),
+    /// it uses `%H:%M:%S`.
+    pub fn get_locale_time_ampm_format() -> String {
+        ampm_format_or_default(query_nl_langinfo_allow_empty(T_FMT_AMPM_ITEM))
     }
 }
 
@@ -151,40 +166,34 @@ pub fn get_locale_default_format() -> &'static str {
 }
 
 /// Fallback for platforms without `nl_langinfo`.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 pub fn get_locale_date_format() -> Option<String> {
     None
 }
 
 /// Fallback for platforms without `nl_langinfo`.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 pub fn get_locale_time_format() -> Option<String> {
     None
 }
 
 /// Fallback for platforms without `nl_langinfo`.
-#[cfg(not(any(
-    target_os = "linux",
-    target_vendor = "apple",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-)))]
+#[cfg(any(
+    not(unix),
+    target_os = "android",
+    target_os = "cygwin",
+    target_os = "redox"
+))]
 pub fn get_locale_time_ampm_format() -> String {
     "%I:%M:%S %p".to_string()
 }
@@ -210,6 +219,16 @@ mod tests {
 
             // Expand the format string with the test date
             strtime::format(format, &test_date).unwrap_or_default()
+        }
+
+        #[test]
+        fn test_ampm_format_distinguishes_empty_and_unavailable() {
+            assert_eq!(ampm_format_or_default(Some(String::new())), "%H:%M:%S");
+            assert_eq!(ampm_format_or_default(None), "%I:%M:%S %p");
+            assert_eq!(
+                ampm_format_or_default(Some("%I:%M:%S %p".to_string())),
+                "%I:%M:%S %p"
+            );
         }
 
         #[test]

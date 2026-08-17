@@ -1778,6 +1778,7 @@ fn test_date_posix_format_specifiers() {
 
     for (format, expected) in cases {
         new_ucmd!()
+            .env("LC_ALL", "C")
             .env("TZ", "UTC")
             .arg("-d")
             .arg("1997-01-19 08:17:48")
