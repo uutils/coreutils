@@ -1075,6 +1075,29 @@ fn test_head_rejects_directory_through_symlink() {
 /// still be readable by head (the fd-based check must distinguish the
 /// fd's mode, not the symlink's).
 #[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_verbose_header_write_error_long_filename() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    // A filename longer than the stdout buffer forces the header write to flush
+    // mid-write, so the failure surfaces inside the filename write rather than
+    // at the next checked one.
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .arg("-v")
+        .arg(long_path)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+#[test]
 #[cfg(unix)]
 fn test_head_follows_symlink_to_regular_file() {
     use std::os::unix::fs::symlink;
