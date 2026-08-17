@@ -1,7 +1,7 @@
 dd-about = Copy, and optionally convert, a file system resource
 dd-usage = dd [OPERAND]...
   dd OPTION
-dd-after-help = ### Operands
+dd-after-help = Operands:
 
   - bs=BYTES : read and write up to BYTES bytes at a time (default: 512);
      overwrites ibs and obs.
@@ -33,7 +33,6 @@ dd-after-help = ### Operands
 
     When unspecified, dd will print stats upon completion. An example is below.
 
-    ```plain
       6+0 records in
       16+0 records out
       8192 bytes (8.2 kB, 8.0 KiB) copied, 0.00057009 s,
@@ -55,7 +54,7 @@ dd-after-help = ### Operands
     or the USR1 signal. Setting the POSIXLY_CORRECT environment variable to any value
     (including an empty value) will cause the USR1 signal to be ignored.
 
-  ### Conversion Options
+  Conversion options:
 
   - ascii : convert from EBCDIC to ASCII. This is the inverse of the ebcdic
     option. Implies conv=unblock.
@@ -89,19 +88,19 @@ dd-after-help = ### Operands
   - fdatasync : data will be written before finishing.
   - fsync : data and metadata will be written before finishing.
 
-  ### Input flags
+  Input flags:
 
   - count_bytes : a value to count=N will be interpreted as bytes.
   - skip_bytes : a value to skip=N will be interpreted as bytes.
   - fullblock : wait for ibs bytes from each read. zero-length reads are still
     considered EOF.
 
-  ### Output flags
+  Output flags:
 
   - append : open file in append mode. Consider setting conv=notrunc as well.
   - seek_bytes : a value to seek=N will be interpreted as bytes.
 
-  ### General Flags
+  General flags:
 
   - direct : use direct I/O for data.
   - directory : fail unless the given input (if used as an iflag) or
