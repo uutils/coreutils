@@ -566,6 +566,25 @@ fn directory(paths: &[OsString], b: &Behavior) -> UResult<()> {
     Ok(())
 }
 
+/// Strip trailing separators from a directory path, if it has any.
+///
+/// Returns `None` when there is nothing to strip. The root is left alone: it is
+/// entirely separators, and trimming it away leaves an empty path that no
+/// longer names anything, which is why `install -D src /dest` used to fail.
+fn trim_trailing_separators(path: &Path) -> Option<PathBuf> {
+    let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).ok()?;
+    if !path_bytes.ends_with(b"/") {
+        return None;
+    }
+    let mut trimmed_bytes = path_bytes;
+    while trimmed_bytes.len() > 1 && trimmed_bytes.ends_with(b"/") {
+        trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
+    }
+    Some(PathBuf::from(
+        uucore::os_str_from_bytes(trimmed_bytes).ok()?.into_owned(),
+    ))
+}
+
 /// Test if the path is a new file path that can be
 /// created immediately
 fn is_new_file_path(path: &Path) -> bool {
@@ -657,17 +676,12 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         if let Some(to_create) = to_create {
             let to_create_original = to_create;
             let to_create_owned;
-            let to_create = match uucore::os_str_as_bytes(to_create.as_os_str()) {
-                Ok(path_bytes) if path_bytes.ends_with(b"/") => {
-                    let mut trimmed_bytes = path_bytes;
-                    while trimmed_bytes.ends_with(b"/") {
-                        trimmed_bytes = &trimmed_bytes[..trimmed_bytes.len() - 1];
-                    }
-                    let trimmed_os_str = std::ffi::OsStr::from_bytes(trimmed_bytes);
-                    to_create_owned = PathBuf::from(trimmed_os_str);
+            let to_create = match trim_trailing_separators(to_create) {
+                Some(trimmed) => {
+                    to_create_owned = trimmed;
                     to_create_owned.as_path()
                 }
-                _ => to_create,
+                None => to_create,
             };
 
             let dir_exists = to_create.exists() && metadata(to_create).is_ok_and(|m| m.is_dir());
@@ -1536,6 +1550,37 @@ pub fn set_selinux_context_for_directories_install(target_path: &Path, context: 
 mod tests {
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     use super::derive_context_from_parent;
+
+    use super::trim_trailing_separators;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn test_trim_trailing_separators() {
+        // Nothing to trim.
+        assert_eq!(trim_trailing_separators(Path::new("/a/b")), None);
+        assert_eq!(trim_trailing_separators(Path::new("a")), None);
+        assert_eq!(trim_trailing_separators(Path::new("")), None);
+
+        assert_eq!(
+            trim_trailing_separators(Path::new("/a/b/")),
+            Some(PathBuf::from("/a/b"))
+        );
+        assert_eq!(
+            trim_trailing_separators(Path::new("/a/b///")),
+            Some(PathBuf::from("/a/b"))
+        );
+
+        // The root is all separators; trimming it away would leave an empty
+        // path that names nothing.
+        assert_eq!(
+            trim_trailing_separators(Path::new("/")),
+            Some(PathBuf::from("/"))
+        );
+        assert_eq!(
+            trim_trailing_separators(Path::new("//")),
+            Some(PathBuf::from("/"))
+        );
+    }
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
     #[test]
