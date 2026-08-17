@@ -107,7 +107,13 @@ fn version() {
 
 #[test]
 fn help() {
-    new_ucmd!().args(&["--help"]).succeeds();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("\nOperands:\n")
+        .stdout_contains("\nConversion options:\n")
+        .stdout_does_not_contain("###")
+        .stdout_does_not_contain("```");
 }
 
 #[test]
