@@ -130,19 +130,6 @@ impl Parser {
         Self::default()
     }
 
-    /// Parse the operands, keeping only the error itself.
-    ///
-    /// The utility itself goes through [`Self::parse_with_diagnostics`], which
-    /// also knows which operand failed; this is the plain form the unit tests
-    /// compare against.
-    #[cfg(test)]
-    pub(crate) fn parse(
-        self,
-        operands: impl IntoIterator<Item: AsRef<str>>,
-    ) -> Result<Settings, ParseError> {
-        self.read(operands).map_err(|(_, error)| error)?.validate()
-    }
-
     /// Parse the operands, pointing a caret at the one that is at fault.
     ///
     /// # Arguments
