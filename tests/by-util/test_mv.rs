@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 //
 // spell-checker:ignore mydir hardlinked tmpfs notty unwriteable GHSA
-// spell-checker:ignore dirattr dirvalue setfattr getfattr
+// spell-checker:ignore dirattr dirvalue setfattr getfattr myfolder SRCDATA DSTDATA REALDATA
 
 use rstest::rstest;
 use std::io::Write;
