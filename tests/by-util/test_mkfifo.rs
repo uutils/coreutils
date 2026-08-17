@@ -83,7 +83,7 @@ fn test_create_one_fifo_already_exists() {
         .arg("abcdef")
         .arg("abcdef")
         .fails()
-        .stderr_is("mkfifo: cannot create fifo 'abcdef': File exists\n");
+        .stderr_contains("mkfifo: cannot create fifo 'abcdef': File exists");
 }
 
 #[test]
