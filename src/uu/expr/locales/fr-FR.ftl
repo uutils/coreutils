@@ -1,8 +1,7 @@
 expr-about = Afficher la valeur de EXPRESSION sur la sortie standard
 expr-usage = expr [EXPRESSION]
   expr [OPTIONS]
-expr-after-help = Afficher la valeur de EXPRESSION sur la sortie standard. Une ligne vide ci-dessous
-  sépare les groupes de précédence croissante.
+expr-after-help = Une ligne vide ci-dessous sépare les groupes de précédence croissante.
 
   EXPRESSION peut être :
 
