@@ -1553,6 +1553,7 @@ mod locale_aware {
     use uutests::new_ucmd;
 
     #[test]
+    #[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
     fn test_expr_collating() {
         for (loc, code, output) in [
             ("C", 0, "1\n"),
@@ -1633,6 +1634,15 @@ mod gnu_expr_multibyte {
     }
 
     fn check_test_case(args: &[&[u8]], tc: &TestCase) {
+        // The WASI build ships no locale data, so every locale behaves like
+        // "C", and WASI can only carry valid UTF-8 through argv. Run just the
+        // cases that don't depend on either.
+        if std::env::var("UUTESTS_WASM_RUNNER").is_ok()
+            && (tc.locale != "C" || args.iter().any(|arg| std::str::from_utf8(arg).is_err()))
+        {
+            return;
+        }
+
         let args = args
             .iter()
             .map(|arg: &&[u8]| os_str_from_bytes(arg).unwrap())
@@ -2012,6 +2022,7 @@ mod gnu_expr_multibyte {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no locale data, every locale is C")]
 fn test_emoji_operations() {
     new_ucmd!()
         .args(&["🚀", "=", "🚀"])
