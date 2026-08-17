@@ -632,21 +632,21 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 }
 
 // FixMe: This test fails on MACOS:
-// thread 'test_env::test_gnu_e20' panicked at 'assertion failed: `(left == right)`
-// left: `"A=B C=D\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
-// right: `"A=B C=D\n"`', tests/by-util/test_env.rs:369:5
+// thread 'test_env::test_env_split_quoted_with_backslash_space' panicked at 'assertion failed: `(left == right)`
+// left: `"X=Y Z=W\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
+// right: `"X=Y Z=W\n"`', tests/by-util/test_env.rs:369:5
 #[cfg(not(target_os = "macos"))]
 #[test]
-fn test_gnu_e20() {
+fn test_env_split_quoted_with_backslash_space() {
     let scene = TestScenario::new(util_name!());
 
     let env_bin = String::from(uutests::util::get_tests_binary()) + " " + util_name!();
     let input = [
         String::from("-i"),
-        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+        String::from(r#"-SX="Y\_Z=W" "#) + env_bin.escape_default().to_string().as_str() + "",
     ];
 
-    let mut output = "A=B C=D\n".to_string();
+    let mut output = "X=Y Z=W\n".to_string();
 
     // Workaround for the test to pass when coverage is being run.
     // If enabled, the binary called by env_bin will most probably be
