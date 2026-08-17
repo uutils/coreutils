@@ -4694,24 +4694,20 @@ fn test_args_sleep_interval_when_illegal_argument_then_usage_error(#[case] sleep
 }
 
 #[test]
-fn test_gnu_args_plus_c() {
+fn test_tail_obsolete_plus_bytes() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-plus-c1
     scene
         .ucmd()
         .arg("+2c")
-        .pipe_in("abcd")
+        .pipe_in("wxyz")
         .succeeds()
-        .stdout_only("bcd");
-    // obs-plus-c2
+        .stdout_only("xyz");
     scene
         .ucmd()
         .arg("+8c")
-        .pipe_in("abcd")
+        .pipe_in("wxyz")
         .succeeds()
         .stdout_only("");
-    // obs-plus-x1: same as +10c
     scene
         .ucmd()
         .arg("+c")
@@ -4721,24 +4717,20 @@ fn test_gnu_args_plus_c() {
 }
 
 #[test]
-fn test_gnu_args_c() {
+fn test_tail_obsolete_bytes() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-c3
     scene
         .ucmd()
         .arg("-1c")
-        .pipe_in("abcd")
+        .pipe_in("wxyz")
         .succeeds()
-        .stdout_only("d");
-    // obs-c4
+        .stdout_only("z");
     scene
         .ucmd()
         .arg("-9c")
-        .pipe_in("abcd")
+        .pipe_in("wxyz")
         .succeeds()
-        .stdout_only("abcd");
-    // obs-c5
+        .stdout_only("wxyz");
     scene
         .ucmd()
         .arg("-12c")
@@ -4748,31 +4740,26 @@ fn test_gnu_args_c() {
 }
 
 #[test]
-fn test_gnu_args_l() {
+fn test_tail_obsolete_lines() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-l1
     scene
         .ucmd()
         .arg("-1l")
         .pipe_in("x")
         .succeeds()
         .stdout_only("x");
-    // obs-l2
     scene
         .ucmd()
         .arg("-1l")
         .pipe_in("x\ny\n")
         .succeeds()
         .stdout_only("y\n");
-    // obs-l3
     scene
         .ucmd()
         .arg("-1l")
         .pipe_in("x\ny")
         .succeeds()
         .stdout_only("y");
-    // obs-l: same as -10l
     scene
         .ucmd()
         .arg("-l")
@@ -4782,24 +4769,20 @@ fn test_gnu_args_l() {
 }
 
 #[test]
-fn test_gnu_args_plus_l() {
+fn test_tail_obsolete_plus_lines() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-plus-l4
     scene
         .ucmd()
         .arg("+1l")
         .pipe_in("x\ny\n")
         .succeeds()
         .stdout_only("x\ny\n");
-    // ops-plus-l5
     scene
         .ucmd()
         .arg("+2l")
         .pipe_in("x\ny\n")
         .succeeds()
         .stdout_only("y\n");
-    // obs-plus-x2: same as +10l
     scene
         .ucmd()
         .arg("+l")
@@ -4809,24 +4792,20 @@ fn test_gnu_args_plus_l() {
 }
 
 #[test]
-fn test_gnu_args_number() {
+fn test_tail_obsolete_number() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-1
     scene
         .ucmd()
         .arg("-1")
         .pipe_in("x")
         .succeeds()
         .stdout_only("x");
-    // obs-2
     scene
         .ucmd()
         .arg("-1")
         .pipe_in("x\ny\n")
         .succeeds()
         .stdout_only("y\n");
-    // obs-3
     scene
         .ucmd()
         .arg("-1")
@@ -4836,17 +4815,14 @@ fn test_gnu_args_number() {
 }
 
 #[test]
-fn test_gnu_args_plus_number() {
+fn test_tail_obsolete_plus_number() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-plus-4
     scene
         .ucmd()
         .arg("+1")
         .pipe_in("x\ny\n")
         .succeeds()
         .stdout_only("x\ny\n");
-    // ops-plus-5
     scene
         .ucmd()
         .arg("+2")
@@ -4856,10 +4832,8 @@ fn test_gnu_args_plus_number() {
 }
 
 #[test]
-fn test_gnu_args_b() {
+fn test_tail_obsolete_blocks() {
     let scene = TestScenario::new(util_name!());
-
-    // obs-b
     scene
         .ucmd()
         .arg("-b")
@@ -4869,45 +4843,38 @@ fn test_gnu_args_b() {
 }
 
 #[test]
-fn test_gnu_args_err() {
+fn test_tail_obsolete_error_cases() {
     let scene = TestScenario::new(util_name!());
-
-    // err-1
     scene
         .ucmd()
         .arg("+cl")
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: cannot open '+cl' for reading: No such file or directory\n");
-    // err-2
     scene
         .ucmd()
         .arg("-cl")
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: invalid number of bytes: 'l'\n");
-    // err-3
     scene
         .ucmd()
         .arg("+2cz")
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: cannot open '+2cz' for reading: No such file or directory\n");
-    // err-4
     scene
         .ucmd()
         .arg("-2cX")
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("tail: option used in invalid context -- 2\n");
-    // err-5: large numbers now clamp to u64::MAX
     scene
         .ucmd()
         .arg("-c99999999999999999999")
         .pipe_in("x")
         .succeeds()
         .stdout_is("x");
-    // err-6
     scene
         .ucmd()
         .arg("-c --")
@@ -4936,7 +4903,7 @@ fn test_gnu_args_err() {
 }
 
 #[test]
-fn test_gnu_args_f() {
+fn test_tail_obsolete_f_flag() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
