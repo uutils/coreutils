@@ -1,7 +1,7 @@
 name: Code Quality
 
 # spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd oniguruma sysroot wasi wasip
 
 on:
   pull_request:
@@ -119,6 +119,18 @@ jobs:
             sudo apt-get -y install libselinux1-dev libsystemd-dev
           ;;
         esac
+    - name: Install/setup WASI prerequisites
+      if: startsWith(matrix.job.target, 'wasm32-wasi')
+      shell: bash
+      run: |
+        ## Install/setup WASI prerequisites
+        # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
+        WASI_SDK=wasi-sdk-25.0-x86_64-linux
+        curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
+        for abi in wasip1 wasip2; do
+          echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
+          echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
+        done
     - name: "`cargo clippy` lint testing"
       uses: nick-fields/retry@v4
       with:
