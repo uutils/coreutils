@@ -30,7 +30,7 @@ pub enum ParseError {
     MultipleBlockUnblock,
     #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone(), "cmd" => uucore::execution_phrase()))]
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone()))]
     FlagNoMatch(String),
     #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
@@ -483,6 +483,13 @@ impl Parser {
 impl UError for ParseError {
     fn code(&self) -> i32 {
         1
+    }
+
+    /// The one message that ends on a hint about the syntax it rejected. The
+    /// hint is left to this, rather than written into the message, so that it
+    /// survives a caret report replacing the message.
+    fn usage(&self) -> bool {
+        matches!(self, Self::FlagNoMatch(_))
     }
 }
 
