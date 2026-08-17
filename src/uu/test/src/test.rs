@@ -8,12 +8,14 @@
 mod diagnostics;
 pub(crate) mod error;
 mod parser;
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "wasi"))]
 mod platform;
 
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
+#[cfg(target_os = "wasi")]
+use platform::path;
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -22,7 +24,7 @@ use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 use uucore::process::{getegid, geteuid};
 
 use uucore::translate;
@@ -304,7 +306,9 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     let result = match (op.to_str(), f_a, f_b) {
         #[cfg(unix)]
         (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
-        #[cfg(not(unix))]
+        #[cfg(target_os = "wasi")]
+        (Some("-ef"), Ok(_), Ok(_)) => platform::same_file(a, b),
+        #[cfg(not(any(unix, target_os = "wasi")))]
         (Some("-ef"), Ok(_), Ok(_)) => unimplemented!(),
         (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),
         (Some("-nt"), Ok(_), _) => true,
@@ -336,7 +340,7 @@ fn isatty(fd: &OsStr) -> ParseResult<bool> {
 }
 
 #[derive(Eq, PartialEq)]
-enum PathCondition {
+pub(crate) enum PathCondition {
     BlockSpecial,
     CharacterSpecial,
     Directory,
@@ -360,14 +364,14 @@ enum PathCondition {
 /// Whether the file was modified more recently than it was last read, the
 /// condition behind `-N`. A timestamp the platform cannot report counts as
 /// "not modified since read" rather than aborting.
-fn modified_since_read(metadata: &fs::Metadata) -> bool {
+pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
     matches!(
         (metadata.accessed(), metadata.modified()),
         (Ok(read), Ok(modified)) if read < modified
     )
 }
 
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
@@ -459,7 +463,9 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
     }
 }
 
-#[cfg(test)]
+// Every test here needs a temporary file, and a WASI guest only sees the
+// directories it was granted, so there is no temporary directory to use.
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
     use std::{ffi::OsStr, time::UNIX_EPOCH};
