@@ -14,8 +14,9 @@ use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError, quiet_if_reported, strip_errno};
+use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::parse_size::{ParseSizeError, parse_size_u64};
 use uucore::translate;
@@ -74,13 +75,11 @@ impl TryFrom<&ArgMatches> for ProgramOptions {
 /// A buffering mode that did not parse as a size, and where it came from.
 ///
 /// The message is built where it always was; the rest is what a caret needs:
-/// the mode as typed, the option it was given to, and what the size parser
+/// the mode as typed with the option it was given to, and what the size parser
 /// made of it.
 #[derive(Debug)]
 struct ModeError {
-    value: String,
-    short: char,
-    long: &'static str,
+    option: OptionValue,
     error: ParseSizeError,
 }
 
@@ -92,34 +91,6 @@ enum ProgramOptionsError {
     InvalidMode(Box<ModeError>),
     #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0.clone()))]
     ValueTooLarge(String),
-}
-
-impl ProgramOptionsError {
-    /// Draw a caret under the part of the mode that is at fault.
-    ///
-    /// # Arguments
-    ///
-    /// * `diag_args` - The arguments as typed, program name included.
-    /// * `message` - The headline, already localized.
-    ///
-    /// # Returns
-    ///
-    /// `false` when this error is not about a mode that failed to parse as a
-    /// size, or when nothing could be drawn; the caller then falls back to the
-    /// plain one-line message.
-    fn render(&self, diag_args: &[OsString], message: &str) -> bool {
-        let Self::InvalidMode(mode) = self else {
-            return false;
-        };
-        mode.error.render_size_value(
-            diag_args,
-            &mode.value,
-            0,
-            Some(mode.short),
-            Some(mode.long),
-            message,
-        )
-    }
 }
 
 #[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "cygwin")))]
@@ -154,9 +125,7 @@ fn check_option(
             x => parse_size_u64(x).map_or_else(
                 |error| {
                     Err(ProgramOptionsError::InvalidMode(Box::new(ModeError {
-                        value: x.to_string(),
-                        short,
-                        long: name,
+                        option: OptionValue::new(x, short, name),
                         error,
                     })))
                 },
@@ -251,10 +220,19 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let options = ProgramOptions::try_from(&matches).map_err(|e| {
         let message = e.to_string();
-        let reported = diag_args
-            .as_deref()
-            .is_some_and(|args| e.render(args, &message));
-        quiet_if_reported(reported, UUsageError::new(125, message))
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            UUsageError::new(125, message.clone()),
+            |args, _| match &e {
+                ProgramOptionsError::InvalidMode(mode) => {
+                    mode.error
+                        .render_size_value(args, &mode.option, 0, &message)
+                }
+                // The rest is not about a mode that failed to parse, so there
+                // is nothing to point a caret at.
+                _ => false,
+            },
+        )
     })?;
 
     let mut command_values = matches

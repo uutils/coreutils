@@ -16,6 +16,7 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 #[cfg(unix)]
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::parser::parse_size::parse_size_u64;
@@ -244,10 +245,10 @@ impl BytesWriter {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let raw_args: Vec<OsString> = args.collect();
-    // Kept for the caret in size diagnostics, which needs the size as typed.
-    let diag_args = uucore::diagnostics::capture(&raw_args);
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
+    // The command line is kept for the caret in size diagnostics, which needs
+    // the size as typed.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(
@@ -420,10 +421,8 @@ fn get_size(size_str_opt: Option<String>, diag_args: Option<&[OsString]>) -> URe
             let message = translate!("shred-invalid-file-size", "size" => size.quote());
             Err(error.size_value_error(
                 diag_args,
-                &size,
+                &OptionValue::new(&size, 's', options::SIZE),
                 0,
-                's',
-                options::SIZE,
                 &message,
                 USimpleError::new(1, message.clone()),
             ))
