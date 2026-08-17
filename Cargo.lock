@@ -3803,6 +3803,7 @@ dependencies = [
  "codspeed-divan-compat",
  "fluent",
  "indicatif",
+ "libc",
  "nix",
  "rustc-hash",
  "rustix",
