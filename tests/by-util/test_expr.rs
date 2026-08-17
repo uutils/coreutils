@@ -1571,9 +1571,9 @@ mod locale_aware {
     }
 }
 
-/// This module reimplements the expr-multibyte.pl test
+/// Tests for multibyte character arithmetic in expr
 #[cfg(target_os = "linux")]
-mod gnu_expr_multibyte {
+mod expr_multibyte_arithmetic {
     use uutests::new_ucmd;
 
     use uucore::os_str_from_bytes;
@@ -1600,8 +1600,7 @@ mod gnu_expr_multibyte {
         }
     }
 
-    const EXPRESSION: &[u8] =
-        "\u{1F14}\u{03BA}\u{03C6}\u{03C1}\u{03B1}\u{03C3}\u{03B9}\u{03C2}".as_bytes();
+    const EXPRESSION: &[u8] = "\u{6C49}\u{5B57}\u{6D4B}\u{8BD5}".as_bytes(); // 汉字测试 – 4 chars, 12 bytes
 
     #[derive(Debug, Default, Clone, Copy)]
     struct TestCase {
@@ -1665,7 +1664,7 @@ mod gnu_expr_multibyte {
 
     // sanity check
     #[test]
-    fn test_l1() {
+    fn test_mb_length_full() {
         let args: &[&[u8]] = &[b"length", b"abcdef"];
 
         let cases = &[TestCase::FR.out("6"), TestCase::C.out("6")];
@@ -1676,9 +1675,9 @@ mod gnu_expr_multibyte {
     }
 
     // A single multibyte character in the beginning of the string \xCE\xB1 is
-    // UTF-8 for "U+03B1 GREEK SMALL LETTER ALPHA"
+    // UTF-8 for "U+03B1 (2-byte UTF-8 sequence, used as multibyte prefix test)"
     #[test]
-    fn test_l2() {
+    fn test_mb_length_ascii_prefix() {
         let args: &[&[u8]] = &[b"length", b"\xCE\xB1bcdef"];
 
         let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
@@ -1689,9 +1688,9 @@ mod gnu_expr_multibyte {
     }
 
     // A single multibyte character in the middle of the string \xCE\xB4 is
-    // UTF-8 for "U+03B4 GREEK SMALL LETTER DELTA"
+    // UTF-8 for "U+03B4 (2-byte UTF-8 sequence, used as multibyte middle test)"
     #[test]
-    fn test_l3() {
+    fn test_mb_length_ascii_middle() {
         let args: &[&[u8]] = &[b"length", b"abc\xCE\xB4ef"];
 
         let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
@@ -1703,7 +1702,7 @@ mod gnu_expr_multibyte {
 
     // A single multibyte character in the end of the string
     #[test]
-    fn test_l4() {
+    fn test_mb_length_ascii_suffix() {
         let args: &[&[u8]] = &[b"length", b"fedcb\xCE\xB1"];
 
         let cases = &[TestCase::FR.out("6"), TestCase::C.out("7")];
@@ -1715,7 +1714,7 @@ mod gnu_expr_multibyte {
 
     // A invalid multibyte sequence
     #[test]
-    fn test_l5() {
+    fn test_mb_length_invalid_seq() {
         let args: &[&[u8]] = &[b"length", b"\xB1aaa"];
 
         let cases = &[TestCase::FR.out("4"), TestCase::C.out("4")];
@@ -1727,7 +1726,7 @@ mod gnu_expr_multibyte {
 
     // An incomplete multibyte sequence at the end of the string
     #[test]
-    fn test_l6() {
+    fn test_mb_length_incomplete_end() {
         let args: &[&[u8]] = &[b"length", b"aaa\xCE"];
 
         let cases = &[TestCase::FR.out("4"), TestCase::C.out("4")];
@@ -1739,10 +1738,10 @@ mod gnu_expr_multibyte {
 
     // An incomplete multibyte sequence at the end of the string
     #[test]
-    fn test_l7() {
+    fn test_mb_length_expression() {
         let args: &[&[u8]] = &[b"length", EXPRESSION];
 
-        let cases = &[TestCase::FR.out("8"), TestCase::C.out("17")];
+        let cases = &[TestCase::FR.out("4"), TestCase::C.out("12")];
 
         for tc in cases {
             check_test_case(args, tc);

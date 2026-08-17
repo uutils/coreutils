@@ -1015,17 +1015,17 @@ fn test_parse_valid_hexadecimal_float_three_args() {
 }
 
 #[test]
-fn test_parse_float_gnu_coreutils() {
+fn test_seq_float_precision_edge_cases() {
     // Known sequence values for verification
     new_ucmd!()
-        .args(&[".89999", "1e-7", ".8999901"])
+        .args(&[".64999", "1e-7", ".6499901"])
         .succeeds()
-        .stdout_only("0.8999900\n0.8999901\n");
+        .stdout_only("0.6499900\n0.6499901\n");
 
     new_ucmd!()
-        .args(&["0", "0.000001", "0.000003"])
+        .args(&["0", "0.000002", "0.000006"])
         .succeeds()
-        .stdout_only("0.000000\n0.000001\n0.000002\n0.000003\n");
+        .stdout_only("0.000000\n0.000002\n0.000004\n0.000006\n");
 }
 
 #[test]
