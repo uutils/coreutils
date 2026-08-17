@@ -447,9 +447,10 @@ mod diagnostics {
             .fails_with_code(125);
 
         // The number parsed; only the unit did not.
-        assert_eq!(
-            result.stderr_as_displayed(),
-            "\
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
 stdbuf: invalid mode '6pq'
    ╭─[ stdbuf:1:12 ]
    │
@@ -459,6 +460,14 @@ stdbuf: invalid mode '6pq'
    │
    │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
 ───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("stdbuf --help' for more information."),
+            "{stderr}"
         );
     }
 
