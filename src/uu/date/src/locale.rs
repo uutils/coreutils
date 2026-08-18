@@ -96,6 +96,10 @@ cfg_langinfo! {
 }
 
 cfg_langinfo! {
+    fn set_locale_time_from_environment() -> bool {
+        unsafe { !libc::setlocale(libc::LC_TIME, c"".as_ptr()).is_null() }
+    }
+
     fn query_nl_langinfo(item: libc::nl_item) -> Option<String> {
         query_nl_langinfo_inner(item, false)
     }
@@ -108,9 +112,11 @@ cfg_langinfo! {
         #[cfg(test)]
         let _lock = LOCALE_MUTEX.lock().unwrap();
 
-        unsafe {
-            libc::setlocale(libc::LC_TIME, c"".as_ptr());
+        if !set_locale_time_from_environment() {
+            return None;
+        }
 
+        unsafe {
             let ptr = libc::nl_langinfo(item);
             if ptr.is_null() {
                 return None;
@@ -229,6 +235,55 @@ mod tests {
                 ampm_format_or_default(Some("%I:%M:%S %p".to_string())),
                 "%I:%M:%S %p"
             );
+        }
+
+        #[test]
+        fn test_setlocale_failure_is_reported() {
+            let _lock = LOCALE_MUTEX.lock().unwrap();
+            let original_lc_all = std::env::var_os("LC_ALL");
+            let original_lc_time = std::env::var_os("LC_TIME");
+            let original_lang = std::env::var_os("LANG");
+            let original_process_locale = unsafe {
+                let ptr = libc::setlocale(libc::LC_TIME, std::ptr::null());
+                if ptr.is_null() {
+                    None
+                } else {
+                    CStr::from_ptr(ptr).to_str().ok().map(ToString::to_string)
+                }
+            };
+
+            unsafe {
+                std::env::set_var("LC_ALL", "__hermes_locale_that_does_not_exist__");
+                std::env::remove_var("LC_TIME");
+                std::env::remove_var("LANG");
+            }
+            let result = set_locale_time_from_environment();
+
+            unsafe {
+                if let Some(value) = original_lc_all {
+                    std::env::set_var("LC_ALL", value);
+                } else {
+                    std::env::remove_var("LC_ALL");
+                }
+                if let Some(value) = original_lc_time {
+                    std::env::set_var("LC_TIME", value);
+                } else {
+                    std::env::remove_var("LC_TIME");
+                }
+                if let Some(value) = original_lang {
+                    std::env::set_var("LANG", value);
+                } else {
+                    std::env::remove_var("LANG");
+                }
+                if let Some(locale) = original_process_locale {
+                    let c_locale = std::ffi::CString::new(locale).unwrap();
+                    libc::setlocale(libc::LC_TIME, c_locale.as_ptr());
+                } else {
+                    libc::setlocale(libc::LC_TIME, c"".as_ptr());
+                }
+            }
+
+            assert!(!result, "invalid environment locale must be reported");
         }
 
         #[test]
