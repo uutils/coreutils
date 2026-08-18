@@ -163,19 +163,20 @@ fn test_stdin_all_repeated() {
 }
 
 #[test]
-fn test_all_repeated_repeated_last_wins() {
-    // GNU uniq accepts a repeated -D/--all-repeated and uses the last occurrence,
-    // instead of rejecting the second one.
+fn test_repeated_all_repeated_uses_final_delimiter() {
+    const DUPLICATE_RUNS: &str = "copper\ncopper\nsilver\ngold\ngold\nplatinum\n";
+
+    new_ucmd!()
+        .args(&["--all-repeated=prepend", "-D"])
+        .pipe_in(DUPLICATE_RUNS)
+        .succeeds()
+        .stdout_is("copper\ncopper\ngold\ngold\n");
+
     new_ucmd!()
         .args(&["-D", "--all-repeated=separate"])
-        .pipe_in("a\na\nb\nb\nc\n")
+        .pipe_in(DUPLICATE_RUNS)
         .succeeds()
-        .stdout_is("a\na\n\nb\nb\n");
-    new_ucmd!()
-        .args(&["-D", "-D"])
-        .pipe_in("a\na\n")
-        .succeeds()
-        .stdout_is("a\na\n");
+        .stdout_is("copper\ncopper\n\ngold\ngold\n");
 }
 
 #[test]
