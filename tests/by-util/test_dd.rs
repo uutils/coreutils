@@ -134,6 +134,24 @@ fn test_out_of_memory_skip() {
 }
 
 #[test]
+fn test_large_numeric_operands_do_not_panic() {
+    // Regression test for GH #12843, #12845, #12846, #12848: a huge
+    // count/skip/seek/iseek/oseek operand overflowed an internal multiplication
+    // and panicked instead of reporting a clean "too large" error.
+    for operand in [
+        "count=177817277272177278",
+        "skip=99999999999999999999",
+        "seek=99999999999999999999",
+        "iseek=166727721627616621762772",
+        "oseek=166727721627616621762772",
+    ] {
+        new_ucmd!()
+            .arg(operand)
+            .pipe_in("")
+            .fails_with_code(1)
+}
+
+#[test]
 fn test_huge_block_size_is_rejected_without_panicking() {
     // Regression test for #12844: a block size >= i64::MAX used to panic
     // ("attempt to multiply with overflow"); it must be rejected cleanly.

@@ -161,7 +161,10 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n * block_size,
+            // Saturate on overflow: a byte count above `u64::MAX` is far beyond
+            // the `i64::MAX` (intmax_t) limit that callers enforce, so clamping
+            // here turns a would-be panic into that clean "too large" error.
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
     }

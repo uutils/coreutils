@@ -266,6 +266,16 @@ impl Parser {
         }
 
         let count = self.count.map(|c| c.force_bytes_if(self.iflag.count_bytes));
+        // GNU coreutils has a limit of i64 (intmax_t)
+        if let Some(count) = count {
+            let count_bytes = count.to_bytes(ibs as u64);
+            if count_bytes > i64::MAX as u64 {
+                return Err(ParseError::InvalidNumberWithErrMsg(
+                    format!("{count_bytes}"),
+                    "Value too large for defined data type".to_string(),
+                ));
+            }
+        }
 
         Ok(Settings {
             skip,
