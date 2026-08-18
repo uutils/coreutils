@@ -217,11 +217,43 @@ cfg_nl_langinfo! {
     }
 
     /// Returns the locale's AM and PM markers used by `%p` and `%P`.
-    pub fn get_locale_ampm_markers() -> Option<(String, String)> {
+    fn get_locale_ampm_markers() -> Option<(String, String)> {
         Some((
             query_nl_langinfo_allow_empty(AM_STR_ITEM)?,
             query_nl_langinfo_allow_empty(PM_STR_ITEM)?,
         ))
+    }
+
+    /// Replace bare `%p` and `%P` with the marker for the supplied hour.
+    ///
+    /// The caller must protect any format syntax it does not want expanded;
+    /// this helper independently protects `%%` literals in the input and in
+    /// locale-provided marker strings.
+    pub fn localize_ampm_markers(format: &str, is_pm: bool) -> String {
+        const PERCENT_PLACEHOLDER: &str = "\0PERCENT\0";
+        const LOWER_MARKER_PLACEHOLDER: &str = "\0LOWER_MARKER\0";
+        const MARKER_PLACEHOLDER: &str = "\0MARKER\0";
+
+        if !format.contains("%p") && !format.contains("%P") {
+            return format.to_string();
+        }
+
+        let Some((am, pm)) = get_locale_ampm_markers() else {
+            return format.to_string();
+        };
+
+        let marker = if is_pm { pm } else { am };
+        let marker_lower = marker.to_lowercase();
+        let marker = marker.replace('%', "%%");
+        let marker_lower = marker_lower.replace('%', "%%");
+
+        format
+            .replace("%%", PERCENT_PLACEHOLDER)
+            .replace("%p", MARKER_PLACEHOLDER)
+            .replace("%P", LOWER_MARKER_PLACEHOLDER)
+            .replace(MARKER_PLACEHOLDER, &marker)
+            .replace(LOWER_MARKER_PLACEHOLDER, &marker_lower)
+            .replace(PERCENT_PLACEHOLDER, "%%")
     }
 }
 
@@ -242,8 +274,8 @@ cfg_nl_langinfo! { else
     }
 
     /// Fallback for platforms without `nl_langinfo`.
-    pub fn get_locale_ampm_markers() -> Option<(String, String)> {
-        None
+    pub fn localize_ampm_markers(format: &str, _is_pm: bool) -> String {
+        format.to_string()
     }
 }
 
