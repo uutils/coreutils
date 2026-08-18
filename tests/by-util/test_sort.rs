@@ -1246,6 +1246,18 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// A read error must be reported with context and without the raw io::Error suffix.
+// It used to print `sort: Input/output error (os error 5)`.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_read_error_message() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(2)
+        .stderr_only("sort: read failed: Input/output error\n");
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()
