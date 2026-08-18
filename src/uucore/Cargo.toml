@@ -38,7 +38,13 @@ libc = { workspace = true, optional = true }
 openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
-rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
+rustix = { workspace = true, features = [
+  "fs",
+  "net",
+  "pipe",
+  "process",
+  "stdio",
+] }
 time = { workspace = true, optional = true, features = [
   "formatting",
   "local-offset",
