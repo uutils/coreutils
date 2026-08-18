@@ -1891,6 +1891,26 @@ fn locale_is_available(locale: &str) -> bool {
         .is_ok_and(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn locale_ampm_markers(locale: &str) -> Option<(String, String)> {
+    use std::process::Command;
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .args(["-k", "am_pm"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let line = String::from_utf8(output.stdout).ok()?;
+    let mut markers = line.trim().strip_prefix("am_pm=")?.split(';');
+    Some((
+        markers.next()?.trim_matches('"').to_string(),
+        markers.next()?.trim_matches('"').to_string(),
+    ))
+}
+
 /// Return whether `locale` is installed, logging a targeted skip when it is not.
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 macro_rules! locale_available {
@@ -2006,6 +2026,35 @@ fn test_date_format_r_locale_aware() {
             .arg("+%r")
             .succeeds()
             .stdout_is(expected);
+    }
+}
+
+/// Verify that locale-specific AM/PM markers are used by `%r`, `%p`, and `%P`.
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_ampm_markers_locale_aware() {
+    if locale_available!("zh_CN.UTF-8", "Chinese AM/PM")
+        && let Some((am, pm)) = locale_ampm_markers("zh_CN.UTF-8")
+    {
+        for (date, format, expected) in [
+            ("1997-01-19 08:17:48", "+%r", format!("08:17:48 {am}")),
+            ("1997-01-19 13:17:48", "+%r", format!("01:17:48 {pm}")),
+            ("1997-01-19 08:17:48", "+%p", am.clone()),
+            ("1997-01-19 08:17:48", "+%P", am.to_lowercase()),
+            ("1997-01-19 13:17:48", "+%p", pm.clone()),
+            ("1997-01-19 13:17:48", "+%P", pm.to_lowercase()),
+        ] {
+            new_ucmd!()
+                .env("TZ", "UTC")
+                .env("LC_ALL", "zh_CN.UTF-8")
+                .arg("-d")
+                .arg(date)
+                .arg(format)
+                .succeeds()
+                .stdout_is(format!("{expected}\n"));
+        }
+    } else {
+        println!("Skipping Chinese AM/PM marker test — locale data unavailable");
     }
 }
 
