@@ -915,15 +915,8 @@ fn expand_locale_specifiers<'a>(format: &'a str, date: &Zoned) -> Cow<'a, str> {
         let ampm = locale::get_locale_time_ampm_format();
         s = s.replace("%r", &ampm);
     }
-    if (s.contains("%p") || s.contains("%P"))
-        && let Some((am, pm)) = locale::get_locale_ampm_markers()
-    {
-        let marker = if date.hour() < 12 { am } else { pm };
-        let marker_lower = marker.to_lowercase();
-        let marker = marker.replace('%', "%%");
-        let marker_lower = marker_lower.replace('%', "%%");
-        s = s.replace("%p", &marker);
-        s = s.replace("%P", &marker_lower);
+    if s.contains("%p") || s.contains("%P") {
+        s = locale::localize_ampm_markers(&s, date.hour() >= 12);
     }
 
     Cow::Owned(s.replace(PLACEHOLDER, "%%"))

@@ -2058,6 +2058,36 @@ fn test_date_format_ampm_markers_locale_aware() {
     }
 }
 
+/// Verify that locale-specific AM/PM markers survive GNU modifier forms.
+#[test]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn test_date_format_ampm_markers_with_modifiers() {
+    if locale_available!("zh_CN.UTF-8", "Chinese AM/PM modifiers")
+        && let Some((am, pm)) = locale_ampm_markers("zh_CN.UTF-8")
+    {
+        for (date, format, marker) in [
+            ("1997-01-19 13:17:48", "+%#P", pm.clone()),
+            ("1997-01-19 08:17:48", "+%_p", am.clone()),
+            ("1997-01-19 13:17:48", "+%^p", pm.clone()),
+            ("1997-01-19 08:17:48", "+%10p", am.clone()),
+            ("1997-01-19 13:17:48", "+%10r", pm.clone()),
+            ("1997-01-19 13:17:48", "+%^r", pm.clone()),
+            ("1997-01-19 13:17:48", "+%#r", pm.clone()),
+        ] {
+            new_ucmd!()
+                .env("TZ", "UTC")
+                .env("LC_ALL", "zh_CN.UTF-8")
+                .arg("-d")
+                .arg(date)
+                .arg(format)
+                .succeeds()
+                .stdout_contains(marker);
+        }
+    } else {
+        println!("Skipping Chinese AM/PM modifier test — locale data unavailable");
+    }
+}
+
 #[test]
 fn test_date_parenthesis_comment() {
     // GNU compatibility: Text in parentheses is treated as a comment and removed.
