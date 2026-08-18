@@ -22,6 +22,18 @@ use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
 use uucore::translate;
 
+/// GNU's regex engine treats a trailing lone backslash as a literal backslash,
+/// while the `regex` crate rejects it as an incomplete escape sequence. Double
+/// it so that such patterns keep working instead of erroring out.
+fn escape_trailing_backslash(pattern: &str) -> String {
+    let trailing = pattern.chars().rev().take_while(|&c| c == '\\').count();
+    if trailing % 2 == 1 {
+        format!("{pattern}\\")
+    } else {
+        pattern.to_owned()
+    }
+}
+
 #[derive(Debug, PartialEq)]
 enum OutFormat {
     Dumb,
@@ -149,7 +161,7 @@ impl WordFilter {
             matches
                 .get_one::<String>(options::WORD_REGEXP)
                 .filter(|v| !v.is_empty())
-                .map(ToOwned::to_owned)
+                .map(|v| escape_trailing_backslash(v))
         } else {
             None
         };
@@ -196,7 +208,10 @@ fn get_config(matches: &mut clap::ArgMatches) -> UResult<Config> {
         config.format = OutFormat::Roff;
         "[^ \t\n]+".clone_into(&mut config.context_regex);
     }
-    if let Some(regex) = matches.remove_one::<String>(options::SENTENCE_REGEXP) {
+    if let Some(regex) = matches
+        .remove_one::<String>(options::SENTENCE_REGEXP)
+        .map(|r| escape_trailing_backslash(&r))
+    {
         // TODO: The regex crate used here is not fully compatible with GNU's regex implementation.
         // For example, it does not support backreferences.
         // In the future, we might want to switch to the onig crate (like expr does) for better compatibility.
@@ -295,17 +310,20 @@ fn read_lines(
     sentence_splitter: Option<&Regex>,
     reader: &mut dyn BufRead,
 ) -> std::io::Result<Vec<String>> {
-    if let Some(re) = sentence_splitter {
-        let mut buffer = String::new();
-        reader.read_to_string(&mut buffer)?;
+    // GNU ptx works on bytes, so invalid UTF-8 input must not be an error.
+    // Read everything and replace invalid sequences instead of failing.
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+    let buffer = String::from_utf8_lossy(&bytes);
 
+    if let Some(re) = sentence_splitter {
         Ok(re
             .split(&buffer)
             .map(|s| s.replace('\n', " ")) // ptx behavior: newlines become spaces inside sentences
             .filter(|s| !s.is_empty()) // remove empty sentences
             .collect())
     } else {
-        reader.lines().collect()
+        Ok(buffer.lines().map(ToOwned::to_owned).collect())
     }
 }
 
