@@ -1025,6 +1025,21 @@ fn open_destination_parent(to: &Path) -> io::Result<(DirFd, OsString)> {
     Ok((dir_fd, basename.to_os_string()))
 }
 
+/// Open the source's parent directory following symlinks as normal path
+/// resolution does, while returning a pinned directory fd for source removal.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn open_source_parent(from: &Path) -> io::Result<(DirFd, OsString)> {
+    let parent = from
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = from
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid source path"))?;
+    let dir_fd = DirFd::open(parent, SymlinkBehavior::Follow)?;
+    Ok((dir_fd, basename.to_os_string()))
+}
+
 /// Recreate the source special file (fifo, socket, or device node) relative
 /// to an already-open destination directory.
 #[cfg(all(unix, not(target_os = "redox")))]
@@ -1118,7 +1133,7 @@ fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> i
     use std::os::unix::ffi::{OsStrExt, OsStringExt};
 
     let (dir_fd, basename) = open_destination_parent(to)?;
-    let (src_parent_fd, src_basename) = open_destination_parent(from)?;
+    let (src_parent_fd, src_basename) = open_source_parent(from)?;
     let basename_cstr = CString::new(basename.as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination name"))?;
     let mut urandom = fs::File::open("/dev/urandom")?;
@@ -1619,7 +1634,7 @@ fn rename_file_fallback(
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
     #[cfg(all(unix, not(target_os = "redox")))]
-    let (src_parent_fd, src_basename) = open_destination_parent(from)
+    let (src_parent_fd, src_basename) = open_source_parent(from)
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
 
     // Remove existing target file if it exists
@@ -1701,9 +1716,9 @@ fn rename_file_fallback(
             .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     }
 
-    #[cfg(not(target_os = "redox"))]
+    #[cfg(all(unix, not(target_os = "redox")))]
     let remove_source_result = src_parent_fd.unlink_at(&src_basename, false);
-    #[cfg(target_os = "redox")]
+    #[cfg(any(not(unix), target_os = "redox"))]
     let remove_source_result = fs::remove_file(from);
     remove_source_result
         .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
@@ -1860,6 +1875,24 @@ mod tests {
 
         let destination = symlink_parent.join("destination");
         assert!(open_destination_parent(&destination).is_err());
+    }
+
+    #[test]
+    fn file_fallback_follows_symlinked_source_parent() {
+        let temp_dir = TempDir::new().unwrap();
+        let real_parent = temp_dir.path().join("real");
+        fs::create_dir(&real_parent).unwrap();
+        let symlink_parent = temp_dir.path().join("link");
+        symlink(&real_parent, &symlink_parent).unwrap();
+
+        let source = symlink_parent.join("source");
+        let destination = temp_dir.path().join("destination");
+        fs::write(&source, b"source").unwrap();
+
+        rename_file_fallback(&source, &destination, None, None).unwrap();
+
+        assert_eq!(fs::read(&destination).unwrap(), b"source");
+        assert!(!real_parent.join("source").exists());
     }
 }
 
