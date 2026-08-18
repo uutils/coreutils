@@ -196,6 +196,15 @@ macro_rules! bin_inner {
             use std::io::Write;
             use uucore::locale;
 
+            // Check if fd 1 (stdout) is open *before* any allocation that could
+            // claim it. This detects `prog >&-` (shell closed stdout before we
+            // start). We use /proc/self/fd/1 to avoid a libc dependency.
+            #[cfg(unix)]
+            let stdout_initially_open: bool =
+                std::path::Path::new("/proc/self/fd/1").exists();
+            #[cfg(not(unix))]
+            let stdout_initially_open: bool = true;
+
             // Preserve inherited SIGPIPE settings (e.g., from env --default-signal=PIPE)
             uucore::panic::preserve_inherited_sigpipe();
 
@@ -217,6 +226,24 @@ macro_rules! bin_inner {
             let code = $util::uumain(uucore::args_os());
             $post
 
+            // Emulate GNU close_stdout/close_stream: flush stdout and exit 1 on
+            // write failure, but silence:
+            //   - BrokenPipe: normal pipe shutdown
+            //   - EBADF when stdout was already closed at startup (`prog >&-`
+            //     with no output) — matches GNU close_stream EBADF exception
+            if let Err(e) = std::io::stdout().flush() {
+                let silent = match e.kind() {
+                    std::io::ErrorKind::BrokenPipe => true,
+                    std::io::ErrorKind::InvalidInput
+                    | std::io::ErrorKind::NotConnected => !stdout_initially_open,
+                    _ => false,
+                };
+                if !silent {
+                    eprintln!("error writing to stdout: {e}");
+                    std::process::exit(1);
+                }
+            }
+
             std::process::exit(code);
         }
     };
@@ -231,12 +258,7 @@ macro_rules! bin {
         ::uucore::bin_inner! {$util, {}}
     };
     ($util:ident) => {
-        ::uucore::bin_inner! {$util, {
-            // (defensively) flush stdout for utility prior to exit; see <https://github.com/rust-lang/rust/issues/23818>
-            if let Err(e) = std::io::stdout().flush() {
-                eprintln!("Error flushing stdout: {e}");
-            }
-        }}
+        ::uucore::bin_inner! {$util, {}}
     };
 }
 
