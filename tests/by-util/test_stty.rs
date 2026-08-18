@@ -107,7 +107,7 @@ fn test_size_from_background_process_group() {
     unsafe {
         helper.pre_exec(|| {
             if libc::setsid() == -1
-                || libc::ioctl(0, libc::TIOCSCTTY as libc::c_ulong, 0) == -1
+                || libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1
                 || libc::tcsetpgrp(0, libc::getpgrp()) == -1
             {
                 return Err(io::Error::last_os_error());
