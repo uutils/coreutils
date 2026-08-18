@@ -1911,6 +1911,62 @@ fn locale_ampm_markers(locale: &str) -> Option<(String, String)> {
     ))
 }
 
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn locale_ampm_format(locale: &str) -> Option<String> {
+    use std::process::Command;
+    let output = Command::new("locale")
+        .env("LC_ALL", locale)
+        .args(["-k", "t_fmt_ampm"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let line = String::from_utf8(output.stdout).ok()?;
+    let value = line.trim().strip_prefix("t_fmt_ampm=")?.trim();
+    Some(value.trim_matches('"').to_string())
+}
+
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+fn expand_locale_ampm_format(
+    format: &str,
+    hour_24: &str,
+    hour_12: &str,
+    minute: &str,
+    second: &str,
+    marker: &str,
+) -> Option<String> {
+    let mut expanded = String::new();
+    let mut chars = format.chars();
+    while let Some(character) = chars.next() {
+        if character != '%' {
+            expanded.push(character);
+            continue;
+        }
+
+        match chars.next()? {
+            '%' => expanded.push('%'),
+            'H' => expanded.push_str(hour_24),
+            'I' => expanded.push_str(hour_12),
+            'M' => expanded.push_str(minute),
+            'S' => expanded.push_str(second),
+            'k' => {
+                expanded.push(' ');
+                expanded.push_str(hour_24.trim_start_matches('0'));
+            }
+            'l' => {
+                expanded.push(' ');
+                expanded.push_str(hour_12.trim_start_matches('0'));
+            }
+            'p' => expanded.push_str(marker),
+            'P' => expanded.push_str(&marker.to_lowercase()),
+            _ => return None,
+        }
+    }
+    Some(expanded)
+}
+
 /// Return whether `locale` is installed, logging a targeted skip when it is not.
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 macro_rules! locale_available {
@@ -2033,28 +2089,51 @@ fn test_date_format_r_locale_aware() {
 #[test]
 #[cfg(any(target_os = "linux", target_vendor = "apple"))]
 fn test_date_format_ampm_markers_locale_aware() {
-    if locale_available!("zh_CN.UTF-8", "Chinese AM/PM")
-        && let Some((am, pm)) = locale_ampm_markers("zh_CN.UTF-8")
-    {
-        for (date, format, expected) in [
-            ("1997-01-19 08:17:48", "+%r", format!("08:17:48 {am}")),
-            ("1997-01-19 13:17:48", "+%r", format!("01:17:48 {pm}")),
-            ("1997-01-19 08:17:48", "+%p", am.clone()),
-            ("1997-01-19 08:17:48", "+%P", am.to_lowercase()),
-            ("1997-01-19 13:17:48", "+%p", pm.clone()),
-            ("1997-01-19 13:17:48", "+%P", pm.to_lowercase()),
-        ] {
-            new_ucmd!()
-                .env("TZ", "UTC")
-                .env("LC_ALL", "zh_CN.UTF-8")
-                .arg("-d")
-                .arg(date)
-                .arg(format)
-                .succeeds()
-                .stdout_is(format!("{expected}\n"));
+    if locale_available!("zh_CN.UTF-8", "Chinese AM/PM") {
+        if let Some((am, pm)) = locale_ampm_markers("zh_CN.UTF-8") {
+            if let Some(ampm_format) = locale_ampm_format("zh_CN.UTF-8") {
+                if !ampm_format.contains("%p") && !ampm_format.contains("%P") {
+                    println!(
+                        "Skipping Chinese AM/PM marker test — T_FMT_AMPM has no AM/PM marker: {ampm_format}"
+                    );
+                } else {
+                    let expected_am_r =
+                        expand_locale_ampm_format(&ampm_format, "08", "08", "17", "48", &am);
+                    let expected_pm_r =
+                        expand_locale_ampm_format(&ampm_format, "13", "01", "17", "48", &pm);
+
+                    if let (Some(expected_am_r), Some(expected_pm_r)) =
+                        (expected_am_r, expected_pm_r)
+                    {
+                        for (date, format, expected) in [
+                            ("1997-01-19 08:17:48", "+%r", expected_am_r),
+                            ("1997-01-19 13:17:48", "+%r", expected_pm_r),
+                            ("1997-01-19 08:17:48", "+%p", am.clone()),
+                            ("1997-01-19 08:17:48", "+%P", am.to_lowercase()),
+                            ("1997-01-19 13:17:48", "+%p", pm.clone()),
+                            ("1997-01-19 13:17:48", "+%P", pm.to_lowercase()),
+                        ] {
+                            new_ucmd!()
+                                .env("TZ", "UTC")
+                                .env("LC_ALL", "zh_CN.UTF-8")
+                                .arg("-d")
+                                .arg(date)
+                                .arg(format)
+                                .succeeds()
+                                .stdout_is(format!("{expected}\n"));
+                        }
+                    } else {
+                        println!(
+                            "Skipping Chinese AM/PM marker test — unsupported T_FMT_AMPM: {ampm_format}"
+                        );
+                    }
+                }
+            } else {
+                println!("Skipping Chinese AM/PM marker test — T_FMT_AMPM unavailable");
+            }
+        } else {
+            println!("Skipping Chinese AM/PM marker test — locale markers unavailable");
         }
-    } else {
-        println!("Skipping Chinese AM/PM marker test — locale data unavailable");
     }
 }
 
