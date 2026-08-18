@@ -73,6 +73,10 @@ cfg_nl_langinfo! {
     const T_FMT_ITEM: libc::nl_item = libc::T_FMT;
     /// `T_FMT_AMPM` — locale 12-hour time format (used by `%r`)
     const T_FMT_AMPM_ITEM: libc::nl_item = libc::T_FMT_AMPM;
+    /// Locale AM marker (used by `%p`/`%r`).
+    const AM_STR_ITEM: libc::nl_item = libc::AM_STR;
+    /// Locale PM marker (used by `%p`/`%r`).
+    const PM_STR_ITEM: libc::nl_item = libc::PM_STR;
 
     /// Mutex to serialize setlocale() calls during tests.
     ///
@@ -211,6 +215,14 @@ cfg_nl_langinfo! {
     pub fn get_locale_time_ampm_format() -> String {
         ampm_format_or_default(query_nl_langinfo_allow_empty(T_FMT_AMPM_ITEM))
     }
+
+    /// Returns the locale's AM and PM markers used by `%p` and `%P`.
+    pub fn get_locale_ampm_markers() -> Option<(String, String)> {
+        Some((
+            query_nl_langinfo_allow_empty(AM_STR_ITEM)?,
+            query_nl_langinfo_allow_empty(PM_STR_ITEM)?,
+        ))
+    }
 }
 
 cfg_nl_langinfo! { else
@@ -227,6 +239,11 @@ cfg_nl_langinfo! { else
     /// Fallback for platforms without `nl_langinfo`.
     pub fn get_locale_time_ampm_format() -> String {
         "%I:%M:%S %p".to_string()
+    }
+
+    /// Fallback for platforms without `nl_langinfo`.
+    pub fn get_locale_ampm_markers() -> Option<(String, String)> {
+        None
     }
 }
 
