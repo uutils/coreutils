@@ -1550,6 +1550,66 @@ fn test_merge_batch_size_with_limit() {
 }
 
 #[test]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+#[cfg(target_os = "linux")]
+fn test_batch_size_above_fd_limit_is_rejected() {
+    use rlimit::Resource;
+    // Only stdin, stdout and stderr are unavailable for merge inputs, so the
+    // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=31")
+        .arg("gamma.txt")
+        .fails_with_code(2)
+        .stderr_contains("--batch-size argument '31' too large")
+        // 24 is forced by the limit above: 27 - 3 reserved descriptors.
+        .stderr_contains("maximum --batch-size argument with current rlimit is 24");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_batch_size_at_fd_limit_is_accepted() {
+    use rlimit::Resource;
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    // 24 is the largest value the limit above allows, and sorting must still happen.
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=24")
+        .arg("gamma.txt")
+        .succeeds()
+        .stdout_only("alpha\ndelta\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_more_files_than_fd_limit() {
+    use rlimit::Resource;
+    let (at, mut ucmd) = at_and_ucmd!();
+    // 40 single-line files cannot all be open at once with a soft limit of 24,
+    // so sort has to merge them in several batches through temporary files.
+    let count = 40;
+    let mut names = Vec::new();
+    for i in 0..count {
+        let name = format!("fdlimit_{i:02}.txt");
+        at.write(&name, &format!("{i:02}\n"));
+        names.push(name);
+    }
+    let mut expected = String::new();
+    for i in 0..count {
+        writeln!(expected, "{i:02}").unwrap();
+    }
+    let limit_fd = 24;
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
