@@ -44,17 +44,26 @@ impl<I> InputDecoder<'_, I> {
         normal_length: usize,
         peek_length: usize,
         byte_order: ByteOrder,
-    ) -> InputDecoder<'_, I> {
-        let bytes = vec![0; normal_length + peek_length];
+    ) -> io::Result<InputDecoder<'_, I>> {
+        // A huge `--width` would otherwise abort the process while allocating
+        // the line buffer. Compute the size with a checked add and reserve it
+        // fallibly so an out-of-range width yields a clean error instead.
+        let size = normal_length
+            .checked_add(peek_length)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::OutOfMemory, "memory exhausted"))?;
+        let mut data: Vec<u8> = Vec::new();
+        data.try_reserve_exact(size)
+            .map_err(|_| io::Error::new(io::ErrorKind::OutOfMemory, "memory exhausted"))?;
+        data.resize(size, 0);
 
-        InputDecoder {
+        Ok(InputDecoder {
             input,
-            data: bytes,
+            data,
             reserved_peek_length: peek_length,
             used_normal_length: 0,
             used_peek_length: 0,
             byte_order,
-        }
+        })
     }
 }
 
@@ -235,7 +244,7 @@ mod tests {
     fn smoke_test() {
         let data = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC0, 0xff, 0xff];
         let mut input = PeekReader::new(Cursor::new(&data));
-        let mut sut = InputDecoder::new(&mut input, 8, 2, ByteOrder::Little);
+        let mut sut = InputDecoder::new(&mut input, 8, 2, ByteOrder::Little).unwrap();
 
         // Peek normal length
         let mut mem = sut.peek_read().unwrap();
