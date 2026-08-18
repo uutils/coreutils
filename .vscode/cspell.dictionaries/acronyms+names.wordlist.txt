@@ -4,6 +4,7 @@ AIX
 ASLR # address space layout randomization
 AST # abstract syntax tree
 CATN # busybox cat -n feature flag
+GHSA # GitHub Security Advisory identifier
 CATV # busybox cat -v feature flag
 CICD # continuous integration/deployment
 CPU
