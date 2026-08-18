@@ -447,10 +447,10 @@ impl DirFd {
 
     /// Open a file for writing with an explicit creation mode.
     ///
-    /// The mode is used only when creating a new file; an existing file keeps
-    /// its current permissions. Callers that will apply final permissions
-    /// later should use a restrictive initial mode so failures cannot leave a
-    /// partially-created file overly permissive.
+    /// The requested mode is still filtered by the process umask when the file
+    /// is created; an existing file keeps its current permissions. Callers
+    /// that will apply final permissions later should use a restrictive initial
+    /// mode so failures cannot leave a partially-created file overly permissive.
     pub fn open_file_at_with_mode(&self, name: &OsStr, mode: u32) -> io::Result<fs::File> {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
@@ -1304,7 +1304,11 @@ mod tests {
             .permissions()
             .mode()
             & 0o777;
-        assert_eq!(mode, 0o600);
+        assert_eq!(
+            mode & !0o600,
+            0,
+            "creation must not grant permissions outside the requested mode"
+        );
     }
 
     #[test]
