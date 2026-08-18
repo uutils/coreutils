@@ -17,7 +17,8 @@ use std::{
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
+use uucore::translate;
 
 use crate::{
     GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
@@ -427,7 +428,12 @@ fn read_to_buffer<T: Read>(
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => return Err(USimpleError::new(2, e.to_string())),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("sort-read-failed", "error" => strip_errno(&e)),
+                ));
+            }
         }
     }
 }
