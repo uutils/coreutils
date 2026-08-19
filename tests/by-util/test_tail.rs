@@ -1118,6 +1118,16 @@ fn test_positive_zero_bytes() {
         .no_output();
 }
 
+/// A `-c +N` offset past the end of a seekable file must not abort.
+#[test]
+fn test_positive_bytes_past_end_of_file_does_not_panic() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", &"a".repeat(1_000_000));
+    ucmd.args(&["-c", "+18446744073709551615", "f"])
+        .succeeds()
+        .no_output();
+}
+
 /// Test for reading all but the first NUM lines: `tail -n +3`.
 #[test]
 fn test_positive_lines() {
