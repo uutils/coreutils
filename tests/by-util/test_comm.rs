@@ -734,6 +734,7 @@ fn test_read_error() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI P2: /dev/full filesystem not available")]
 fn test_comm_write_error_dev_full() {
     use std::fs::OpenOptions;
     let scene = TestScenario::new(util_name!());
