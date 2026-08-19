@@ -1183,6 +1183,22 @@ fn test_merge_write_error_does_not_panic() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_merge_flush_error_is_reported() {
+    use std::fs::File;
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("input.txt", "line\n");
+
+    let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+    ts.ucmd()
+        .args(&["-m", "input.txt"])
+        .set_stdout(dev_full)
+        .fails()
+        .stderr_contains("No space left on device");
+}
+
+#[test]
 fn test_merge_unique() {
     new_ucmd!()
         .arg("-m")

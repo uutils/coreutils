@@ -25,7 +25,9 @@ use std::{
 };
 
 use compare::Compare;
+use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
+use uucore::translate;
 
 use crate::{
     GlobalSettings, Output, SortError,
@@ -304,8 +306,14 @@ struct FileMerger<'a> {
 impl FileMerger<'_> {
     /// Write the merged contents to the output file.
     fn write_all(self, settings: &GlobalSettings, output: Output) -> UResult<()> {
+        let output_name = output
+            .as_output_name()
+            .unwrap_or(OsStr::new("standard output"))
+            .to_owned();
+        let ctx = || translate!("sort-error-write-failed", "output" => output_name.maybe_quote());
         let mut out = output.into_write();
-        self.write_all_to(settings, &mut out)
+        self.write_all_to(settings, &mut out)?;
+        out.flush().map_err_context(ctx)
     }
 
     fn write_all_to(mut self, settings: &GlobalSettings, out: &mut impl Write) -> UResult<()> {
