@@ -75,7 +75,9 @@ impl Sessions {
                 &raw mut count,
             )
         };
-        if result == 0 {
+        // A null buffer is not documented as impossible when the call reports
+        // success with no sessions, and `ids()` may not build a slice from it.
+        if result == 0 || ptr.is_null() {
             return None;
         }
         Some(Self {
