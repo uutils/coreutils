@@ -281,12 +281,13 @@ impl LineFormat {
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
 
-        let par_idx = rest.iter().position(|&b| b == b'(')?;
-        // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
-        // it's not a validly formatted line.
-        if par_idx == 0 {
-            return None;
-        }
+        let par_idx = rest
+            .iter()
+            .position(|&b| b == b'(')
+            // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
+            // it's not a validly formatted line.
+            .filter(|b| *b != 0)?;
+
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
@@ -951,9 +952,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if opts.verbose.over_status() {
-            log_no_properly_formatted(filename_display());
-        }
+        log_no_properly_formatted(filename_display());
         return Err(FileCheckError::Failed);
     }
 

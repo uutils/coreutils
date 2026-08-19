@@ -319,7 +319,7 @@ impl UError for USimpleError {
     }
 }
 
-/// Wrapper type around [`std::io::Error`].
+/// A usage error type with an exit code and a message that implements [`UError`].
 #[derive(Debug)]
 pub struct UUsageError {
     /// Exit code of the error.
@@ -432,6 +432,7 @@ impl Display for UIoError {
                 WriteZero => "Write zero",
                 Interrupted => "Interrupted",
                 UnexpectedEof => "Unexpected end of file",
+                IsADirectory => "Is a directory",
                 _ => {
                     // TODO: When the new error variants
                     // (https://github.com/rust-lang/rust/issues/86442)
@@ -458,6 +459,24 @@ impl Display for UIoError {
 }
 
 /// Strip the trailing " (os error XX)" from io error strings.
+///
+/// Rust renders OS errors as `"No such file or directory (os error 2)"`, while GNU
+/// coreutils only prints the `strerror` part. Use this when formatting a message
+/// that has to match GNU's output.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::{Error, ErrorKind};
+/// use uucore::error::strip_errno;
+///
+/// let err = Error::from_raw_os_error(2);
+/// assert_eq!(strip_errno(&err), "No such file or directory");
+///
+/// // Errors without an errno are returned unchanged.
+/// let err = Error::new(ErrorKind::Other, "custom failure");
+/// assert_eq!(strip_errno(&err), "custom failure");
+/// ```
 pub fn strip_errno(err: &std::io::Error) -> String {
     let mut msg = err.to_string();
     if let Some(pos) = msg.find(" (os error ") {
@@ -656,6 +675,42 @@ impl ExitCode {
     /// Create a new `ExitCode` with a given exit code.
     pub fn new(code: i32) -> Box<dyn UError> {
         Box::new(Self(code))
+    }
+}
+
+/// The error to return once its message may already have reached stderr.
+///
+/// A utility that renders its own report — a caret diagnostic, a warning it
+/// printed itself — has already said everything the error would say, and
+/// returning the error too would print the message twice. This keeps the exit
+/// code without the second message: the code is taken from the error itself,
+/// so both paths always agree on it.
+///
+/// # Arguments
+///
+/// * `reported` - Whether the message has already been written to stderr.
+/// * `error` - The error that would otherwise be printed.
+///
+/// # Returns
+///
+/// A bare [`ExitCode`] carrying `error`'s code when `reported`, and `error`
+/// itself otherwise.
+///
+/// # Examples
+///
+/// ```
+/// use uucore::error::{USimpleError, quiet_if_reported};
+///
+/// let reported = false; // e.g. a caret diagnostic could not be rendered
+/// let error = quiet_if_reported(reported, USimpleError::new(2, "bad key".to_string()));
+/// assert_eq!(error.code(), 2);
+/// ```
+pub fn quiet_if_reported<E: Into<Box<dyn UError>>>(reported: bool, error: E) -> Box<dyn UError> {
+    let error = error.into();
+    if reported {
+        ExitCode::new(error.code())
+    } else {
+        error
     }
 }
 

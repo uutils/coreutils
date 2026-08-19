@@ -152,10 +152,10 @@ fn gen_manpage<T: Args>(
         let mut cmd = util_map.get(utility).unwrap().1();
         cmd.set_bin_name(utility.clone());
         let mut cmd = cmd.display_name(utility);
-        if let Some(zip) = tldr {
-            if let Ok(examples) = write_zip_examples(zip, utility, false) {
-                cmd = cmd.after_help(examples);
-            }
+        if let Some(zip) = tldr
+            && let Ok(examples) = write_zip_examples(zip, utility, false)
+        {
+            cmd = cmd.after_help(examples);
         }
         cmd
     };
@@ -275,6 +275,7 @@ fn main() -> io::Result<()> {
         \t* [Code of Conduct](CODE_OF_CONDUCT.md)\n\
         * [GNU test coverage](test_coverage.md)\n\
         * [Extensions](extensions.md)\n\
+        \t* [Error diagnostics](extensions-errors.md)\n\
         \n\
         # Reference\n\
         * [Multi-call binary](multicall.md)\n",
@@ -452,24 +453,23 @@ impl MDWriter<'_, '_> {
                 value: Some(Pattern { elements }),
                 ..
             }) = entry
+                && id.name == key
             {
-                if id.name == key {
-                    // Simple text extraction - just concatenate text elements
-                    let mut result = String::new();
-                    for element in elements {
-                        if let TextElement { ref value } = element {
-                            result.push_str(value);
-                        }
-                        if let Placeable {
-                            expression:
-                                Expression::Inline(InlineExpression::StringLiteral { ref value }),
-                        } = element
-                        {
-                            result.push_str(value);
-                        }
+                // Simple text extraction - just concatenate text elements
+                let mut result = String::new();
+                for element in elements {
+                    if let TextElement { ref value } = element {
+                        result.push_str(value);
                     }
-                    return Some(result);
+                    if let Placeable {
+                        expression:
+                            Expression::Inline(InlineExpression::StringLiteral { ref value }),
+                    } = element
+                    {
+                        result.push_str(value);
+                    }
                 }
+                return Some(result);
             }
         }
         None
@@ -559,10 +559,10 @@ impl MDWriter<'_, '_> {
     /// # Errors
     /// Returns an error if the writer fails.
     fn examples(&mut self) -> io::Result<()> {
-        if let Some(zip) = self.tldr_zip {
-            if let Ok(examples) = write_zip_examples(zip, self.name, true) {
-                writeln!(self.w, "{examples}")?;
-            }
+        if let Some(zip) = self.tldr_zip
+            && let Ok(examples) = write_zip_examples(zip, self.name, true)
+        {
+            writeln!(self.w, "{examples}")?;
         }
         Ok(())
     }

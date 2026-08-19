@@ -2110,6 +2110,26 @@ fn test_ls_sort_name() {
         .stdout_is(".a\n.b\na\nb\n");
 }
 
+// https://github.com/uutils/coreutils/issues/11831
+// In a UTF-8 locale, GNU ls places "." and ".." before names starting with
+// punctuation such as '#' due to locale-aware collation.
+#[test]
+fn test_ls_sort_dot_first_utf8_locale() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("#asdf");
+    at.touch("bar");
+    at.touch("foo");
+
+    scene
+        .ucmd()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-1a")
+        .succeeds()
+        .stdout_is(".\n..\n#asdf\nbar\nfoo\n");
+}
+
 #[test]
 fn test_ls_sort_width() {
     let scene = TestScenario::new(util_name!());
@@ -2721,6 +2741,31 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+#[test]
+fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13501:
+    // combining `-a` (show `.`/`..`) with `-R` (recursive) and `-v`
+    // (version/natural sort) used to make `ls` recurse into the listed
+    // `.`/`..` entries themselves, walking all the way up to the
+    // filesystem root instead of stopping at the leaf directories.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+
+    #[cfg(unix)]
+    let out = "a/b:\n.\n..\nc\n\na/b/c:\n.\n..\n";
+    #[cfg(windows)]
+    let out = "a/b:\n.\n..\nc\n\na/b\\c:\n.\n..\n";
+    scene
+        .ucmd()
+        .arg("-aRv")
+        .arg("a/b")
+        .succeeds()
+        .stdout_is(out);
+}
+
 /// The quoting module regroups tests that check the behavior of ls when
 /// quoting and escaping special characters with different quoting styles.
 #[cfg(unix)]
@@ -3314,6 +3359,30 @@ mod quoting {
                 .succeeds()
                 .stdout_only(utf_8_ref);
         }
+    }
+
+    #[test]
+    fn test_c_dot_utf8_renders_utf8() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename = "é";
+        at.touch(filename);
+
+        // C (no UTF-8): bytes 0xC3 0xA9 replaced with ??
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("??\n");
+
+        // C.UTF-8: multi-byte UTF-8 character rendered literally
+        scene
+            .ucmd()
+            .env("LC_ALL", "C.UTF-8")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("é\n");
     }
 }
 
@@ -7609,4 +7678,37 @@ fn test_long_options_detached() {
     new_ucmd!().arg("--format").arg("single-column").succeeds();
     new_ucmd!().arg("--time").arg("mtime").succeeds();
     new_ucmd!().arg("--block-size").arg("512").succeeds();
+}
+
+// Without -R a directory can never be revisited, so ls should not spend a stat
+// recording it for the loop detection that only recursion consults.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_extra_stat_without_recursion() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("some-dir");
+
+    let stats_of_some_dir = |args: &[&str]| -> Option<usize> {
+        let output = Command::new("strace")
+            .args(["-qq", "-e", "trace=stat,statx,lstat,newfstatat"])
+            .arg(&scene.bin_path)
+            .arg(scene.util_name.as_str())
+            .args(args)
+            .current_dir(scene.fixtures.as_string())
+            .output()
+            .ok()?;
+        let trace = String::from_utf8_lossy(&output.stderr);
+        // No syscalls traced at all means strace could not do its job here.
+        if !trace.contains('(') {
+            return None;
+        }
+        Some(trace.lines().filter(|l| l.contains("\"some-dir\"")).count())
+    };
+
+    let Some(count) = stats_of_some_dir(&["-F", "--color=always", "some-dir"]) else {
+        return; // strace unavailable, e.g. restricted ptrace in a container
+    };
+    assert_eq!(count, 1, "expected a single stat of the directory operand");
 }

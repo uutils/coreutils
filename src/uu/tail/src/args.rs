@@ -10,10 +10,10 @@ use crate::{Quotable, parse, platform};
 use clap::{Arg, ArgAction, ArgMatches, Command, value_parser};
 use same_file::Handle;
 use std::ffi::OsString;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::time::Duration;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
+use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -71,16 +71,29 @@ impl FilterMode {
         }
     }
 
-    fn from(matches: &ArgMatches) -> UResult<Self> {
+    fn from(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        // The plain message, or a caret under the part of the size at fault.
+        let raise = |message: String, arg: &str, short, long, error: &ParseSizeError| {
+            error.size_value_error(
+                diag_args,
+                arg,
+                // The parser never saw the sign; the caret has to count it back in.
+                number_offset(arg),
+                short,
+                long,
+                &message,
+                USimpleError::new(1, message.clone()),
+            )
+        };
+
         let zero_term = matches.get_flag(options::ZERO_TERM);
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
                 Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string()),
-                    ));
+                    let message =
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string());
+                    return Err(raise(message, arg, 'c', "bytes", &e));
                 }
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
@@ -89,11 +102,10 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote()),
-                    ));
+                Err(e) => {
+                    let message =
+                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
+                    return Err(raise(message, arg, 'n', "lines", &e));
                 }
             }
         } else if zero_term {
@@ -134,7 +146,7 @@ pub struct Settings {
     pub follow: Option<FollowMode>,
     pub max_unchanged_stats: u32,
     pub mode: FilterMode,
-    pub pid: platform::Pid,
+    pub pid: Option<platform::Pid>,
     pub retry: bool,
     pub sleep_sec: Duration,
     pub use_polling: bool,
@@ -152,7 +164,7 @@ impl Default for Settings {
             sleep_sec: Duration::from_secs_f32(1.0),
             follow: Option::default(),
             mode: FilterMode::default(),
-            pid: Default::default(),
+            pid: Option::default(),
             retry: Default::default(),
             use_polling: Default::default(),
             verbose: Default::default(),
@@ -184,6 +196,13 @@ impl Settings {
     }
 
     pub fn from(matches: &ArgMatches) -> UResult<Self> {
+        Self::from_with_diagnostics(matches, None)
+    }
+
+    fn from_with_diagnostics(
+        matches: &ArgMatches,
+        diag_args: Option<&[OsString]>,
+    ) -> UResult<Self> {
         // We're parsing --follow, -F and --retry under the following conditions:
         // * -F sets --retry and --follow=name
         // * plain --follow or short -f is the same like specifying --follow=descriptor
@@ -223,7 +242,7 @@ impl Settings {
             follow,
             retry,
             use_polling: matches.get_flag(options::USE_POLLING),
-            mode: FilterMode::from(matches)?,
+            mode: FilterMode::from(matches, diag_args)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
             presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
             debug: matches.get_flag(options::DEBUG),
@@ -264,7 +283,7 @@ impl Settings {
                         ));
                     }
 
-                    settings.pid = pid;
+                    settings.pid = Some(pid);
                 }
                 Err(e) => {
                     return Err(USimpleError::new(
@@ -300,7 +319,7 @@ impl Settings {
 
     /// Check [`Settings`] for problematic configurations of tail originating from user provided
     /// command line arguments and print appropriate warnings.
-    pub fn check_warnings(&self) {
+    pub fn check_warnings(&self) -> std::io::Result<()> {
         if self.retry {
             if self.follow.is_none() {
                 show_warning!("{}", translate!("tail-warning-retry-ignored"));
@@ -309,10 +328,15 @@ impl Settings {
             }
         }
 
-        if self.pid != 0 {
+        if let Some(pid) = self.pid {
             if self.follow.is_none() {
-                show_warning!("{}", translate!("tail-warning-pid-ignored"));
-            } else if !platform::supports_pid_checks(self.pid) {
+                writeln!(
+                    std::io::stderr().lock(),
+                    "{}: warning: {}",
+                    uucore::util_name(),
+                    translate!("tail-warning-pid-ignored")
+                )?;
+            } else if pid != 0 && !platform::supports_pid_checks(pid) {
                 show_warning!("{}", translate!("tail-warning-pid-not-supported"));
             }
         }
@@ -322,7 +346,7 @@ impl Settings {
         // as `tty` (but no otherwise blocking stdin), then we print a warning that `--follow`
         // cannot be applied under these circumstances and is therefore ineffective.
         if self.follow.is_some() && self.has_stdin() {
-            let blocking_stdin = self.pid == 0
+            let blocking_stdin = self.pid.unwrap_or_default() == 0
                 && self.follow == Some(FollowMode::Descriptor)
                 && self.num_inputs() == 1
                 && Handle::stdin().is_ok_and(|handle| {
@@ -336,6 +360,8 @@ impl Settings {
                 show_warning!("{}", translate!("tail-warning-following-stdin-ineffective"));
             }
         }
+
+        Ok(())
     }
 
     /// Verify [`Settings`] and try to find unsolvable misconfigurations of tail originating from
@@ -403,7 +429,12 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
     let clap_result = match clap_args {
-        Ok(matches) => Ok(Settings::from(&matches)?),
+        // Kept for the caret in size diagnostics, which needs the value as
+        // typed.
+        Ok(matches) => Ok(Settings::from_with_diagnostics(
+            &matches,
+            uucore::diagnostics::capture(&args_vec).as_deref(),
+        )?),
         Err(err) => Err(err.into()),
     };
 

@@ -1,7 +1,7 @@
 name: Code Quality
 
 # spell-checker:ignore (people) juliangruber pell reactivecircus taiki-e taplo
-# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd
+# spell-checker:ignore (misc) TERMUX noaudio pkill swiftshader esac sccache pcoreutils shopt subshell dequote libsystemd oniguruma sysroot wasi wasip
 
 on:
   pull_request:
@@ -33,7 +33,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Initialize workflow variables
@@ -75,8 +75,9 @@ jobs:
           - { os: macos-latest   , features: all             , workspace: true }
           - { os: windows-latest , features: feat_os_windows }
           - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip1 }
+          - { os: ubuntu-latest  , features: feat_wasm , target: wasm32-wasip2 }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: dtolnay/rust-toolchain@master
@@ -87,7 +88,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.10
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -118,6 +119,18 @@ jobs:
             sudo apt-get -y install libselinux1-dev libsystemd-dev
           ;;
         esac
+    - name: Install/setup WASI prerequisites
+      if: startsWith(matrix.job.target, 'wasm32-wasi')
+      shell: bash
+      run: |
+        ## Install/setup WASI prerequisites
+        # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
+        WASI_SDK=wasi-sdk-25.0-x86_64-linux
+        curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
+        for abi in wasip1 wasip2; do
+          echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
+          echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
+        done
     - name: "`cargo clippy` lint testing"
       uses: nick-fields/retry@v4
       with:
@@ -149,12 +162,17 @@ jobs:
   style_spellcheck:
     name: Style/spelling
     runs-on: ${{ matrix.job.os }}
+    env:
+      # Spelling is enforced locally by the cspell pre-commit hook, where it is
+      # cheap to fix. Here it is advisory: unknown words show up as annotations
+      # on the diff instead of blocking the merge.
+      STYLE_FAIL_ON_FAULT: false
     strategy:
       matrix:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v7.0.0
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - name: Initialize workflow variables
@@ -192,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -216,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
 
@@ -232,9 +250,6 @@ jobs:
       - name: Install pre-commit
         run: pip install pre-commit
 
-      - name: Install cspell
-        run: npm install -g cspell
-
       - name: Cache pre-commit environments
         uses: actions/cache@v6
         with:
@@ -244,4 +259,8 @@ jobs:
             pre-commit-${{ runner.os }}-
 
       - name: Run pre-commit
-        run: pre-commit run
+        env:
+          # cspell is enforced locally and reported by Style/spelling; the rust
+          # hooks are already covered by the Style/format and Style/lint jobs.
+          SKIP: cspell,rust-linting,rust-clippy,cargo-lock-check
+        run: pre-commit run --all-files --show-diff-on-failure

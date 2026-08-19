@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/mkdir.rs"
 test = false
@@ -21,15 +18,19 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-uucore = { workspace = true, features = ["fs", "mode", "fsxattr"] }
+uucore = { workspace = true, features = ["fs", "fsxattr", "mode"] }
 fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["process", "fs"] }
 
 [features]
+diagnostics = ["uucore/diagnostics"]
 selinux = ["uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "mkdir"

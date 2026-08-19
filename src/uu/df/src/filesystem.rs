@@ -29,7 +29,7 @@ use uucore::fsext::{FsUsage, MountInfo};
 /// [`Filesystem::usage`] field provides information on the amount of
 /// space available on the filesystem and the amount of space used.
 #[derive(Debug, Clone)]
-pub(crate) struct Filesystem {
+pub struct Filesystem {
     /// The file given on the command line if any.
     ///
     /// When invoking `df` with a positional argument, it displays
@@ -74,23 +74,15 @@ pub(crate) fn find_mount_point<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     let mut current = path.as_ref().canonicalize()?;
     let current_dev = current.metadata()?.dev();
 
-    loop {
-        let parent = match current.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p,
-            _ => return Ok(current),
-        };
-
+    while let Some(parent) = current.parent().filter(|p| !p.as_os_str().is_empty()) {
         let parent_dev = parent.metadata()?.dev();
-        if parent_dev != current_dev {
-            return Ok(current);
-        }
-
-        if parent == current {
+        if parent_dev != current_dev || parent == current {
             return Ok(current);
         }
 
         current = parent.to_path_buf();
     }
+    Ok(current)
 }
 
 /// Find the mount info that best matches a given filesystem path.

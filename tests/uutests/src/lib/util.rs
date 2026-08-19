@@ -399,6 +399,42 @@ impl CmdResult {
         std::str::from_utf8(&self.stderr).unwrap()
     }
 
+    /// Returns the program's standard error with the carriage returns a
+    /// pseudo-terminal inserts and any trailing padding on each line removed.
+    ///
+    /// Diagnostics rendered under [`UCommand::terminal_sim_stderr`] pad their
+    /// lines out to the width of the report, which makes them awkward to
+    /// compare verbatim; this gives back the block as it reads on screen.
+    pub fn stderr_as_displayed(&self) -> String {
+        self.stderr_str()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Returns the one-based column a caret diagnostic points at.
+    ///
+    /// A report opens with a header naming the utility and the position it
+    /// points at — `╭─[ chmod:1:5 ]` — which is the only place the column is
+    /// written out; the caret row itself is padded and drawn with box
+    /// characters. Asserting on the column keeps a test to the one thing it
+    /// cares about, where matching the block verbatim would break on every
+    /// wording change.
+    ///
+    /// # Returns
+    ///
+    /// `None` when stderr carries no such header: the plain one-line message
+    /// was printed, or the diagnostic pointed at another line.
+    pub fn caret_column(&self) -> Option<usize> {
+        let header = format!("{}:1:", self.util_name.as_ref()?);
+        let line = self
+            .stderr_str()
+            .lines()
+            .find(|line| line.contains(&header))?;
+        line.rsplit(':').next()?.trim_end_matches(" ]").parse().ok()
+    }
+
     /// Returns the program's standard error as a string slice, automatically handling invalid utf8
     pub fn stderr_str_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(&self.stderr)
@@ -1383,10 +1419,8 @@ impl TestScenario {
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
         fixture_path_builder.push(util_name.as_ref());
-        if let Ok(m) = fs::metadata(&fixture_path_builder) {
-            if m.is_dir() {
-                recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
-            }
+        if fs::metadata(&fixture_path_builder).is_ok_and(|m| m.is_dir()) {
+            recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
         }
         ts
     }
@@ -1723,6 +1757,21 @@ impl UCommand {
     pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
         self.terminal_simulation = Some(config);
         self
+    }
+
+    /// Attach stderr (and only stderr) to a simulated terminal, with colors
+    /// disabled through `NO_COLOR`.
+    ///
+    /// This is useful to test output that is only rendered when
+    /// `stderr.is_terminal()` is `true`, such as the rich error reports of
+    /// `chmod` or `test`, while letting assertions see plain text.
+    #[cfg(unix)]
+    pub fn terminal_sim_stderr(&mut self) -> &mut Self {
+        self.terminal_sim_stdio(TerminalSimulation {
+            stderr: true,
+            ..Default::default()
+        })
+        .env("NO_COLOR", "1")
     }
 
     #[cfg(unix)]

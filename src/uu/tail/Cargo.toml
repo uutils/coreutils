@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tail.rs"
 doctest = false
@@ -44,6 +41,12 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 rstest = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tail"

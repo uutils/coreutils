@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/test.rs"
 doctest = false
@@ -23,10 +20,24 @@ clap = { workspace = true }
 fluent = { workspace = true }
 libc = { workspace = true }
 thiserror = { workspace = true }
-uucore = { workspace = true, features = ["process"] }
+uucore = { workspace = true, features = ["process", "wide"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "test"

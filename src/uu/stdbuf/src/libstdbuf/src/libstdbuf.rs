@@ -4,8 +4,9 @@
 // file that was distributed with this source code.
 // spell-checker:ignore (ToDO) getreent reent IOFBF IOLBF IONBF setvbuf stderrp stdinp stdoutp fdopen
 
+use core::ffi::{c_char, c_int};
 use ctor::ctor;
-use libc::{_IOFBF, _IOLBF, _IONBF, FILE, c_char, c_int, fileno, size_t};
+use libc::{_IOFBF, _IOLBF, _IONBF, FILE, fileno, size_t};
 use std::io::{Write, stderr};
 use std::{env, ptr};
 

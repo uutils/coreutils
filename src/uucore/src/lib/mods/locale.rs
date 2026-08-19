@@ -93,14 +93,19 @@ impl Localizer {
         }
 
         // Fall back to English bundle if available
-        #[expect(clippy::collapsible_if)]
-        if let Some(ref fallback) = self.fallback_bundle {
-            if let Some(message) = fallback.get_message(id).and_then(|m| m.value()) {
-                let mut errs = Vec::new();
-                return fallback
-                    .format_pattern(message, args, &mut errs)
-                    .to_string();
-            }
+        if let Some(ref fallback) = self.fallback_bundle
+            && let Some(message) = fallback.get_message(id).and_then(|m| m.value())
+        {
+            let mut errs = Vec::new();
+            return fallback
+                .format_pattern(message, args, &mut errs)
+                .to_string();
+        }
+
+        // Only now, once nothing common has matched, is it worth parsing the
+        // strings that only an error path asks for.
+        if let Some(message) = errors_message(self.primary_bundle.locales.as_slice(), id, args) {
+            return message;
         }
 
         // Return the key ID if not found anywhere
@@ -108,12 +113,97 @@ impl Localizer {
     }
 }
 
+/// Look `id` up among the strings only an error path ever asks for.
+///
+/// Their resource is deliberately not part of the bundle every utility builds
+/// at startup: parsing it costs every binary, while almost no run reads one of
+/// these. It is parsed here instead, on the first lookup that reaches it, and
+/// kept for the rest of the process.
+fn errors_message(
+    locales: &[LanguageIdentifier],
+    id: &str,
+    args: Option<&FluentArgs>,
+) -> Option<String> {
+    ERRORS_BUNDLE.with(|cell| {
+        let bundle = cell.get_or_init(|| build_errors_bundle(locales)).as_ref()?;
+        let message = bundle.get_message(id)?.value()?;
+        let mut errs = Vec::new();
+        Some(bundle.format_pattern(message, args, &mut errs).to_string())
+    })
+}
+
+/// The error strings for `locale`, from the locales directory when there is
+/// one to read and from the embedded copy otherwise.
+fn errors_resource(locale: &LanguageIdentifier) -> Option<String> {
+    let from_disk = get_locales_dir("uucore")
+        .ok()
+        .and_then(|dir| fs::read_to_string(dir.join("errors").join(format!("{locale}.ftl"))).ok());
+    from_disk
+        .or_else(|| get_embedded_locale(&format!("uucore-errors/{locale}.ftl")).map(str::to_owned))
+}
+
+/// Build the bundle behind [`errors_message`]: English underneath, so a locale
+/// that has not translated one of these still says something, and the
+/// requested locale over the top of it.
+fn build_errors_bundle(locales: &[LanguageIdentifier]) -> Option<FluentBundle<FluentResource>> {
+    build_errors_bundle_with(locales, errors_resource)
+}
+
+fn build_errors_bundle_with(
+    locales: &[LanguageIdentifier],
+    mut resource_for: impl FnMut(&LanguageIdentifier) -> Option<String>,
+) -> Option<FluentBundle<FluentResource>> {
+    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
+        .expect("Default locale should always be valid");
+    let locale = locales.first().unwrap_or(&default_locale).clone();
+
+    // Own the resources in this thread-local bundle so one thread's requested
+    // locale cannot populate a process-wide cache used by another locale.
+    let mut bundle: FluentBundle<FluentResource> = FluentBundle::new(vec![locale.clone()]);
+    bundle.set_use_isolating(false);
+
+    let mut any = false;
+    if let Some(content) = resource_for(&default_locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+    if locale != default_locale
+        && let Some(content) = resource_for(&locale)
+        && let Ok(resource) = parse_fluent_resource_owned(&content)
+    {
+        bundle.add_resource_overriding(resource);
+        any = true;
+    }
+
+    any.then_some(bundle)
+}
+
 // Cache localizer. FluentResource cannot be shared between threads while FluentBundle can be shared
 static UUCORE_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static CHECKSUM_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 static UTIL_FLUENT: OnceLock<FluentResource> = OnceLock::new();
 thread_local! {
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
     static LOCALIZER: OnceLock<Localizer> = const { OnceLock::new() };
+    /// Built on the first lookup that misses every ordinary bundle; `None`
+    /// when there are no error strings to be found at all.
+    #[cfg_attr(
+        target_os = "android",
+        expect(
+            clippy::missing_const_for_thread_local,
+            reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+        )
+    )]
+    static ERRORS_BUNDLE: OnceLock<Option<FluentBundle<FluentResource>>> =
+        const { OnceLock::new() };
 }
 
 /// Helper function to find the uucore locales directory from a utility's locales directory
@@ -234,18 +324,8 @@ fn init_localization(
     Ok(())
 }
 
-/// Helper function to parse FluentResource from content string
-fn parse_fluent_resource(
-    content: &str,
-    cache: &'static OnceLock<FluentResource>,
-) -> Result<&'static FluentResource, LocalizationError> {
-    // global cache breaks unit tests
-    #[cfg(not(test))]
-    if let Some(res) = cache.get() {
-        return Ok(res);
-    }
-
-    let resource = FluentResource::try_new(content.to_string()).map_err(
+fn parse_fluent_resource_owned(content: &str) -> Result<FluentResource, LocalizationError> {
+    FluentResource::try_new(content.to_string()).map_err(
         |(_partial_resource, errs): (FluentResource, Vec<ParserError>)| {
             if let Some(first_err) = errs.into_iter().next() {
                 let snippet = first_err
@@ -262,7 +342,21 @@ fn parse_fluent_resource(
                 LocalizationError::LocalesDirNotFound("Parse error without details".to_string())
             }
         },
-    )?;
+    )
+}
+
+/// Helper function to parse FluentResource from content string
+fn parse_fluent_resource(
+    content: &str,
+    cache: &'static OnceLock<FluentResource>,
+) -> Result<&'static FluentResource, LocalizationError> {
+    // global cache breaks unit tests
+    #[cfg(not(test))]
+    if let Some(res) = cache.get() {
+        return Ok(res);
+    }
+
+    let resource = parse_fluent_resource_owned(content)?;
     // global cache breaks unit tests
     if cfg!(not(test)) {
         Ok(cache.get_or_init(|| resource))
@@ -332,10 +426,10 @@ fn create_wasi_bundle_from_embedded(
     bundle.set_use_isolating(false);
 
     let mut try_add = |key: &str| {
-        if let Some(content) = get_embedded_locale(key) {
-            if let Ok(resource) = FluentResource::try_new(content.to_string()) {
-                bundle.add_resource_overriding(Box::leak(Box::new(resource)));
-            }
+        if let Some(content) = get_embedded_locale(key)
+            && let Ok(resource) = FluentResource::try_new(content.to_string())
+        {
+            bundle.add_resource_overriding(Box::leak(Box::new(resource)));
         }
     };
 
@@ -477,6 +571,13 @@ fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
 pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
     // Avoid duplicated and high-cost localizer setup
     thread_local! {
+        #[cfg_attr(
+            target_os = "android",
+            expect(
+                clippy::missing_const_for_thread_local,
+                reason = "https://github.com/rust-lang/rust-clippy/issues/13422"
+            )
+        )]
         static LOCALIZER_IS_SET: Cell<bool> = const { Cell::new(false) };
     }
     if LOCALIZER_IS_SET.with(Cell::get) {
@@ -554,6 +655,13 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     {
         // During development, use the project's locales directory
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        if p == "uucore" {
+            let uucore_path = PathBuf::from(manifest_dir).join("locales");
+            if uucore_path.exists() {
+                return Ok(uucore_path);
+            }
+        }
+
         // from uucore path, load the locales directory from the program directory
         let dev_path = PathBuf::from(manifest_dir)
             .join("../uu")
@@ -600,11 +708,53 @@ fn get_locales_dir(p: &str) -> Result<PathBuf, LocalizationError> {
     }
 }
 
+/// Macro for retrieving localized messages, substituting arguments as text.
+///
+/// [`translate!`] hands Fluent a number whenever an argument parses as one,
+/// and the locale then formats it: a length of `123456` comes back as
+/// `123 456` wherever thousands are grouped. Use this macro instead whenever
+/// the argument is text the user typed or a value that must be echoed
+/// unchanged — a file name, an escape, a width — and [`translate!`] when the
+/// value really is a number the reader should see in their own conventions,
+/// or when a plural selector needs one.
+///
+/// # Arguments
+///
+/// * `$id` - The message identifier string
+/// * Key-value pairs in the format `"key" => value`, each substituted with
+///   its [`ToString`] rendering
+///
+/// # Examples
+///
+/// ```
+/// use uucore::translate_text;
+/// use fluent::FluentArgs;
+///
+/// // '17' stays '17', whatever the locale does to numbers
+/// let error = translate_text!("checksum-error-invalid-length", "length" => "17");
+/// ```
+#[macro_export]
+macro_rules! translate_text {
+    ($id:expr, $($key:expr => $value:expr),+ $(,)?) => {
+        {
+            let mut args = fluent::FluentArgs::new();
+            $(
+                args.set($key, $value.to_string());
+            )+
+            $crate::locale::get_message_with_args($id, args)
+        }
+    };
+}
+
 /// Macro for retrieving localized messages with optional arguments.
 ///
 /// This macro provides a unified interface for both simple message retrieval
 /// and message retrieval with variable substitution. It accepts a message ID
 /// and optionally key-value pairs using the `"key" => value` syntax.
+///
+/// An argument that parses as a number is handed to Fluent as one, so the
+/// locale formats it — grouping its digits, for instance. When the value has
+/// to come back exactly as it went in, reach for [`translate_text!`].
 ///
 /// # Arguments
 ///
@@ -660,8 +810,8 @@ macro_rules! translate {
     };
 }
 
-// Re-export the macro for easier access
-pub use translate;
+// Re-export the macros for easier access
+pub use {translate, translate_text};
 
 #[cfg(test)]
 mod tests {
@@ -1348,6 +1498,56 @@ invalid-syntax = This is { $missing
         } else {
             panic!("Expected LocalizationError::ParseResource with snippet");
         }
+    }
+
+    #[test]
+    fn test_lazy_error_resources_follow_runtime_locale() {
+        fn resource_for(locale: &LanguageIdentifier) -> Option<String> {
+            match locale.to_string().as_str() {
+                "en-US" => Some(include_str!("../../../locales/errors/en-US.ftl").to_string()),
+                "fr-FR" => Some(include_str!("../../../locales/errors/fr-FR.ftl").to_string()),
+                _ => None,
+            }
+        }
+
+        fn message_for(locale: &str, id: &str) -> String {
+            let locale = LanguageIdentifier::from_str(locale).unwrap();
+            let bundle = build_errors_bundle_with(&[locale], resource_for).unwrap();
+            let message = bundle
+                .get_message(id)
+                .and_then(|message| message.value())
+                .unwrap();
+            let mut errors = Vec::new();
+            bundle
+                .format_pattern(message, None, &mut errors)
+                .to_string()
+        }
+
+        assert_eq!(
+            message_for("en-US", "size-diag-label-invalid-suffix"),
+            "not a known unit"
+        );
+        assert_eq!(
+            message_for("fr-FR", "size-diag-label-invalid-suffix"),
+            "unité inconnue"
+        );
+        assert_eq!(
+            message_for("en-US", "checksum-error-need-algorithm-to-hash"),
+            "Needs an algorithm to hash with.\nUse --help for more information."
+        );
+        assert_eq!(
+            message_for("fr-FR", "checksum-error-need-algorithm-to-hash"),
+            "Un algorithme de hachage est nécessaire.\nUtilisez --help pour plus d'informations."
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn test_uucore_locale_directory_in_development() {
+        assert_eq!(
+            get_locales_dir("uucore").unwrap(),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales")
+        );
     }
 
     #[test]

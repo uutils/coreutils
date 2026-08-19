@@ -167,34 +167,6 @@ impl Num {
     }
 }
 
-/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
-///
-/// This is more efficient than `io::copy` with `BufReader` because it reads
-/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
-/// Returns the total number of bytes actually read.
-fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::new();
-    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
-    let mut total = 0u64;
-    let mut remaining = n;
-    while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64);
-        buf.clear();
-        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
-            Ok(0) => break, // EOF
-            Ok(bytes_read) => {
-                total += bytes_read as u64;
-                remaining -= bytes_read as u64;
-            }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(total)
-}
-
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -235,7 +207,7 @@ impl Source {
         match self {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
-                let m = read_and_discard(stdin, n, ibs)?;
+                let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
                     show_error!(
                         "{}",
@@ -274,7 +246,7 @@ impl Source {
                     // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
                     // so fall back to reading and discarding bytes using ibs-sized buffer
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
-                        let m = read_and_discard(f, n, ibs)?;
+                        let m = uucore::io::read_and_discard(f, n, ibs)?;
                         if m < n {
                             show_error!(
                                 "{}",
@@ -295,7 +267,7 @@ impl Source {
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => read_and_discard(f, n, ibs),
+            Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
         }
     }
 
@@ -430,7 +402,7 @@ impl<'a> Input<'a> {
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
-fn make_linux_iflags(iflags: &IFlags) -> Option<libc::c_int> {
+fn make_linux_iflags(iflags: &IFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     if iflags.direct {
@@ -515,7 +487,9 @@ impl Input<'_> {
 
     /// Fills a given buffer.
     /// Reads in increments of 'self.ibs'.
-    /// The start of each ibs-sized read follows the previous one.
+    /// The start of each ibs-sized read follows the previous one; a short
+    /// read ends the fill, so the bytes received so far form one partial
+    /// record for the copy loop (as in GNU dd).
     fn fill_consecutive(&mut self, buf: &mut Vec<u8>) -> io::Result<ReadStat> {
         let mut reads_complete = 0;
         let mut reads_partial = 0;
@@ -530,6 +504,12 @@ impl Input<'_> {
                 rlen if rlen > 0 => {
                     bytes_total += rlen;
                     reads_partial += 1;
+                    // A short read must end this fill: the next read would
+                    // start at the following ibs-aligned chunk, leaving a
+                    // gap of stale bytes inside `buf` that the `truncate`
+                    // below would keep in the output while dropping the
+                    // same number of real trailing bytes (issue #13458).
+                    break;
                 }
                 _ => break,
             }
@@ -667,7 +647,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                read_and_discard(f, n, obs)
+                uucore::io::read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -676,22 +656,20 @@ impl Dest {
 
     /// Truncate the underlying file to the current stream position, if possible.
     fn truncate(&mut self) -> io::Result<()> {
-        #[allow(clippy::match_wildcard_for_single_variants)]
-        match self {
-            Self::File(f, _) => {
-                let pos = f.stream_position()?;
-                // `set_len()` can fail with EINVAL on special outputs such as
-                // `/dev/null`; GNU `dd` ignores that. But on a regular file a
-                // truncate failure (e.g. ENOSPC, read-only fs) means silent data
-                // loss, so the error must surface there.
-                match f.set_len(pos) {
-                    Ok(()) => Ok(()),
-                    Err(e) if f.metadata().is_ok_and(|m| m.file_type().is_file()) => Err(e),
-                    Err(_) => Ok(()),
-                }
-            }
-            _ => Ok(()),
+        let Self::File(f, _) = self else {
+            return Ok(());
+        };
+        let pos = f.stream_position()?;
+        // `set_len()` can fail with EINVAL on special outputs such as
+        // `/dev/null`; GNU ignores that. But on a regular file a
+        // truncate failure (e.g. ENOSPC, read-only fs) means silent data
+        // loss.
+        if let Err(e) = f.set_len(pos)
+            && f.metadata().is_ok_and(|m| m.file_type().is_file())
+        {
+            return Err(e);
         }
+        Ok(())
     }
 
     /// Discard the system file cache for the given portion of the destination.
@@ -735,21 +713,16 @@ fn handle_o_direct_write(f: &mut File, buf: &[u8], original_error: io::Error) ->
         let flags_without_direct = oflags & !OFlags::DIRECT;
 
         // Remove O_DIRECT flag
-        if fcntl_setfl(&*f, flags_without_direct).is_err() {
-            return Err(original_error);
-        }
+        fcntl_setfl(&*f, flags_without_direct).map_err(|_| original_error)?;
 
         // Retry the write without O_DIRECT
         let write_result = f.write(buf);
 
         // Restore O_DIRECT flag (GNU doesn't restore it, but we'll be safer)
         // Log any restoration errors without failing the operation
-        if let Err(os_err) = fcntl_setfl(&*f, oflags) {
+        if let Err(e) = fcntl_setfl(&*f, oflags).map_err(io::Error::from) {
             // Just log the error, don't fail the whole operation
-            show_error!(
-                "Failed to restore O_DIRECT flag: {}",
-                io::Error::from(os_err)
-            );
+            show_error!("Failed to restore O_DIRECT flag: {e}");
         }
 
         write_result
@@ -1218,14 +1191,20 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
+    // A failure ends the loop, so the statistics gathered so far still get reported.
+    let mut copy_error = None;
     while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
         // As an optimization, make an educated guess about the
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
-        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, &wstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
+        let Ok(rstat_update) =
+            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        else {
+            break;
+        };
         if rstat_update.is_empty() {
             if input_nocache {
                 i.discard_cache(read_offset, 0);
@@ -1235,7 +1214,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let Ok(wstat_update) = o.write_blocks(&buf).map_err(|e| copy_error = Some(e)) else {
+            break;
+        };
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1273,18 +1254,23 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         if check_and_reset_sigusr1() {
             alarm.manual_trigger();
         }
-        match alarm.get_trigger() {
-            ALARM_TRIGGER_NONE => {}
-            t @ (ALARM_TRIGGER_TIMER | ALARM_TRIGGER_SIGNAL) => {
-                let tp = match t {
-                    ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
-                    _ => ProgUpdateType::Signal,
-                };
-                let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
-                prog_tx.send(prog_update).unwrap_or(());
-            }
-            _ => {}
-        }
+        let tp = match alarm.get_trigger() {
+            ALARM_TRIGGER_TIMER => ProgUpdateType::Periodic,
+            ALARM_TRIGGER_SIGNAL => ProgUpdateType::Signal,
+            _ => continue,
+        };
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
+        prog_tx.send(prog_update).unwrap_or(());
+    }
+
+    if let Some(e) = copy_error {
+        // Flushing and syncing are pointless now, but the caller still wants the statistics.
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
+        prog_tx.send(prog_update).unwrap_or(());
+        output_thread
+            .join()
+            .expect("Failed to join with the output thread.");
+        return Err(e);
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
@@ -1326,7 +1312,7 @@ fn finalize<T>(
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[allow(clippy::cognitive_complexity)]
-fn make_linux_oflags(oflags: &OFlags) -> Option<libc::c_int> {
+fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     let mut flag = 0;
 
     // oflag=FLAG
@@ -1418,13 +1404,7 @@ fn calc_bsize(ibs: usize, obs: usize) -> usize {
 
 /// Calculate the buffer size appropriate for this loop iteration, respecting
 /// a `count=N` if present.
-fn calc_loop_bsize(
-    count: Option<Num>,
-    rstat: &ReadStat,
-    wstat: &WriteStat,
-    ibs: usize,
-    ideal_bsize: usize,
-) -> usize {
+fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize: usize) -> usize {
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
@@ -1432,9 +1412,9 @@ fn calc_loop_bsize(
             cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
         }
         Some(Num::Bytes(bmax)) => {
-            let bmax: u128 = bmax.into();
-            let bremain: u128 = bmax - wstat.bytes_total;
-            cmp::min(ideal_bsize as u128, bremain) as usize
+            // `iflag=count_bytes` limits input, so use bytes read.
+            let bremain = bmax.saturating_sub(rstat.bytes_total);
+            cmp::min(ideal_bsize as u64, bremain) as usize
         }
         None => ideal_bsize,
     }
@@ -1671,5 +1651,22 @@ mod tests {
         assert!(
             Output::new_file(Path::new(settings.outfile.as_ref().unwrap()), &settings).is_err()
         );
+    }
+
+    #[test]
+    fn test_calc_loop_bsize_count_bytes() {
+        use crate::progress::ReadStat;
+        use crate::{Num, calc_loop_bsize};
+
+        for (bytes_read, expected) in [(512, 488), (1000, 0), (1001, 0)] {
+            let rstat = ReadStat {
+                bytes_total: bytes_read,
+                ..ReadStat::default()
+            };
+            assert_eq!(
+                calc_loop_bsize(Some(Num::Bytes(1000)), &rstat, 512, 512),
+                expected
+            );
+        }
     }
 }

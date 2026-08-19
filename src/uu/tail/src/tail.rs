@@ -41,7 +41,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    settings.check_warnings();
+    settings.check_warnings()?;
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
@@ -102,7 +102,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
             follow::follow(observer, settings)?;
         }
     }
@@ -162,7 +162,7 @@ fn tail_file(
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
+        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
@@ -468,7 +468,7 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             let i = forwards_thru_file(file, *count - 1, *delimiter).unwrap();
             file.seek(SeekFrom::Start(i as u64)).unwrap();
         }
-        FilterMode::Lines(Signum::MinusZero, _) => {
+        FilterMode::Lines(Signum::MinusZero, _) | FilterMode::Bytes(Signum::MinusZero) => {
             file.seek(SeekFrom::End(0)).unwrap();
         }
         FilterMode::Bytes(Signum::Negative(count)) => {
@@ -481,9 +481,6 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
             file.seek(SeekFrom::Start(*count - 1)).unwrap();
-        }
-        FilterMode::Bytes(Signum::MinusZero) => {
-            file.seek(SeekFrom::End(0)).unwrap();
         }
         _ => {}
     }
@@ -500,7 +497,8 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _) => {
+        FilterMode::Lines(Signum::PlusZero | Signum::Positive(1), _)
+        | FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
             io::copy(reader, &mut writer)?;
         }
         FilterMode::Lines(Signum::Positive(count), sep) => {
@@ -529,27 +527,23 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             chunks.fill(reader)?;
             chunks.write(&mut writer)?;
         }
-        FilterMode::Bytes(Signum::PlusZero | Signum::Positive(1)) => {
-            io::copy(reader, &mut writer)?;
-        }
         FilterMode::Bytes(Signum::Positive(count)) => {
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                if let Some(bytes) = chunk.fill(reader)? {
-                    let bytes: u64 = bytes as u64;
-                    match bytes.cmp(&num_skip) {
-                        Ordering::Less => num_skip -= bytes,
-                        Ordering::Equal => {
-                            break;
-                        }
-                        Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
-                            break;
-                        }
-                    }
-                } else {
+                let Some(bytes) = chunk.fill(reader)? else {
                     return Ok(());
+                };
+                let bytes: u64 = bytes as u64;
+                match bytes.cmp(&num_skip) {
+                    Ordering::Less => num_skip -= bytes,
+                    Ordering::Equal => {
+                        break;
+                    }
+                    Ordering::Greater => {
+                        writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                        break;
+                    }
                 }
             }
 

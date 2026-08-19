@@ -266,7 +266,7 @@ fn test_tf_explicit_float_still_uses_4_bytes() {
         .arg("-tfF")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("       1.0000000       2.0000000\n");
+        .stdout_only("               1               2\n");
 }
 
 #[test]
@@ -363,7 +363,7 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000      -1.2345679        12345678  -9.8765427e+37              -0
+            0000000      -1.2345679        12345678   -9.876543e+37              -0
             0000020             NaN           1e-40  -1.1663108e-38
             0000034
             ",
@@ -392,7 +392,7 @@ fn test_f64() {
         "
             0000000        12345678912345678                        0
             0000020 -2.2250738585072014e-308                   5e-324
-            0000040      -2.0000000000000000
+            0000040                       -2
             0000050
             ",
     );
@@ -541,6 +541,20 @@ fn test_very_wide_hex_byte_output() {
 }
 
 #[test]
+fn test_very_wide_hex_byte_ascii_dump() {
+    const WIDTH: usize = 100_000;
+    let expected = format!(" 41{}  >A<\n", " ".repeat(WIDTH * 3 - 3));
+
+    new_ucmd!()
+        .arg("-An")
+        .arg(format!("-w{WIDTH}"))
+        .arg("-tx1z")
+        .pipe_in("A")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_suppress_duplicates() {
     let input: [u8; 41] = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -577,8 +591,8 @@ fn test_big_endian() {
 
     let expected_output = unindent(
         "
-        0000000             -2.0000000000000000
-                     -2.0000000               0
+        0000000                              -2
+                             -2               0
                        c0000000        00000000
                    c000    0000    0000    0000
         0000010
@@ -637,7 +651,7 @@ fn test_alignment_Fx() {
 
     let expected_output = unindent(
         "
-        0000000      -2.0000000000000000
+        0000000                       -2
                   0000  0000  0000  c000
         0000010
         ",
@@ -932,6 +946,31 @@ fn test_skip_bytes_error() {
         .arg("--skip-bytes=10")
         .run_piped_stdin(input.as_bytes())
         .failure();
+}
+
+// A seekable special file such as /dev/null can be skipped past its (empty)
+// end without error, matching GNU od.
+#[cfg(unix)]
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: /dev/null is not a seekable device"
+)]
+fn test_skip_bytes_past_end_of_seekable_device() {
+    new_ucmd!()
+        .arg("-j1")
+        .arg("/dev/null")
+        .succeeds()
+        .stdout_only("0000001\n");
+}
+
+// Skipping past the end of a regular file is an error and must not print a
+// trailing offset line, matching GNU od.
+#[test]
+fn test_skip_bytes_past_end_no_offset() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("f", "hello");
+    ucmd.arg("-j10").arg("f").fails().no_stdout();
 }
 
 #[test]

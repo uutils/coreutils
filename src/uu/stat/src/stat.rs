@@ -25,9 +25,10 @@ use std::borrow::Cow;
 use std::cell::OnceCell;
 use std::ffi::{OsStr, OsString};
 use std::fs::{FileType, Metadata};
-use std::io::Write;
+use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
 use thiserror::Error;
@@ -130,7 +131,7 @@ fn write_padded_bytes<W: Write>(
     left: bool,
     width: usize,
     precision: Precision,
-) -> Result<(), std::io::Error> {
+) -> io::Result<()> {
     let display_bytes = match precision {
         Precision::Number(p) if p < bytes.len() => &bytes[..p],
         _ => bytes,
@@ -159,7 +160,7 @@ fn write_padded_bytes<W: Write>(
 /// write padding based on a writer W and n size
 /// writer is genric to be any buffer like: `std::io::stdout`
 /// n is the calculated padding size
-fn write_padding<W: Write>(writer: &mut W, n: usize) -> Result<(), std::io::Error> {
+fn write_padding<W: Write>(writer: &mut W, n: usize) -> io::Result<()> {
     for _ in 0..n {
         writer.write_all(b" ")?;
     }
@@ -174,7 +175,7 @@ pub enum OutputType<'a> {
     Unsigned(u64),
     UnsignedHex(u64),
     UnsignedOct(u32),
-    Float(f64),
+    Timestamp(i64, u32),
     Unknown,
 }
 
@@ -372,8 +373,15 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
         OutputType::UnsignedHex(num) => {
             print_unsigned_hex(*num, flags, width, precision, padding_char);
         }
-        OutputType::Float(num) => {
-            print_float(*num, flags, width, precision, padding_char);
+        OutputType::Timestamp(seconds, nanoseconds) => {
+            print_timestamp(
+                *seconds,
+                *nanoseconds,
+                flags,
+                width,
+                precision,
+                padding_char,
+            );
         }
         OutputType::Unknown => print!("?"),
     }
@@ -405,11 +413,8 @@ fn determine_padding_char(flags: Flags) -> Padding {
 /// * `width` - The width of the field for the printed string.
 /// * `precision` - How many digits of precision, if any.
 fn print_str(s: &str, flags: Flags, width: usize, precision: Precision) {
-    let s = match precision {
-        Precision::Number(p) if p < s.len() => &s[..p],
-        _ => s,
-    };
-    pad_and_print(s, flags.left, width, Padding::Space);
+    // Truncate and pad on the byte representation, so a precision that lands inside a multibyte character does not cause a panic.
+    let _ = write_padded_bytes(io::stdout(), s.as_bytes(), flags.left, width, precision);
 }
 
 /// Prints a `OsString` value based on the provided flags, width, and precision.
@@ -430,7 +435,7 @@ fn print_os_str(s: &OsString, flags: Flags, width: usize, precision: Precision) 
 
         let bytes = s.as_bytes();
 
-        if write_padded_bytes(std::io::stdout(), bytes, flags.left, width, precision).is_err() {
+        if write_padded_bytes(io::stdout(), bytes, flags.left, width, precision).is_err() {
             // if an error occurred while trying to print bytes fall back to normal lossy string so it can be printed
             let fallback_string = s.to_string_lossy();
             print_str(&fallback_string, flags, width, precision);
@@ -586,53 +591,61 @@ fn print_integer(
         ""
     };
     let extended = match precision {
-        Precision::NotSpecified => format!("{prefix}{arg}"),
-        Precision::NoNumber => format!("{prefix}{arg}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{arg}"),
         Precision::Number(p) => format!("{prefix}{arg:0>p$}"),
     };
     pad_and_print(&extended, flags.left, width, padding_char);
 }
 
-/// Truncate a float to the given number of digits after the decimal point.
-fn precision_trunc(num: f64, precision: Precision) -> String {
-    // GNU `stat` doesn't round, it just seems to truncate to the
-    // given precision:
-    //
-    //     $ stat -c "%.5Y" /dev/pts/ptmx
-    //     1736344012.76399
-    //     $ stat -c "%.4Y" /dev/pts/ptmx
-    //     1736344012.7639
-    //     $ stat -c "%.3Y" /dev/pts/ptmx
-    //     1736344012.763
-    //
-    // Contrast this with `printf`, which seems to round the
-    // numbers:
-    //
-    //     $ printf "%.5f\n" 1736344012.76399
-    //     1736344012.76399
-    //     $ printf "%.4f\n" 1736344012.76399
-    //     1736344012.7640
-    //     $ printf "%.3f\n" 1736344012.76399
-    //     1736344012.764
-    //
-    let num_str = num.to_string();
-    let n = num_str.len();
-    match (num_str.find('.'), precision) {
-        (None, Precision::NotSpecified) => num_str,
-        (None, Precision::NoNumber) => num_str,
-        (None, Precision::Number(0)) => num_str,
-        (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
-        (Some(i), Precision::NotSpecified) => num_str[..i].to_string(),
-        (Some(_), Precision::NoNumber) => num_str,
-        (Some(i), Precision::Number(0)) => num_str[..i].to_string(),
-        (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
-        (Some(i), Precision::Number(p)) => {
-            format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
-        }
+fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> String {
+    let precision = match precision {
+        Precision::NotSpecified => return seconds.to_string(),
+        Precision::NoNumber => 9,
+        Precision::Number(p) => p,
+    };
+
+    let total_nanoseconds = i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds);
+    if precision <= 9 {
+        let divisor = 10_i128.pow((9 - precision) as u32);
+        let value = total_nanoseconds.div_euclid(divisor);
+        format_scaled_decimal(value, precision)
+    } else {
+        let mut result = format_scaled_decimal(total_nanoseconds, 9);
+        result.push_str(&"0".repeat(precision - 9));
+        result
     }
 }
 
-fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, padding_char: Padding) {
+fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
+    let (mut seconds, mut nanoseconds) = system_time_to_sec(time);
+    if time < UNIX_EPOCH && nanoseconds != 0 {
+        seconds -= 1;
+        nanoseconds = 1_000_000_000 - nanoseconds;
+    }
+    (seconds, nanoseconds)
+}
+
+fn format_scaled_decimal(value: i128, precision: usize) -> String {
+    if precision == 0 {
+        return value.to_string();
+    }
+
+    let scale = 10_u128.pow(precision as u32);
+    let magnitude = value.unsigned_abs();
+    let whole = magnitude / scale;
+    let fraction = magnitude % scale;
+    let sign = if value < 0 { "-" } else { "" };
+    format!("{sign}{whole}.{fraction:0>precision$}")
+}
+
+fn print_timestamp(
+    seconds: i64,
+    nanoseconds: u32,
+    flags: Flags,
+    width: usize,
+    precision: Precision,
+    padding_char: Padding,
+) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -640,7 +653,7 @@ fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, paddi
     } else {
         ""
     };
-    let num_str = precision_trunc(num, precision);
+    let num_str = format_timestamp(seconds, nanoseconds, precision);
     let extended = format!("{prefix}{num_str}");
     pad_and_print(&extended, flags.left, width, padding_char);
 }
@@ -668,8 +681,7 @@ fn print_unsigned(
         Cow::Borrowed(num.as_str())
     };
     let s = match precision {
-        Precision::NotSpecified => s,
-        Precision::NoNumber => s,
+        Precision::NotSpecified | Precision::NoNumber => s,
         Precision::Number(p) => format!("{s:0>p$}").into(),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -693,8 +705,7 @@ fn print_unsigned_oct(
 ) {
     let prefix = if flags.alter { "0" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:o}"),
-        Precision::NoNumber => format!("{prefix}{num:o}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:o}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$o}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
@@ -718,20 +729,20 @@ fn print_unsigned_hex(
 ) {
     let prefix = if flags.alter { "0x" } else { "" };
     let s = match precision {
-        Precision::NotSpecified => format!("{prefix}{num:x}"),
-        Precision::NoNumber => format!("{prefix}{num:x}"),
+        Precision::NotSpecified | Precision::NoNumber => format!("{prefix}{num:x}"),
         Precision::Number(p) => format!("{prefix}{num:0>p$x}"),
     };
     pad_and_print(&s, flags.left, width, padding_char);
 }
 
 fn print_raw_byte(byte: u8) {
-    std::io::stdout().write_all(&[byte]).unwrap();
+    io::stdout().write_all(&[byte]).unwrap();
 }
 
 impl Stater {
     fn process_flags(chars: &[char], i: &mut usize, bound: usize, flag: &mut Flags) {
         while *i < bound {
+            #[expect(clippy::match_same_arms)] // needs comment
             match chars[*i] {
                 '#' => flag.alter = true,
                 '0' => flag.zero = true,
@@ -822,21 +833,20 @@ impl Stater {
         *i = j;
 
         // Check for multi-character specifiers (e.g., `%Hd`, `%Lr`)
-        if *i + 1 < bound {
-            if let Some(&next_char) = chars.get(*i + 1) {
-                if (chars[*i] == 'H' || chars[*i] == 'L') && (next_char == 'd' || next_char == 'r')
-                {
-                    flag.major = chars[*i] == 'H';
-                    flag.minor = chars[*i] == 'L';
-                    *i += 1;
-                    return Ok(Token::Directive {
-                        flag,
-                        width,
-                        precision,
-                        format: next_char,
-                    });
-                }
-            }
+        if *i + 1 < bound
+            && let Some(&next_char) = chars.get(*i + 1).filter(|c| **c == 'd' || **c == 'r')
+            && (chars[*i] == 'H' || chars[*i] == 'L')
+        {
+            let is_major = chars[*i] == 'H';
+            flag.major = is_major;
+            flag.minor = !is_major; // chars[*i] == 'L'
+            *i += 1;
+            return Ok(Token::Directive {
+                flag,
+                width,
+                precision,
+                format: next_char,
+            });
         }
 
         Ok(Token::Directive {
@@ -1039,12 +1049,9 @@ impl Stater {
     }
 
     fn exec(&self) -> i32 {
-        let mut stdin_is_fifo = false;
-        if cfg!(unix) {
-            if let Ok(md) = fs::metadata("/dev/stdin") {
-                stdin_is_fifo = md.file_type().is_fifo();
-            }
-        }
+        #[cfg(unix)]
+        let stdin_is_fifo = rustix::fs::fstat(io::stdin())
+            .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
@@ -1069,7 +1076,9 @@ impl Stater {
     ) -> Result<(), i32> {
         match *t {
             Token::Byte(byte) => print_raw_byte(byte),
-            Token::Char(c) => print!("{c}"),
+            Token::Char(c) => io::stdout()
+                .write_all(c.to_string().as_bytes())
+                .map_err(|_| 1)?,
 
             Token::Directive {
                 flag,
@@ -1178,7 +1187,7 @@ impl Stater {
                     // time of file birth, seconds since Epoch; 0 if unknown
                     'W' => OutputType::Integer(
                         metadata_get_time(meta, MetadataTimeField::Birth)
-                            .map_or(0, |x| system_time_to_sec(x).0),
+                            .map_or(0, |x| system_time_to_timestamp(x).0),
                     ),
 
                     // time of last access, human-readable
@@ -1186,24 +1195,24 @@ impl Stater {
                     // time of last access, seconds since Epoch
                     'X' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Access)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     // time of last data modification, human-readable
                     'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
                     // time of last data modification, seconds since Epoch
                     'Y' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Modification)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
                     // time of last status change, seconds since Epoch
                     'Z' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Change)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     'R' => OutputType::UnsignedHex(meta.rdev()),
                     'r' if flag.major => OutputType::Unsigned(major(meta.rdev() as _) as u64),
@@ -1454,7 +1463,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 mod tests {
     use crate::{quote_file_name, write_padded_bytes, write_padding};
 
-    use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
+    use super::{Flags, Precision, ScanUtil, Stater, Token, format_timestamp, group_num};
 
     #[test]
     fn test_scanners() {
@@ -1565,15 +1574,42 @@ mod tests {
     }
 
     #[test]
-    fn test_precision_trunc() {
-        assert_eq!(precision_trunc(123.456, Precision::NotSpecified), "123");
-        assert_eq!(precision_trunc(123.456, Precision::NoNumber), "123.456");
-        assert_eq!(precision_trunc(123.456, Precision::Number(0)), "123");
-        assert_eq!(precision_trunc(123.456, Precision::Number(1)), "123.4");
-        assert_eq!(precision_trunc(123.456, Precision::Number(2)), "123.45");
-        assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
-        assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
-        assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
+    fn test_format_timestamp() {
+        let cases = [
+            (Precision::NotSpecified, "123"),
+            (Precision::NoNumber, "123.456000000"),
+            (Precision::Number(0), "123"),
+            (Precision::Number(1), "123.4"),
+            (Precision::Number(2), "123.45"),
+            (Precision::Number(3), "123.456"),
+            (Precision::Number(4), "123.4560"),
+            (Precision::Number(5), "123.45600"),
+        ];
+        for (precision, expected) in cases {
+            assert_eq!(format_timestamp(123, 456_000_000, precision), expected);
+        }
+
+        let zero_nanoseconds_cases = [
+            (Precision::NotSpecified, "123"),
+            (Precision::NoNumber, "123.000000000"),
+            (Precision::Number(9), "123.000000000"),
+        ];
+        for (precision, expected) in zero_nanoseconds_cases {
+            assert_eq!(format_timestamp(123, 0, precision), expected);
+        }
+
+        let pre_epoch_cases = [
+            (Precision::NotSpecified, "-1"),
+            (Precision::NoNumber, "-0.876543211"),
+            (Precision::Number(0), "-1"),
+            (Precision::Number(1), "-0.9"),
+            (Precision::Number(3), "-0.877"),
+            (Precision::Number(9), "-0.876543211"),
+            (Precision::Number(10), "-0.8765432110"),
+        ];
+        for (precision, expected) in pre_epoch_cases {
+            assert_eq!(format_timestamp(-1, 123_456_789, precision), expected);
+        }
     }
 
     #[test]

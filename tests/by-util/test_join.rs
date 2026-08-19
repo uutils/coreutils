@@ -339,6 +339,71 @@ fn missing_format_fields() {
 }
 
 #[test]
+fn empty_fields_use_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // A blank line splits into a single empty field, so the join field is
+    // present but zero length rather than missing.
+    at.write("blank", "hello\n\n\n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "blank", "blank"])
+        .succeeds()
+        .stdout_only("hello\nEMPTY\nEMPTY\nEMPTY\nEMPTY\n");
+
+    // The same holds for a line containing only whitespace.
+    at.write("spaces", "   \n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "-o", "0,1.1", "spaces", "spaces"])
+        .succeeds()
+        .stdout_only("EMPTY EMPTY\n");
+
+    // A field between two adjacent separators is also present but empty.
+    at.write("gap", "a,,b\n");
+
+    ts.ucmd()
+        .args(&[
+            "-t",
+            ",",
+            "-e",
+            "EMPTY",
+            "-o",
+            "0,1.1,1.2,1.3",
+            "gap",
+            "gap",
+        ])
+        .succeeds()
+        .stdout_only("a,a,EMPTY,b\n");
+
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "EMPTY", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,EMPTY,b,EMPTY,b\n");
+}
+
+#[test]
+fn empty_fields_kept_without_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("gap", "a,,b\n");
+
+    // Without -e an empty field stays empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+
+    // Passing an empty string to -e is equivalent to not passing it at all.
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+}
+
+#[test]
 fn nocheck_order() {
     new_ucmd!()
         .arg("fields_1.txt")

@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (clap) dont
-// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset nrofbytes partialreader odfunc multifile exitcode
 // spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
 mod formatter_item_info;
 mod input_decoder;
 mod input_offset;
-#[cfg(test)]
-mod mockstream;
 mod multifile_reader;
 mod output_info;
 mod parse_formats;
@@ -263,7 +261,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             &od_options.input_strings,
             od_options.skip_bytes,
             od_options.read_bytes,
-        );
+        )?;
         let mut input_decoder = InputDecoder::new(
             &mut input,
             od_options.line_bytes,
@@ -591,9 +589,8 @@ fn extract_strings_from_input(
         let to_skip = cmp::min(8192, skip_bytes - skipped);
         let mut skip_buf = vec![0u8; to_skip as usize];
         match mf.read(&mut skip_buf) {
-            Ok(0) => break, // EOF reached
+            Ok(0) | Err(_) => break, // 0 is EOF
             Ok(n) => skipped += n as u64,
-            Err(_) => break,
         }
     }
 
@@ -721,13 +718,9 @@ fn write_bytes(
             let missing_spacing = output_info
                 .print_width_line
                 .saturating_sub(output_text.chars().count());
-            write!(
-                output_text,
-                "{:>missing_spacing$}  {}",
-                "",
-                format_ascii_dump(input_decoder.get_buffer(0)),
-            )
-            .unwrap();
+            output_text.extend(std::iter::repeat_n(' ', missing_spacing));
+            output_text.push_str("  ");
+            output_text.push_str(&format_ascii_dump(input_decoder.get_buffer(0)));
         }
 
         if first {
@@ -763,17 +756,19 @@ fn open_input_peek_reader(
     input_strings: &[String],
     skip_bytes: u64,
     read_bytes: Option<u64>,
-) -> PeekReader<BufReader<PartialReader<MultifileReader<'_>>>> {
+) -> UResult<PeekReader<BufReader<PartialReader<MultifileReader<'_>>>>> {
     // should return  "impl PeekRead + Read + HasError" when supported in (stable) rust
     let inputs = map_input_strings(input_strings);
-    let mf = MultifileReader::new(inputs);
-    let pr = PartialReader::new(mf, skip_bytes, read_bytes);
+    let mut mf = MultifileReader::new(inputs);
+    mf.skip(skip_bytes)
+        .map_err(|e| USimpleError::new(1, e.to_string()))?;
+    let pr = PartialReader::new(mf, read_bytes);
     // Add a BufReader over the top of the PartialReader. This will have the
     // effect of generating buffered reads to files/stdin, but since these reads
     // go through MultifileReader (which limits the maximum number of bytes read)
     // we won't ever read more bytes than were specified with the `-N` flag.
     let buf_pr = BufReader::new(pr);
-    PeekReader::new(buf_pr)
+    Ok(PeekReader::new(buf_pr))
 }
 
 impl<R: HasError> HasError for BufReader<R> {

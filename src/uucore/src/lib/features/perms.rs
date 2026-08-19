@@ -276,7 +276,7 @@ fn is_root(path: &Path, would_traverse_symlink: bool) -> bool {
     false
 }
 
-pub fn get_metadata(file: &Path, follow: bool) -> Result<Metadata, std::io::Error> {
+pub fn get_metadata(file: &Path, follow: bool) -> std::io::Result<Metadata> {
     if follow {
         file.metadata()
     } else {
@@ -488,10 +488,11 @@ impl ChownExecutor {
         // fd. Using the fd is TOCTOU-safe (no path re-resolution through symlinks) and
         // avoids a redundant path walk. If it's already on the current path, it's a cycle.
         let dir_info = FileInformation::from_file(dir_fd).ok();
-        if let Some(info) = &dir_info {
-            if !ancestors.insert(info.clone()) {
-                return; // cycle detected, stop silently
-            }
+        if dir_info
+            .as_ref()
+            .is_some_and(|info| !ancestors.insert(info.clone()))
+        {
+            return; // cycle detected, stop silently
         }
 
         // Read directory entries

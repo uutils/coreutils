@@ -207,7 +207,8 @@ fn test_reference() {
             .arg("--reference=/etc/passwd")
             .arg("/etc")
             .fails()
-            .stderr_is("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from root to root\n");
+            // group name can differ, so just check the first part of the message
+            .stderr_contains("chgrp: changing group of '/etc': Operation not permitted\nfailed to change group of '/etc' from ");
     }
 }
 
@@ -478,16 +479,26 @@ fn test_from_option() {
 #[test]
 #[cfg(not(any(target_os = "android", target_os = "macos")))]
 fn test_from_with_invalid_group() {
-    let (at, mut ucmd) = at_and_ucmd!();
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
     at.touch("test_file");
-    #[cfg(not(target_os = "android"))]
-    let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
-    #[cfg(target_os = "android")]
-    let err_msg = "chgrp: invalid user: 'staff'\n";
 
-    ucmd.arg("--from")
+    let err_msg = "chgrp: invalid user: 'nonexistent_group'\n";
+
+    scene
+        .ucmd()
+        .arg("--from")
         .arg("nonexistent_group")
-        .arg("staff")
+        .arg("nobody") // assumption: group exists
+        .arg("test_file")
+        .fails()
+        .stderr_is(err_msg);
+
+    scene
+        .ucmd()
+        .arg("--from")
+        .arg("nonexistent_group")
+        .arg("another_nonexistent_group")
         .arg("test_file")
         .fails()
         .stderr_is(err_msg);

@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) chdir progname subcommand subcommands unsets setenv putenv spawnp SIGSEGV SIGBUS sigaction Sigmask sigprocmask elidable sigset sigaddset sigemptyset
 
+pub mod diagnostics;
 pub mod native_int_str;
 pub mod split_iterator;
 pub mod string_expander;
@@ -40,7 +41,7 @@ use std::mem::zeroed;
 use std::os::unix::ffi::OsStrExt;
 
 use uucore::display::{Quotable, print_all_env_vars};
-use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError};
+use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
 #[cfg(unix)]
 use uucore::signals::{
@@ -463,42 +464,70 @@ pub fn uu_app() -> Command {
 }
 
 pub fn parse_args_from_str(text: &NativeIntStr) -> UResult<Vec<NativeIntString>> {
+    parse_args_from_str_at(text, None)
+}
+
+/// As [`parse_args_from_str`], pointing a caret into the argument the string
+/// came from.
+///
+/// # Arguments
+///
+/// * `text` - The `-S` string to split.
+/// * `located` - The whole argument list and the index of the argument
+///   carrying `text`, or `None` when no diagnostic is wanted. The argument is
+///   named rather than searched for, so a command that repeats the string
+///   elsewhere still points at the right one.
+fn parse_args_from_str_at(
+    text: &NativeIntStr,
+    located: Option<(&[OsString], usize)>,
+) -> UResult<Vec<NativeIntString>> {
     split_iterator::split(text).map_err(|e| {
-        let var_error = |pos: usize| {
-            // Find the '$' that started this variable reference and format
-            // the error like GNU: "only ${VARNAME} expansion is supported, error at: $..."
-            let dollar = get_single_native_int_value('$');
-            let dollar_pos = text[..pos]
-                .iter()
-                .rposition(|&c| Some(c) == dollar)
-                .unwrap_or(pos);
-            let rest = from_native_int_representation(Cow::Borrowed(&text[dollar_pos..]));
-            USimpleError::new(
-                125,
-                translate!("env-error-only-braced-variable-at", "rest" => rest.to_string_lossy()),
-            )
-        };
-        match e {
-            EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
-                USimpleError::new(125, e.to_string())
-            }
-            EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
-            EnvError::EnvParsingOfVariableMissingClosingBrace(pos)
-            | EnvError::EnvParsingOfMissingVariable(pos)
-            | EnvError::EnvParsingOfVariableOnlyBracedName(pos)
-            | EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => var_error(pos),
-            _ => USimpleError::new(
-                125,
-                translate!("env-error-generic", "error" => format!("{e:?}")),
-            ),
-        }
+        let error = to_error(text, &e);
+        // The `-S` string is echoed back as typed, so a string that is not
+        // text cannot be pointed into.
+        let reported = located.is_some_and(|(args, index)| {
+            from_native_int_representation(Cow::Borrowed(text))
+                .to_str()
+                .is_some_and(|payload| {
+                    diagnostics::render(args, index, payload, &error.to_string(), &e)
+                })
+        });
+        uucore::error::quiet_if_reported(reported, error)
     })
+}
+
+/// The user-facing error for a `-S` string that does not split.
+fn to_error(text: &NativeIntStr, e: &EnvError) -> Box<dyn UError> {
+    let var_error = |pos: usize| {
+        // Find the '$' that started this variable reference and format
+        // the error like GNU: "only ${VARNAME} expansion is supported, error at: $..."
+        let dollar = get_single_native_int_value('$');
+        let dollar_pos = text[..pos]
+            .iter()
+            .rposition(|&c| Some(c) == dollar)
+            .unwrap_or(pos);
+        let rest = from_native_int_representation(Cow::Borrowed(&text[dollar_pos..]));
+        USimpleError::new(
+            125,
+            translate!("env-error-only-braced-variable-at", "rest" => rest.to_string_lossy()),
+        )
+    };
+    match e {
+        EnvError::EnvBackslashCNotAllowedInDoubleQuotes(_)
+        | EnvError::EnvInvalidBackslashAtEndOfStringInMinusS(_, _)
+        | EnvError::EnvInvalidSequenceBackslashXInMinusS(_, _) => {
+            USimpleError::new(125, e.to_string())
+        }
+        EnvError::EnvMissingClosingQuote(_, _) => USimpleError::new(125, e.to_string()),
+        EnvError::EnvParsingOfVariableMissingClosingBrace(pos)
+        | EnvError::EnvParsingOfMissingVariable(pos)
+        | EnvError::EnvParsingOfVariableOnlyBracedName(pos)
+        | EnvError::EnvParsingOfVariableUnexpectedNumber(pos, _) => var_error(*pos),
+        _ => USimpleError::new(
+            125,
+            translate!("env-error-generic", "error" => format!("{e:?}")),
+        ),
+    }
 }
 
 fn debug_print_args(args: &[OsString]) {
@@ -516,6 +545,7 @@ fn check_and_handle_string_args(
     do_debug_print_args: Option<&Vec<OsString>>,
     require_non_empty_payload: bool,
     strip_optional_leading_equals: bool,
+    located: Option<(&[OsString], usize)>,
 ) -> UResult<bool> {
     let native_arg = NCvt::convert(arg);
     if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
@@ -537,7 +567,7 @@ fn check_and_handle_string_args(
             remaining_arg
         };
 
-        let arg_strings = parse_args_from_str(remaining_arg)?;
+        let arg_strings = parse_args_from_str_at(remaining_arg, located)?;
         all_args.extend(
             arg_strings
                 .into_iter()
@@ -610,6 +640,9 @@ impl EnvAppData {
                 continue;
             }
             expecting_arg = false;
+            // Where the `-S` string sits, for the caret: the argument the
+            // parser is looking at right now.
+            let located = uucore::diagnostics::enabled().then_some((original_args.as_slice(), n));
             match arg {
                 b if check_and_handle_string_args(
                     b,
@@ -618,14 +651,33 @@ impl EnvAppData {
                     None,
                     true,
                     true,
+                    located,
                 )? =>
                 {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-S", &mut all_args, None, true, false)? => {
+                b if check_and_handle_string_args(
+                    b,
+                    "-S",
+                    &mut all_args,
+                    None,
+                    true,
+                    false,
+                    located,
+                )? =>
+                {
                     self.had_string_argument = true;
                 }
-                b if check_and_handle_string_args(b, "-vS", &mut all_args, None, true, false)? => {
+                b if check_and_handle_string_args(
+                    b,
+                    "-vS",
+                    &mut all_args,
+                    None,
+                    true,
+                    false,
+                    located,
+                )? =>
+                {
                     self.do_debug_printing = true;
                     self.had_string_argument = true;
                 }
@@ -636,6 +688,7 @@ impl EnvAppData {
                     Some(original_args),
                     true,
                     false,
+                    located,
                 )? =>
                 {
                     self.do_debug_printing = true;
@@ -657,7 +710,10 @@ impl EnvAppData {
                     }
 
                     let native_next_arg = NCvt::convert(next_arg);
-                    let arg_strings = parse_args_from_str(native_next_arg.as_ref())?;
+                    // The string is the argument after this one, detached.
+                    let located =
+                        uucore::diagnostics::enabled().then_some((original_args.as_slice(), n + 1));
+                    let arg_strings = parse_args_from_str_at(native_next_arg.as_ref(), located)?;
                     all_args.extend(
                         arg_strings
                             .into_iter()
@@ -758,11 +814,9 @@ impl EnvAppData {
         self.do_input_debug_printing = self
             .do_input_debug_printing
             .or(Some(matches.get_count("debug") >= 2));
-        if let Some(value) = self.do_input_debug_printing {
-            if value {
-                debug_print_args(&original_args);
-                self.do_input_debug_printing = Some(false);
-            }
+        if Some(true) == self.do_input_debug_printing {
+            debug_print_args(&original_args);
+            self.do_input_debug_printing = Some(false);
         }
 
         let mut opts = make_options(
@@ -898,30 +952,12 @@ impl EnvAppData {
             // Execute the program using execvp. this replaces the current
             // process. The execvp function takes care of appending a NULL
             // argument to the argument list so that we don't have to.
-            match execvp(&prog_cstring, &argv) {
-                Err(nix::errno::Errno::ENOENT) => Err(self.make_error_no_such_file_or_dir(&prog)),
-                Err(nix::errno::Errno::EACCES) => {
-                    uucore::show_error!(
-                        "{}",
-                        translate!(
-                            "env-error-permission-denied",
-                            "program" => prog.quote()
-                        )
-                    );
+            // unwrap_err since execvp should never return on success
+            match execvp(&prog_cstring, &argv).unwrap_err() {
+                nix::errno::Errno::ENOENT => Err(self.make_error_no_such_file_or_dir(&prog)),
+                e => {
+                    uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e.into()));
                     Err(126.into())
-                }
-                Err(_) => {
-                    uucore::show_error!(
-                        "{}",
-                        translate!(
-                            "env-error-unknown",
-                            "error" => "execvp failed"
-                        )
-                    );
-                    Err(126.into())
-                }
-                Ok(_) => {
-                    unreachable!("execvp should never return on success")
                 }
             }
         }
@@ -934,25 +970,18 @@ impl EnvAppData {
 
             match cmd.status() {
                 Ok(exit) if !exit.success() => Err(exit.code().unwrap_or(1).into()),
-                Err(ref err) => match err.kind() {
-                    io::ErrorKind::NotFound | io::ErrorKind::InvalidInput => {
-                        Err(self.make_error_no_such_file_or_dir(&prog))
-                    }
-                    io::ErrorKind::PermissionDenied => {
-                        uucore::show_error!(
-                            "{}",
-                            translate!("env-error-permission-denied", "program" => prog.quote())
-                        );
-                        Err(126.into())
-                    }
-                    _ => {
-                        uucore::show_error!(
-                            "{}",
-                            translate!("env-error-unknown", "error" => format!("{err:?}"))
-                        );
-                        Err(126.into())
-                    }
-                },
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        io::ErrorKind::NotFound | io::ErrorKind::InvalidInput
+                    ) =>
+                {
+                    Err(self.make_error_no_such_file_or_dir(&prog))
+                }
+                Err(e) => {
+                    uucore::show_error!("{}: {}", prog.quote(), strip_errno(&e));
+                    Err(126.into())
+                }
                 Ok(_) => Ok(()),
             }
         }
@@ -982,11 +1011,11 @@ fn make_options<'a>(
         .map(OsString::as_os_str);
     let files = match matches.get_many::<OsString>("file") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let unsets = match matches.get_many::<OsString>("unset") {
         Some(v) => v.map(OsString::as_os_str).collect(),
-        None => Vec::with_capacity(0),
+        None => Vec::new(),
     };
     let argv0 = matches
         .get_one::<OsString>("argv0")
@@ -1162,7 +1191,7 @@ fn ignore_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_IGN);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_IGN);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1179,7 +1208,7 @@ fn reset_signal(sig: usize) -> UResult<()> {
     // nix::sys::signal::Signal does not cover real-time signals, so we need to call
     // libc::signal directly.
     let result = unsafe {
-        let res = libc::signal(sig as libc::c_int, libc::SIG_DFL);
+        let res = libc::signal(sig as core::ffi::c_int, libc::SIG_DFL);
         nix::errno::Errno::result(res)
     };
     if let Err(err) = result {
@@ -1208,9 +1237,9 @@ fn sigset_from_signal_value(sig: usize) -> UResult<SigSet> {
         ));
     }
 
-    if let Err(err) =
-        unsafe { nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as libc::c_int)) }
-    {
+    if let Err(err) = unsafe {
+        nix::errno::Errno::result(libc::sigaddset(&raw mut sigset, sig as core::ffi::c_int))
+    } {
         return Err(USimpleError::new(
             125,
             translate!(

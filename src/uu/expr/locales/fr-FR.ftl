@@ -44,6 +44,10 @@ expr-after-help = Afficher la valeur de EXPRESSION sur la sortie standard. Une l
   - EXPR_DEBUG_SYA_STEP=1: afficher chaque étape de l'analyseur
   - EXPR_DEBUG_AST=1: afficher l'arbre de syntaxe abstraite représentant l'expression
 
+  Les erreurs sont signalées en réaffichant l'expression avec un caret sous
+  l'argument fautif dès que la sortie d'erreur est un terminal ; sinon, le
+  message habituel sur une seule ligne est conservé.
+
 # Messages d'aide
 expr-help-version = afficher les informations de version et quitter
 expr-help-help = afficher cette aide et quitter
@@ -64,3 +68,8 @@ expr-error-invalid-bracket-content = Contenu invalide de {"\\{\\}"}
 expr-error-trailing-backslash = Barre oblique inverse en fin
 expr-error-too-big-range-quantifier-index = Expression régulière trop grande
 expr-error-match-utf8 = match ne supporte pas l'encodage UTF-8 invalide dans { $arg }
+
+# Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
+expr-diag-help-missing-argument = chaque opérateur a besoin d'une valeur de chaque côté
+expr-diag-help-unexpected-argument = le shell a peut-être développé un opérateur ; protégez-le avec '{"*"}' ou échappez-le avec {"\\*"}
+expr-diag-help-non-integer-argument = les opérateurs arithmétiques attendent des entiers ; utilisez = ou {"!"}= pour comparer des chaînes

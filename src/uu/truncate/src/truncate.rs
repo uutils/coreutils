@@ -18,7 +18,9 @@ use uucore::format_usage;
 use uucore::show_if_err;
 use uucore::translate;
 
-use uucore::parser::parse_size::{ParseSizeError, Parser, allow_list_with_all_suffixes};
+use uucore::parser::parse_size::{
+    ParseSizeError, Parser, allow_list_with_all_suffixes, size_offset,
+};
 
 #[derive(Debug, Eq, PartialEq)]
 enum TruncateMode {
@@ -119,6 +121,9 @@ pub mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in size diagnostics, which needs the size as typed.
+    let diag_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let files: Vec<OsString> = matches
@@ -140,7 +145,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::from);
     let size = matches.get_one::<String>(options::SIZE).map(String::from);
 
-    truncate(&files, no_create, io_blocks, reference, size)
+    truncate(
+        &files,
+        no_create,
+        io_blocks,
+        reference,
+        size,
+        diag_args.as_deref(),
+    )
 }
 
 pub fn uu_app() -> Command {
@@ -276,6 +288,7 @@ fn truncate(
     _io_blocks: bool, // TODO: implement handling
     reference: Option<String>,
     size: Option<String>,
+    diag_args: Option<&[OsString]>,
 ) -> UResult<()> {
     let reference_size = match reference {
         Some(reference_path) => {
@@ -298,9 +311,17 @@ fn truncate(
     let mode = match size_string {
         Some(string) => match parse_mode_and_size(string) {
             Err(error) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("truncate-error-invalid-number", "error" => error),
+                let message = translate!("truncate-error-invalid-number", "error" => &error);
+                return Err(error.size_value_error(
+                    diag_args,
+                    string,
+                    // The parser never saw the mode character; the caret has
+                    // to count it back in.
+                    size_offset(string, is_modifier),
+                    's',
+                    "size",
+                    &message,
+                    USimpleError::new(1, message.clone()),
                 ));
             }
             Ok(mode) => mode,
@@ -360,6 +381,11 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
     // Get the modifier character from the size string, if any. For
     // example, if the argument is "+123", then the modifier is '+'.
     if let Some(c) = size_string.chars().next() {
+        // Check if there's a non-numerical string after the positive/negative sign
+        if (matches!(c, '+' | '-')) && !size_string.chars().nth(1).unwrap_or(c).is_ascii_digit() {
+            return Err(ParseSizeError::ParseFailure(format!("'{size_string}'")));
+        }
+
         if is_modifier(c) {
             size_string = &size_string[1..];
         }
@@ -378,7 +404,7 @@ fn parse_mode_and_size(size_string: &str) -> Result<TruncateMode, ParseSizeError
                 _ => TruncateMode::Absolute,
             })
     } else {
-        Err(ParseSizeError::ParseFailure(size_string.to_string()))
+        Err(ParseSizeError::ParseFailure("''".to_string()))
     }
 }
 
@@ -387,6 +413,21 @@ mod tests {
     use crate::SizeCalculationError;
     use crate::TruncateMode;
     use crate::parse_mode_and_size;
+    use crate::{is_modifier, size_offset};
+
+    /// The offset a caret counts has to be the one the parser skipped, or the
+    /// underline lands beside what went wrong.
+    #[test]
+    fn size_offset_counts_what_the_parser_stripped() {
+        let offset = |s| size_offset(s, is_modifier);
+        assert_eq!(offset("5x"), 0);
+        assert_eq!(offset("+5x"), 1);
+        // Only the first modifier is stripped; the second is part of the size.
+        assert_eq!(offset("//5x"), 1);
+        // The parser trims before looking for a modifier.
+        assert_eq!(offset("  +5x"), 3);
+        assert_eq!(offset("  5x"), 2);
+    }
 
     #[test]
     fn test_parse_mode_and_size() {

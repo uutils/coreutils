@@ -4,6 +4,7 @@ doctest
 
 # * crates
 aho-corasick
+ariadne
 blake2b_simd
 rustix
 
@@ -83,6 +84,7 @@ powi
 println
 repr
 rfind
+rsplit
 struct
 structs
 substr
@@ -133,6 +135,7 @@ EBADF
 EBUSY
 EEXIST
 EINVAL
+EISDIR
 ENODATA
 ENOENT
 ENOSPC
@@ -363,6 +366,7 @@ uutils
 sendfile
 execfn
 fadvise
+ficlone
 fstatfs
 getcwd
 mkfifoat

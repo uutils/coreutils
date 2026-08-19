@@ -391,16 +391,24 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
+    // Written before every unnumbered line; hoisted so it is not reallocated per line.
+    let blank_prefix = vec![b' '; settings.number_width + 1];
 
     loop {
         line.clear();
         // reads up to and including b'\n'; returns 0 on EOF
-        let n = reader
-            .read_until(b'\n', &mut line)
-            .map_err_context(|| translate!("nl-error-could-not-read-line"))?;
-        if n == 0 {
-            break;
-        }
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) => break,
+            Ok(bytes_read) => bytes_read,
+            Err(err) => {
+                show_error!(
+                    "{}",
+                    err.map_err_context(|| translate!("nl-error-could-not-read-line"))
+                );
+                set_exit_code(1);
+                break;
+            }
+        };
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
@@ -456,9 +464,8 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let prefix = " ".repeat(settings.number_width + 1);
                 writer
-                    .write_all(prefix.as_bytes())
+                    .write_all(&blank_prefix)
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
             }
             write_line(&mut writer, &line)

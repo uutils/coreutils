@@ -9,6 +9,8 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
 }
 #[test]
 fn test_reference_format_for_stdin() {
@@ -371,6 +373,33 @@ fn test_unicode_in_after_chunk_does_not_panic() {
         .pipe_in("We've got +11 more G of 1.70. 🛠\n")
         .succeeds()
         .stdout_contains("We've got +11");
+}
+
+#[test]
+fn test_unicode_in_before_chunk_does_not_panic() {
+    // Regression test for issue #10893: a panic in get_output_chunks() when the
+    // computed max_before_size used char counts but the assert compared against
+    // before.len() (byte length). A multibyte char in the before chunk could
+    // trigger: `assertion failed: max_before_size >= before.len()`.
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("éé word\n")
+        .succeeds()
+        .no_stderr();
+}
+
+#[test]
+fn test_unicode_tail_chunk_sizing() {
+    // The tail chunk budget (max_tail_size) subtracts the size of the before
+    // chunk. It must use the before chunk's char count, not its byte length,
+    // otherwise a multibyte before chunk shrinks the tail too much and drops a
+    // word that fits. Here "cc" wraps into the tail before "aé bé KEY"; with the
+    // byte-based budget it was dropped.
+    new_ucmd!()
+        .args(&["-w", "20"])
+        .pipe_in("aé bé KEY cc dd ee ff gg\n")
+        .succeeds()
+        .stdout_contains("cc/ aé");
 }
 
 #[test]

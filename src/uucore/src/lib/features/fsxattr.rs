@@ -129,6 +129,30 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
     Ok(attrs)
 }
 
+/// Retrieves the extended attributes (xattrs) of a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the file (open file descriptor).
+///
+/// # Returns
+///
+/// A result containing a map of attribute names to values, or an error.
+#[cfg(unix)]
+pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
+    use xattr::FileExt;
+    let mut attrs = FxHashMap::default();
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            attrs.insert(attr_name, value);
+        }
+    }
+    Ok(attrs)
+}
+
 /// Applies extended attributes (xattrs) to a given file or directory.
 ///
 /// # Arguments
@@ -147,6 +171,43 @@ pub fn apply_xattrs<P: AsRef<Path>>(
         xattr::set(&dest, &attr, &value)?;
     }
     Ok(())
+}
+
+/// Applies extended attributes (xattrs) to a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `dest` - A reference to the file (open file descriptor).
+/// * `xattrs` - A map of attribute names to their corresponding values.
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+#[cfg(unix)]
+pub fn apply_xattrs_fd(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    use xattr::FileExt;
+    for (attr, value) in xattrs {
+        dest.set_xattr(&attr, &value)?;
+    }
+    Ok(())
+}
+
+/// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn apply_xattrs_fd_ignore_unsupported(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    match apply_xattrs_fd(dest, xattrs) {
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        res => res,
+    }
 }
 
 /// Checks if a file has an Access Control List (ACL) based on its extended attributes.
@@ -392,5 +453,36 @@ mod tests {
 
             assert!(has_security_cap_acl(&file_path));
         }
+    }
+
+    #[test]
+    fn test_apply_and_retrieve_xattrs_fd() {
+        use std::fs::OpenOptions;
+
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        let mut test_xattrs = FxHashMap::default();
+        let test_attr = "user.test_attr_fd";
+        let test_value = b"test value fd";
+        test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
+
+        // Apply using file descriptor
+        let file = OpenOptions::new().write(true).open(&file_path).unwrap();
+        apply_xattrs_fd(&file, test_xattrs).unwrap();
+        drop(file);
+
+        // Retrieve using file descriptor
+        let file = File::open(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs_fd(&file).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .unwrap(),
+            test_value
+        );
     }
 }

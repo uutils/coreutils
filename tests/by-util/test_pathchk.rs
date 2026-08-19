@@ -180,3 +180,13 @@ fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
     new_ucmd!().arg(&filename).succeeds();
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_not_a_directory_clean() {
+    // https://github.com/uutils/coreutils/issues/13888
+    new_ucmd!()
+        .arg("/dev/full/")
+        .fails()
+        .stderr_is("pathchk: /dev/full/: Not a directory\n");
+}

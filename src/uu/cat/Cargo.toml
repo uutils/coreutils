@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cat.rs"
 doctest = false
@@ -37,6 +34,9 @@ windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 rustix = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "cat"

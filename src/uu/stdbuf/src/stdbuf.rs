@@ -14,7 +14,8 @@ use std::process;
 use tempfile::TempDir;
 use tempfile::tempdir;
 use thiserror::Error;
-use uucore::error::{UResult, USimpleError, UUsageError};
+use uucore::display::Quotable;
+use uucore::error::{UResult, USimpleError, UUsageError, strip_errno};
 use uucore::format_usage;
 use uucore::parser::parse_size::parse_size_u64;
 use uucore::translate;
@@ -147,8 +148,11 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 #[cfg(feature = "feat_external_libstdbuf")]
 fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
-    // This will fail to compile if LIBSTDBUF_DIR is not set, which is the desired behavior
-    const LIBSTDBUF_DIR: &str = env!("LIBSTDBUF_DIR");
+    // cannot use unwrap_or <https://github.com/rust-lang/rust/issues/143874>
+    const LIBSTDBUF_DIR: &str = match option_env!("LIBSTDBUF_DIR") {
+        Some(v) => v,
+        None => "/usr/local/libexec/coreutils",
+    };
 
     let (preload, extension) = preload_strings();
 
@@ -158,10 +162,10 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     let mut search_paths: Vec<PathBuf> = Vec::with_capacity(2);
 
     // First, try to get the directory where stdbuf is running from
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            search_paths.push(exe_dir.to_path_buf());
-        }
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(exe_dir) = exe_path.parent()
+    {
+        search_paths.push(exe_dir.to_path_buf());
     }
 
     // Add the compile-time directory as fallback
@@ -205,6 +209,18 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let tmp_dir = tempdir()
         .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
     let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
+    // The preload variable is a colon-separated list with no escaping mechanism,
+    // so a path containing ':' does not round-trip: the dynamic loader splits it
+    // and treats the leading component as a library to load. Since the temp
+    // directory is derived from $TMPDIR, that component would be attacker-chosen
+    // whenever TMPDIR crosses a privilege boundary. Refuse instead of preloading
+    // something we did not select.
+    if libstdbuf.as_os_str().as_encoded_bytes().contains(&b':') {
+        return Err(USimpleError::new(
+            125,
+            translate!("stdbuf-error-preload-path-separator", "path" => libstdbuf.quote(), "var" => preload_env),
+        ));
+    }
     command.env(preload_env, libstdbuf);
     set_command_env(&mut command, "_STDBUF_I", &options.stdin);
     set_command_env(&mut command, "_STDBUF_O", &options.stdout);
@@ -223,20 +239,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Err(err) => err,
     };
     // exec() only returns if there was an error
-    match e.kind() {
-        std::io::ErrorKind::PermissionDenied => Err(USimpleError::new(
-            126,
-            translate!("stdbuf-error-permission-denied"),
-        )),
-        std::io::ErrorKind::NotFound => Err(USimpleError::new(
-            127,
-            translate!("stdbuf-error-no-such-file"),
-        )),
-        _ => Err(USimpleError::new(
-            1,
-            translate!("stdbuf-error-failed-to-execute", "error" => e),
-        )),
-    }
+    let exit_code = match e.kind() {
+        std::io::ErrorKind::PermissionDenied => 126,
+        std::io::ErrorKind::NotFound => 127,
+        _ => 1,
+    };
+    Err(USimpleError::new(
+        exit_code,
+        translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&e)),
+    ))
 }
 
 pub fn uu_app() -> Command {

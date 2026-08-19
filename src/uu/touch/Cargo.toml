@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/touch.rs"
 doctest = false
@@ -33,6 +30,8 @@ tempfile = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+
+[target.'cfg(any(unix, target_os = "wasi"))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
@@ -40,6 +39,9 @@ windows-sys = { workspace = true, features = [
   "Win32_Storage_FileSystem",
   "Win32_Foundation",
 ] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "touch"

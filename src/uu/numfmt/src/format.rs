@@ -43,9 +43,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
             continue;
         }
         let num_str = s[..i].replace(dec_sep, ".");
-        if num_str.parse::<f64>().is_err() {
-            return None;
-        }
+        num_str.parse::<f64>().ok()?;
         return Some(&s[..i]);
     }
 
@@ -102,6 +100,65 @@ fn valid_end_with_unit_separator(
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
 
+/// Length of the leading part of `s` that reads as a number, suffix included.
+fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
+    let Some(number_prefix) = find_valid_number_with_suffix(s, unit) else {
+        return 0;
+    };
+
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
+        valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
+            .unwrap_or(number_prefix.len())
+    } else {
+        number_prefix.len()
+    }
+}
+
+/// Byte range of the part of a refused `input` a caret should point at: what
+/// follows the number that could be read, or the whole of it when there is
+/// none. Surrounding whitespace, reproduced rather than converted, is left out.
+pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usize> {
+    let start = input.len() - input.trim_start().len();
+    let mut end = input.trim_end().len();
+
+    // Whitespace only: there is no number to point past, and the two offsets
+    // above have crossed — `start` is the whole length, `end` is zero.
+    if start >= end {
+        return 0..input.len();
+    }
+
+    // A declared --suffix is stripped before parsing, so it is not at fault.
+    if let Some(suffix) = &options.suffix
+        && !suffix.is_empty()
+        && let Some(stripped) = input[start..end].strip_suffix(suffix.as_str())
+    {
+        end = start + stripped.len();
+    }
+
+    let valid = valid_prefix_len(
+        &input[start..end],
+        options.transform.from,
+        &options.unit_separator,
+    );
+    start + valid..end.max(start + valid)
+}
+
+/// Whether `input` begins with something that reads as a number, so that advice
+/// about what may follow one is only given where there is one. A lone sign or
+/// decimal separator is the leading part of a number, but not yet a number.
+pub fn holds_number(input: &str) -> bool {
+    find_numeric_beginning(input.trim_start()).is_some_and(|number| {
+        number
+            .replace(locale_decimal_separator(), ".")
+            .parse::<f64>()
+            .is_ok()
+    })
+}
+
 fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
@@ -119,19 +176,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
         return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
     }
 
-    // When a unit separator is in use, the valid part may extend beyond the
-    // contiguous number+suffix found by find_valid_number_with_suffix.
-    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
-    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
-    let valid_end =
-        if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
-            valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
-                .unwrap_or(number_prefix.len())
-        } else {
-            number_prefix.len()
-        };
-
-    let valid_part = &s[..valid_end];
+    let valid_part = &s[..valid_prefix_len(s, unit, unit_separator)];
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
@@ -418,10 +463,8 @@ fn transform_from(
     })?;
     let had_no_suffix = suffix.is_none();
 
-    if had_no_suffix {
-        if let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
-            return Ok(scaled);
-        }
+    if had_no_suffix && let Some(scaled) = try_scale_exact_int_with_from_unit(i, opts.from_unit) {
+        return Ok(scaled);
     }
 
     let i = i.to_f64() * (opts.from_unit as f64);
@@ -478,6 +521,12 @@ pub fn div_round(n: f64, d: f64, method: RoundMethod) -> f64 {
 /// Rounds to the specified number of decimal points.
 fn round_with_precision(n: f64, method: RoundMethod, precision: usize) -> f64 {
     let p = 10.0_f64.powf(precision as f64);
+
+    // rounding is a no-op once the scale factor overflows f64;
+    // dividing by it would turn the value into NaN
+    if !p.is_finite() {
+        return n;
+    }
 
     method.round(p * n) / p
 }
@@ -628,7 +677,7 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None => localize(format!(
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
             "{:.precision$}",
             round_with_precision(i2, round_method, precision),
         )),
@@ -637,7 +686,7 @@ fn transform_to(
             localize(format!("{i2:.precision$}"))
         }
         None => localize(format!("{i2:.0}")),
-        Some(s) if precision > 0 => localize(format!(
+        Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
@@ -845,7 +894,7 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
             // add delimiter before second and subsequent fields
             let prefix = if n > 1 {
                 writer.write_all(b" ").unwrap();
-                &prefix[1..]
+                &prefix[prefix.chars().next().map_or(0, char::len_utf8)..]
             } else {
                 prefix
             };
