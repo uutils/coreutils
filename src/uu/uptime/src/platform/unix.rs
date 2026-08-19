@@ -92,7 +92,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         use std::os::unix::ffi::OsStrExt;
         let bytes = file_path.as_os_str().as_bytes();
 
-        if bytes[bytes.len() - 1] != b'x' {
+        if bytes.last() != Some(&b'x') {
             show_error!("{}", translate!("uptime-error-couldnt-get-boot-time"));
             print_time()?;
             write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
