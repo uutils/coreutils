@@ -238,6 +238,8 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_LINES)
                 .help(translate!("pr-help-number-lines"))
                 .allow_hyphen_values(true)
+                // GNU pr makes -n optional (defaults to width 5, tab).
+                .num_args(0..=1)
                 .value_name("[char][width]"),
         )
         .arg(
