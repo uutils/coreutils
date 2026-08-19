@@ -218,6 +218,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // open with O_NONBLOCK to handle fifo files
         #[cfg(any(target_os = "linux", target_os = "android"))]
         {
+            use uucore::error::strip_errno;
             let path = Path::new(f);
             if let Err(e) = rustix::fs::open(
                 path,
@@ -225,7 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 rustix::fs::Mode::empty(),
             ) && (e != rustix::io::Errno::ACCESS || path.is_dir())
             {
-                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => uucore::error::strip_errno(&std::io::Error::from(e)));
+                let msg = translate!("sync-error-opening-file", "file" => f.quote(), "err" => strip_errno(&std::io::Error::from(e)));
                 show_error!("{msg}");
                 set_exit_code(1);
             }
