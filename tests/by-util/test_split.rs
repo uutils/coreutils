@@ -254,6 +254,19 @@ fn test_split_num_prefixed_chunks_by_lines() {
 }
 
 #[test]
+fn test_number_of_chunks_by_line_more_chunks_than_bytes() {
+    // More chunks than bytes must not overflow; the trailing chunks are empty.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "ab");
+    ucmd.args(&["-n", "l/5", "in"]).succeeds().no_stderr();
+    assert_eq!(at.read("xaa"), "ab");
+    for name in ["xab", "xac", "xad", "xae"] {
+        assert_eq!(at.read(name), "");
+    }
+    assert!(!at.file_exists("xaf"));
+}
+
+#[test]
 fn test_split_str_prefixed_chunks_by_lines() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "split_str_prefixed_chunks_by_lines";
