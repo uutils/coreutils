@@ -6,7 +6,9 @@
 // spell-checker:ignore utmp runlevel testusr testx boottime
 #![allow(clippy::cast_possible_wrap, clippy::unreadable_literal)]
 
-use uutests::{at_and_ucmd, new_ucmd};
+#[cfg(unix)]
+use uutests::at_and_ucmd;
+use uutests::new_ucmd;
 
 use regex::Regex;
 
@@ -17,12 +19,19 @@ fn test_invalid_arg() {
 
 #[test]
 fn test_uptime() {
-    new_ucmd!()
-        .succeeds()
-        .stdout_contains("load average:")
-        .stdout_contains(" up ");
-
+    let result = new_ucmd!().succeeds();
+    result.stdout_contains(" up ");
     // Don't check for users as it doesn't show in some CI
+    #[cfg(unix)]
+    result
+        .stdout_contains("load average:")
+        .stdout_does_not_contain(",  ,");
+
+    // Windows has no load average; the line ends after the user count.
+    #[cfg(windows)]
+    result
+        .stdout_does_not_contain("load average")
+        .stdout_matches(&Regex::new(r" up .*,  \d+ users?\n$").unwrap());
 }
 
 #[test]
@@ -42,6 +51,7 @@ fn test_write_error_handling() {
 
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
+#[cfg(unix)]
 #[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
 // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
 // file that is accessed using getutxent()
@@ -88,6 +98,7 @@ fn test_uptime_with_fifo() {
 }
 
 #[test]
+#[cfg(unix)]
 #[cfg(not(target_os = "freebsd"))]
 fn test_uptime_with_non_existent_file() {
     // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
@@ -102,6 +113,7 @@ fn test_uptime_with_non_existent_file() {
 // TODO create a similar test for macos
 // This will pass
 #[test]
+#[cfg(unix)]
 #[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
@@ -267,6 +279,7 @@ fn test_uptime_with_file_containing_valid_boot_time_utmpx_record() {
 }
 
 #[test]
+#[cfg(unix)]
 fn test_uptime_with_extra_argument() {
     new_ucmd!()
         .arg("a")
@@ -274,8 +287,20 @@ fn test_uptime_with_extra_argument() {
         .fails()
         .stderr_contains("unexpected value 'b'");
 }
+
+/// The utmp file operand is unix-only; any operand is rejected on Windows.
+#[test]
+#[cfg(windows)]
+fn test_uptime_with_file_windows() {
+    new_ucmd!()
+        .arg("file1")
+        .fails_with_code(1)
+        .stderr_contains("unexpected argument");
+}
+
 /// Checks whether uptime displays the correct stderr msg when its called with a directory
 #[test]
+#[cfg(unix)]
 fn test_uptime_with_dir() {
     let (at, mut ucmd) = at_and_ucmd!();
 
