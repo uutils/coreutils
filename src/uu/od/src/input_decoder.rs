@@ -27,11 +27,6 @@ where
     /// The number of bytes in the buffer reserved for the peek data from `PeekRead`.
     reserved_peek_length: usize,
 
-    /// The number of (valid) bytes in the buffer.
-    used_normal_length: usize,
-    /// The number of peek bytes in the buffer.
-    used_peek_length: usize,
-
     /// Byte order used to read data from the buffer.
     byte_order: ByteOrder,
 }
@@ -51,8 +46,6 @@ impl<I> InputDecoder<'_, I> {
             input,
             data: bytes,
             reserved_peek_length: peek_length,
-            used_normal_length: 0,
-            used_peek_length: 0,
             byte_order,
         }
     }
@@ -68,12 +61,11 @@ where
         let (n, p) = self
             .input
             .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)?;
-        self.used_normal_length = n;
-        self.used_peek_length = p;
+
         Ok(MemoryDecoder {
             data: &mut self.data,
-            used_normal_length: self.used_normal_length,
-            used_peek_length: self.used_peek_length,
+            used_normal_length: n,
+            used_peek_length: p,
             byte_order: self.byte_order,
         })
     }
