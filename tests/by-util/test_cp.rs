@@ -120,6 +120,46 @@ fn test_cp_verbose_write_error_is_reported() {
     assert!(at.file_exists("dest_file"));
 }
 
+// https://github.com/uutils/coreutils/issues/10554
+// #13310 made the `'src' -> 'dest'` verbose line non-panicking, but the
+// remaining `--verbose`/`--debug` lines still used `println!` and panicked on a
+// stdout write error (e.g. `> /dev/full`). Verify each of those paths now
+// reports the write error instead of crashing, matching the `'src' -> 'dest'`
+// behaviour fixed by `test_cp_verbose_write_error_is_reported`.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_verbose_removed_write_error_is_reported_issue10554() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source_file");
+    at.touch("dest_file");
+    // `--remove-destination` always unlinks the existing dest first, emitting
+    // the `removed 'dest_file'` verbose line before the copy begins.
+    ucmd.arg("--remove-destination")
+        .arg("--verbose")
+        .arg("source_file")
+        .arg("dest_file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cp: write error: No space left on device\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_debug_skipped_write_error_is_reported_issue10554() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("source_file");
+    at.touch("dest_file");
+    // `--no-clobber --debug` against an existing dest emits the debug
+    // `skipped 'dest_file'` line via the same `print_stdout_line` helper.
+    ucmd.arg("--debug")
+        .arg("--no-clobber")
+        .arg("source_file")
+        .arg("dest_file")
+        .set_stdout(std::fs::File::create("/dev/full").unwrap())
+        .fails()
+        .stderr_is("cp: write error: No space left on device\n");
+}
+
 #[test]
 fn test_cp_cp() {
     let (at, mut ucmd) = at_and_ucmd!();

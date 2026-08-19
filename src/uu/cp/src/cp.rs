@@ -1666,7 +1666,7 @@ impl OverwriteMode {
         match self {
             Self::NoClobber => {
                 if debug {
-                    println!("{}", translate!("cp-debug-skipped", "path" => path.quote()));
+                    print_stdout_line(translate!("cp-debug-skipped", "path" => path.quote()))?;
                 }
                 Err(CpError::Skipped(false))
             }
@@ -2100,7 +2100,7 @@ fn handle_existing_dest(
 
     if options.update == UpdateMode::None {
         if options.debug {
-            println!("skipped {}", dest.quote());
+            print_stdout_line(format!("skipped {}", dest.quote()))?;
         }
         return Err(CpError::Skipped(false));
     }
@@ -2205,10 +2205,7 @@ fn delete_path(path: &Path, options: &Options) -> CopyResult<()> {
     match fs::remove_file(path) {
         Ok(()) => {
             if options.verbose {
-                println!(
-                    "{}",
-                    translate!("cp-verbose-removed", "path" => path.quote())
-                );
+                print_stdout_line(translate!("cp-verbose-removed", "path" => path.quote()))?;
             }
         }
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
@@ -2299,6 +2296,21 @@ fn print_paths(parents: bool, source: &Path, dest: &Path) -> CopyResult<()> {
     Ok(())
 }
 
+/// Print a single `--verbose`/`--debug` line to stdout, surfacing a write
+/// failure (e.g. stdout redirected to a full disk, or a closed pipe) as a
+/// normal error instead of panicking inside `println!`. Mirrors the buffered
+/// write approach of [`print_paths`] so every user-facing verbose/debug line
+/// shares the same non-panicking behaviour. See #10554.
+fn print_stdout_line(line: impl Display) -> CopyResult<()> {
+    use std::io::Write;
+
+    let mut out = io::BufWriter::new(io::stdout().lock());
+    let write_err = |e| CpError::IoErrContext(e, translate!("cp-error-write"));
+    writeln!(out, "{line}").map_err(write_err)?;
+    out.flush().map_err(write_err)?;
+    Ok(())
+}
+
 /// Handles the copy mode for a file copy operation.
 ///
 /// This function determines how to copy a file based on the provided options.
@@ -2382,7 +2394,7 @@ fn handle_copy_mode(
                     }
                     UpdateMode::None => {
                         if options.debug {
-                            println!("skipped {}", dest.quote());
+                            print_stdout_line(format!("skipped {}", dest.quote()))?;
                         }
 
                         return Ok(PerformedAction::Skipped);
