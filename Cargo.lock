@@ -3353,7 +3353,10 @@ name = "uu_basenc"
 version = "0.10.0"
 dependencies = [
  "clap",
+ "codspeed-divan-compat",
  "fluent",
+ "rustix",
+ "tempfile",
  "uu_base32",
  "uucore",
 ]
