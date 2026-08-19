@@ -58,16 +58,14 @@ where
     /// calls `peek_read` on the internal stream to (re)fill the buffer. Returns a
     /// `MemoryDecoder` providing access to the result or returns an i/o error.
     pub fn peek_read(&mut self) -> io::Result<MemoryDecoder<'_>> {
-        let (n, p) = self
-            .input
-            .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)?;
-
-        Ok(MemoryDecoder {
-            data: &mut self.data,
-            used_normal_length: n,
-            used_peek_length: p,
-            byte_order: self.byte_order,
-        })
+        self.input
+            .peek_read(self.data.as_mut_slice(), self.reserved_peek_length)
+            .map(|(n, p)| MemoryDecoder {
+                data: &mut self.data,
+                used_normal_length: n,
+                used_peek_length: p,
+                byte_order: self.byte_order,
+            })
     }
 }
 
