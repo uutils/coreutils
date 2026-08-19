@@ -188,6 +188,17 @@ fn test_number_width_zero() {
 }
 
 #[test]
+fn test_number_width_above_int_max_is_rejected() {
+    // A field width above i32::MAX is rejected up front by clap, matching GNU's
+    // C-int bound, instead of aborting with a capacity overflow (#13347).
+    new_ucmd!()
+        .args(&["-w", "2147483648"])
+        .pipe_in("x\n")
+        .fails()
+        .stderr_contains("is not in 0..=2147483647");
+}
+
+#[test]
 fn test_invalid_number_width() {
     for arg in ["-winvalid", "--number-width=invalid"] {
         new_ucmd!()
