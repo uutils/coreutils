@@ -279,6 +279,21 @@ fn file_truncate(
             }
         })?;
 
+    // A size above i64::MAX is not a valid file offset; reject it up front like
+    // GNU, instead of creating the file and failing when it is opened.
+    if truncate_size > i64::MAX as u64 {
+        let error = match size_argument {
+            None => translate!("truncate-error-value-too-large"),
+            Some(arg) => {
+                translate!("truncate-error-value-too-large-arg", "arg" => arg.quote())
+            }
+        };
+        return Err(USimpleError::new(
+            1,
+            translate!("truncate-error-invalid-number", "error" => error),
+        ));
+    }
+
     do_file_truncate(path, !no_create, truncate_size)
 }
 
