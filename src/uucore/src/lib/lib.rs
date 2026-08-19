@@ -5,7 +5,7 @@
 //! library ~ (core/bundler file)
 // #![deny(missing_docs)] //TODO: enable this
 //
-// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind
+// spell-checker:ignore sigaction SIGBUS SIGSEGV extendedbigdecimal myutil logind dlopen
 
 // * feature-gated external crates (re-shared as public internal modules)
 #[cfg(feature = "libc")]
@@ -356,17 +356,37 @@ static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| wild::args_os().collect(
 #[cfg(not(windows))]
 static ARGV: LazyLock<Vec<OsString>> = LazyLock::new(|| std::env::args_os().collect());
 
+/// Name reported when `argv` is unavailable.
+///
+/// `std::env::args_os()` is empty when the code does not run from a normal
+/// process entry point — for example when a utility is called as a library from
+/// inside a shared object loaded with `dlopen`. There is no `argv[0]` to derive
+/// a name from in that case.
+const ARGV_UNAVAILABLE_NAME: &str = "uutils";
+
 static UTIL_NAME: LazyLock<String> = LazyLock::new(|| {
     let base_index = usize::from(get_utility_is_second_arg());
-    let is_man = usize::from(ARGV[base_index].eq("manpage"));
+
+    // `ARGV` can legitimately be empty (see `ARGV_UNAVAILABLE_NAME`). Indexing it
+    // panics with "index out of bounds: the len is 0 but the index is 0", and
+    // because this is a `LazyLock`, the panic also poisons the lock: every later
+    // call then fails with "LazyLock instance has previously been poisoned"
+    // instead of the original error. Fall back to a neutral name instead.
+    let Some(base_arg) = ARGV.get(base_index) else {
+        return ARGV_UNAVAILABLE_NAME.to_string();
+    };
+    let is_man = usize::from(base_arg.eq("manpage"));
     let argv_index = base_index + is_man;
+    let Some(arg) = ARGV.get(argv_index) else {
+        return ARGV_UNAVAILABLE_NAME.to_string();
+    };
 
     // Strip directory path to show only utility name
     // (e.g., "mkdir" instead of "./target/debug/mkdir")
     // in version output, error messages, and other user-facing output
-    std::path::Path::new(&ARGV[argv_index])
+    std::path::Path::new(arg)
         .file_name()
-        .unwrap_or(&ARGV[argv_index])
+        .unwrap_or(arg)
         .to_string_lossy()
         .into_owned()
 });
@@ -384,7 +404,11 @@ static EXECUTION_PHRASE: LazyLock<String> = LazyLock::new(|| {
             .collect::<Vec<_>>()
             .join(" ")
     } else {
-        ARGV[0].to_string_lossy().into_owned()
+        // Same reasoning as in `UTIL_NAME`: `ARGV` may be empty.
+        ARGV.first().map_or_else(
+            || ARGV_UNAVAILABLE_NAME.to_string(),
+            |arg| arg.to_string_lossy().into_owned(),
+        )
     }
 });
 
