@@ -1113,11 +1113,19 @@ fn test_split_invalid_io_blksize() {
 #[test]
 fn test_split_number_oversized_stdin() {
     new_ucmd!()
-        .args(&["--number=3", "---io-blksize=600"])
+        .args(&["--number=1/4"])
         .pipe_in_fixture("sixhundredfiftyonebytes.txt")
-        .ignore_stdin_write_error()
-        .fails()
-        .stderr_only("split: -: cannot determine input size\n");
+        .succeeds()
+        .stdout_only("a".repeat(163));
+}
+
+#[test]
+fn test_split_number_by_lines_oversized_stdin() {
+    new_ucmd!()
+        .args(&["--number=l/1/4"])
+        .pipe_in("x\n".repeat(300))
+        .succeeds()
+        .stdout_only("x\n".repeat(75));
 }
 
 #[test]
