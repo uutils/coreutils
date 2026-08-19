@@ -79,7 +79,7 @@ pub fn create_dest_restrictive<P: AsRef<Path>>(path: P, nofollow: bool) -> io::R
     Ok(File::from(fd))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::io::{Read, Write};

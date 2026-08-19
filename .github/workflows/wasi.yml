@@ -51,8 +51,8 @@ jobs:
         echo "$HOME/.wasmtime/bin" >> $GITHUB_PATH
     - name: Run unit tests
       env:
-        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
-        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime
+        CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime --dir=.
+        CARGO_TARGET_WASM32_WASIP2_RUNNER: wasmtime --dir=.
       run: |
         # Get all utilities and exclude ones that don't compile for ${{ matrix.job.target }}
         EXCLUDE="df|du|env|more|tac"
@@ -82,6 +82,17 @@ jobs:
         cargo test --test tests -- \
           test_base32:: test_base64:: test_basenc:: test_basename:: \
           test_cp::test_cp_arg_symlink \
+          test_cp::test_cp_wasi_preserve_dereferenced_symlink_timestamps \
+          test_cp::test_cp_wasi_preserve_file_timestamps \
+          test_cp::test_cp_wasi_preserve_overlapping_recursive_source_timestamps \
+          test_cp::test_cp_wasi_preserve_recursive_directory_timestamps \
+          test_cp::test_cp_wasi_preserve_timestamps_through_destination_symlink \
+          test_cp::test_cp_wasi_preserve_symlink_timestamps \
+          test_cp::test_cp_wasi_preserve_timestamps_with_symbolic_link \
+          test_cp::test_cp_wasi_refreshes_timestamps_for_later_source \
+          test_cp::test_cp_wasi_recursive_copy_ignores_unsupported_optional_mode \
+          test_cp::test_cp_update_skip_preserves_destination_timestamps \
+          test_cp::test_cp_recursive_update_continues_after_skipped_file \
           test_comm:: test_cut:: test_dirname:: test_echo:: \
           test_expand:: test_expr:: test_factor:: test_false:: test_fold:: \
           test_head:: test_link:: test_ln:: test_nl:: test_numfmt:: \

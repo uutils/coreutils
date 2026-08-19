@@ -104,7 +104,7 @@ pub use crate::features::perms;
 pub use crate::features::pipes;
 #[cfg(all(any(unix, windows), feature = "process"))]
 pub use crate::features::process;
-#[cfg(all(unix, feature = "safe-copy"))]
+#[cfg(all(any(unix, target_os = "wasi"), feature = "safe-copy"))]
 pub use crate::features::safe_copy;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub use crate::features::safe_traversal;

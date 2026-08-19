@@ -502,6 +502,78 @@ fn test_cp_arg_update_none() {
     assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "How are you?\n");
 }
 
+#[rstest]
+#[case("--update=none", false)]
+#[case("--update=older", true)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_update_skip_preserves_destination_timestamps(
+    #[case] update: &str,
+    #[case] with_backup: bool,
+) {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let source_time = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let dest_atime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let dest_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 1800, ts.nanosecond());
+
+    at.write("source", "new contents");
+    at.write("destination", "old contents");
+    filetime::set_file_times(at.plus("source"), source_time, source_time).unwrap();
+    filetime::set_file_times(at.plus("destination"), dest_atime, dest_mtime).unwrap();
+
+    let mut args = vec![update, "--preserve=timestamps", "source", "destination"];
+    if with_backup {
+        args.insert(1, "--backup");
+    }
+    ucmd.args(&args).succeeds().no_output();
+
+    let metadata = std_fs::metadata(at.plus("destination")).unwrap();
+    assert_timestamps(&metadata, dest_atime, dest_mtime);
+    assert_eq!(at.read("destination"), "old contents");
+    assert!(!at.plus("destination~").exists());
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_recursive_update_continues_after_skipped_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let old_time = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let new_time = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.mkdir_all("source");
+    at.mkdir_all("destination/source");
+    at.write("source/first", "first contents");
+    at.write("source/second", "second contents");
+    let source_order = walkdir::WalkDir::new(at.plus("source"))
+        .min_depth(1)
+        .max_depth(1)
+        .into_iter()
+        .map(|entry| entry.unwrap().file_name().to_owned())
+        .collect::<Vec<_>>();
+    assert_eq!(source_order.len(), 2);
+    let skipped_source = Path::new("source").join(&source_order[0]);
+    let skipped_dest = Path::new("destination/source").join(&source_order[0]);
+    let copied_source = Path::new("source").join(&source_order[1]);
+    let copied_dest = Path::new("destination/source").join(&source_order[1]);
+    std_fs::write(at.plus(&skipped_dest), "old contents").unwrap();
+    filetime::set_file_times(at.plus(&skipped_source), old_time, old_time).unwrap();
+    filetime::set_file_times(at.plus(&skipped_dest), new_time, new_time).unwrap();
+
+    ucmd.args(&["-R", "--update=older", "source", "destination"])
+        .succeeds()
+        .no_output();
+
+    assert_eq!(
+        std_fs::read_to_string(at.plus(&skipped_dest)).unwrap(),
+        "old contents"
+    );
+    assert_eq!(
+        std_fs::read_to_string(at.plus(&copied_dest)).unwrap(),
+        std_fs::read_to_string(at.plus(&copied_source)).unwrap()
+    );
+}
+
 #[test]
 fn test_cp_arg_update_none_fail() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1920,6 +1992,18 @@ fn test_cp_preserve_all() {
     }
 }
 
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_recursive_copy_ignores_unsupported_optional_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("source");
+    at.touch("source/file");
+
+    ucmd.args(&["-R", "source", "destination"])
+        .succeeds()
+        .no_output();
+}
+
 // GNU `cp -p` preserves mode, ownership, and timestamps but NOT xattrs.
 // xattr preservation requires explicit `--preserve=xattr` or `-a`. See #9704.
 #[test]
@@ -2594,6 +2678,240 @@ fn test_cp_preserve_timestamps() {
 
     println!("ls dest {}", result.stdout_str());
     assert_eq!(creation, creation2);
+}
+
+#[cfg(any(wasi_runner, target_os = "linux", target_os = "android"))]
+fn assert_timestamps(metadata: &std_fs::Metadata, accessed: FileTime, modified: FileTime) {
+    assert_eq!(FileTime::from_last_access_time(metadata), accessed);
+    assert_eq!(FileTime::from_last_modification_time(metadata), modified);
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_file_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let previous_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let previous_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    filetime::set_file_times(
+        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
+        previous_atime,
+        previous_mtime,
+    )
+    .unwrap();
+
+    ucmd.arg(TEST_HELLO_WORLD_SOURCE)
+        .arg("--preserve=timestamps")
+        .arg(TEST_HOW_ARE_YOU_SOURCE)
+        .succeeds();
+
+    let metadata = std_fs::metadata(at.plus(TEST_HOW_ARE_YOU_SOURCE)).unwrap();
+    assert_timestamps(&metadata, previous_atime, previous_mtime);
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_symlink_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let link_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let link_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let target_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let target_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 10_800, ts.nanosecond());
+
+    at.write("target", "contents");
+    at.relative_symlink_file("target", "source-link");
+    filetime::set_file_times(at.plus("target"), target_atime, target_mtime).unwrap();
+    filetime::set_symlink_file_times(at.plus("source-link"), link_atime, link_mtime).unwrap();
+
+    ucmd.args(&[
+        "-P",
+        "--progress",
+        "--preserve=timestamps",
+        "source-link",
+        "dest-link",
+    ])
+    .succeeds();
+
+    let link_metadata = std_fs::symlink_metadata(at.plus("dest-link")).unwrap();
+    assert!(link_metadata.file_type().is_symlink());
+    assert_timestamps(&link_metadata, link_atime, link_mtime);
+    assert_eq!(
+        std_fs::read_link(at.plus("dest-link")).unwrap(),
+        std_fs::read_link(at.plus("source-link")).unwrap()
+    );
+
+    let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
+    assert_timestamps(&target_metadata, target_atime, target_mtime);
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_timestamps_with_symbolic_link() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let source_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let source_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("source", "contents");
+    filetime::set_file_times(at.plus("source"), source_atime, source_mtime).unwrap();
+
+    ucmd.args(&[
+        "--symbolic-link",
+        "--preserve=timestamps",
+        "source",
+        "destination",
+    ])
+    .succeeds();
+
+    let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
+    assert!(destination_metadata.file_type().is_symlink());
+    assert_timestamps(&destination_metadata, source_atime, source_mtime);
+    assert_eq!(
+        std_fs::read_link(at.plus("destination")).unwrap(),
+        Path::new("source")
+    );
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_dereferenced_symlink_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let link_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let link_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let target_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let target_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 10_800, ts.nanosecond());
+
+    at.write("target", "contents");
+    at.relative_symlink_file("target", "source-link");
+    filetime::set_file_times(at.plus("target"), target_atime, target_mtime).unwrap();
+    filetime::set_symlink_file_times(at.plus("source-link"), link_atime, link_mtime).unwrap();
+
+    ucmd.args(&[
+        "-L",
+        "--progress",
+        "--preserve=timestamps",
+        "source-link",
+        "destination",
+    ])
+    .succeeds();
+
+    let destination_metadata = std_fs::symlink_metadata(at.plus("destination")).unwrap();
+    assert!(!destination_metadata.file_type().is_symlink());
+    assert_eq!(at.read("destination"), "contents");
+    assert_timestamps(&destination_metadata, target_atime, target_mtime);
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_timestamps_through_destination_symlink() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let source_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let source_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("source", "new contents");
+    at.write("target", "old contents");
+    at.relative_symlink_file("target", "destination");
+    filetime::set_file_times(at.plus("source"), source_atime, source_mtime).unwrap();
+
+    ucmd.args(&["--preserve=timestamps", "source", "destination"])
+        .succeeds();
+
+    assert!(at.is_symlink("destination"));
+    let target_metadata = std_fs::metadata(at.plus("target")).unwrap();
+    assert_timestamps(&target_metadata, source_atime, source_mtime);
+    assert_eq!(at.read("target"), "new contents");
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_refreshes_timestamps_for_later_source() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let first_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let second_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let shared_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.write("first", "first contents");
+    at.write("second", "second contents");
+    at.mkdir("destination");
+    std_fs::hard_link(at.plus("second"), at.plus("destination/first")).unwrap();
+    filetime::set_file_times(at.plus("first"), first_atime, shared_mtime).unwrap();
+    filetime::set_file_times(at.plus("second"), second_atime, shared_mtime).unwrap();
+
+    ucmd.args(&[
+        "--progress",
+        "--preserve=timestamps",
+        "first",
+        "second",
+        "destination",
+    ])
+    .succeeds();
+
+    let metadata = std_fs::metadata(at.plus("destination/second")).unwrap();
+    assert_timestamps(&metadata, first_atime, shared_mtime);
+    assert_eq!(at.read("destination/second"), "first contents");
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_recursive_directory_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let root_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let root_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let nested_atime = FileTime::from_unix_time(ts.unix_timestamp() - 14_400, ts.nanosecond());
+    let nested_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 10_800, ts.nanosecond());
+
+    at.mkdir_all("source/nested");
+    at.write("source/nested/file", "contents");
+    filetime::set_file_times(at.plus("source/nested"), nested_atime, nested_mtime).unwrap();
+    filetime::set_file_times(at.plus("source"), root_atime, root_mtime).unwrap();
+
+    ucmd.args(&[
+        "-R",
+        "--progress",
+        "--preserve=timestamps",
+        "source",
+        "destination",
+    ])
+    .succeeds()
+    .no_output();
+
+    let root_metadata = std_fs::metadata(at.plus("destination")).unwrap();
+    assert_timestamps(&root_metadata, root_atime, root_mtime);
+    let nested_metadata = std_fs::metadata(at.plus("destination/nested")).unwrap();
+    assert_timestamps(&nested_metadata, nested_atime, nested_mtime);
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_cp_wasi_preserve_overlapping_recursive_source_timestamps() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let ts = time::OffsetDateTime::now_utc();
+    let nested_atime = FileTime::from_unix_time(ts.unix_timestamp() - 7200, ts.nanosecond());
+    let nested_mtime = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+
+    at.mkdir_all("tree/subdir/nested");
+    at.write("tree/subdir/nested/file", "contents");
+    at.mkdir("destination");
+    filetime::set_file_times(at.plus("tree/subdir/nested"), nested_atime, nested_mtime).unwrap();
+
+    ucmd.args(&[
+        "-R",
+        "--progress",
+        "--preserve=timestamps",
+        "tree",
+        "tree/subdir",
+        "destination",
+    ])
+    .succeeds()
+    .no_output();
+
+    let metadata = std_fs::metadata(at.plus("destination/subdir/nested")).unwrap();
+    assert_timestamps(&metadata, nested_atime, nested_mtime);
 }
 
 #[test]

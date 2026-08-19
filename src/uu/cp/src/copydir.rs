@@ -32,6 +32,11 @@ use crate::{
     CopyMode, CopyResult, CpError, Options, aligned_ancestors, context_for, copy_attributes,
     copy_file,
 };
+#[cfg(target_os = "wasi")]
+use crate::{
+    copy_attributes_with_source_times,
+    platform::{DirectoryTimesSnapshot, DirectoryTimesTracker},
+};
 
 /// Represents a directory that needs permission fixup after copying its contents.
 struct DirNeedingPermissions {
@@ -41,6 +46,40 @@ struct DirNeedingPermissions {
     dest: PathBuf,
     /// Whether this directory was freshly created by the copy operation
     was_created: bool,
+    /// Timestamps captured before recursive traversal opened the directory.
+    #[cfg(target_os = "wasi")]
+    source_times: Option<DirectoryTimesSnapshot>,
+}
+
+fn copy_directory_attributes(
+    source: &Path,
+    dest: &Path,
+    attributes: &crate::Attributes,
+    dest_is_freshly_created_dir: bool,
+    skip_selinux_xattr: bool,
+    #[cfg(target_os = "wasi")] source_times: Option<DirectoryTimesSnapshot>,
+) -> CopyResult<()> {
+    #[cfg(target_os = "wasi")]
+    if let Some(source_times) =
+        source_times.and_then(|snapshot| snapshot.times_if_unchanged(source))
+    {
+        return copy_attributes_with_source_times(
+            source,
+            dest,
+            source_times,
+            attributes,
+            dest_is_freshly_created_dir,
+            skip_selinux_xattr,
+        );
+    }
+
+    copy_attributes(
+        source,
+        dest,
+        attributes,
+        dest_is_freshly_created_dir,
+        skip_selinux_xattr,
+    )
 }
 
 /// Ensure a Windows path starts with a `\\?`.
@@ -319,8 +358,13 @@ fn copy_direntry(
             copied_files,
             created_parent_dirs,
             false,
+            #[cfg(target_os = "wasi")]
+            None,
         )
     {
+        if matches!(err, CpError::Skipped(false)) {
+            return Ok(false);
+        }
         if preserve_hard_links {
             if !source_is_symlink {
                 return Err(err);
@@ -372,6 +416,7 @@ pub(crate) fn copy_directory(
     copied_files: &mut HashMap<FileInformation, PathBuf>,
     created_parent_dirs: &mut HashSet<PathBuf>,
     source_in_command_line: bool,
+    #[cfg(target_os = "wasi")] initial_directory_times: Option<DirectoryTimesTracker>,
 ) -> CopyResult<()> {
     // if no-dereference is enabled and this is a symlink, copy it as a file
     if !options.dereference(source_in_command_line) && root.is_symlink() {
@@ -385,6 +430,8 @@ pub(crate) fn copy_directory(
             copied_files,
             created_parent_dirs,
             source_in_command_line,
+            #[cfg(target_os = "wasi")]
+            None,
         );
     }
 
@@ -464,6 +511,17 @@ pub(crate) fn copy_directory(
     // Keep track of all directories we've created that need permission fixes
     let mut dirs_needing_permissions: Vec<DirNeedingPermissions> = Vec::new();
 
+    #[cfg(target_os = "wasi")]
+    let mut directory_times = initial_directory_times.or_else(|| {
+        matches!(options.attributes.timestamps, crate::Preserve::Yes { .. }).then(|| {
+            DirectoryTimesTracker::new(
+                root,
+                options.dereference(source_in_command_line),
+                options.dereference,
+            )
+        })
+    });
+
     // Traverse the contents of the directory, copying each one.
     for direntry_result in WalkDir::new(root)
         .same_file_system(options.one_file_system)
@@ -481,6 +539,16 @@ pub(crate) fn copy_directory(
                         }
                         Err(_) => (direntry_type.is_symlink(), direntry_type.is_dir()),
                     };
+                #[cfg(target_os = "wasi")]
+                let source_times = directory_times
+                    .as_mut()
+                    .and_then(|tracker| tracker.take(direntry_path, direntry.depth()));
+                #[cfg(target_os = "wasi")]
+                if (entry_is_dir_no_follow || (options.dereference && direntry_path.is_dir()))
+                    && let Some(tracker) = directory_times.as_mut()
+                {
+                    tracker.capture_children(direntry_path);
+                }
                 let entry = Entry::new(&context, direntry_path, options.no_target_dir)?;
 
                 let created = copy_direntry(
@@ -512,12 +580,14 @@ pub(crate) fn copy_directory(
                 if is_dir_for_permissions {
                     // For --link mode, copy attributes immediately to avoid O(n) memory
                     if options.copy_mode == CopyMode::Link {
-                        copy_attributes(
+                        copy_directory_attributes(
                             &entry.source_absolute,
                             &entry.local_to_target,
                             &options.attributes,
                             false,
                             options.set_selinux_context,
+                            #[cfg(target_os = "wasi")]
+                            source_times,
                         )?;
                         continue;
                     }
@@ -526,6 +596,8 @@ pub(crate) fn copy_directory(
                         source: entry.source_absolute.clone(),
                         dest: entry.local_to_target.clone(),
                         was_created: created,
+                        #[cfg(target_os = "wasi")]
+                        source_times,
                     });
 
                     // If true, last_iter is not a parent of this iter.
@@ -555,12 +627,14 @@ pub(crate) fn copy_directory(
                             let src = direntry_path.join(p);
                             let entry = Entry::new(&context, &src, options.no_target_dir)?;
 
-                            copy_attributes(
+                            copy_directory_attributes(
                                 &entry.source_absolute,
                                 &entry.local_to_target,
                                 &options.attributes,
                                 false,
                                 options.set_selinux_context,
+                                #[cfg(target_os = "wasi")]
+                                None,
                             )?;
                         }
                     }
@@ -577,12 +651,14 @@ pub(crate) fn copy_directory(
     // Fix permissions for all directories we created
     // This ensures that even sibling directories get their permissions fixed
     for dir in dirs_needing_permissions {
-        copy_attributes(
+        copy_directory_attributes(
             &dir.source,
             &dir.dest,
             &options.attributes,
             dir.was_created,
             options.set_selinux_context,
+            #[cfg(target_os = "wasi")]
+            dir.source_times,
         )?;
 
         #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]

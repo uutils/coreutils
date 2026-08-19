@@ -29,12 +29,15 @@ mod windows;
 #[cfg(target_os = "windows")]
 pub(crate) use self::windows::copy_on_write;
 
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
 mod other;
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, target_os = "windows", target_os = "wasi")))]
 pub(crate) use self::other::copy_on_write;
 
 #[cfg(target_os = "wasi")]
 mod wasi;
 #[cfg(target_os = "wasi")]
-pub(crate) use self::wasi::create_symlink;
+pub(crate) use self::wasi::{
+    DirectoryTimesSnapshot, DirectoryTimesTracker, SourceTimes, SourceTimesSnapshot, copy_on_write,
+    create_symlink, is_optional_metadata_error, set_timestamps,
+};

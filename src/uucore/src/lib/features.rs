@@ -86,7 +86,7 @@ pub mod pipes;
 pub mod proc_info;
 #[cfg(all(any(unix, windows), feature = "process"))]
 pub mod process;
-#[cfg(all(unix, feature = "safe-copy"))]
+#[cfg(all(any(unix, target_os = "wasi"), feature = "safe-copy"))]
 pub mod safe_copy;
 #[cfg(all(unix, not(target_os = "redox")))]
 pub mod safe_traversal;
