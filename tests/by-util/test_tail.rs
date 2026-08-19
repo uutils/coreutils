@@ -858,6 +858,22 @@ fn test_bytes_single() {
 }
 
 #[test]
+fn test_positive_bytes_overflowing_offset_does_not_panic() {
+    // Regression test for #13887: `tail -c +N` on a regular file larger than the block size seeks
+    // to byte N-1. A very large N (greater than `i64::MAX`) makes the seek fail with `EINVAL`;
+    // `tail` used to `.unwrap()` and abort. That start is past the end of the file, so the output
+    // must simply be empty.
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Larger than sane_blksize (~4 KiB) so the seek code path is taken.
+    at.write("big", &"x".repeat(8192));
+    ucmd.arg("-c")
+        .arg("+18446744073709551615") // u64::MAX
+        .arg("big")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
 fn test_bytes_stdin() {
     new_ucmd!()
         .pipe_in_fixture(FOOBAR_TXT)

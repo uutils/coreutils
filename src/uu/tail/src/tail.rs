@@ -480,7 +480,13 @@ fn bounded_tail(file: &mut File, settings: &Settings) -> UResult<()> {
         FilterMode::Bytes(Signum::Positive(count)) if count > &1 => {
             // GNU `tail` seems to index bytes and lines starting at 1, not
             // at 0. It seems to treat `+0` and `+1` as the same thing.
-            file.seek(SeekFrom::Start(*count - 1)).unwrap();
+            //
+            // Clamp the start offset to the file length. A start beyond the end of the file
+            // produces no output; clamping also avoids seeking to an offset the OS cannot
+            // represent (anything above `i64::MAX` fails with `EINVAL`), which previously
+            // panicked via `.unwrap()`. See #13887.
+            let len = file.metadata()?.len();
+            file.seek(SeekFrom::Start((*count - 1).min(len)))?;
         }
         _ => {}
     }
