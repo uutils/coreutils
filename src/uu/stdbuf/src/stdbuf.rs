@@ -7,13 +7,13 @@
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 use std::fs::Permissions;
-#[cfg(not(feature = "feat_external_libstdbuf"))]
+#[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 use std::os::unix::fs::PermissionsExt;
-#[cfg(unix)]
 use std::path::PathBuf;
 use std::process;
+#[cfg(not(feature = "feat_external_libstdbuf"))]
 use tempfile::TempDir;
 use thiserror::Error;
 use uucore::display::Quotable;
@@ -206,7 +206,7 @@ fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
 }
 
 #[cfg(feature = "feat_external_libstdbuf")]
-fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
+fn get_preload_env() -> UResult<(String, PathBuf)> {
     // Use the directory provided at compile time via LIBSTDBUF_DIR environment variable
     // cannot use unwrap_or <https://github.com/rust-lang/rust/issues/143874>
     const LIBSTDBUF_DIR: &str = match option_env!("LIBSTDBUF_DIR") {
@@ -249,6 +249,23 @@ fn get_preload_env(_tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
     ))
 }
 
+/// The exit status to report for a child that has already terminated.
+///
+/// `exec()` would have let the shell observe the child's own fate directly.
+/// Now that a waiter sits in between, reproduce it: a child killed by a signal
+/// is reported as `128 + signal`, the convention shells use, instead of the 0
+/// that `ExitStatus::code()` yields for a signalled process.
+fn exit_status_code(status: process::ExitStatus) -> i32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return 128 + signal;
+        }
+    }
+    status.code().unwrap_or(1)
+}
+
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let raw_args: Vec<OsString> = args.collect();
@@ -274,23 +291,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let mut command = process::Command::new(first_command);
     let command_params: Vec<&OsString> = command_values.collect();
 
-    // When embedding the library, create a private (0700) temporary directory.
-    // The TempDir is kept alive until after the child exits so that the dynamic
-    // linker can load the .so, then dropped automatically.
-    // Mode is set at creation (not via a later chmod) so the directory is never
-    // world-accessible between create and restrict.
+    // When embedding the library, extract it into a temporary directory that is
+    // private to this user (0700 on Unix, where the mode is applied at mkdir
+    // time so the directory is never world-accessible in between). The TempDir
+    // is kept alive until the child exits, so the loader can still find the
+    // library, and is removed afterwards instead of being leaked.
     #[cfg(not(feature = "feat_external_libstdbuf"))]
-    let _tmp_dir = tempfile::Builder::new()
-        .permissions(Permissions::from_mode(0o700))
-        .tempdir()
-        .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
-    #[cfg(not(feature = "feat_external_libstdbuf"))]
-    let (preload_env, libstdbuf) = get_preload_env(&_tmp_dir)?;
+    let (tmp_dir, preload_env, libstdbuf) = {
+        let mut builder = tempfile::Builder::new();
+        #[cfg(unix)]
+        builder.permissions(Permissions::from_mode(0o700));
+        let tmp_dir = builder
+            .tempdir()
+            .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
+        let (preload_env, libstdbuf) = get_preload_env(&tmp_dir)?;
+        (tmp_dir, preload_env, libstdbuf)
+    };
     #[cfg(feature = "feat_external_libstdbuf")]
-    let (preload_env, libstdbuf) =
-        get_preload_env(&tempfile::tempdir().map_err(|e| {
-            UUsageError::new(125, format!("failed to create temp directory: {e}"))
-        })?)?;
+    let (preload_env, libstdbuf) = get_preload_env()?;
     // The preload variable is a colon-separated list with no escaping mechanism,
     // so a path containing ':' does not round-trip: the dynamic loader splits it
     // and treats the leading component as a library to load. Since the temp
@@ -314,10 +332,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // destructor runs, leaking the dir on every invocation.
     let e = match command.spawn() {
         Ok(mut child) => {
-            let status = child.wait().unwrap();
+            let status = child.wait();
+            // The child is gone: the library is no longer needed, remove it.
             #[cfg(not(feature = "feat_external_libstdbuf"))]
-            drop(_tmp_dir); // cleanup after child exits — .so no longer needed
-            process::exit(status.code().unwrap_or(0));
+            drop(tmp_dir);
+            let status = status.map_err(|err| {
+                USimpleError::new(
+                    1,
+                    translate!("stdbuf-error-failed-to-execute", "error" => strip_errno(&err)),
+                )
+            })?;
+            process::exit(exit_status_code(status));
         }
         Err(err) => err,
     };
