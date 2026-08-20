@@ -212,11 +212,10 @@ dependencies = [
 
 [[package]]
 name = "blake2b_simd"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b79834656f71332577234b50bfc009996f7449e0c056884e6a02492ded0ca2f3"
+checksum = "3560a7b1951efe814fcd721938313adc56753ca39f4b23847d7e9a2402f5dbff"
 dependencies = [
- "arrayref",
  "arrayvec",
  "constant_time_eq",
 ]
