@@ -3699,3 +3699,76 @@ fn test_mv_exchange_missing_target() {
         .stderr_contains("present")
         .stderr_contains("absent");
 }
+
+// Regression test for issue #11246: `mv --debug` must report a verbose
+// output write failure on stderr and exit 1 instead of panicking.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_debug_write_error_does_not_panic() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let source = "test_mv_debug_write_error_source";
+    let dest = "test_mv_debug_write_error_dest";
+
+    at.write(source, "data");
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    ucmd.arg("--debug")
+        .arg(source)
+        .arg(dest)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device")
+        .stderr_does_not_contain("panicked");
+
+    assert!(!at.file_exists(source));
+    assert_eq!(at.read(dest), "data");
+}
+
+// Regression test for issue #11246: a verbose output write failure on a
+// debug skip line must not abort later operands and must be reported once.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_no_clobber_debug_write_error_reported_once() {
+    use std::fs::OpenOptions;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir = "test_mv_no_clobber_write_error_dir";
+    let skipped = "skipped_source";
+    let moved = "moved_source";
+
+    at.mkdir(dir);
+    at.write(skipped, "new");
+    at.write(&format!("{dir}/{skipped}"), "existing");
+    at.write(moved, "data");
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    let result = ucmd
+        .arg("--no-clobber")
+        .arg("--debug")
+        .arg(skipped)
+        .arg(moved)
+        .arg(dir)
+        .set_stdout(dev_full)
+        .fails();
+    result.code_is(1).stderr_does_not_contain("panicked");
+    assert_eq!(
+        result
+            .stderr_str()
+            .matches("No space left on device")
+            .count(),
+        1
+    );
+
+    // The skipped pair is unchanged...
+    assert!(at.file_exists(skipped));
+    assert_eq!(at.read(skipped), "new");
+    assert_eq!(at.read(&format!("{dir}/{skipped}")), "existing");
+    // ...and the second source was still moved.
+    assert!(!at.file_exists(moved));
+    assert_eq!(at.read(&format!("{dir}/{moved}")), "data");
+}
