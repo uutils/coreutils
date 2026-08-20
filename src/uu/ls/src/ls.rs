@@ -20,7 +20,6 @@ use std::cell::RefCell;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::{
     cell::OnceCell,
-    cmp::Reverse,
     ffi::{OsStr, OsString},
     fs::{self, DirEntry, FileType, Metadata, ReadDir},
     io::{BufWriter, ErrorKind, Stdout, Write, stdout},
@@ -1471,13 +1470,30 @@ pub fn list(locs: Vec<&Path>, config: &Config) -> UResult<()> {
 }
 
 fn sort_entries(entries: &mut [PathData], config: &Config) {
-    match config.sort {
-        Sort::Time => entries.sort_unstable_by_key(|k| {
-            Reverse(
-                k.metadata()
-                    .and_then(|md| metadata_get_time(md, config.time))
-                    .unwrap_or(UNIX_EPOCH),
+    // The order the name sort uses. Sorting by time falls back on it so that
+    // entries sharing a timestamp come out in a fixed order rather than in
+    // whatever order the directory was read in, which is what GNU ls does and
+    // what every other arm of this match already does.
+    let use_locale = uucore::i18n::collator::should_use_locale_collation();
+    let name_cmp = |a: &PathData, b: &PathData| {
+        if use_locale {
+            uucore::i18n::collator::locale_cmp(
+                os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                os_str_as_bytes_lossy(b.display_name()).as_ref(),
             )
+        } else {
+            a.display_name().cmp(b.display_name())
+        }
+    };
+
+    match config.sort {
+        Sort::Time => entries.sort_unstable_by(|a, b| {
+            let time = |p: &PathData| {
+                p.metadata()
+                    .and_then(|md| metadata_get_time(md, config.time))
+                    .unwrap_or(UNIX_EPOCH)
+            };
+            time(b).cmp(&time(a)).then_with(|| name_cmp(a, b))
         }),
         Sort::Size => {
             entries.sort_unstable_by(|a, b| {
@@ -1488,18 +1504,7 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             });
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => {
-            if uucore::i18n::collator::should_use_locale_collation() {
-                entries.sort_unstable_by(|a, b| {
-                    uucore::i18n::collator::locale_cmp(
-                        os_str_as_bytes_lossy(a.display_name()).as_ref(),
-                        os_str_as_bytes_lossy(b.display_name()).as_ref(),
-                    )
-                });
-            } else {
-                entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name()));
-            }
-        }
+        Sort::Name => entries.sort_unstable_by(name_cmp),
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.file_name()).as_ref(),

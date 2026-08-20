@@ -2530,6 +2530,57 @@ fn test_ls_time_recent_future() {
 }
 
 #[test]
+fn test_ls_order_time_breaks_ties_by_name() {
+    // Every other sort in this utility falls back on the name, and GNU ls does
+    // the same for -t. Without the fallback, entries sharing a timestamp come
+    // out in whatever order the directory happened to be read in.
+    use filetime::{FileTime, set_file_times};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    let names = ["zulu", "alpha", "Mike", "bravo"];
+    for name in names {
+        at.touch(name);
+        at.append(name, "x");
+    }
+    let same = FileTime::from_unix_time(1_700_000_000, 0);
+    for name in names {
+        set_file_times(at.plus_as_string(name), same, same).unwrap();
+    }
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("-t")
+        .succeeds()
+        .stdout_only("Mike\nalpha\nbravo\nzulu\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .arg("-tr")
+        .succeeds()
+        .stdout_only("zulu\nbravo\nalpha\nMike\n");
+
+    // The tie is broken with the same order the name sort uses, so a UTF-8
+    // locale puts `alpha` before `Mike` where the C locale does the reverse.
+    #[cfg(unix)]
+    {
+        use uutests::util::is_locale_available;
+        let locale = "en_US.UTF-8";
+        if is_locale_available(locale) {
+            scene
+                .ucmd()
+                .env("LC_ALL", locale)
+                .arg("-t")
+                .succeeds()
+                .stdout_only("alpha\nbravo\nMike\nzulu\n");
+        }
+    }
+}
+
+#[test]
 fn test_ls_order_time() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
