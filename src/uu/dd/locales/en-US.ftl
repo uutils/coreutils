@@ -139,7 +139,7 @@ dd-error-conv-flag-no-match = Unrecognized conv=CONV -> { $flag }
 dd-error-multiplier-parse-failure = invalid number: '{ $input }'
 dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
 dd-error-block-without-cbs = conv=block or conv=unblock specified without cbs=N
-dd-error-status-not-recognized = invalid status level: ‘{ $level }’
+dd-error-status-not-recognized = invalid status level: { $level }
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory
 dd-error-invalid-number = invalid number: ‘{ $input }’

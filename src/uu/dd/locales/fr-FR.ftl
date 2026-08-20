@@ -139,7 +139,7 @@ dd-error-conv-flag-no-match = conv=CONV non reconnu -> { $flag }
 dd-error-multiplier-parse-failure = nombre invalide : ‘{ $input }‘
 dd-error-multiplier-overflow = La chaîne de multiplicateur déborderait sur le système actuel -> { $input }
 dd-error-block-without-cbs = conv=block ou conv=unblock spécifié sans cbs=N
-dd-error-status-not-recognized = status=NIVEAU non reconnu -> { $level }
+dd-error-status-not-recognized = niveau de statut invalide : { $level }
 dd-error-unimplemented = fonctionnalité non implémentée sur ce système -> { $feature }
 dd-error-bs-out-of-range = { $param }=N ne peut pas tenir en mémoire
 dd-error-invalid-number = nombre invalide : ‘{ $input }‘

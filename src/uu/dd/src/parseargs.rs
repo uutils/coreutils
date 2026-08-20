@@ -14,8 +14,7 @@ use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
 use uucore::parser::parse_size::{ParseSizeError, Parser as SizeParser};
-use uucore::show_warning;
-use uucore::translate;
+use uucore::{show_warning, translate};
 
 /// Parser Errors describe errors with parser input
 #[derive(Debug, PartialEq, Eq, Error)]
@@ -379,7 +378,9 @@ impl Parser {
             "none" => Ok(StatusLevel::None),
             "noxfer" => Ok(StatusLevel::Noxfer),
             "progress" => Ok(StatusLevel::Progress),
-            _ => Err(ParseError::StatusLevelNotRecognized(val.to_string())),
+            _ => Err(ParseError::StatusLevelNotRecognized(
+                val.quote().to_string(),
+            )),
         }
     }
 
