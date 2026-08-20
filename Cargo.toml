@@ -506,14 +506,14 @@ z85 = "3.0.5"
 zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
-md-5 = "0.11.0"
-sha1 = "0.11.0"
-sha2 = "0.11.0"
-sha3 = "0.12.0"
+md-5 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha1 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha3 = { version = "0.12.0", default-features = false, features = ["alloc"] }
 shake = "0.1.0"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
-sm3 = "0.5.0"
+sm3 = { version = "0.5.0", default-features = false, features = ["alloc"] }
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.11.0"
 openssl = { version = "0.10", features = ["vendored"] }
