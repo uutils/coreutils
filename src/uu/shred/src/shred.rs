@@ -210,7 +210,7 @@ impl BytesWriter {
                     Pattern::Single(byte) => [*byte; PATTERN_BUFFER_SIZE],
                     Pattern::Multi(bytes) => {
                         let mut buf = [0; PATTERN_BUFFER_SIZE];
-                        for chunk in buf.chunks_exact_mut(PATTERN_LENGTH) {
+                        for chunk in buf.as_chunks_mut::<PATTERN_LENGTH>().0 {
                             chunk.copy_from_slice(bytes);
                         }
                         buf
