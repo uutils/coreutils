@@ -6,6 +6,8 @@
 
 use uutests::new_ucmd;
 use uutests::util::TestScenario;
+#[cfg(unix)]
+use uutests::util::is_locale_available;
 use uutests::util_name;
 
 #[test]
@@ -730,6 +732,50 @@ fn test_read_error() {
         .arg("/proc/self/mem")
         .fails()
         .stderr_contains("comm: /proc/self/mem: Input/output error");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_locale_collation() {
+    // In a UTF-8 locale the collation puts `a1` before `a-b` and the byte order
+    // puts them the other way round. Reading a file `sort` produced with a byte
+    // comparison rejects it as unsorted and drops the line the two files share.
+    let locale = "en_US.UTF-8";
+    if !is_locale_available(locale) {
+        return;
+    }
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a1\na-b\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", locale)
+        .args(&["-23", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a1\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_c_locale_still_orders_by_bytes() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("f1", "a-b\na1\n");
+    scene.fixtures.write("f2", "a-b\n");
+
+    scene
+        .ucmd()
+        .env("LC_ALL", "C")
+        .args(&["-12", "f1", "f2"])
+        .succeeds()
+        .stdout_only("a-b\n");
 }
 
 #[test]

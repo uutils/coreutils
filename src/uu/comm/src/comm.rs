@@ -14,6 +14,9 @@ use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
 use uucore::fs::paths_refer_to_same_file;
+use uucore::i18n::collator::{
+    AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
+};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -53,6 +56,20 @@ struct OrderChecker {
     file_num: FileNumber,
     check_order: bool,
     has_error: bool,
+    use_locale: bool,
+}
+
+/// Compare two lines the way the input was ordered.
+///
+/// `sort` orders with the locale collation, and so do `join` and `ls`. Reading
+/// that order back with a byte comparison rejects input that is in order and
+/// puts lines in the wrong column, so `comm` has to measure it the same way.
+fn line_cmp(a: &[u8], b: &[u8], use_locale: bool) -> Ordering {
+    if use_locale {
+        locale_cmp(a, b)
+    } else {
+        a.cmp(b)
+    }
 }
 
 enum Input {
@@ -97,12 +114,13 @@ impl LineReader {
 }
 
 impl OrderChecker {
-    fn new(file_num: FileNumber, check_order: bool) -> Self {
+    fn new(file_num: FileNumber, check_order: bool, use_locale: bool) -> Self {
         Self {
             last_line: Vec::new(),
             file_num,
             check_order,
             has_error: false,
+            use_locale,
         }
     }
 
@@ -112,7 +130,7 @@ impl OrderChecker {
             return true;
         }
 
-        let is_ordered = *current_line >= *self.last_line;
+        let is_ordered = line_cmp(current_line, &self.last_line, self.use_locale) != Ordering::Less;
         if !is_ordered && !self.has_error {
             let _ = writeln!(
                 stderr(),
@@ -234,15 +252,16 @@ fn comm(
                 || are_files_identical(Path::new(filename1), Path::new(filename2))
                     .unwrap_or(false)));
 
-    let mut checker1 = OrderChecker::new(FileNumber::One, check_order);
-    let mut checker2 = OrderChecker::new(FileNumber::Two, check_order);
+    let use_locale = should_use_locale_collation();
+    let mut checker1 = OrderChecker::new(FileNumber::One, check_order, use_locale);
+    let mut checker2 = OrderChecker::new(FileNumber::Two, check_order, use_locale);
     let mut input_error = false;
 
     while na != 0 || nb != 0 {
         let ord = match (na, nb) {
             (0, _) => Ordering::Greater,
             (_, 0) => Ordering::Less,
-            (_, _) => ra.as_slice().cmp(rb.as_slice()),
+            (_, _) => line_cmp(ra, rb, use_locale),
         };
 
         match ord {
@@ -343,6 +362,11 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    let mut collator_opts = CollatorOptions::default();
+    collator_opts.alternate_handling = Some(AlternateHandling::Shifted);
+    let _ = try_init_collator(collator_opts);
+
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
     let filename1 = matches.get_one::<OsString>(options::FILE_1).unwrap();
     let filename2 = matches.get_one::<OsString>(options::FILE_2).unwrap();
