@@ -468,7 +468,7 @@ fn test_stdbuf_no_tmpdir_leak() {
     let leaked: Vec<_> = std::fs::read_dir(dedicated_tmpdir.path())
         .unwrap()
         .flatten()
-        .filter(|e| e.metadata().ok().map_or(false, |m| m.is_dir()))
+        .filter(|e| e.metadata().is_ok_and(|m| m.is_dir()))
         .map(|e| e.file_name().to_string_lossy().to_string())
         .collect();
 
@@ -505,7 +505,7 @@ fn test_stdbuf_tmpdir_is_private() {
     let stdbuf_dirs: Vec<_> = std::fs::read_dir(dedicated_tmpdir.path())
         .unwrap()
         .flatten()
-        .filter(|e| e.metadata().ok().map_or(false, |m| m.is_dir()))
+        .filter(|e| e.metadata().is_ok_and(|m| m.is_dir()))
         .map(|e| e.path())
         .collect();
 
@@ -529,22 +529,31 @@ fn test_stdbuf_tmpdir_is_private() {
         );
 
         for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
-            if !entry.file_type().map_or(false, |t| t.is_file()) {
+            if !entry.file_type().is_ok_and(|t| t.is_file()) {
                 continue;
             }
-            let file_mode = entry
-                .metadata()
-                .expect("metadata")
-                .permissions()
-                .mode()
-                & 0o777;
+            let file_mode = entry.metadata().expect("metadata").permissions().mode() & 0o777;
             assert_eq!(
-                file_mode, 0o600,
+                file_mode,
+                0o600,
                 "libstdbuf at {} has unsafe permissions {file_mode:#o}, expected 0o600",
                 entry.path().display(),
             );
         }
     }
+}
+
+/// stdbuf waits on the command instead of exec'ing it, so it has to translate
+/// the child's fate back into its own exit status: a command killed by a
+/// signal must still be reported as `128 + signal`, not as a clean 0.
+#[test]
+#[cfg(unix)]
+fn test_stdbuf_reports_signalled_command() {
+    // SIGQUIT (3) rather than the usual SIGTERM, so the expected 131 cannot be
+    // confused with a status the shell would produce on its own.
+    new_ucmd!()
+        .args(&["-o0", "sh", "-c", "kill -QUIT $$"])
+        .fails_with_code(131);
 }
 
 #[cfg(unix)]
