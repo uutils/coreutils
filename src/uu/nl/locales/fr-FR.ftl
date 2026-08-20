@@ -2,17 +2,16 @@ nl-about = Numéroter les lignes des fichiers
 nl-usage = nl [OPTION]... [FICHIER]...
 nl-after-help = STYLE est l'un des suivants :
 
-  - a numéroter toutes les lignes
-  - t numéroter seulement les lignes non vides
-  - n ne numéroter aucune ligne
-  - pBRE numéroter seulement les lignes qui contiennent une correspondance pour
-          l'expression régulière de base, BRE
+    - a numéroter toutes les lignes
+    - t numéroter seulement les lignes non vides
+    - n ne numéroter aucune ligne
+    - pBRE numéroter seulement les lignes qui contiennent une correspondance pour l'expression régulière de base, BRE
 
   FORMAT est l'un des suivants :
 
-  - ln justifié à gauche, sans zéros en tête
-  - rn justifié à droite, sans zéros en tête
-  - rz justifié à droite, avec zéros en tête
+    - ln justifié à gauche, sans zéros en tête
+    - rn justifié à droite, sans zéros en tête
+    - rz justifié à droite, avec zéros en tête
 
 # Messages d'aide
 nl-help-help = Afficher les informations d'aide.
