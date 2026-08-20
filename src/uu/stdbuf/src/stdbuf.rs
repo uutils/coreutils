@@ -249,17 +249,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // When embedding the library, create a private (0700) temporary directory.
     // The TempDir is kept alive until after the child exits so that the dynamic
     // linker can load the .so, then dropped automatically.
-    // We create with default permissions and immediately restrict them to 0700
-    // (bypassing umask) so other users on the system cannot race to replace the .so.
+    // Mode is set at creation (not via a later chmod) so the directory is never
+    // world-accessible between create and restrict.
     #[cfg(not(feature = "feat_external_libstdbuf"))]
-    let _tmp_dir = {
-        let d = tempfile::tempdir()
-            .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
-        std::fs::set_permissions(d.path(), Permissions::from_mode(0o700)).map_err(|e| {
-            UUsageError::new(125, format!("failed to set temp dir permissions: {e}"))
-        })?;
-        d
-    };
+    let _tmp_dir = tempfile::Builder::new()
+        .permissions(Permissions::from_mode(0o700))
+        .tempdir()
+        .map_err(|e| UUsageError::new(125, format!("failed to create temp directory: {e}")))?;
     #[cfg(not(feature = "feat_external_libstdbuf"))]
     let (preload_env, libstdbuf) = get_preload_env(&_tmp_dir)?;
     #[cfg(feature = "feat_external_libstdbuf")]
