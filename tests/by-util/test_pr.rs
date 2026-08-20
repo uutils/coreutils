@@ -1173,6 +1173,34 @@ fn test_zero_page_width() {
 }
 
 #[test]
+fn test_page_length_ten_implies_omit_header() {
+    // `pr --help` states it twice: a page length of 10 or less implies `-t`.
+    // At exactly 10 the header and trailer were kept and then subtracted from
+    // the page, which left no room for content: `-h` printed empty pages and
+    // `-t` printed nothing at all.
+    new_ucmd!()
+        .args(&["-l", "10", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+
+    new_ucmd!()
+        .args(&["-l", "10", "-t"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_page_length_eleven_keeps_header() {
+    new_ucmd!()
+        .args(&["-l", "11", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_contains("hdr");
+}
+
+#[test]
 fn test_zero_length() {
     new_ucmd!()
         .args(&["-l", "0"])
