@@ -155,7 +155,7 @@ printf-after-help = basic anonymous string templating:
   - %b: escaped string - the string will be checked for any escaped literals from
         the escaped literal list above, and translate them to literal characters.
         e.g. \\n will be transformed into a newline character.
-        One special rule about %b mode is that octal literals are interpreted differently
+        One special rule about %b mode is that octal literals are interpreted differently.
         In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
         instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
         still be interpreted and not throw a warning, you will have problems if you use this for a
@@ -182,7 +182,7 @@ printf-after-help = basic anonymous string templating:
 
   - %u: 64-bit unsigned integer
 
-  - %x or %X: 64-bit unsigned integer printed in Hexadecimal (base 16)
+  - %x or %X: 64-bit unsigned integer printed in Hexadecimal (base 16).
               %X instead of %x means to use uppercase letters for 'a' through 'f'
 
   - %o: 64-bit unsigned integer printed in octal (base 8)
@@ -206,15 +206,15 @@ printf-after-help = basic anonymous string templating:
         estimated or adjusted beyond input values.
 
   - %e or %E: floating point value presented in scientific notation
-              7 significant digits by default
+              7 significant digits by default.
               %E means use to use uppercase E for the mantissa.
 
   - %g or %G: floating point value presented in the shortest of decimal and scientific notation
               behaves differently from %f and %E, please see posix printf spec for full details,
               some examples of different behavior:
-              Sci Note has 6 significant digits by default
-              Trailing zeroes are removed
-              Instead of being truncated, digit after last is rounded
+              - Sci Note has 6 significant digits by default
+              - Trailing zeroes are removed
+              - Instead of being truncated, digit after last is rounded
 
   Like other behavior in this utility, the design choices of floating point
   behavior in this utility is selected to reproduce in exact
