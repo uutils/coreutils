@@ -1181,10 +1181,7 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         BlockWriter::Unbuffered(o)
     };
 
-    // Create a common empty buffer with a capacity of the block size.
-    // This is the max size needed.
-    let mut buf = Vec::new();
-    buf.try_reserve(bsize)?; // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    let mut buf = alloc_copy_buffer(bsize)?;
 
     // The main read/write loop.
     //
@@ -1346,6 +1343,26 @@ fn make_linux_oflags(oflags: &OFlags) -> Option<core::ffi::c_int> {
     }
 
     if flag == 0 { None } else { Some(flag) }
+}
+
+/// The copy buffer, `bsize` bytes long and ready to be read into.
+///
+/// `Read::read` fills an initialised slice, and zeroed pages are the only
+/// initialisation that costs nothing: `vec![0; n]` allocates through
+/// `alloc_zeroed`, so the pages arrive from the kernel already zero and stay
+/// untouched until something is read into them. Writing a fill byte over
+/// reserved capacity instead faults in the whole of `bs=` before the first
+/// read, which is what made a large `bs=` cost its full size in time and in
+/// resident memory even with nothing to copy.
+///
+/// The reservation still happens first, because `vec![0; n]` aborts when the
+/// allocation fails and `dd` reports that as an error instead.
+fn alloc_copy_buffer(bsize: usize) -> io::Result<Vec<u8>> {
+    let mut probe: Vec<u8> = Vec::new();
+    // try_with_capacity is unstable https://github.com/rust-lang/rust/issues/91913
+    probe.try_reserve(bsize)?;
+    drop(probe);
+    Ok(vec![0u8; bsize])
 }
 
 /// Read from an input (that is, a source of bytes) into the given buffer.
@@ -1542,6 +1559,39 @@ mod tests {
     use crate::{Output, Parser, calc_bsize};
 
     use std::path::Path;
+
+    /// `dd` has to accept a `bs=` far larger than the data it will copy, the
+    /// way GNU dd does, so the copy buffer must not fault in its pages.
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    #[test]
+    fn alloc_copy_buffer_does_not_touch_its_pages() {
+        use crate::alloc_copy_buffer;
+
+        fn peak_rss_kib() -> u64 {
+            std::fs::read_to_string("/proc/self/status")
+                .unwrap()
+                .lines()
+                .find_map(|line| line.strip_prefix("VmHWM:"))
+                .and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+                .unwrap()
+        }
+
+        // Larger than anything else this test binary allocates, so the reading
+        // below cannot be attributed to another test.
+        const BSIZE: usize = 4 << 30;
+        const SLACK_KIB: u64 = 64 << 10;
+
+        let before = peak_rss_kib();
+        let buf = alloc_copy_buffer(BSIZE).unwrap();
+        let after = peak_rss_kib();
+
+        assert_eq!(buf.len(), BSIZE);
+        assert!(
+            after - before < SLACK_KIB,
+            "a {BSIZE}-byte copy buffer raised peak RSS by {} KiB",
+            after - before
+        );
+    }
 
     #[test]
     fn bsize_test_primes() {
