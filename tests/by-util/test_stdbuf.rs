@@ -480,9 +480,8 @@ fn test_stdbuf_no_tmpdir_leak() {
     );
 }
 
-/// Verify that the temporary directory created for libstdbuf.so is private (0700).
-/// A world-accessible tmpdir allows other users to replace libstdbuf.so, leading
-/// to arbitrary code execution.
+/// Verify that the temporary directory created for libstdbuf.so is private (0700)
+/// and the embedded library file is owner read/write only (0600).
 /// Regression test for https://github.com/uutils/coreutils/issues/13939
 #[test]
 #[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
@@ -528,6 +527,23 @@ fn test_stdbuf_tmpdir_is_private() {
             0o700,
             "tmpdir {dir:?} has unsafe permissions {mode:#o}, expected 0o700"
         );
+
+        for entry in std::fs::read_dir(dir).expect("read_dir").flatten() {
+            if !entry.file_type().map_or(false, |t| t.is_file()) {
+                continue;
+            }
+            let file_mode = entry
+                .metadata()
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(
+                file_mode, 0o600,
+                "libstdbuf at {} has unsafe permissions {file_mode:#o}, expected 0o600",
+                entry.path().display(),
+            );
+        }
     }
 }
 
