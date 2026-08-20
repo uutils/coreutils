@@ -662,3 +662,46 @@ fn test_locale_collation() {
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
 }
+
+#[test]
+fn test_incompatible_fields_reports_exact_field_number() {
+    // An out-of-range field clamps to usize::MAX, which used to overflow the
+    // one-based increment. Field numbers past 2^53 also used to be rounded on
+    // their way through the localization layer.
+    //
+    // `parse_field_number` uses `usize` (matching GNU join's `size_t`), so a
+    // value at or above `usize::MAX` saturates to it. The saturation ceiling is
+    // therefore pointer-width dependent, and the expected text is built from
+    // `usize::MAX` rather than a hard-coded 64-bit literal.
+    let max_field = usize::MAX.to_string();
+
+    // A small field number takes the i64 number path through the localization
+    // layer and is platform-independent.
+    new_ucmd!()
+        .args(&["-j", "3", "-1", "5", "/dev/null", "/dev/null"])
+        .fails()
+        .stderr_contains("incompatible join fields 3, 5");
+
+    // Values at or above `usize::MAX` saturate to `usize::MAX` on every
+    // platform; the localization layer must carry that ceiling as an exact
+    // decimal string rather than rounding it through Fluent's f64-backed number
+    // type.
+    for field in ["18446744073709551615", "99999999999999999999999"] {
+        new_ucmd!()
+            .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
+            .fails()
+            .stderr_contains(&format!("incompatible join fields {max_field}, 5"));
+    }
+
+    // A value above f64 precision (2^53) but below `usize::MAX` is reported
+    // exactly on 64-bit (where `usize` holds it); on 32-bit it saturates to
+    // `usize::MAX` like the cases above.
+    #[cfg(target_pointer_width = "64")]
+    let expected_above: String = "9007199254740993".to_string();
+    #[cfg(not(target_pointer_width = "64"))]
+    let expected_above: String = max_field.clone();
+    new_ucmd!()
+        .args(&["-j", "9007199254740993", "-1", "5", "/dev/null", "/dev/null"])
+        .fails()
+        .stderr_contains(&format!("incompatible join fields {expected_above}, 5"));
+}
