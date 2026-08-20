@@ -156,13 +156,19 @@ fn set_command_env(command: &mut process::Command, buffer_name: &str, buffer_typ
 
 #[cfg(not(feature = "feat_external_libstdbuf"))]
 fn get_preload_env(tmp_dir: &TempDir) -> UResult<(String, PathBuf)> {
-    use std::fs::File;
+    use std::fs::OpenOptions;
     use std::io::Write;
+    #[cfg(unix)]
+    use std::os::unix::fs::OpenOptionsExt;
 
     let (preload, extension) = preload_strings();
     let inject_path = tmp_dir.path().join("libstdbuf").with_extension(extension);
 
-    let mut file = File::create(&inject_path)?;
+    let mut open_options = OpenOptions::new();
+    open_options.write(true).create_new(true);
+    #[cfg(unix)]
+    open_options.mode(0o600);
+    let mut file = open_options.open(&inject_path)?;
     file.write_all(STDBUF_INJECT)?;
 
     Ok((preload.to_owned(), inject_path))
