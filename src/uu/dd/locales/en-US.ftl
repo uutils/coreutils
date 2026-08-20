@@ -135,7 +135,6 @@ dd-error-multiple-case = Only one of conv=lcase or conv=ucase may be specified
 dd-error-multiple-block = Only one of conv=block or conv=unblock may be specified
 dd-error-multiple-excl = Only one ov conv=excl or conv=nocreat may be specified
 dd-error-invalid-flag = invalid input flag: ‘{ $flag }’
-  Try '{ $cmd } --help' for more information.
 dd-error-conv-flag-no-match = Unrecognized conv=CONV -> { $flag }
 dd-error-multiplier-parse-failure = invalid number: '{ $input }'
 dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
@@ -160,3 +159,9 @@ dd-progress-bytes-copied-si-iec = { $bytes } bytes ({ $si }, { $iec }) copied, {
 # Warnings
 dd-warning-zero-multiplier = { $zero } is a zero multiplier; use { $alternative } if that is intended
 dd-warning-signal-handler = Internal dd Warning: Unable to register signal handler
+
+# Diagnostics
+dd-diag-help-operand = an operand is KEY=VALUE, as in if=file bs=4k count=10
+dd-diag-help-flags = conv=, iflag= and oflag= take flags separated by commas, as in conv=ucase,sync
+dd-diag-help-status = status= is one of none, noxfer or progress
+dd-diag-help-number = a number may be followed by a multiplier: c, w, b, then K, M, G and so on for 1024, kB, MB, GB for 1000

@@ -40,8 +40,9 @@ use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
+use std::ffi::OsString;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, quiet_if_reported};
 use uucore::translate;
 
 use uucore::parser::parse_size::ParseSizeError;
@@ -77,6 +78,35 @@ struct OdOptions {
     string_min_length: Option<usize>,
 }
 
+/// The error to raise for a SIZE that does not parse.
+///
+/// Draws a caret under the part of the value at fault when stderr is a
+/// terminal, and quiets the message when it did, since the report has already
+/// said everything it would.
+///
+/// # Arguments
+///
+/// * `error` - What the size parser made of the value.
+/// * `args` - The whole argument list, program name included.
+/// * `value` - The value as typed.
+/// * `short` - The short name of the option it was given to, if it has one.
+/// * `long` - Its long name.
+/// * `message` - The headline, already localized.
+fn size_error(
+    error: &ParseSizeError,
+    args: &[String],
+    value: &str,
+    short: Option<char>,
+    long: &str,
+    message: String,
+) -> Box<dyn UError> {
+    let reported = uucore::diagnostics::enabled() && {
+        let diag_args: Vec<OsString> = args.iter().map(OsString::from).collect();
+        error.render_size_value(&diag_args, value, 0, short, Some(long), &message)
+    };
+    quiet_if_reported(reported, USimpleError::new(1, message))
+}
+
 /// Helper function to parse bytes with error handling
 fn parse_bytes_option(
     matches: &ArgMatches,
@@ -88,10 +118,11 @@ fn parse_bytes_option(
         None => Ok(None),
         Some(s) => match parse_number_of_bytes(s) {
             Ok(n) => Ok(Some(n)),
-            Err(e) => Err(USimpleError::new(
-                1,
-                format_error_message(&e, s, &option_display_name(args, option_name, short)),
-            )),
+            Err(e) => {
+                let message =
+                    format_error_message(&e, s, &option_display_name(args, option_name, short));
+                Err(size_error(&e, args, s, short, option_name, message))
+            }
         },
     }
 }
@@ -135,8 +166,10 @@ impl OdOptions {
             matches.value_source(options::WIDTH),
         ) {
             let width_display = option_display_name(args, options::WIDTH, Some('w'));
-            let parsed = parse_number_of_bytes(s)
-                .map_err(|e| USimpleError::new(1, format_error_message(&e, s, &width_display)))?;
+            let parsed = parse_number_of_bytes(s).map_err(|e| {
+                let message = format_error_message(&e, s, &width_display);
+                size_error(&e, args, s, Some('w'), options::WIDTH, message)
+            })?;
             if parsed == 0 {
                 return Err(USimpleError::new(
                     1,
