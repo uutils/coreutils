@@ -26,8 +26,7 @@ use uucore::translate;
 
 use std::cmp;
 use std::env;
-use std::ffi::OsString;
-#[cfg(unix)]
+use std::ffi::{OsStr, OsString};
 use std::fs::Metadata;
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -203,16 +202,23 @@ impl Source {
         Self::StdinFile(f)
     }
 
-    fn skip(&mut self, n: u64, ibs: usize) -> io::Result<u64> {
+    fn skip(&mut self, n: u64, settings: &Settings, name: &OsStr) -> io::Result<u64> {
+        let ibs = settings.ibs;
+        // Skipping past EOF is not fatal, so status=none suppresses it.
+        let warn_offset = || {
+            if settings.status != Some(StatusLevel::None) {
+                show_error!(
+                    "{}",
+                    translate!("dd-error-cannot-skip-offset", "file" => name.maybe_quote())
+                );
+            }
+        };
         match self {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
                 let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
-                    show_error!(
-                        "{}",
-                        translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                    );
+                    warn_offset();
                 }
                 Ok(m)
             }
@@ -230,16 +236,13 @@ impl Source {
                     set_exit_code(1);
                     return Ok(len);
                 }
-                // Get file length before seeking to avoid race condition
-                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
                 // Try seek first; fall back to read if not seekable
                 match n.try_into().ok().map(|n| f.seek(SeekFrom::Current(n))) {
                     Some(Ok(pos)) => {
-                        if pos > file_len {
-                            show_error!(
-                                "{}",
-                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                            );
+                        // Sampled after the seek, for the reason given in the File arm below.
+                        let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
+                        if file_len != 0 && pos > file_len {
+                            warn_offset();
                         }
                         Ok(n)
                     }
@@ -248,10 +251,7 @@ impl Source {
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
                         let m = uucore::io::read_and_discard(f, n, ibs)?;
                         if m < n {
-                            show_error!(
-                                "{}",
-                                translate!("dd-error-cannot-skip-offset", "file" => "standard input")
-                            );
+                            warn_offset();
                         }
                         Ok(m)
                     }
@@ -265,9 +265,24 @@ impl Source {
                     }
                 }
             }
-            Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
+            Self::File(f) => {
+                let pos = f.seek(SeekFrom::Current(n.try_into().unwrap()))?;
+                // Length is read after the seek so a file that changes size in
+                // between is judged against the state the seek landed in.
+                let file_len = f.metadata().as_ref().map_or(u64::MAX, Metadata::len);
+                if file_len != 0 && pos > file_len {
+                    warn_offset();
+                }
+                Ok(pos)
+            }
             #[cfg(unix)]
-            Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
+            Self::Fifo(f) => {
+                let m = uucore::io::read_and_discard(f, n, ibs)?;
+                if m < n {
+                    warn_offset();
+                }
+                Ok(m)
+            }
         }
     }
 
@@ -358,7 +373,7 @@ impl<'a> Input<'a> {
         }
 
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings, OsStr::new("standard input"))?;
         }
         Ok(Self { src, settings })
     }
@@ -381,7 +396,7 @@ impl<'a> Input<'a> {
 
         let mut src = Source::File(src);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings, filename.as_os_str())?;
         }
         Ok(Self { src, settings })
     }
@@ -395,7 +410,7 @@ impl<'a> Input<'a> {
         opts.custom_flags(make_linux_iflags(&settings.iflags).unwrap_or(0));
         let mut src = Source::Fifo(opts.open(filename)?);
         if settings.skip > 0 {
-            src.skip(settings.skip, settings.ibs)?;
+            src.skip(settings.skip, settings, filename.as_os_str())?;
         }
         Ok(Self { src, settings })
     }

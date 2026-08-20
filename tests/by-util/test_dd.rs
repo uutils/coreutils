@@ -755,6 +755,53 @@ fn test_skip_beyond_file_seekable_stdin() {
 }
 
 #[test]
+fn test_skip_beyond_named_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "abcd");
+    ucmd.args(&["if=in", "bs=1", "skip=5", "count=0", "status=noxfer"])
+        .succeeds()
+        .no_stdout()
+        .stderr_contains("in: cannot skip to specified offset\n0+0 records in\n0+0 records out\n");
+}
+
+#[test]
+fn test_skip_beyond_named_file_status_none() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "abcd");
+    ucmd.args(&["if=in", "bs=1", "skip=5", "count=0", "status=none"])
+        .succeeds()
+        .no_stdout()
+        .no_stderr();
+}
+
+#[test]
+fn test_skip_in_empty_named_file_no_warning() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("in");
+    ucmd.args(&["if=in", "bs=1", "skip=1", "count=0", "status=noxfer"])
+        .succeeds()
+        .no_stdout()
+        .stderr_is("0+0 records in\n0+0 records out\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_skip_in_empty_seekable_stdin_no_warning() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("in");
+    let stdin = OwnedFileDescriptorOrHandle::open_file(
+        OpenOptions::new().read(true),
+        at.plus("in").as_path(),
+    )
+    .unwrap();
+    ucmd.args(&["bs=1", "skip=1", "count=0", "status=noxfer"])
+        .set_stdin(Stdio::from(stdin))
+        .succeeds()
+        .no_stdout()
+        .stderr_is("0+0 records in\n0+0 records out\n");
+}
+
+#[test]
 fn test_seek_do_not_overwrite() {
     let (at, mut ucmd) = at_and_ucmd!();
     let mut outfile = at.make_file("outfile");
@@ -1589,6 +1636,25 @@ fn test_skip_input_fifo() {
         .unwrap()
         .success()
         .stderr_only("0+0 records in\n0+0 records out\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_skip_beyond_input_fifo() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkfifo("fifo");
+
+    let mut ucmd = ts.ucmd();
+    let child = ucmd
+        .args(&["bs=1", "count=0", "skip=5", "if=fifo", "status=noxfer"])
+        .run_no_wait();
+
+    std::fs::write(at.plus("fifo"), vec![0; 4]).unwrap();
+
+    child.wait().unwrap().success().stderr_only(
+        "dd: fifo: cannot skip to specified offset\n0+0 records in\n0+0 records out\n",
+    );
 }
 
 /// Test for reading part of stdin from each of two child processes.
