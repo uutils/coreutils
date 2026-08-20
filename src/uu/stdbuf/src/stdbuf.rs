@@ -327,9 +327,14 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     set_command_env(&mut command, "_STDBUF_E", &options.stderr);
     command.args(command_params);
 
-    // Spawn a child so the TempDir destructor fires in the parent, cleaning up
-    // the temporary directory. exec() would replace this process before the
-    // destructor runs, leaking the dir on every invocation.
+    // Windows has no exec(), so it has always waited on a child here; the
+    // library it preloads is Cygwin's, shipped by a separate package, and no
+    // temporary directory is involved.
+    //
+    // Unix used to exec(), which replaced this process before the TempDir
+    // destructor could run and leaked the extracted library on every
+    // invocation. Waiting on a child instead gives us somewhere to clean up
+    // from.
     let e = match command.spawn() {
         Ok(mut child) => {
             let status = child.wait();
