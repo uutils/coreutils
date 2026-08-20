@@ -155,7 +155,7 @@ printf-after-help = templating de chaîne anonyme de base :
   - %b: chaîne échappée - la chaîne sera vérifiée pour tout littéral échappé de
         la liste de littéraux échappés ci-dessus, et les traduire en caractères littéraux.
         ex. \\n sera transformé en caractère de nouvelle ligne.
-        Une règle spéciale sur le mode %b est que les littéraux octaux sont interprétés différemment
+        Une règle spéciale sur le mode %b est que les littéraux octaux sont interprétés différemment.
         Dans les arguments passés par %b, les littéraux interprétés en octal doivent être sous la forme \\0NNN
         au lieu de \\NNN. (Bien que, pour des raisons d'héritage, les littéraux octaux sous la forme \\NNN seront
         toujours interprétés et ne lanceront pas d'avertissement, vous aurez des problèmes si vous utilisez cela pour un
@@ -182,7 +182,7 @@ printf-after-help = templating de chaîne anonyme de base :
 
   - %u: entier non signé 64 bits
 
-  - %x ou %X: entier non signé 64 bits affiché en hexadécimal (base 16)
+  - %x ou %X: entier non signé 64 bits affiché en hexadécimal (base 16).
               %X au lieu de %x signifie utiliser des lettres majuscules pour 'a' à 'f'
 
   - %o: entier non signé 64 bits affiché en octal (base 8)
@@ -206,15 +206,15 @@ printf-after-help = templating de chaîne anonyme de base :
         estimées ou ajustées au-delà des valeurs d'entrée.
 
   - %e ou %E: valeur en virgule flottante présentée en notation scientifique
-              7 chiffres significatifs par défaut
+              7 chiffres significatifs par défaut.
               %E signifie utiliser E majuscule pour la mantisse.
 
   - %g ou %G: valeur en virgule flottante présentée dans la plus courte des notations décimale et scientifique
               se comporte différemment de %f et %E, veuillez voir la spécification posix printf pour tous les détails,
               quelques exemples de comportement différent :
-              Sci Note a 6 chiffres significatifs par défaut
-              Les zéros de fin sont supprimés
-              Au lieu d'être tronqué, le chiffre après le dernier est arrondi
+              - Sci Note a 6 chiffres significatifs par défaut
+              - Les zéros de fin sont supprimés
+              - Au lieu d'être tronqué, le chiffre après le dernier est arrondi
 
   Comme d'autres comportements dans cet utilitaire, les choix de conception du comportement en virgule flottante
   dans cet utilitaire sont sélectionnés pour reproduire exactement
