@@ -64,7 +64,7 @@ dd-after-help = Operands:
     and ~ specified in POSIX. Implies conv=block.
 
   - ucase : convert from lower-case to upper-case.
-  - lcase : converts from upper-case to lower-case.
+  - lcase : convert from upper-case to lower-case.
 
   - block : for each newline less than the size indicated by cbs=BYTES, remove
     the newline and pad with spaces up to cbs. Lines longer than cbs are truncated.
@@ -79,7 +79,7 @@ dd-after-help = Operands:
     specified, pad with spaces instead.
   - excl : the output file must be created. Fail if the output file is already
     present.
-  - nocreat : the output file will not be created. Fail if the output file in
+  - nocreat : the output file will not be created. Fail if the output file is
     not already present.
   - notrunc : the output file will not be truncated. If this option is not
     present, output will be truncated when opened.
