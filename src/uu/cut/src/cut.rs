@@ -1033,8 +1033,7 @@ mod options {
     pub const WHITESPACE_DELIMITED: &str = "whitespace-delimited";
     pub const COMPLEMENT: &str = "complement";
     pub const FILE: &str = "file";
-    // ignored option
-    pub const NOTHING: &str = "nothing";
+    pub const NO_PARTIAL: &str = "no-partial";
 }
 
 #[uucore::main]
@@ -1062,7 +1061,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let (delimiter, out_delimiter) = get_delimiters(&matches)?;
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
-    let suppress_split = matches.get_flag(options::NOTHING);
+    let suppress_split = matches.get_flag(options::NO_PARTIAL);
     // `--whitespace-delimited[=trimmed]` (`-w`): the optional value selects trimming.
     let whitespace_trimmed = matches
         .get_one::<String>(options::WHITESPACE_DELIMITED)
@@ -1336,9 +1335,9 @@ pub fn uu_app() -> Command {
                 .value_parser(clap::value_parser!(OsString)),
         )
         .arg(
-            Arg::new(options::NOTHING)
+            Arg::new(options::NO_PARTIAL)
                 .short('n')
-                .long("no-partial")
+                .long(options::NO_PARTIAL)
                 .help(translate!("cut-help-no-partial"))
                 .action(ArgAction::SetTrue),
         )
