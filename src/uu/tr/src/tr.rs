@@ -51,41 +51,37 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(ToOwned::to_owned)
         .collect();
 
-    if sets.is_empty() {
-        return Err(UUsageError::new(1, translate!("tr-error-missing-operand")));
-    }
-
-    let sets_len = sets.len();
-
-    if !(delete_flag || squeeze_flag) && sets_len == 1 {
-        return Err(UUsageError::new(
-            1,
-            translate!("tr-error-missing-operand-translating", "set" => sets[0].quote()),
-        ));
-    }
-
-    if delete_flag && squeeze_flag && sets_len == 1 {
-        return Err(UUsageError::new(
-            1,
-            translate!("tr-error-missing-operand-deleting-squeezing", "set" => sets[0].quote()),
-        ));
-    }
-
-    if sets_len > 1 {
-        if delete_flag && !squeeze_flag {
-            let op = sets[1].quote();
-            let msg = if sets_len == 2 {
-                translate!("tr-error-extra-operand-deleting-without-squeezing", "operand" => op)
-            } else {
-                translate!("tr-error-extra-operand-simple", "operand" => op)
-            };
-            return Err(UUsageError::new(1, msg));
+    match &sets[..] {
+        [s] if !(delete_flag || squeeze_flag) => {
+            return Err(UUsageError::new(
+                1,
+                translate!("tr-error-missing-operand-translating", "set" => s.quote()),
+            ));
         }
-        if sets_len > 2 {
-            let op = sets[2].quote();
-            let msg = translate!("tr-error-extra-operand-simple", "operand" => op);
-            return Err(UUsageError::new(1, msg));
+        [s] if delete_flag && squeeze_flag => {
+            return Err(UUsageError::new(
+                1,
+                translate!("tr-error-missing-operand-deleting-squeezing", "set" => s.quote()),
+            ));
         }
+        // len >1
+        [_, op, ..] => {
+            if delete_flag && !squeeze_flag {
+                let op = op.quote();
+                let msg = if sets.len() == 2 {
+                    translate!("tr-error-extra-operand-deleting-without-squeezing", "operand" => op)
+                } else {
+                    translate!("tr-error-extra-operand-simple", "operand" => op)
+                };
+                return Err(UUsageError::new(1, msg));
+            }
+            if let Some(op2) = sets.get(2) {
+                let op2 = op2.quote();
+                let msg = translate!("tr-error-extra-operand-simple", "operand" => op2);
+                return Err(UUsageError::new(1, msg));
+            }
+        }
+        _ => {}
     }
 
     if let Some(first) = sets.first() {
@@ -98,6 +94,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 translate!("tr-warning-unescaped-backslash")
             ));
         }
+    } else {
+        return Err(UUsageError::new(1, translate!("tr-error-missing-operand")));
     }
 
     let stdin = stdin();
@@ -141,7 +139,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             process_input(&mut locked_stdin, &mut locked_stdout, &op)?;
         }
     } else if squeeze_flag {
-        if sets_len == 1 {
+        if sets.len() == 1 {
             let op = SqueezeOperation::new(set1);
             translate_input(&mut locked_stdin, &mut locked_stdout, op)?;
         } else {
