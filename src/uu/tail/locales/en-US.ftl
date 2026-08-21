@@ -73,5 +73,6 @@ tail-no-files-remaining = no files remaining
 tail-become-inaccessible = has become inaccessible
 
 # Debug messages
+tail-debug-using-blocking-mode = using blocking mode
 tail-debug-using-notification-mode = using notification mode
 tail-debug-using-polling-mode = using polling mode
