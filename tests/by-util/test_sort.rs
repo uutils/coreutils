@@ -390,6 +390,56 @@ fn test_random_shuffle_two_runs_not_the_same() {
 }
 
 #[test]
+fn test_random_source_shorter_than_the_salt() {
+    // GNU wants 128 bits out of the source and reports end of file below that,
+    // instead of shuffling with whatever it could read.
+    for len in [0, 1, 15] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write_bytes("source", &vec![b'x'; len]);
+        at.write("input", "b\na\nc\n");
+
+        ucmd.args(&["-R", "--random-source=source", "input"])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is("sort: 'source': end of file\n");
+    }
+}
+
+#[test]
+fn test_random_source_of_exactly_the_salt_length() {
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[b'x'; 16]);
+    ts.fixtures.write("input", "b\na\nc\n");
+
+    let first = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source", "input"])
+        .succeeds()
+        .stdout_move_str();
+    let second = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source", "input"])
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(first, second);
+    assert_eq!(first.lines().count(), 3);
+}
+
+#[test]
+fn test_random_source_is_not_read_without_random_sort() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("source", b"");
+    at.write("input", "b\na\nc\n");
+
+    ucmd.args(&["--random-source=source", "input"])
+        .succeeds()
+        .stdout_is("a\nb\nc\n");
+}
+
+#[test]
 fn test_random_ignore_case() {
     let input = "ABC\nABc\nAbC\nAbc\naBC\naBc\nabC\nabc\n";
     new_ucmd!()
