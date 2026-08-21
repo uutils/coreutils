@@ -42,7 +42,7 @@ use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
 use std::ffi::OsString;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError, quiet_if_reported};
+use uucore::error::{UResult, USimpleError, quiet_if_reported};
 use uucore::translate;
 
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
