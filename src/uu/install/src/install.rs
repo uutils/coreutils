@@ -600,8 +600,10 @@ fn is_potential_directory_path(path: &Path) -> bool {
 
 #[cfg(not(unix))]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+    matches!(
+        path.as_os_str().as_encoded_bytes().last(),
+        Some(b'/') | Some(b'\\')
+    ) || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
