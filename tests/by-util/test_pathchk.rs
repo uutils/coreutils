@@ -175,6 +175,23 @@ fn test_posix_all() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_empty_path_portability_message() {
+    // In every portability mode (-p, -P, --portability) GNU reports an empty
+    // file name with the program-name prefix and before any filesystem check.
+    for flag in ["-p", "-P", "--portability"] {
+        new_ucmd!()
+            .args(&[flag, ""])
+            .fails()
+            .stderr_only("pathchk: empty file name\n");
+    }
+    new_ucmd!()
+        .args(&["-p", "-P", ""])
+        .fails()
+        .stderr_only("pathchk: empty file name\n");
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_pathchk_non_utf8_paths() {
     let filename = std::ffi::OsString::from_vec(vec![0xFF, 0xFE]);
