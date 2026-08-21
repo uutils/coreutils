@@ -26,19 +26,19 @@ pub enum EscapeState {
 }
 
 /// Bytes we need to present as escaped octal, in the form of `\nnn` per byte.
-/// Only supports characters up to 2 bytes long in UTF-8.
+/// Supports characters up to 4 bytes long in UTF-8.
 pub struct EscapeOctal {
-    c: [u8; 2],
+    bytes: [u8; 4],
+    num_bytes: usize,
+    byte_idx: usize,
+    digit_idx: u8,
     state: EscapeOctalState,
-    idx: u8,
 }
 
 enum EscapeOctalState {
     Done,
-    FirstBackslash,
-    FirstValue,
-    LastBackslash,
-    LastValue,
+    Backslash,
+    Value,
 }
 
 fn byte_to_octal_digit(byte: u8, idx: u8) -> u8 {
@@ -51,30 +51,23 @@ impl Iterator for EscapeOctal {
     fn next(&mut self) -> Option<char> {
         match self.state {
             EscapeOctalState::Done => None,
-            EscapeOctalState::FirstBackslash => {
-                self.state = EscapeOctalState::FirstValue;
+            EscapeOctalState::Backslash => {
+                self.state = EscapeOctalState::Value;
                 Some('\\')
             }
-            EscapeOctalState::LastBackslash => {
-                self.state = EscapeOctalState::LastValue;
-                Some('\\')
-            }
-            EscapeOctalState::FirstValue => {
-                let octal_digit = byte_to_octal_digit(self.c[0], self.idx);
-                if self.idx == 0 {
-                    self.state = EscapeOctalState::LastBackslash;
-                    self.idx = 2;
+            EscapeOctalState::Value => {
+                let octal_digit = byte_to_octal_digit(self.bytes[self.byte_idx], self.digit_idx);
+                if self.digit_idx == 0 {
+                    // Move to next byte
+                    self.byte_idx += 1;
+                    if self.byte_idx >= self.num_bytes {
+                        self.state = EscapeOctalState::Done;
+                    } else {
+                        self.state = EscapeOctalState::Backslash;
+                        self.digit_idx = 2;
+                    }
                 } else {
-                    self.idx -= 1;
-                }
-                Some(from_digit(octal_digit.into(), 8).unwrap())
-            }
-            EscapeOctalState::LastValue => {
-                let octal_digit = byte_to_octal_digit(self.c[1], self.idx);
-                if self.idx == 0 {
-                    self.state = EscapeOctalState::Done;
-                } else {
-                    self.idx -= 1;
+                    self.digit_idx -= 1;
                 }
                 Some(from_digit(octal_digit.into(), 8).unwrap())
             }
@@ -88,20 +81,24 @@ impl EscapeOctal {
             return Self::from_byte(c as u8);
         }
 
-        let mut buf = [0; 2];
-        let _s = c.encode_utf8(&mut buf);
+        let mut bytes = [0; 4];
+        let len = c.encode_utf8(&mut bytes).len();
         Self {
-            c: buf,
-            idx: 2,
-            state: EscapeOctalState::FirstBackslash,
+            bytes,
+            num_bytes: len,
+            byte_idx: 0,
+            digit_idx: 2,
+            state: EscapeOctalState::Backslash,
         }
     }
 
     fn from_byte(b: u8) -> Self {
         Self {
-            c: [0, b],
-            idx: 2,
-            state: EscapeOctalState::LastBackslash,
+            bytes: [b, 0, 0, 0],
+            num_bytes: 1,
+            byte_idx: 0,
+            digit_idx: 2,
+            state: EscapeOctalState::Backslash,
         }
     }
 }
