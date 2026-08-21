@@ -1218,7 +1218,7 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 #[test]
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 #[cfg_attr(wasi_runner, ignore)]
-fn test_eio() {
+fn test_read_error() {
     new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])
         .fails_with_code(1)
