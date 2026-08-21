@@ -468,10 +468,6 @@ impl Parser {
 }
 
 impl UError for ParseError {
-    fn code(&self) -> i32 {
-        1
-    }
-
     /// The one message that ends on a hint about the syntax it rejected. The
     /// hint is left to this, rather than written into the message, so that it
     /// survives a caret report replacing the message.
