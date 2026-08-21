@@ -303,8 +303,12 @@ fn get_file_info(path: &Path, _metadata: &Metadata) -> Option<FileInfo> {
 
 fn read_block_size(s: Option<&str>) -> UResult<u64> {
     if let Some(s) = s {
-        parse_size_u64(s)
-            .map_err(|e| USimpleError::new(1, e.format_option_error(s, options::BLOCK_SIZE)))
+        parse_size_u64(s).map_err(|e| {
+            USimpleError::new(
+                1,
+                e.format_option_error(s, &format!("--{}", options::BLOCK_SIZE)),
+            )
+        })
     } else if let Some(bytes) =
         parse_block_size::block_size_from_env(&["DU_BLOCK_SIZE", "BLOCK_SIZE", "BLOCKSIZE"]).found()
     {
@@ -1114,8 +1118,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         threshold: matches
             .get_one::<String>(options::THRESHOLD)
             .map(|s| {
-                Threshold::from_str(s)
-                    .map_err(|e| USimpleError::new(1, e.format_option_error(s, options::THRESHOLD)))
+                Threshold::from_str(s).map_err(|e| {
+                    USimpleError::new(
+                        1,
+                        e.format_option_error(s, &format!("--{}", options::THRESHOLD)),
+                    )
+                })
             })
             .transpose()?,
         apparent_size: matches.get_flag(options::APPARENT_SIZE) || matches.get_flag(options::BYTES),
