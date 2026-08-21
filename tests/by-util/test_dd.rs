@@ -2253,7 +2253,24 @@ fn test_stats_are_reported_when_a_write_fails() {
     // second one is cut short at 256 KiB, and the third write fails.
     result.stderr_contains("1+1 records out");
     result.stderr_contains("786432 bytes");
+    // The third block was read before its write failed, so it counts as a
+    // record in.
+    result.stderr_contains("3+0 records in");
+    result.stderr_contains("error writing 'capped.bin'");
     assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+// A failing read names the operation and the input, as GNU `dd` does, instead
+// of reporting a bare "IO error".
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_read_error_names_the_input() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("adir");
+    ucmd.args(&["if=adir", "of=/dev/null"])
+        .fails()
+        .stderr_contains("error reading 'adir'")
+        .stderr_contains("0+0 records in");
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
