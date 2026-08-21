@@ -4,7 +4,7 @@
 
 # spell-checker:ignore (paths) abmon deref discrim eacces getopt ginstall inacc infloop inotify reflink ; (misc) INT_OFLOW OFLOW
 # spell-checker:ignore baddecode submodules xstrtol distros ; (vars/env) SRCDIR vdir rcexp xpart dired OSTYPE ; (utils) greadlink gsed multihardlink texinfo CARGOFLAGS
-# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc
+# spell-checker:ignore openat TOCTOU CFLAGS tmpfs gnproc texi
 
 set -e
 
@@ -158,6 +158,10 @@ else
     # Remove tests checking for --version & --help
     # Not really interesting for us and logs are too big
     sed -i '/tests\/help\/help-version.sh/ D' Makefile
+    # Remove usage_vs_refs: it checks that --help options match GNU's texi docs.
+    # uutils has intentionally different options (e.g., clap adds -V for --version)
+    # so this test will never pass.
+    sed -i '/tests\/misc\/usage_vs_refs.sh/ D' Makefile
     touch gnu-built
 fi
 
