@@ -724,6 +724,30 @@ impl ParseSizeError {
         crate::error::quiet_if_reported(reported, error)
     }
 
+    /// Format an error message for a size option, in the style GNU coreutils
+    /// uses: "invalid suffix in --OPTION argument VALUE" etc.
+    ///
+    /// This is the plain one-line message. Use [] when
+    /// you also want a caret drawn under the bad part of the value.
+    ///
+    /// # Arguments
+    ///
+    /// *  - The value as typed.
+    /// *  - The option name to echo in the message (e.g. ).
+    pub fn format_option_error(&self, value: &str, option: &str) -> String {
+        match self {
+            Self::InvalidSuffix(_) => {
+                crate::translate!("parse-size-invalid-suffix", "option" => option, "value" => value.quote())
+            }
+            Self::ParseFailure(_) | Self::PhysicalMem(_) => {
+                crate::translate!("parse-size-invalid-argument", "option" => option, "value" => value.quote())
+            }
+            Self::SizeTooBig(_) => {
+                crate::translate!("parse-size-argument-too-large", "option" => option, "value" => value.quote())
+            }
+        }
+    }
+
     fn size_too_big(s: &str) -> Self {
         // stderr on linux (GNU coreutils 8.32) (LC_ALL=C)
         // has to be handled in the respective uutils because strings differ, e.g.:

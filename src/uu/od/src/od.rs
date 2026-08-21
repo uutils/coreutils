@@ -832,17 +832,5 @@ fn option_display_name(args: &[String], option_name: &str, short: Option<char>) 
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    // NOTE:
-    // GNU's od echos affected flag, -N or --read-bytes (-j or --skip-bytes, etc.), depending user's selection
-    match error {
-        ParseSizeError::InvalidSuffix(_) => {
-            translate!("od-error-invalid-suffix", "option" => option, "value" => s.quote())
-        }
-        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            translate!("od-error-invalid-argument", "option" => option, "value" => s.quote())
-        }
-        ParseSizeError::SizeTooBig(_) => {
-            translate!("od-error-argument-too-large", "option" => option, "value" => s.quote())
-        }
-    }
+    error.format_option_error(s, option)
 }
