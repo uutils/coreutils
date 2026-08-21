@@ -867,7 +867,10 @@ fn build_options(
         });
     }
 
-    let page_length_le_ht = page_length < (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
+    // `pr --help` states the rule twice: a page length of 10 or less implies
+    // `-t`. At exactly 10 the old `<` left the header and trailer in place and
+    // subtracted them from the page, so the page had no room for content at all.
+    let page_length_le_ht = page_length <= (HEADER_LINES_PER_PAGE + TRAILER_LINES_PER_PAGE);
 
     let display_header_and_trailer = !page_length_le_ht
         && !matches.get_flag(options::OMIT_HEADER)
