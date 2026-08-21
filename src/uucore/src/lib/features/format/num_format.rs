@@ -385,6 +385,31 @@ fn zero_pad_to(s: &str, width: usize) -> String {
     }
 }
 
+/// Pad `s` with `fill` up to `width` characters, on the left when `right_align`
+/// is set and on the right otherwise.
+///
+/// Like `zero_pad_to`, this pads manually instead of using `format!("{s:>width$}")`,
+/// which feeds `width` into the standard formatting machinery and panics with
+/// "Formatting argument out of range" once the dynamic width exceeds `u16::MAX`.
+/// A large field width such as `%100000d` is valid input for `printf`, so it
+/// must not panic (#13850). As with `zero_pad_to`, the numeric strings handled
+/// here are ASCII, so byte length equals the printed width.
+fn pad_to(s: &str, width: usize, fill: char, right_align: bool) -> String {
+    if s.len() >= width {
+        return s.to_string();
+    }
+    let mut padded = String::with_capacity(width);
+    let padding = std::iter::repeat_n(fill, width - s.len());
+    if right_align {
+        padded.extend(padding);
+        padded.push_str(s);
+    } else {
+        padded.push_str(s);
+        padded.extend(padding);
+    }
+    padded
+}
+
 fn get_sign_indicator(sign: PositiveSign, negative: bool) -> String {
     if negative {
         String::from("-")
@@ -769,16 +794,29 @@ fn write_output(
     // Check if the width is too large for formatting
     super::check_width(remaining_width)?;
 
+    // Pad manually via pad_to instead of feeding remaining_width into a
+    // `write!("{:>width$}")`, which panics once the width exceeds u16::MAX (#13850).
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            write!(
+                writer,
+                "{sign_indicator}{}",
+                pad_to(&s, remaining_width, ' ', false)
+            )
+        }
         NumberAlignment::RightSpace => {
             let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
             if is_sign && remaining_width > 0 {
                 // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
                 let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+                // Since we now add sign_indicator and s together, plus 1
+                write!(writer, "{}", pad_to(&s, remaining_width + 1, ' ', true))
             } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
+                write!(
+                    writer,
+                    "{sign_indicator}{}",
+                    pad_to(&s, remaining_width, ' ', true)
+                )
             }
         }
         NumberAlignment::RightZero => {
@@ -789,7 +827,11 @@ fn write_output(
                 ("", s.as_str())
             };
             let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            write!(
+                writer,
+                "{sign_indicator}{prefix}{}",
+                pad_to(rest, remaining_width, '0', true)
+            )
         }
     }
 }
@@ -1266,6 +1308,30 @@ mod test {
         let s = fmt(&format, 255u64);
         assert_eq!(s.len(), 100_000);
         assert!(s.ends_with("0ff"));
+    }
+
+    #[test]
+    fn format_int_large_width() {
+        // A field width above u16::MAX must not panic in the formatter (#13850).
+        let format = Format::<SignedInt, i64>::parse("%100000d").unwrap();
+        let s = fmt(&format, 1i64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with('1'));
+        assert!(s.starts_with(' '));
+
+        // Left-aligned large width pads with spaces on the right.
+        let format = Format::<SignedInt, i64>::parse("%-100000d").unwrap();
+        let s = fmt(&format, 1i64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.starts_with('1'));
+        assert!(s.ends_with(' '));
+
+        // Zero-flagged large width pads with zeros.
+        let format = Format::<UnsignedInt, u64>::parse("%0100000x").unwrap();
+        let s = fmt(&format, 255u64);
+        assert_eq!(s.len(), 100_000);
+        assert!(s.ends_with("0ff"));
+        assert!(s.starts_with('0'));
     }
 
     #[test]
