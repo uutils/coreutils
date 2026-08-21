@@ -271,6 +271,18 @@ fn test_comma_separated_tabs_shortcut() {
 }
 
 #[test]
+fn test_blank_separated_tabs() {
+    // GNU accepts a space or a tab as a tab-list separator, just like a comma.
+    for sep in [" ", "\t"] {
+        new_ucmd!()
+            .args(&["-a", "-t", &format!("3{sep}9")])
+            .pipe_in("a  b     c")
+            .succeeds()
+            .stdout_is("a\tb\tc");
+    }
+}
+
+#[test]
 fn test_tabs_cannot_be_zero() {
     new_ucmd!()
         .arg("--tabs=0")
