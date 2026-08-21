@@ -7,6 +7,7 @@
 use std::ffi::OsString;
 
 use crate::options;
+use uucore::display::Quotable;
 use uucore::translate;
 
 // parse_options loads the options into the settings, returning an array of
@@ -69,8 +70,13 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
     }
     match opts.get_one::<usize>(options::NUMBER_WIDTH) {
         None => {}
-        Some(num) if *num > 0 => settings.number_width = *num,
-        Some(_) => errs.push(translate!("nl-error-invalid-line-width", "value" => "0")),
+        // GNU bounds the line-number field width to a C `int` ([1, INT_MAX]); a larger value
+        // otherwise makes `number_width + 1` overflow `isize` and abort with a capacity overflow
+        // when the blank prefix is built. Reject out-of-range widths up front, as GNU does.
+        Some(num) if *num > 0 && i32::try_from(*num).is_ok() => settings.number_width = *num,
+        Some(num) => {
+            errs.push(translate!("nl-error-invalid-line-width", "value" => num.to_string().quote()))
+        }
     }
     if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {
         settings.join_blank_lines = *num;

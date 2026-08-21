@@ -38,6 +38,24 @@ fn test_stdin_no_newline() {
 }
 
 #[test]
+fn test_number_width_too_large_is_rejected_not_panic() {
+    // Regression test for #13347: an unbounded `-w` (line-number field width) made
+    // `number_width + 1` overflow `isize` and abort with a capacity overflow. Like GNU, values
+    // outside [1, INT_MAX] must be rejected up front with an error, not crash.
+    new_ucmd!()
+        .args(&["-w", "9223372036854775807"])
+        .pipe_in("\n")
+        .fails_with_code(1)
+        .stderr_contains("Invalid line number field width");
+    // GNU's boundary: INT_MAX + 1 is rejected.
+    new_ucmd!()
+        .args(&["-w", "2147483648"])
+        .pipe_in("\n")
+        .fails_with_code(1)
+        .stderr_contains("Invalid line number field width");
+}
+
+#[test]
 fn test_stdin_newline() {
     new_ucmd!()
         .args(&["-s", "-", "-w", "1"])
@@ -183,7 +201,7 @@ fn test_number_width_zero() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+            .stderr_contains("Invalid line number field width: '0': Numerical result out of range");
     }
 }
 
