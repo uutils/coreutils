@@ -181,6 +181,9 @@ pub enum SortError {
     #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
 
+    #[error("{}", translate!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
+    RandomSourceEndOfFile { path: PathBuf },
+
     #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
 }
@@ -3083,6 +3086,10 @@ const U64_LEN: usize = 8;
 const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
 /// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+///
+/// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
+/// bits and reports `end of file` when the source cannot supply them, rather
+/// than shuffling with whatever it managed to read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
@@ -3104,6 +3111,13 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
         if take < n {
             break;
         }
+    }
+
+    if total < SALT_LEN {
+        return Err(SortError::RandomSourceEndOfFile {
+            path: path.to_owned(),
+        }
+        .into());
     }
 
     let first = hasher.finish();
