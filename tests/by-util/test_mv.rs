@@ -3,8 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
-// spell-checker:ignore dirattr dirvalue setfattr getfattr
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable GHSA
+// spell-checker:ignore dirattr dirvalue setfattr getfattr myfolder SRCDATA DSTDATA REALDATA
 
 use rstest::rstest;
 use std::io::Write;
@@ -2837,6 +2837,148 @@ fn test_mv_cross_device_dir_refuses_symlink_at_recreated_dest() {
         "cross-device dir move escaped the destination through a symlink"
     );
     assert_eq!(at.read("victim/guard"), "PROTECTED_DATA");
+}
+
+/// Regression for #13145 (GHSA-xw28-j282-p74c). A cross-device move of a
+/// socket used to delete the destination and then fail to copy the socket,
+/// destroying the destination. Like GNU, the socket must be recreated at the
+/// destination instead.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_socket_replaces_dest() {
+    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    UnixListener::bind(at.plus("sock")).expect("bind socket");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("dest");
+    std::fs::write(&dest, "precious content").expect("write dest");
+
+    scene
+        .ucmd()
+        .arg("sock")
+        .arg(dest.to_str().unwrap())
+        .succeeds()
+        .no_output();
+
+    assert!(
+        !at.plus("sock").exists(),
+        "source socket should be gone after the move"
+    );
+    assert!(
+        dest.symlink_metadata().unwrap().file_type().is_socket(),
+        "destination should have been replaced by the moved socket"
+    );
+}
+
+/// A cross-device move of a fifo onto an existing file must replace the
+/// destination and preserve the fifo's permissions.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_fifo_replaces_dest_and_preserves_mode() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkfifo("fifo");
+    set_permissions(at.plus("fifo"), Permissions::from_mode(0o604)).expect("chmod fifo");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("dest");
+    std::fs::write(&dest, "old content").expect("write dest");
+
+    scene
+        .ucmd()
+        .arg("fifo")
+        .arg(dest.to_str().unwrap())
+        .succeeds()
+        .no_output();
+
+    let metadata = dest.symlink_metadata().unwrap();
+    assert!(metadata.file_type().is_fifo());
+    assert_eq!(metadata.permissions().mode() & 0o7777, 0o604);
+}
+
+/// A directory containing a socket must survive a cross-device move.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_dir_with_socket_across_partitions() {
+    use std::os::unix::fs::FileTypeExt;
+    use std::os::unix::net::UnixListener;
+    use tempfile::TempDir;
+    use uutests::util::TestScenario;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    UnixListener::bind(at.plus("dir/sock")).expect("bind socket");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+    scene
+        .ucmd()
+        .arg("dir")
+        .arg(other_fs_tempdir.path().to_str().unwrap())
+        .succeeds()
+        .no_output();
+
+    assert!(!at.dir_exists("dir"));
+    let moved_sock = other_fs_tempdir.path().join("dir/sock");
+    assert!(
+        moved_sock
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_socket()
+    );
+}
+
+/// A failed cross-device move must not destroy an existing destination.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_unreadable_source_preserves_dest() {
+    use std::fs::{Permissions, set_permissions};
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+    use uucore::process::geteuid;
+    use uutests::util::TestScenario;
+
+    if geteuid() == 0 {
+        return;
+    }
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("src", "source content");
+    set_permissions(at.plus("src"), Permissions::from_mode(0o000)).expect("chmod src");
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dest = other_fs_tempdir.path().join("dest");
+    std::fs::write(&dest, "keep me").expect("write dest");
+
+    scene.ucmd().arg("src").arg(dest.to_str().unwrap()).fails();
+
+    assert_eq!(
+        std::fs::read_to_string(&dest).expect("dest must still exist"),
+        "keep me",
+        "a failed cross-device move must not destroy the destination"
+    );
 }
 
 #[test]
