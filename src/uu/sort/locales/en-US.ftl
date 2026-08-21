@@ -24,6 +24,7 @@ sort-file-operands-combined = extra operand {$file}
 sort-multiple-output-files = multiple output files specified
 sort-minus-in-stdin = when reading file names from standard input, no file name of '-' allowed
 sort-no-input-from = no input from {$file}
+sort-random-source-end-of-file = {$path}: end of file
 sort-invalid-zero-length-filename = {$file}:{$line_num}: invalid zero-length file name
 sort-options-incompatible = options '-{$opt1}{$opt2}' are incompatible
 sort-invalid-key = invalid key {$key}
