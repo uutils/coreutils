@@ -120,7 +120,7 @@ fn parse_bytes_option(
             Ok(n) => Ok(Some(n)),
             Err(e) => {
                 let message =
-                    format_error_message(&e, s, &option_display_name(args, option_name, short));
+                    e.format_option_error(s, &option_display_name(args, option_name, short));
                 Err(size_error(&e, args, s, short, option_name, message))
             }
         },
@@ -167,7 +167,7 @@ impl OdOptions {
         ) {
             let width_display = option_display_name(args, options::WIDTH, Some('w'));
             let parsed = parse_number_of_bytes(s).map_err(|e| {
-                let message = format_error_message(&e, s, &width_display);
+                let message = e.format_option_error(s, &width_display);
                 size_error(&e, args, s, Some('w'), options::WIDTH, message)
             })?;
             if parsed == 0 {
@@ -829,8 +829,4 @@ fn option_display_name(args: &[String], option_name: &str, short: Option<char>) 
     } else {
         long_form
     }
-}
-
-fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    error.format_option_error(s, option)
 }
