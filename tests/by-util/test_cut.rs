@@ -1219,16 +1219,10 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 #[cfg(target_env = "gnu")]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_eio() {
-    let result = new_ucmd!()
+    new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])
-        .fails_with_code(1);
-
-    let stderr = result.stderr_str();
-
-    let input_output = "cut: Input/output error\n";
-    let io = "cut: I/O error\n";
-
-    assert!(stderr == input_output || stderr == io);
+        .fails_with_code(1)
+        .stderr_is("cut: Input/output error\n");
 }
 
 #[cfg(unix)]
