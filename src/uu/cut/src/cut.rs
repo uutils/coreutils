@@ -281,7 +281,7 @@ fn cut_bytes<R: Read, W: Write>(
     });
 
     if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
+        return Err(USimpleError::new(1, strip_errno(&e)));
     }
 
     Ok(())
