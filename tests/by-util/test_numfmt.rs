@@ -1595,6 +1595,20 @@ fn test_locale_fr_rejects_period() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: locale env vars not propagated")]
+fn test_locale_multibyte_separator_invalid_suffix_does_not_panic() {
+    // Regression test for #13937: under a locale with a multi-byte decimal separator (Arabic
+    // '٫', U+066B, 2 bytes), an input like "1٫€K" made numfmt slice inside a multi-byte
+    // character while parsing the suffix and panic. It must instead reject the malformed suffix
+    // like GNU (non-zero exit, "invalid suffix in input"), without crashing.
+    new_ucmd!()
+        .env("LC_ALL", "ar_SA.UTF-8")
+        .args(&["--from=auto", "1٫€K"])
+        .fails()
+        .stderr_contains("invalid suffix in input");
+}
+
+#[test]
 fn test_locale_c_uses_period() {
     // C locale should still use '.' as usual
     new_ucmd!()
