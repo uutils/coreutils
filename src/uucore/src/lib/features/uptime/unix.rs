@@ -152,7 +152,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
 /// # Returns
 ///
 /// Returns the number of users currently logged in if successful, otherwise 0.
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 // see: https://gitlab.com/procps-ng/procps/-/blob/4740a0efa79cade867cfc7b32955fe0f75bf5173/library/uptime.c#L63-L115
 pub fn get_nusers() -> usize {
     use crate::utmpx::USER_PROCESS;
@@ -198,10 +198,12 @@ pub fn get_nusers(file: &str) -> usize {
 /// [`super::get_formatted_nusers`]. On OpenBSD the default source is
 /// `/var/run/utmp`.
 pub(crate) fn default_nusers() -> usize {
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
     return get_nusers();
     #[cfg(target_os = "openbsd")]
-    get_nusers("/var/run/utmp")
+    return get_nusers("/var/run/utmp");
+    #[cfg(target_os = "android")]
+    return 0;
 }
 
 /// Get the system load average
@@ -210,6 +212,7 @@ pub(crate) fn default_nusers() -> usize {
 ///
 /// Returns a UResult with the load average if successful, otherwise an UptimeError.
 /// The load average is a tuple of three floating point numbers representing the 1-minute, 5-minute, and 15-minute load averages.
+#[cfg(not(any(target_arch = "wasm32", target_os = "android")))]
 pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     use core::ffi::c_double;
     use libc::getloadavg;
@@ -223,6 +226,11 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     } else {
         Ok((avg[0], avg[1], avg[2]))
     }
+}
+
+#[cfg(any(target_arch = "wasm32", target_os = "android"))]
+pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
+    Err(UptimeError::SystemLoadavg)?
 }
 
 #[cfg(all(test, target_os = "macos"))]
