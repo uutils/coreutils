@@ -95,6 +95,6 @@ mode-diag-label-invalid-number = not an octal mode
 mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w
 
 # SIZE option error messages
-parse-size-invalid-suffix = invalid suffix in --{  } argument {  }
-parse-size-invalid-argument = invalid --{  } argument {  }
-parse-size-argument-too-large = --{  } argument {  } too large
+parse-size-invalid-suffix = invalid suffix in --{ $option } argument { $value }
+parse-size-invalid-argument = invalid --{ $option } argument { $value }
+parse-size-argument-too-large = --{ $option } argument { $value } too large
