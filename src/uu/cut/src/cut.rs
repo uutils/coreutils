@@ -13,7 +13,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, IsTerminal, Read, Write, stdin, stdout};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code, strip_errno};
 use uucore::i18n::charmap::{Encoding, locale_encoding, mb_char_len};
 use uucore::line_ending::LineEnding;
 use uucore::os_str_as_bytes;
@@ -474,7 +474,7 @@ fn cut_chars<R: Read, W: Write>(
     });
 
     if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
+        return Err(USimpleError::new(1, strip_errno(&e)));
     }
 
     Ok(())
