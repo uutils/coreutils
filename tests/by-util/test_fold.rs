@@ -1055,5 +1055,27 @@ fn test_width_zero() {
         .arg("-w")
         .arg("0")
         .fails_with_code(1)
-        .stderr_is("fold: illegal width value\n");
+        .stderr_is("fold: invalid number of columns: '0': Result too large\n");
+}
+
+#[test]
+fn test_width_invalid() {
+    for width in ["xyz", "12x", "12.5", "1 2"] {
+        new_ucmd!()
+            .arg("-w")
+            .arg(width)
+            .fails_with_code(1)
+            .stderr_is(format!("fold: invalid number of columns: '{width}'\n"));
+    }
+}
+
+#[test]
+fn test_width_overflow() {
+    new_ucmd!()
+        .arg("-w")
+        .arg("999999999999999999999")
+        .fails_with_code(1)
+        .stderr_is(
+            "fold: invalid number of columns: '999999999999999999999': Value too large to be stored in data type\n",
+        );
 }

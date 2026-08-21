@@ -8,6 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stdin, stdout};
+use std::num::IntErrorKind;
 use std::path::Path;
 use unicode_width::UnicodeWidthChar;
 use uucore::display::Quotable;
@@ -69,14 +70,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             Ok(0) => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
+                    translate!("fold-error-width-zero", "width" => inp_width.quote()),
                 ));
             }
             Ok(parsed_width) => parsed_width,
-            Err(e) => {
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => {
                 return Err(USimpleError::new(
                     1,
-                    translate!("fold-error-illegal-width", "width" => inp_width.quote(), "error" => e),
+                    translate!("fold-error-width-overflow", "width" => inp_width.quote()),
+                ));
+            }
+            Err(_) => {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("fold-error-illegal-width", "width" => inp_width.quote()),
                 ));
             }
         },
