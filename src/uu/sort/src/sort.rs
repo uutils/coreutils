@@ -2239,7 +2239,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
         settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
-            let message = error.format_option_error(size_str, options::BUF_SIZE);
+            let message = error.format_option_error(size_str, &format!("--{}", options::BUF_SIZE));
             error.size_value_error(
                 key_args.as_deref(),
                 size_str,
