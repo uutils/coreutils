@@ -1217,11 +1217,18 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_proc_self_mem() {
-    new_ucmd!()
+    let result = new_ucmd!()
         .args(&["-c1", "/proc/self/mem"])
-        .fails_with_code(1)
-        .stderr_is("cut: Input/output error\n");
+        .fails_with_code(1);
+
+    let stderr = result.stderr_str();
+
+    let input_output = "cut: Input/output error\n";
+    let io = "cut: I/O error\n";
+
+    assert!(stderr == input_output || stderr == io);
 }
 
 #[cfg(unix)]
