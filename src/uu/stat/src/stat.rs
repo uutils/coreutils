@@ -53,11 +53,7 @@ enum StatError {
     CannotStatx { file: String, error: String },
 }
 
-impl UError for StatError {
-    fn code(&self) -> i32 {
-        1
-    }
-}
+impl UError for StatError {}
 
 mod options {
     pub const DEREFERENCE: &str = "dereference";

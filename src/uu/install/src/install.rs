@@ -138,10 +138,6 @@ enum InstallError {
 }
 
 impl UError for InstallError {
-    fn code(&self) -> i32 {
-        1
-    }
-
     fn usage(&self) -> bool {
         false
     }
