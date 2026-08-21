@@ -31,9 +31,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     repeat_content_to_capacity(&mut buffer);
     match exec(&buffer) {
         Ok(()) => Ok(()),
-        // On Windows and WASI, silently handle broken pipe since there's no SIGPIPE
+        // On Windows and WASI, silently handle any stdout write error since there's no SIGPIPE
         #[cfg(any(windows, target_os = "wasi"))]
-        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(()),
+        Err(_) => Ok(()),
         Err(err) => Err(USimpleError::new(
             1,
             translate!("yes-error-standard-output", "error" => strip_errno(&err)),
