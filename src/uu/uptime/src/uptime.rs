@@ -7,6 +7,11 @@
 
 mod platform;
 
+#![cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))
+))]
+
 use clap::{Arg, ArgAction, Command};
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};

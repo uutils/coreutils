@@ -20,7 +20,7 @@ feat_systemd_logind = ["uucore/feat_systemd_logind"]
 path = "src/pinky.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
 fluent = { workspace = true }
@@ -31,3 +31,4 @@ workspace = true
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
+required-features = ["uucore/default"]

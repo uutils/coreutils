@@ -4,8 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) SIGHUP cproc vprocmgr homeout
-#[cfg(not(unix))]
-compile_error!("nohup is not supported on the target");
+
+#![cfg(unix)]
 
 use clap::{Arg, ArgAction, Command};
 use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout, stdout};
