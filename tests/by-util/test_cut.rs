@@ -1216,7 +1216,7 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
 }
 
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(target_env = "gnu")]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_proc_self_mem() {
     let result = new_ucmd!()
