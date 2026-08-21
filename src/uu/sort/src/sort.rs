@@ -3292,19 +3292,7 @@ fn open_with_open_failed_error(path: impl AsRef<OsStr>) -> UResult<Box<dyn Read 
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    // NOTE:
-    // GNU's sort echos affected flag, -S or --buffer-size, depending on user's selection
-    match error {
-        ParseSizeError::InvalidSuffix(_) => {
-            translate!("sort-invalid-suffix-in-option-arg", "option" => option, "arg" => s.quote())
-        }
-        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            translate!("sort-invalid-option-arg", "option" => option, "arg" => s.quote())
-        }
-        ParseSizeError::SizeTooBig(_) => {
-            translate!("sort-option-arg-too-large", "option" => option, "arg" => s.quote())
-        }
-    }
+    error.format_option_error(s, option)
 }
 
 #[cfg(test)]

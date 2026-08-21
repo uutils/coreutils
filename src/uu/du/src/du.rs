@@ -1572,19 +1572,7 @@ impl Threshold {
 }
 
 fn format_error_message(error: &ParseSizeError, s: &str, option: &str) -> String {
-    // NOTE:
-    // GNU's du echos affected flag, -B or --block-size (-t or --threshold), depending user's selection
-    match error {
-        ParseSizeError::InvalidSuffix(_) => {
-            translate!("du-error-invalid-suffix", "option" => option, "value" => s.quote())
-        }
-        ParseSizeError::ParseFailure(_) | ParseSizeError::PhysicalMem(_) => {
-            translate!("du-error-invalid-argument", "option" => option, "value" => s.quote())
-        }
-        ParseSizeError::SizeTooBig(_) => {
-            translate!("du-error-argument-too-large", "option" => option, "value" => s.quote())
-        }
-    }
+    error.format_option_error(s, option)
 }
 
 #[cfg(test)]
