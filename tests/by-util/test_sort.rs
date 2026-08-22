@@ -1446,7 +1446,7 @@ fn test_compress_fail() {
             "--compress-program",
             "nonexistent-program",
             "-S",
-            "10",
+            "1K",
         ])
         .succeeds();
 
@@ -1464,6 +1464,20 @@ fn test_compress_fail() {
         .succeeds()
         .stdout_move_str();
     assert_eq!(result.stdout_str(), expected);
+}
+
+#[test]
+#[cfg(unix)]
+fn test_input_error_before_compression_is_needed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "b\na\n");
+    at.mkdir("directory");
+
+    ucmd.args(&["--compress-program=nonexistent", "input", "directory"])
+        .fails_with_code(2)
+        .no_stdout()
+        .stderr_contains("Is a directory")
+        .stderr_does_not_contain("compress program");
 }
 
 #[test]
