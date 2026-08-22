@@ -303,6 +303,34 @@ fn test_du_env_block_size_hierarchy() {
 }
 
 #[test]
+fn test_du_suffix_only_block_size() {
+    let ts = TestScenario::new(util_name!());
+    let file = "file";
+    ts.fixtures.write(file, "x");
+
+    for (arg, env, expected) in [
+        (Some("-BM"), None, "1M"),
+        (Some("-B1M"), None, "1"),
+        (None, Some(("DU_BLOCK_SIZE", "M")), "1M"),
+        (None, Some(("BLOCK_SIZE", "KB")), "1kB"),
+        (None, Some(("BLOCKSIZE", "MiB")), "1MiB"),
+        (None, Some(("DU_BLOCK_SIZE", "1M")), "1"),
+    ] {
+        let mut cmd = ts.ucmd();
+        if let Some(arg) = arg {
+            cmd.arg(arg);
+        }
+        if let Some((var, value)) = env {
+            cmd.env(var, value);
+        }
+        cmd.arg("--apparent-size")
+            .arg(file)
+            .succeeds()
+            .stdout_only(format!("{expected}\t{file}\n"));
+    }
+}
+
+#[test]
 fn test_du_binary_block_size() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -2104,7 +2132,7 @@ fn test_du_inodes_blocksize_ineffective() {
     let at = &ts.fixtures;
     let fpath = at.plus("test.txt");
     at.touch(fpath);
-    for method in ["-B3", "--block-size=3"] {
+    for method in ["-B3", "--block-size=3", "-BM"] {
         // No warning
         ts.ucmd()
             .arg(method)
