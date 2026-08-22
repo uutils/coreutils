@@ -66,7 +66,7 @@ pub fn parse_options(settings: &mut crate::Settings, opts: &clap::ArgMatches) ->
         Some(Ok(style)) => settings.footer_numbering = style,
         Some(Err(message)) => errs.push(message),
     }
-    if let Some(&num) = opts.get_one::<u64>(options::NUMBER_WIDTH) {
+    if let Some(&num) = opts.get_one::<u32>(options::NUMBER_WIDTH) {
         settings.number_width = num as usize;
     }
     if let Some(num) = opts.get_one::<u64>(options::JOIN_BLANK_LINES) {

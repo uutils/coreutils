@@ -376,7 +376,8 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_WIDTH)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(u64).range(1..=(i32::MAX as u64))),
+                // ~ i32::MAX
+                .value_parser(clap::value_parser!(u32).range(1..=2_147_483_647)),
         )
 }
 
