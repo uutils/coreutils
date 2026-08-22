@@ -132,6 +132,11 @@ pub fn uu_app() -> Command {
 
 /// check a path, given as a slice of it's components and an operating mode
 fn check_path(mode: &Mode, path: &[String]) -> bool {
+    // GNU rejects an empty file name in any portability mode before touching the filesystem.
+    if !matches!(mode, Mode::Default) && path.join("/").is_empty() {
+        show_error!("{}", translate!("pathchk-error-empty-file-name"));
+        return false;
+    }
     match *mode {
         Mode::Basic => check_basic(path),
         Mode::Extra => check_default(path) && check_extra(path),
