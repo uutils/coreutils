@@ -56,6 +56,10 @@ pub enum ChrootError {
     #[error("{}", translate!("chroot-error-no-such-directory", "dir" => _0.quote()))]
     NoSuchDirectory(PathBuf),
 
+    /// The given path could not be stat'd (e.g. ENAMETOOLONG, EACCES).
+    #[error("{}", translate!("chroot-error-cannot-stat", "dir" => _0.quote(), "err" => _1))]
+    CannotStat(PathBuf, #[source] Error),
+
     /// The call to `setgid()` failed.
     #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]
     SetGidFailed(String, #[source] Error),

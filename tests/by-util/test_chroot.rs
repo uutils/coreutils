@@ -57,6 +57,22 @@ fn test_no_such_directory() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
+fn test_filename_too_long() {
+    // Regression for #13156: a NEWROOT longer than NAME_MAX (255 bytes on
+    // Linux) used to be misreported as "no such directory" because
+    // `Path::is_dir()` swallows ENAMETOOLONG. GNU surfaces the real error.
+    let long_name = "A".repeat(256);
+    let expected = format!(
+        "chroot: cannot change root directory to '{long_name}': File name too long (os error 63)\n"
+    );
+    new_ucmd!()
+        .arg(&long_name)
+        .fails_with_code(125)
+        .stderr_is(expected);
+}
+
+#[test]
 fn test_multiple_group_args() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
