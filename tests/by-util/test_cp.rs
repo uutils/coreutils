@@ -2786,6 +2786,32 @@ fn test_cp_reflink_never() {
     }
 }
 
+// Regression test for #14052: on macOS, `cp` used to call clonefile(2) unconditionally, so
+// `--reflink=never` still cloned — and clonefile copies the source's metadata, including mtime.
+// A real (non-clone) copy stamps the destination with its own mtime, so after `--reflink=never`
+// the destination must NOT inherit the source's (old) mtime.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_cp_reflink_never_does_not_clonefile() {
+    use filetime::FileTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "reflink never contents");
+    // Stamp the source with a mtime well in the past; a clonefile would copy it verbatim.
+    let past = FileTime::from_unix_time(1_000_000_000, 0); // 2001-09-09
+    filetime::set_file_times(at.plus("src"), past, past).unwrap();
+
+    ucmd.arg("--reflink=never").arg("src").arg("dst").succeeds();
+
+    assert_eq!(at.read("dst"), "reflink never contents");
+    let src_mtime = FileTime::from_last_modification_time(&at.metadata("src"));
+    let dst_mtime = FileTime::from_last_modification_time(&at.metadata("dst"));
+    assert_ne!(
+        dst_mtime, src_mtime,
+        "--reflink=never must copy (not clonefile), so dst must not inherit the source's mtime"
+    );
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_bad() {
