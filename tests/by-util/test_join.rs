@@ -254,6 +254,34 @@ fn default_format() {
 }
 
 #[test]
+fn repeated_o_accumulates_fields() {
+    // GNU lets -o repeat; the fields accumulate, so this matches a single -o.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("1.1")
+        .arg("-o")
+        .arg("2.2")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
+fn repeated_o_ignores_auto_when_mixed() {
+    // When -o is repeated and not every value is `auto`, each `auto` is ignored.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("1.1 2.2")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
 fn unpaired_lines_format() {
     new_ucmd!()
         .arg("fields_2.txt")
