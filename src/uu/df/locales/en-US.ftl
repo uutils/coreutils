@@ -17,6 +17,7 @@ df-help-total = produce a grand total
 df-help-human-readable = print sizes in human readable format (e.g., 1K 234M 2G)
 df-help-si = likewise, but use powers of 1000 not 1024
 df-help-inodes = list inode information instead of block usage
+df-help-mega = like --block-size=1M
 df-help-kilo = like --block-size=1K
 df-help-local = limit listing to local file systems
 df-help-no-sync = do not invoke sync before getting usage info (default)
