@@ -724,7 +724,7 @@ pub fn uu_app() -> Command {
                 .num_args(0..=1)
                 .default_missing_value("none")
                 .require_equals(true)
-                // GNU accepts a repeated -D/--all-repeated and uses the last one.
+                // Let the final occurrence select the delimiter method.
                 .overrides_with(options::ALL_REPEATED),
         )
         .arg(

@@ -15,11 +15,11 @@ use crate::options::{
 use crate::units::{Result, Unit};
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, parser::ValueSource};
 use std::ffi::OsString;
-use std::io::{BufRead, Write as _, stderr};
+use std::io::{BufRead, BufWriter, IsTerminal, Write, stderr};
 use std::str::FromStr;
 
 use uucore::display::Quotable;
-use uucore::error::{UResult, quiet_if_reported};
+use uucore::error::UResult;
 use uucore::i18n::decimal::locale_grouping_separator;
 use uucore::parser::parse_size::{IEC_BASES, SI_BASES};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -46,8 +46,8 @@ fn is_scientific(input: &[u8]) -> bool {
 ///
 /// Returns `true` if the line contained invalid input (only possible in
 /// non-abort modes).
-fn format_and_write<W: std::io::Write>(
-    writer: &mut W,
+fn format_and_write(
+    writer: &mut dyn Write,
     input_line: &[u8],
     options: &NumfmtOptions,
     eol: Option<u8>,
@@ -62,7 +62,7 @@ fn format_and_write<W: std::io::Write>(
     // can emit the original line instead.
     let buffer_output = !matches!(options.invalid, InvalidModes::Abort);
     let mut buf = Vec::new();
-    let dest: &mut dyn std::io::Write = if buffer_output { &mut buf } else { writer };
+    let dest: &mut dyn Write = if buffer_output { &mut buf } else { writer };
 
     let result = if options.delimiter.is_some() {
         write_formatted_with_delimiter(dest, line, options, eol)
@@ -112,6 +112,33 @@ fn format_and_write<W: std::io::Write>(
     Ok(false)
 }
 
+/// Run `body` with stdout buffered the way stdio buffers it: a block at a time
+/// into a file or a pipe, where only the total number of writes matters, and a
+/// line at a time onto a terminal, where output is read as it is produced.
+///
+/// Whatever `body` wrote is flushed before this returns, so an error still
+/// leaves the lines that came before it on stdout.
+fn with_stdout<T>(body: impl FnOnce(&mut dyn Write) -> UResult<T>) -> UResult<T> {
+    let stdout = std::io::stdout();
+    if stdout.is_terminal() {
+        let mut writer = stdout.lock();
+        finish(body(&mut writer), &mut writer)
+    } else {
+        let mut writer = BufWriter::new(stdout.lock());
+        finish(body(&mut writer), &mut writer)
+    }
+}
+
+/// Flush `writer`, keeping the failure `result` already carries, if any.
+fn finish<T>(result: UResult<T>, writer: &mut impl Write) -> UResult<T> {
+    let flushed = writer
+        .flush()
+        .map_err(|e| NumfmtError::IoError(e.to_string()));
+    let value = result?;
+    flushed?;
+    Ok(value)
+}
+
 /// Process command-line number arguments.
 ///
 /// `snapshot` is the command line as typed, for the caret under a number that
@@ -123,31 +150,42 @@ fn handle_args<'a>(
     options: &NumfmtOptions,
     snapshot: Option<&[OsString]>,
 ) -> UResult<bool> {
-    let mut stdout = std::io::stdout().lock();
-    let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    let mut saw_invalid = false;
-    for (n, l) in args.enumerate() {
-        match format_and_write(&mut stdout, l, options, Some(terminator)) {
-            Ok(invalid) => saw_invalid |= invalid,
-            // Only this mode stops on the first bad number; the others carry
-            // on, where a report per line would bury the output.
-            Err(error) => {
-                let reported = snapshot.is_some_and(|args| {
-                    diagnostics::render_input(args, l, n, &error.to_string(), options)
-                });
-                return Err(quiet_if_reported(reported, error));
+    with_stdout(|stdout| {
+        let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
+        let mut saw_invalid = false;
+        for (n, l) in args.enumerate() {
+            match format_and_write(stdout, l, options, Some(terminator)) {
+                Ok(invalid) => saw_invalid |= invalid,
+                // Only this mode stops on the first bad number; the others carry
+                // on, where a report per line would bury the output.
+                Err(error) => {
+                    return Err(uucore::diagnostics::error_after_report(
+                        snapshot,
+                        error,
+                        |args, error| {
+                            diagnostics::render_input(args, l, n, &error.to_string(), options)
+                        },
+                    ));
+                }
             }
         }
-    }
-    Ok(saw_invalid)
+        Ok(saw_invalid)
+    })
 }
 
 /// Process lines read from stdin.
 ///
 /// Returns `true` if any line contained invalid input.
-fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<bool> {
+fn handle_buffer<R: BufRead>(input: R, options: &NumfmtOptions) -> UResult<bool> {
+    with_stdout(|stdout| handle_buffer_to(input, options, stdout))
+}
+
+fn handle_buffer_to<R: BufRead>(
+    mut input: R,
+    options: &NumfmtOptions,
+    stdout: &mut dyn Write,
+) -> UResult<bool> {
     let terminator = if options.zero_terminated { 0u8 } else { b'\n' };
-    let mut stdout = std::io::stdout().lock();
     let mut buf = Vec::new();
     let mut line_idx = 0;
     let mut saw_invalid = false;
@@ -178,7 +216,7 @@ fn handle_buffer<R: BufRead>(mut input: R, options: &NumfmtOptions) -> UResult<b
                 stdout.write_all(&[t])?;
             }
         } else {
-            saw_invalid |= format_and_write(&mut stdout, line, options, eol)?;
+            saw_invalid |= format_and_write(stdout, line, options, eol)?;
         }
 
         line_idx += 1;
@@ -443,34 +481,34 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // A format error still knows where in the format string it happened,
         // so it is the one error worth a caret.
         Err(ParseError::Format(error)) => {
-            let reported = format_args
-                .as_ref()
-                .zip(matches.get_one::<String>(FORMAT))
-                .is_some_and(|(args, format)| diagnostics::render(args, format, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| {
+                    matches
+                        .get_one::<String>(FORMAT)
+                        .is_some_and(|format| diagnostics::render(args, format, &error))
+                },
             ));
         }
         // As for a format, a field list knows which of its ranges is at fault.
         Err(ParseError::Field(error)) => {
-            let reported = format_args
-                .as_ref()
-                .zip(matches.get_one::<String>(FIELD))
-                .is_some_and(|(args, fields)| diagnostics::render_field(args, fields, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| {
+                    matches
+                        .get_one::<String>(FIELD)
+                        .is_some_and(|fields| diagnostics::render_field(args, fields, &error))
+                },
             ));
         }
         // An option value that is wrong as a whole: underline it where typed.
         Err(ParseError::Value(error)) => {
-            let reported = format_args
-                .as_ref()
-                .is_some_and(|args| diagnostics::render_value(args, &error));
-            return Err(quiet_if_reported(
-                reported,
-                NumfmtError::IllegalArgument(error.message),
+            return Err(uucore::diagnostics::error_after_report(
+                format_args.as_deref(),
+                NumfmtError::IllegalArgument(error.message.clone()),
+                |args, _| diagnostics::render_value(args, &error),
             ));
         }
         Err(ParseError::Other(message)) => {

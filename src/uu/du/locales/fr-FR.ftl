@@ -11,9 +11,10 @@ du-after-help = Les valeurs affichées sont en unités de la première TAILLE di
 
   MOTIF permet des exclusions avancées. Par exemple, les syntaxes suivantes
   sont prises en charge :
-  ? correspondra à un seul caractère
-  { "*" } correspondra à zéro ou plusieurs caractères
-  {"{"}a,b{"}"} correspondra à a ou b
+
+    - ? correspondra à un seul caractère
+    - { "*" } correspondra à zéro ou plusieurs caractères
+    - {"{"}a,b{"}"} correspondra à a ou b
 
 # Messages d'aide
 du-help-print-help = Afficher les informations d'aide.

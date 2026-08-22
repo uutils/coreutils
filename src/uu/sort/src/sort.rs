@@ -45,9 +45,10 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, quiet_if_reported};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
@@ -1520,6 +1521,16 @@ pub(crate) fn fd_soft_limit() -> Option<usize> {
     None
 }
 
+/// The largest `--batch-size` argument that can be honoured with the current file
+/// descriptor soft limit, or `None` if that limit is unknown.
+///
+/// Three descriptors are always in use (stdin, stdout and stderr) and are therefore
+/// not available for merge inputs.
+fn max_merge_batch_size() -> Option<usize> {
+    const RESERVED_STDIO: usize = 3;
+    fd_soft_limit().map(|limit| limit.saturating_sub(RESERVED_STDIO))
+}
+
 #[cfg(unix)]
 pub(crate) fn current_open_fd_count() -> Option<usize> {
     fn count_dir(path: &str) -> Option<usize> {
@@ -2228,8 +2239,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     if let Some(size_str) = matches.get_one::<String>(options::BUF_SIZE) {
-        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|e| {
-            USimpleError::new(2, format_error_message(&e, size_str, options::BUF_SIZE))
+        settings.buffer_size = GlobalSettings::parse_byte_count(size_str).map_err(|error| {
+            let message = format_error_message(&error, size_str, options::BUF_SIZE);
+            error.size_value_error(
+                key_args.as_deref(),
+                &OptionValue::new(size_str, 'S', options::BUF_SIZE),
+                0,
+                &message,
+                USimpleError::new(2, message.clone()),
+            )
         })?;
         settings.buffer_size_is_explicit = true;
     } else {
@@ -2259,54 +2277,51 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(String::from);
 
     if let Some(n_merge) = matches.get_one::<String>(options::BATCH_SIZE) {
-        match n_merge.parse::<usize>() {
-            Ok(parsed_value) => {
-                if parsed_value < 2 {
-                    show_error!(
-                        "{}",
-                        translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
-                    );
-                    return Err(UUsageError::new(
-                        2,
-                        translate!("sort-minimum-batch-size-two"),
-                    ));
-                }
-                settings.merge_batch_size = parsed_value;
+        // `None` means the value does not even fit in a `usize`, which is always too large.
+        let parsed_value = match n_merge.parse::<usize>() {
+            Ok(parsed_value) => Some(parsed_value),
+            Err(e) if *e.kind() == IntErrorKind::PosOverflow => None,
+            Err(_) => {
+                return Err(UUsageError::new(
+                    2,
+                    translate!("sort-invalid-batch-size-arg", "arg" => n_merge),
+                ));
             }
-            Err(e) => {
-                let error_message = if *e.kind() == IntErrorKind::PosOverflow {
-                    let batch_too_large = translate!(
-                        "sort-batch-size-too-large",
-                        "arg" => n_merge.quote()
-                    );
+        };
 
-                    #[cfg(target_os = "linux")]
-                    {
-                        show_error!("{batch_too_large}");
-
-                        translate!(
-                            "sort-maximum-batch-size-rlimit",
-                            "rlimit" => {
-                                fd_soft_limit().ok_or_else(|| {
-                                    UUsageError::new(2, translate!("sort-failed-fetch-rlimit"))
-                                })?
-                            }
-                        )
-                    }
-                    #[cfg(not(target_os = "linux"))]
-                    {
-                        batch_too_large
-                    }
-                } else {
-                    translate!(
-                        "sort-invalid-batch-size-arg",
-                        "arg" =>  n_merge,
-                    )
-                };
-
-                return Err(UUsageError::new(2, error_message));
-            }
+        if parsed_value.is_some_and(|value| value < 2) {
+            show_error!(
+                "{}",
+                translate!("sort-invalid-batch-size-arg", "arg" => n_merge)
+            );
+            return Err(UUsageError::new(
+                2,
+                translate!("sort-minimum-batch-size-two"),
+            ));
         }
+
+        let max_batch_size = max_merge_batch_size();
+        let too_large = match (parsed_value, max_batch_size) {
+            (None, _) => true,
+            (Some(value), Some(max)) => value > max,
+            (Some(_), None) => false,
+        };
+        if too_large {
+            let batch_too_large = translate!(
+                "sort-batch-size-too-large",
+                "arg" => n_merge.quote()
+            );
+            let error_message = match max_batch_size {
+                Some(max) => {
+                    show_error!("{batch_too_large}");
+                    translate!("sort-maximum-batch-size-rlimit", "rlimit" => max)
+                }
+                None => batch_too_large,
+            };
+            return Err(UUsageError::new(2, error_message));
+        }
+
+        settings.merge_batch_size = parsed_value.unwrap_or(usize::MAX);
     }
 
     settings.line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO_TERMINATED));
@@ -2376,10 +2391,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let selector = match FieldSelector::parse(value, &settings) {
                 Ok(selector) => selector,
                 Err(error) => {
-                    let reported = key_args
-                        .as_ref()
-                        .is_some_and(|args| diagnostics::render(args, value, &error));
-                    return Err(quiet_if_reported(reported, error));
+                    return Err(uucore::diagnostics::error_after_report(
+                        key_args.as_deref(),
+                        error,
+                        |args, error| diagnostics::render(args, value, error),
+                    ));
                 }
             };
             settings.selectors.push(selector);

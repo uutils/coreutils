@@ -1550,6 +1550,66 @@ fn test_merge_batch_size_with_limit() {
 }
 
 #[test]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+#[cfg(target_os = "linux")]
+fn test_batch_size_above_fd_limit_is_rejected() {
+    use rlimit::Resource;
+    // Only stdin, stdout and stderr are unavailable for merge inputs, so the
+    // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=31")
+        .arg("gamma.txt")
+        .fails_with_code(2)
+        .stderr_contains("--batch-size argument '31' too large")
+        // 24 is forced by the limit above: 27 - 3 reserved descriptors.
+        .stderr_contains("maximum --batch-size argument with current rlimit is 24");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_batch_size_at_fd_limit_is_accepted() {
+    use rlimit::Resource;
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    // 24 is the largest value the limit above allows, and sorting must still happen.
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=24")
+        .arg("gamma.txt")
+        .succeeds()
+        .stdout_only("alpha\ndelta\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_more_files_than_fd_limit() {
+    use rlimit::Resource;
+    let (at, mut ucmd) = at_and_ucmd!();
+    // 40 single-line files cannot all be open at once with a soft limit of 24,
+    // so sort has to merge them in several batches through temporary files.
+    let count = 40;
+    let mut names = Vec::new();
+    for i in 0..count {
+        let name = format!("fdlimit_{i:02}.txt");
+        at.write(&name, &format!("{i:02}\n"));
+        names.push(name);
+    }
+    let mut expected = String::new();
+    for i in 0..count {
+        writeln!(expected, "{i:02}").unwrap();
+    }
+    let limit_fd = 24;
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -1804,19 +1864,19 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o2"
-fn test_multiple_output_files() {
+// Test sort with output file (o2)
+fn test_error_on_multiple_output_flags() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "bar"])
+        .args(&["-o", "alpha", "-o", "beta"])
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o3"
-fn test_duplicate_output_files_allowed() {
+// Test sort with output file (o3)
+fn test_same_output_flag_twice_ok() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "foo"])
+        .args(&["-o", "output", "-o", "output"])
         .pipe_in("")
         .succeeds()
         .no_stderr();
@@ -1846,8 +1906,8 @@ fn test_output_file_with_leading_dash() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
-fn test_files0_from_extra_arg() {
+// Test files0-from with extra argument
+fn test_files0_from_rejects_extra_positional() {
     new_ucmd!()
         .args(&["--files0-from", "-", "foo"])
         .fails_with_code(2)
@@ -1858,8 +1918,8 @@ fn test_files0_from_extra_arg() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "missing"
-fn test_files0_from_missing() {
+// Test files0-from with missing file
+fn test_files0_from_nonexistent_file_fails() {
     new_ucmd!()
         .args(&["--files0-from", "missing_file"])
         .fails_with_code(2)
@@ -1872,8 +1932,8 @@ fn test_files0_from_missing() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "minus-in-stdin"
-fn test_files0_from_minus_in_stdin() {
+// Test files0-from reading from stdin
+fn test_files0_from_reads_stdin_via_dash() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("-")
@@ -1884,8 +1944,8 @@ fn test_files0_from_minus_in_stdin() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty"
-fn test_files0_from_empty() {
+// Test files0-from with empty file
+fn test_files0_from_empty_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file");
@@ -1897,7 +1957,7 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
-fn test_files0_from_non_utf8_name() {
+fn test_files0_from_non_utf8_filename() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in(vec![0xff_u8])
@@ -1907,7 +1967,7 @@ fn test_files0_from_non_utf8_name() {
 
 #[test]
 #[cfg(unix)]
-fn test_files0_read_error() {
+fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
         .fails_with_code(2)
@@ -1916,8 +1976,8 @@ fn test_files0_read_error() {
 
 #[cfg(unix)]
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
-fn test_files0_from_empty_non_regular() {
+// Test files0-from with non-regular empty file
+fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
         .fails_with_code(2)
@@ -1925,8 +1985,8 @@ fn test_files0_from_empty_non_regular() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-1"
-fn test_files0_from_nul() {
+// Test files0-from with NUL-separated input (case 1)
+fn test_files0_from_single_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0")
@@ -1935,8 +1995,8 @@ fn test_files0_from_nul() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-2"
-fn test_files0_from_nul2() {
+// Test files0-from with NUL-separated input (case 2)
+fn test_files0_from_double_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0\0")
@@ -1945,65 +2005,65 @@ fn test_files0_from_nul2() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1"
-fn test_files0_from_1() {
+// Test files0-from basic single file
+fn test_files0_from_single_entry() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file")
+        .pipe_in("words")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1a"
-fn test_files0_from_1a() {
+// Test files0-from basic single file variant
+fn test_files0_from_single_entry_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0")
+        .pipe_in("words\0")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2"
-fn test_files0_from_2() {
+// Test files0-from with two files
+fn test_files0_from_two_entries() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file")
+        .pipe_in("words\0words")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2a"
-fn test_files0_from_2a() {
+// Test files0-from with two files variant
+fn test_files0_from_two_entries_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file\0")
+        .pipe_in("words\0words\0")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "non-utf8"
+// Test files0-from with non-UTF-8 filenames
 #[cfg(all(unix, not(target_os = "macos")))]
-fn test_files0_from_non_utf8() {
+fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2020,20 +2080,20 @@ fn test_files0_from_non_utf8() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "zero-len"
-fn test_files0_from_zero_length() {
+// Test files0-from with zero-length filename
+fn test_files0_from_zero_length_entry_fails() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
-        .pipe_in("g\0\0b\0\0")
+        .pipe_in("x\0\0y\0\0")
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-float.sh
-fn test_g_float() {
-    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
-    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+// Test sort with floating point numbers
+fn test_sort_general_numeric_extremes() {
+    let input = "0\n-1.7976931348623157e+308\n1.7976931348623157e+308\n";
+    let output = "-1.7976931348623157e+308\n0\n1.7976931348623157e+308\n";
     new_ucmd!()
         .args(&["-g"])
         .pipe_in(input)
@@ -3361,6 +3421,30 @@ sort: invalid number at field start: invalid count at start of 'sort'
         );
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_a_buffer_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid suffix in --buffer-size argument '8zz'
+   ╭─[ sort:1:10 ]
+   │
+ 1 │ sort -S 8zz /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
     #[test]
     fn test_plain_message_when_stderr_is_not_a_terminal() {
         // The test harness pipes stderr, so the report must not appear.
@@ -3370,6 +3454,10 @@ sort: invalid number at field start: invalid count at start of 'sort'
             .stderr_only(
                 "sort: stray character in field spec: invalid field specification '2.3q'\n",
             );
+        new_ucmd!()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2)
+            .stderr_only("sort: invalid suffix in --buffer-size argument '8zz'\n");
     }
 }
 

@@ -221,13 +221,7 @@ impl MountInfo {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::ffi::OsStringExt;
 
-        let dev_name;
-        let fs_type;
-        let mount_root;
-        let mount_dir;
-        let mount_option;
-
-        match file_name {
+        let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
@@ -239,21 +233,23 @@ impl MountInfo {
                     .unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                dev_name = String::from_utf8_lossy(raw[after_fields + 1]).to_string();
-                fs_type = String::from_utf8_lossy(raw[after_fields]).to_string();
-                mount_root = OsStr::from_bytes(raw[3]).to_owned();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[4]));
-                mount_option = String::from_utf8_lossy(raw[5]).to_string();
+                (
+                    String::from_utf8_lossy(raw[after_fields + 1]).to_string(),
+                    String::from_utf8_lossy(raw[after_fields]).to_string(),
+                    OsStr::from_bytes(raw[3]).to_owned(),
+                    OsString::from_vec(replace_special_chars(raw[4])),
+                    String::from_utf8_lossy(raw[5]).to_string(),
+                )
             }
-            LINUX_MTAB => {
-                dev_name = String::from_utf8_lossy(raw[0]).to_string();
-                fs_type = String::from_utf8_lossy(raw[2]).to_string();
-                mount_root = OsString::new();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[1]));
-                mount_option = String::from_utf8_lossy(raw[3]).to_string();
-            }
+            LINUX_MTAB => (
+                String::from_utf8_lossy(raw[0]).to_string(),
+                String::from_utf8_lossy(raw[2]).to_string(),
+                OsString::new(),
+                OsString::from_vec(replace_special_chars(raw[1])),
+                String::from_utf8_lossy(raw[3]).to_string(),
+            ),
             _ => return None,
-        }
+        };
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);

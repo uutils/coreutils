@@ -3,6 +3,7 @@ numfmt-usage = numfmt [OPTION]... [NOMBRE]...
 numfmt-after-help = Options d'UNITÉ :
 
   - none : aucune mise à l'échelle automatique n'est effectuée ; les suffixes déclencheront une erreur
+
   - auto : accepter un suffixe optionnel d'une/deux lettres :
 
       1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,

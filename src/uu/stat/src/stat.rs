@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
+use std::ops::Range;
+use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::UEncoding;
 use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
@@ -82,20 +84,88 @@ struct Flags {
 /// checks if the string is within the specified bound,
 /// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
-fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
+fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> Result<(), DirectiveError> {
     if end >= bound {
         // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
         // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
         let directive: String = slice.chars().skip(beg).take(end - beg).collect();
-        return Err(USimpleError::new(
-            1,
-            StatError::InvalidDirective {
-                directive: directive.quote().to_string(),
-            }
-            .to_string(),
-        ));
+        return Err(DirectiveError::new(slice, &directive, beg, end));
     }
     Ok(())
+}
+
+/// Converts a character index to a byte index in a UTF-8 string
+///
+/// This is necessary because Rust strings are UTF-8 encoded, so character
+/// positions don't always align with byte positions for multi-byte characters.
+/// An index past the last character gives the end of the string.
+fn char_index_to_byte_index(format_str: &str, char_index: usize) -> usize {
+    format_str
+        .char_indices()
+        .nth(char_index)
+        .map_or(format_str.len(), |(byte_idx, _)| byte_idx)
+}
+
+/// A directive stat does not know, and where it sat in the format string.
+///
+/// The message is the one stat always printed; the byte range is what a caret
+/// needs to point inside the format rather than at all of it.
+#[derive(Debug)]
+struct DirectiveError {
+    directive: String,
+    span: Range<usize>,
+}
+
+impl DirectiveError {
+    /// # Arguments
+    ///
+    /// * `format_str` - The format string the directive came from.
+    /// * `directive` - The directive as written, without its quotes.
+    /// * `beg`, `end` - Its char indices in `format_str`; `end` may sit past
+    ///   the end, for a directive the format stops in the middle of.
+    fn new(format_str: &str, directive: &str, beg: usize, end: usize) -> Self {
+        Self {
+            directive: directive.quote().to_string(),
+            span: char_index_to_byte_index(format_str, beg)
+                ..char_index_to_byte_index(format_str, end),
+        }
+    }
+
+    /// The error to raise, a caret under the directive when the format was
+    /// given on the command line and stderr is a terminal.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, or `None` when they were not
+    ///   kept.
+    /// * `option` - The format as typed and the option it was given to, or
+    ///   `None` for a format stat built itself, which is not on the command
+    ///   line and has nothing to point at.
+    fn into_error(
+        self,
+        diag_args: Option<&[OsString]>,
+        option: Option<&OptionValue>,
+    ) -> Box<dyn UError> {
+        let message = StatError::InvalidDirective {
+            directive: self.directive,
+        }
+        .to_string();
+        uucore::diagnostics::error_after_report(
+            diag_args,
+            USimpleError::new(1, message.clone()),
+            |args, _| {
+                option.is_some_and(|option| {
+                    uucore::diagnostics::Snapshot::with_program(args).render_option(
+                        option,
+                        self.span.clone(),
+                        &message,
+                        None,
+                        Some(&translate!("stat-diag-help-directive")),
+                    )
+                })
+            },
+        )
+    }
 }
 
 enum Padding {
@@ -760,22 +830,12 @@ impl Stater {
         }
     }
 
-    /// Converts a character index to a byte index in a UTF-8 string
-    /// This is necessary because Rust strings are UTF-8 encoded, so character positions
-    /// don't always align with byte positions for multi-byte characters
-    fn char_index_to_byte_index(format_str: &str, char_index: usize) -> usize {
-        format_str
-            .char_indices()
-            .nth(char_index)
-            .map_or(format_str.len(), |(byte_idx, _)| byte_idx)
-    }
-
     fn handle_percent_case(
         chars: &[char],
         i: &mut usize,
         bound: usize,
         format_str: &str,
-    ) -> UResult<Token> {
+    ) -> Result<Token, DirectiveError> {
         let old = *i;
 
         *i += 1;
@@ -794,20 +854,20 @@ impl Stater {
         let mut precision = Precision::NotSpecified;
         let mut j = *i;
 
-        let j_byte = Self::char_index_to_byte_index(format_str, j);
+        let j_byte = char_index_to_byte_index(format_str, j);
         if let Some((field_width, offset)) = format_str[j_byte..].scan_num::<usize>() {
             width = field_width;
             j += offset;
 
             // Reject directives like `%<NUMBER>` by checking if width has been parsed.
             if j >= bound || chars[j] == '%' {
-                let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
-                return Err(USimpleError::new(
-                    1,
-                    StatError::InvalidDirective {
-                        directive: invalid_directive.quote().to_string(),
-                    }
-                    .to_string(),
+                let end = j.min(bound - 1);
+                let invalid_directive: String = chars[old..=end].iter().collect();
+                return Err(DirectiveError::new(
+                    format_str,
+                    &invalid_directive,
+                    old,
+                    end + 1,
                 ));
             }
         }
@@ -817,7 +877,7 @@ impl Stater {
             j += 1;
             check_bound(format_str, bound, old, j)?;
 
-            let j_byte = Self::char_index_to_byte_index(format_str, j);
+            let j_byte = char_index_to_byte_index(format_str, j);
             match format_str[j_byte..].scan_num::<i32>() {
                 Some((value, offset)) => {
                     if value >= 0 {
@@ -898,7 +958,7 @@ impl Stater {
                 // Parse hexadecimal escape sequence (\xNN format)
                 // Uses UTF-8 safe byte indexing to handle multi-byte characters properly
                 if *i + 1 < bound {
-                    let byte_index = Self::char_index_to_byte_index(format_str, *i + 1);
+                    let byte_index = char_index_to_byte_index(format_str, *i + 1);
                     if let Some((c, offset)) = format_str[byte_index..].scan_char(16) {
                         *i += offset;
                         Token::Byte(c as u8)
@@ -921,7 +981,7 @@ impl Stater {
         }
     }
 
-    fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
+    fn generate_tokens(format_str: &str, use_printf: bool) -> Result<Vec<Token>, DirectiveError> {
         let mut tokens = Vec::new();
         let chars = format_str.chars().collect::<Vec<char>>();
         let bound = chars.len();
@@ -973,7 +1033,7 @@ impl Stater {
         Ok(mount_list)
     }
 
-    fn new(matches: &ArgMatches) -> UResult<Self> {
+    fn new(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
@@ -995,13 +1055,30 @@ impl Stater {
         let terse = matches.get_flag(options::TERSE);
         let show_fs = matches.get_flag(options::FILE_SYSTEM);
 
+        // Only the format the user typed can be pointed at; the ones stat
+        // builds for itself never fail, and are not on the command line.
+        // `--printf` has no short form; `--format` also answers to `-c`.
+        let given_option = || {
+            OptionValue::with_names(
+                format_str,
+                if use_printf { None } else { Some('c') },
+                Some(if use_printf {
+                    options::PRINTF
+                } else {
+                    options::FORMAT
+                }),
+            )
+        };
         let default_tokens = if format_str.is_empty() {
-            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)
+                .map_err(|e| e.into_error(diag_args, None))?
         } else {
-            Self::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens(format_str, use_printf)
+                .map_err(|e| e.into_error(diag_args, Some(&given_option())))?
         };
         let default_dev_tokens =
-            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)
+                .map_err(|e| e.into_error(diag_args, None))?;
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
@@ -1379,9 +1456,12 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The command line is kept for the caret in format diagnostics, which
+    // needs the format as typed.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
-    let stater = Stater::new(&matches)?;
+    let stater = Stater::new(&matches, diag_args.as_deref())?;
     let exit_status = stater.exec();
     if exit_status == 0 {
         Ok(())
