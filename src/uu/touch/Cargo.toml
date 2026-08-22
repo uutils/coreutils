@@ -19,7 +19,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-filetime = { workspace = true }
 fluent = { workspace = true }
 jiff = { workspace = true }
 parse_datetime = { workspace = true }
