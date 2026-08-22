@@ -17,7 +17,6 @@ path = "src/touch.rs"
 doctest = false
 
 [dependencies]
-filetime = { workspace = true }
 clap = { workspace = true }
 jiff = { workspace = true }
 parse_datetime = { workspace = true }

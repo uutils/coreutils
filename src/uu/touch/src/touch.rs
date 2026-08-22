@@ -6,16 +6,13 @@
 // spell-checker:ignore (ToDO) datelike datetime filetime mktime strtime timelike utime DATETIME UTIME futimens
 // spell-checker:ignore (FORMATS) MMDDhhmm YYYYMMDDHHMM YYMMDDHHMM YYYYMMDDHHMMS CREAT ENXIO RDONLY utimensat
 
+#![feature(fs_set_times)]
+
 pub mod error;
 mod platform;
 
 use clap::builder::{PossibleValue, ValueParser};
 use clap::{Arg, ArgAction, ArgGroup, ArgMatches, Command};
-use filetime::FileTime;
-#[cfg(all(any(not(unix), target_os = "redox"), not(target_os = "wasi")))]
-use filetime::set_file_times;
-#[cfg(not(target_os = "wasi"))]
-use filetime::set_symlink_file_times;
 use jiff::civil::Time;
 use jiff::fmt::strtime;
 use jiff::tz::TimeZone;
@@ -28,13 +25,12 @@ use rustix::fs::Timestamps;
 use rustix::fs::futimens;
 use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
-use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{self, FileTimes, OpenOptions};
 use std::io::{Error, ErrorKind};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 #[cfg(target_os = "linux")]
@@ -46,8 +42,6 @@ use uucore::{format_usage, show};
 use crate::error::TouchError;
 #[cfg(not(unix))]
 use crate::platform::pathbuf_from_stdout;
-#[cfg(target_os = "wasi")]
-use crate::platform::{set_file_times, set_symlink_file_times};
 
 /// Options contains all the possible behaviors and flags for touch.
 ///
@@ -100,7 +94,7 @@ pub enum ChangeTimes {
 pub enum Source {
     /// Use access/modification times of given file
     Reference(PathBuf),
-    Timestamp(FileTime),
+    Timestamp(SystemTime),
     /// Use current time
     Now,
 }
@@ -140,12 +134,8 @@ mod format {
     pub(crate) const YYYYMMDDHHMM_OFFSET: &str = "%Y-%m-%d %H:%M %z";
 }
 
-fn timestamp_to_filetime(ts: Timestamp) -> FileTime {
-    FileTime::from_system_time(SystemTime::from(ts))
-}
-
-fn filetime_to_zoned(ft: &FileTime) -> Option<Zoned> {
-    let ts = Timestamp::new(ft.unix_seconds(), ft.nanoseconds() as i32).ok()?;
+fn system_time_to_zoned(st: SystemTime) -> Option<Zoned> {
+    let ts = Timestamp::try_from(st).ok()?;
     Some(Zoned::new(ts, TimeZone::system()))
 }
 
@@ -391,19 +381,7 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
             (atime, mtime)
         }
         Source::Now => {
-            let now: FileTime;
-            #[cfg(target_os = "linux")]
-            {
-                if opts.date.is_none() {
-                    now = FileTime::from_unix_time(0, libc::UTIME_NOW as u32);
-                } else {
-                    now = timestamp_to_filetime(Timestamp::now());
-                }
-            }
-            #[cfg(not(target_os = "linux"))]
-            {
-                now = timestamp_to_filetime(Timestamp::now());
-            }
+            let now = SystemTime::now();
             (now, now)
         }
         &Source::Timestamp(ts) => (ts, ts),
@@ -412,11 +390,11 @@ pub fn touch(files: &[InputFile], opts: &Options) -> Result<(), TouchError> {
     let (atime, mtime) = if let Some(date) = &opts.date {
         (
             parse_date(
-                filetime_to_zoned(&atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
+                system_time_to_zoned(atime).ok_or_else(|| TouchError::InvalidFiletime(atime))?,
                 date,
             )?,
             parse_date(
-                filetime_to_zoned(&mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
+                system_time_to_zoned(mtime).ok_or_else(|| TouchError::InvalidFiletime(mtime))?,
                 date,
             )?,
         )
@@ -467,8 +445,8 @@ fn touch_file(
     path: &Path,
     is_stdout: bool,
     opts: &Options,
-    atime: FileTime,
-    mtime: FileTime,
+    atime: SystemTime,
+    mtime: SystemTime,
 ) -> UResult<()> {
     let filename = if is_stdout {
         OsStr::new("-")
@@ -575,8 +553,8 @@ fn update_times(
     path: &Path,
     is_stdout: bool,
     opts: &Options,
-    atime: FileTime,
-    mtime: FileTime,
+    atime: SystemTime,
+    mtime: SystemTime,
 ) -> UResult<()> {
     // If changing "only" atime or mtime, grab the existing value of the other.
     let (atime, mtime) = match opts.change_times {
@@ -599,24 +577,41 @@ fn update_times(
         ChangeTimes::Both => (atime, mtime),
     };
 
-    // sets the file access and modification times for a file or a symbolic link.
-    // The filename, access time (atime), and modification time (mtime) are provided as inputs.
+    let times = FileTimes::new().set_accessed(atime).set_modified(mtime);
 
     if opts.no_deref && !is_stdout {
-        return set_symlink_file_times(path, atime, mtime).map_err_context(
+        return fs::set_times_nofollow(path, times).map_err_context(
             || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
         );
     }
 
     #[cfg(unix)]
     {
+        #[cfg(target_os = "linux")]
+        let is_now = opts.source == Source::Now && opts.date.is_none();
+        #[cfg(not(target_os = "linux"))]
+        let is_now = false;
+
+        let to_spec = |st, is_changed| {
+            if is_now && is_changed {
+                rustix::fs::Timespec {
+                    tv_sec: 0,
+                    tv_nsec: rustix::fs::UTIME_NOW,
+                }
+            } else {
+                system_time_to_timespec(st)
+            }
+        };
+
+        let timestamps = build_timestamps(
+            to_spec(atime, opts.change_times != ChangeTimes::MtimeOnly),
+            to_spec(mtime, opts.change_times != ChangeTimes::AtimeOnly),
+        );
+
         if is_stdout {
             // `touch -` operates on whatever file is open as stdout (fd 1),
             // even when it was opened read-only. Use futimens on the fd
-            // directly: it preserves the UTIME_NOW sentinel, while
-            // filetime::set_file_times would normalize it into a literal
-            // 1970 timestamp.
-            let timestamps = build_timestamps(atime, mtime);
+            // directly: it preserves the UTIME_NOW sentinel.
             return futimens(std::io::stdout(), &timestamps)
                 .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
                 .map_err_context(
@@ -625,67 +620,50 @@ fn update_times(
         }
 
         // Open write-only and use futimens to trigger IN_CLOSE_WRITE on Linux.
-        if try_futimens_via_write_fd(path, atime, mtime).is_ok() {
+        if try_futimens_via_write_fd(path, &timestamps).is_ok() {
             return Ok(());
         }
         // The write-FD approach fails on special files such as FIFOs (the
-        // write-only open returns ENXIO when there is no reader). Set the times
-        // by path with utimensat, which never opens the file and so never
-        // blocks — unlike filetime::set_file_times, which opens O_RDONLY and
-        // would hang on a reader-less FIFO.
-        set_times_by_path(path, atime, mtime)
+        // write-only open returns ENXIO when there is no reader). Fall back to
+        // the path-based `fs::set_times` (utimensat), which never opens the
+        // file and so never blocks.
     }
 
-    #[cfg(not(unix))]
-    {
-        set_file_times(path, atime, mtime).map_err_context(
-            || translate!("touch-error-setting-times-of-path", "path" => path.quote()),
-        )
+    fs::set_times(path, times)
+        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
+}
+
+#[cfg(unix)]
+fn system_time_to_timespec(st: SystemTime) -> rustix::fs::Timespec {
+    match st.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(d) => rustix::fs::Timespec {
+            tv_sec: d.as_secs() as _,
+            tv_nsec: d.subsec_nanos().into(),
+        },
+        Err(e) => {
+            let d = e.duration();
+            let subsec = d.subsec_nanos();
+            let (sec_offset, nanos) = if subsec == 0 {
+                (0, 0)
+            } else {
+                (1, 1_000_000_000 - subsec)
+            };
+            rustix::fs::Timespec {
+                tv_sec: -((d.as_secs() + sec_offset as u64) as i128) as _,
+                tv_nsec: nanos.into(),
+            }
+        }
     }
 }
 
 #[cfg(unix)]
-/// Build a rustix `Timestamps` from the access and modification `FileTime`s,
+/// Build a rustix `Timestamps` from the access and modification `Timespec`s,
 /// preserving the `UTIME_NOW`/`UTIME_OMIT` sentinels in the nanoseconds field.
-fn build_timestamps(atime: FileTime, mtime: FileTime) -> Timestamps {
+fn build_timestamps(atime: rustix::fs::Timespec, mtime: rustix::fs::Timespec) -> Timestamps {
     Timestamps {
-        last_access: rustix::fs::Timespec {
-            tv_sec: atime.unix_seconds(),
-            tv_nsec: atime.nanoseconds() as _,
-        },
-        last_modification: rustix::fs::Timespec {
-            tv_sec: mtime.unix_seconds(),
-            tv_nsec: mtime.nanoseconds() as _,
-        },
+        last_access: atime,
+        last_modification: mtime,
     }
-}
-
-#[cfg(all(unix, not(target_os = "redox")))]
-/// Set file times by path using `utimensat`, following symlinks.
-///
-/// This never opens the file, so it does not block on special files such as
-/// FIFOs.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
-    let timestamps = build_timestamps(atime, mtime);
-    rustix::fs::utimensat(
-        rustix::fs::CWD,
-        path,
-        &timestamps,
-        rustix::fs::AtFlags::empty(),
-    )
-    .map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
-    .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
-}
-
-#[cfg(target_os = "redox")]
-/// Set file times by path on Redox, which lacks `rustix::fs::utimensat`.
-///
-/// Falls back to `filetime::set_file_times`; unlike on other unixes this may
-/// block on a reader-less FIFO, but Redox has no FIFO support so the FIFO
-/// edge case the `utimensat` path guards against does not arise here.
-fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<()> {
-    set_file_times(path, atime, mtime)
-        .map_err_context(|| translate!("touch-error-setting-times-of-path", "path" => path.quote()))
 }
 
 #[cfg(unix)]
@@ -694,31 +672,20 @@ fn set_times_by_path(path: &Path, atime: FileTime, mtime: FileTime) -> UResult<(
 /// This opens the file write-only and uses the POSIX `futimens` call to set
 /// access and modification times on the open FD (not by path), which also
 /// triggers `IN_CLOSE_WRITE` on Linux when the FD is closed.
-fn try_futimens_via_write_fd(path: &Path, atime: FileTime, mtime: FileTime) -> std::io::Result<()> {
+fn try_futimens_via_write_fd(path: &Path, timestamps: &Timestamps) -> std::io::Result<()> {
     let file = OpenOptions::new()
         .write(true)
         // Avoid blocking on special files (e.g. FIFOs) before we can inspect metadata.
         .custom_flags(O_NONBLOCK)
         .open(path)?;
 
-    let timestamps = Timestamps {
-        last_access: rustix::fs::Timespec {
-            tv_sec: atime.unix_seconds(),
-            tv_nsec: atime.nanoseconds() as _,
-        },
-        last_modification: rustix::fs::Timespec {
-            tv_sec: mtime.unix_seconds(),
-            tv_nsec: mtime.nanoseconds() as _,
-        },
-    };
-
-    futimens(&file, &timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
+    futimens(&file, timestamps).map_err(|e| Error::from_raw_os_error(e.raw_os_error()))
 }
 
 /// Get metadata of the provided path
 /// If `follow` is `true`, the function will try to follow symlinks. Errors if the symlink is dangling, otherwise defaults to symlink metadata.
 /// If `follow` is `false`, the function will return metadata of the symlink itself
-fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
+fn stat(path: &Path, follow: bool) -> std::io::Result<(SystemTime, SystemTime)> {
     let metadata = if follow {
         match fs::metadata(path) {
             // Successfully followed symlink
@@ -732,26 +699,10 @@ fn stat(path: &Path, follow: bool) -> std::io::Result<(FileTime, FileTime)> {
         fs::symlink_metadata(path)?
     };
 
-    // `FileTime::from_last_{access,modification}_time` is unimplemented on
-    // `wasm32-wasi`, so go through `Metadata::{accessed, modified}` (which
-    // return `SystemTime`) and convert via `FileTime::from_system_time`.
-    #[cfg(target_os = "wasi")]
-    {
-        let atime = metadata.accessed()?;
-        let mtime = metadata.modified()?;
-        Ok((
-            FileTime::from_system_time(atime),
-            FileTime::from_system_time(mtime),
-        ))
-    }
-    #[cfg(not(target_os = "wasi"))]
-    Ok((
-        FileTime::from_last_access_time(&metadata),
-        FileTime::from_last_modification_time(&metadata),
-    ))
+    Ok((metadata.accessed()?, metadata.modified()?))
 }
 
-fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
+fn parse_date(ref_zoned: Zoned, s: &str) -> Result<SystemTime, TouchError> {
     // This isn't actually compatible with GNU touch, but there doesn't seem to
     // be any simple specification for what format this parameter allows and I'm
     // not about to implement GNU parse_datetime.
@@ -770,7 +721,7 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
         .and_then(|tm| tm.to_datetime())
         .and_then(|dt| TimeZone::UTC.to_zoned(dt))
     {
-        return Ok(timestamp_to_filetime(parsed.timestamp()));
+        return Ok(SystemTime::from(parsed.timestamp()));
     }
 
     // Also support other formats found in the GNU tests like
@@ -785,35 +736,40 @@ fn parse_date(ref_zoned: Zoned, s: &str) -> Result<FileTime, TouchError> {
             .and_then(|tm| tm.to_datetime())
             .and_then(|dt| TimeZone::UTC.to_zoned(dt))
         {
-            return Ok(timestamp_to_filetime(parsed.timestamp()));
+            return Ok(SystemTime::from(parsed.timestamp()));
         }
     }
 
     // "Equivalent to %Y-%m-%d (the ISO 8601 date format). (C99)"
     // ("%F", ISO_8601_FORMAT),
-    if let Ok(filetime) = strtime::parse(format::ISO_8601, s)
+    if let Ok(parsed_time) = strtime::parse(format::ISO_8601, s)
         .and_then(|tm| tm.to_date())
         .and_then(|date| {
             TimeZone::system()
                 .to_ambiguous_zoned(date.to_datetime(Time::midnight()))
                 .unambiguous()
         })
-        .map(|zdt| timestamp_to_filetime(zdt.timestamp()))
+        .map(|zdt| SystemTime::from(zdt.timestamp()))
     {
-        return Ok(filetime);
+        return Ok(parsed_time);
     }
 
     // "@%s" is "The number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC). (TZ) (Calculated from mktime(tm).)"
     if s.bytes().next() == Some(b'@')
-        && let Ok(ts) = &s[1..].parse::<i64>()
+        && let Ok(ts) = s[1..].parse::<i64>()
     {
-        return Ok(FileTime::from_unix_time(*ts, 0));
+        let ts = if ts >= 0 {
+            SystemTime::UNIX_EPOCH + Duration::from_secs(ts as u64)
+        } else {
+            SystemTime::UNIX_EPOCH - Duration::from_secs(ts.unsigned_abs())
+        };
+        return Ok(ts);
     }
 
     if let Ok(parsed) = parse_datetime::parse_datetime_at_date(ref_zoned, s)
         && let Some(zoned) = parsed.into_zoned()
     {
-        return Ok(timestamp_to_filetime(zoned.timestamp()));
+        return Ok(SystemTime::from(zoned.timestamp()));
     }
 
     Err(TouchError::InvalidDateFormat(s.to_owned()))
@@ -841,15 +797,15 @@ fn prepend_century(s: &str) -> UResult<String> {
     ))
 }
 
-/// Parses a timestamp string into a [`FileTime`].
+/// Parses a timestamp string into a [`SystemTime`].
 ///
-/// This function attempts to parse a string into a [`FileTime`]
+/// This function attempts to parse a string into a [`SystemTime`]
 /// As expected by gnu touch -t : `[[cc]yy]mmddhhmm[.ss]`
 ///
 /// Note that  If the year is specified with only two digits,
 /// then cc is 20 for years in the range 0 … 68, and 19 for years in 69 … 99.
 /// in order to be compatible with GNU `touch`.
-fn parse_timestamp(s: &str) -> UResult<FileTime> {
+fn parse_timestamp(s: &str) -> UResult<SystemTime> {
     use format::{YYYYMMDDHHMM, YYYYMMDDHHMM_DOT_SS};
 
     let current_year = || Timestamp::now().to_zoned(TimeZone::system()).year();
@@ -905,7 +861,7 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
             )
         })?;
 
-    Ok(timestamp_to_filetime(local.timestamp()))
+    Ok(SystemTime::from(local.timestamp()))
 }
 
 /// Returns a [`PathBuf`] to stdout.
@@ -924,7 +880,7 @@ fn pathbuf_from_stdout() -> Result<PathBuf, TouchError> {
 
 #[cfg(test)]
 mod tests {
-    use filetime::FileTime;
+    use std::time::{Duration, SystemTime};
 
     use crate::{
         ChangeTimes, Options, Source, determine_atime_mtime_change, error::TouchError, touch,
@@ -987,7 +943,7 @@ mod tests {
 
     #[test]
     fn test_invalid_filetime() {
-        let invalid_filetime = FileTime::from_unix_time(0, 1_111_111_111);
+        let invalid_filetime = SystemTime::UNIX_EPOCH + Duration::from_secs(300_000_000_001);
         match touch(
             &[],
             &Options {
@@ -1021,14 +977,18 @@ mod tests {
         let path = dir.path().join("futimens-file");
         std::fs::write(&path, b"data").unwrap();
 
-        let atime = FileTime::from_unix_time(1_600_000_000, 123_456_789);
-        let mtime = FileTime::from_unix_time(1_600_000_100, 987_654_321);
+        let atime = SystemTime::UNIX_EPOCH + Duration::new(1_600_000_000, 123_456_789);
+        let mtime = SystemTime::UNIX_EPOCH + Duration::new(1_600_000_100, 987_654_321);
 
-        super::try_futimens_via_write_fd(&path, atime, mtime).unwrap();
+        let timestamps = super::build_timestamps(
+            super::system_time_to_timespec(atime),
+            super::system_time_to_timespec(mtime),
+        );
+        super::try_futimens_via_write_fd(&path, &timestamps).unwrap();
 
         let metadata = std::fs::metadata(&path).unwrap();
-        let actual_atime = FileTime::from_last_access_time(&metadata);
-        let actual_mtime = FileTime::from_last_modification_time(&metadata);
+        let actual_atime = metadata.accessed().unwrap();
+        let actual_mtime = metadata.modified().unwrap();
 
         assert_eq!(actual_atime, atime);
         assert_eq!(actual_mtime, mtime);

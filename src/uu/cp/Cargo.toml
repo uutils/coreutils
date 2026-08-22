@@ -17,7 +17,6 @@ doctest = false
 
 [dependencies]
 clap = { workspace = true }
-filetime = { workspace = true }
 libc = { workspace = true }
 uucore = { workspace = true, features = [
   "backup-control",

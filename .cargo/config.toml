@@ -10,3 +10,6 @@ linker = "aarch64-linux-gnu-gcc"
 rustflags = ["-C", "target-feature=+crt-static"]
 [target.'cfg(target_env = "msvc")']
 rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+RUSTC_BOOTSTRAP = "1"

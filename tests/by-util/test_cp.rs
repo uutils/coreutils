@@ -2467,11 +2467,8 @@ fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
-        .unwrap();
-    file.set_times(
+    std_fs::set_times(
+        at.plus(TEST_HELLO_WORLD_SOURCE),
         std_fs::FileTimes::new()
             .set_accessed(previous)
             .set_modified(previous),
@@ -2567,11 +2564,8 @@ fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
-        .unwrap();
-    file.set_times(
+    std_fs::set_times(
+        at.plus(TEST_HELLO_WORLD_SOURCE),
         std_fs::FileTimes::new()
             .set_accessed(previous)
             .set_modified(previous),
@@ -2603,11 +2597,8 @@ fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    let file = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
-        .unwrap();
-    file.set_times(
+    std_fs::set_times(
+        at.plus(TEST_HELLO_WORLD_SOURCE),
         std_fs::FileTimes::new()
             .set_accessed(previous)
             .set_modified(previous),
@@ -2797,18 +2788,23 @@ fn test_cp_reflink_never() {
 #[test]
 #[cfg(target_vendor = "apple")]
 fn test_cp_reflink_never_does_not_clonefile() {
-    use filetime::FileTime; // todo: replace with std
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("src", "reflink never contents");
     // Stamp the source with a mtime well in the past; a clonefile would copy it verbatim.
-    let past = FileTime::from_unix_time(1_000_000_000, 0); // 2001-09-09
-    filetime::set_file_times(at.plus("src"), past, past).unwrap();
+    let past = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000); // 2001-09-09
+    std::fs::set_times(
+        at.plus("src"),
+        std::fs::FileTimes::new()
+            .set_accessed(past)
+            .set_modified(past),
+    )
+    .unwrap();
 
     ucmd.arg("--reflink=never").arg("src").arg("dst").succeeds();
 
     assert_eq!(at.read("dst"), "reflink never contents");
-    let src_mtime = FileTime::from_last_modification_time(&at.metadata("src"));
-    let dst_mtime = FileTime::from_last_modification_time(&at.metadata("dst"));
+    let src_mtime = at.metadata("src").modified().unwrap();
+    let dst_mtime = at.metadata("dst").modified().unwrap();
     assert_ne!(
         dst_mtime, src_mtime,
         "--reflink=never must copy (not clonefile), so dst must not inherit the source's mtime"
@@ -7825,28 +7821,14 @@ fn test_cp_current_directory_preserve_attributes() {
 
     // Set specific timestamps on the source files (1 hour ago)
     let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
-    let file1 = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus("source_dir/file1.txt"))
-        .unwrap();
-    file1
-        .set_times(
-            std::fs::FileTimes::new()
-                .set_accessed(previous)
-                .set_modified(previous),
-        )
-        .unwrap();
-    let file2 = std::fs::OpenOptions::new()
-        .write(true)
-        .open(at.plus("source_dir/file2.txt"))
-        .unwrap();
-    file2
-        .set_times(
-            std::fs::FileTimes::new()
-                .set_accessed(previous)
-                .set_modified(previous),
-        )
-        .unwrap();
+    let times = std::fs::FileTimes::new()
+        .set_accessed(previous)
+        .set_modified(previous);
+    std::fs::set_times(at.plus("source_dir/file1.txt"), times).unwrap();
+    let times = std::fs::FileTimes::new()
+        .set_accessed(previous)
+        .set_modified(previous);
+    std::fs::set_times(at.plus("source_dir/file2.txt"), times).unwrap();
 
     // Create existing destination directory
     at.mkdir("dest_dir");

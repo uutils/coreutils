@@ -4,7 +4,7 @@
 // file that was distributed with this source code.
 
 #[cfg(target_os = "wasi")]
-pub use self::wasi::{pathbuf_from_stdout, set_file_times, set_symlink_file_times};
+pub use self::wasi::pathbuf_from_stdout;
 
 #[cfg(windows)]
 pub use self::windows::pathbuf_from_stdout;
