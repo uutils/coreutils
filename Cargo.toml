@@ -536,6 +536,10 @@ uutests = { version = "0.10.0", path = "tests/uutests" }
 # This is the linting configuration for all crates.
 # In order to use these, all crates have `[lints] workspace = true` section.
 [workspace.lints.rust]
+# Introduced to suppress a warning from the from_iter_instead_of_collect lint
+# which got deprecated with Rust 1.98.
+# TODO reconsider whether we still need this setting when we have a MSRV >= 1.98
+renamed_and_removed_lints = { level = "allow", priority = -1 }
 # Allow "fuzzing" as a "cfg" condition name and "cygwin" as a value for "target_os"
 # https://doc.rust-lang.org/nightly/rustc/check-cfg/cargo-specifics.html
 unexpected_cfgs = { level = "warn", check-cfg = [
