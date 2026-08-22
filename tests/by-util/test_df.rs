@@ -92,6 +92,18 @@ fn test_df_output_arg() {
 }
 
 #[test]
+#[cfg(windows)]
+fn test_inodes_not_supported_windows() {
+    // The notice goes to stdout with exit 0, before any other option is validated.
+    for args in [&["-i"][..], &["-i", "--block-size=bogus"][..]] {
+        new_ucmd!()
+            .args(args)
+            .succeeds()
+            .stdout_only("df: doesn't support -i option\n");
+    }
+}
+
+#[test]
 fn test_df_output() {
     let expected = if cfg!(target_os = "macos") {
         vec![
