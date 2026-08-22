@@ -82,6 +82,18 @@ fn test_number_lines_empty_value_is_rejected() {
 }
 
 #[test]
+fn test_number_lines_without_value_numbers_lines() {
+    // A bare -n/--number-lines numbers lines with the default 5-wide, tab format.
+    for arg in ["-n", "--number-lines"] {
+        new_ucmd!()
+            .args(&["-t", arg])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    1\ta\n    2\tb\n");
+    }
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
