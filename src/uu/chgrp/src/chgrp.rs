@@ -17,6 +17,17 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::fs;
 use std::os::unix::fs::MetadataExt;
 
+use thiserror::Error;
+use uucore::error::UError;
+
+#[derive(Error, Debug)]
+enum ChgrpError {
+    #[error("{}", translate!("chgrp-error-invalid-user", "from_group" => .from_group))]
+    InvalidUser { from_group: String },
+}
+
+impl UError for ChgrpError {}
+
 fn parse_gid_from_str(group: &str) -> Result<u32, String> {
     if let Some(gid_str) = group.strip_prefix(':') {
         // Handle :gid format
@@ -69,15 +80,13 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        match parse_gid_from_str(from_group) {
-            Ok(g) => IfFrom::Group(g),
-            Err(_) => {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("chgrp-error-invalid-user", "from_group" => from_group),
-                ));
+        let Ok(gid) = parse_gid_from_str(from_group) else {
+            return Err(ChgrpError::InvalidUser {
+                from_group: from_group.clone(),
             }
-        }
+            .into());
+        };
+        IfFrom::Group(gid)
     } else {
         IfFrom::All
     };
