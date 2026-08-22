@@ -5,43 +5,48 @@
 
 // spell-checker:ignore (formats) cymdhm cymdhms datetime filestat mdhm mdhms mktime preopen strtime tzdb ymdhm ymdhms
 
-use filetime::FileTime;
-#[cfg(not(target_os = "freebsd"))]
-use filetime::set_symlink_file_times;
 use jiff::{fmt::strtime, tz::TimeZone};
-use std::fs::remove_file;
+use std::fs::{FileTimes, remove_file};
 use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 use uutests::util::{AtPath, TestScenario};
 use uutests::util_name;
 
-fn get_file_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
+fn get_file_times(at: &AtPath, path: &str) -> (SystemTime, SystemTime) {
     let m = at.metadata(path);
-    (
-        FileTime::from_last_access_time(&m),
-        FileTime::from_last_modification_time(&m),
-    )
+    (m.accessed().unwrap(), m.modified().unwrap())
 }
 
 #[cfg(not(target_os = "freebsd"))]
-fn get_symlink_times(at: &AtPath, path: &str) -> (FileTime, FileTime) {
+fn get_symlink_times(at: &AtPath, path: &str) -> (SystemTime, SystemTime) {
     let m = at.symlink_metadata(path);
-    (
-        FileTime::from_last_access_time(&m),
-        FileTime::from_last_modification_time(&m),
+    (m.accessed().unwrap(), m.modified().unwrap())
+}
+
+fn set_file_times(at: &AtPath, path: &str, atime: SystemTime, mtime: SystemTime) {
+    std::fs::set_times(
+        at.plus(path),
+        FileTimes::new().set_accessed(atime).set_modified(mtime),
     )
+    .unwrap();
 }
 
-fn set_file_times(at: &AtPath, path: &str, atime: FileTime, mtime: FileTime) {
-    filetime::set_file_times(at.plus_as_string(path), atime, mtime).unwrap();
+#[cfg(not(target_os = "freebsd"))]
+fn set_symlink_times(path: PathBuf, atime: SystemTime, mtime: SystemTime) {
+    std::fs::set_times_nofollow(
+        path,
+        FileTimes::new().set_accessed(atime).set_modified(mtime),
+    )
+    .unwrap();
 }
 
-fn str_to_filetime(format: &str, s: &str) -> FileTime {
+fn str_to_system_time(format: &str, s: &str) -> SystemTime {
     let tm = strtime::parse(format, s).unwrap();
     let dt = tm.to_datetime().unwrap();
     let ts = dt.to_zoned(TimeZone::UTC).unwrap().timestamp();
-    FileTime::from_unix_time(ts.as_second(), ts.subsec_nanosecond() as u32)
+    SystemTime::from(ts)
 }
 
 #[test]
@@ -91,14 +96,20 @@ fn test_touch_set_mdhm_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime(
+    let start_of_year = str_to_system_time(
         "%Y%m%d%H%M",
         &format!("{}01010000", time::OffsetDateTime::now_utc().year()),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
 }
 
 #[test]
@@ -112,14 +123,20 @@ fn test_touch_set_mdhms_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime(
+    let start_of_year = str_to_system_time(
         "%Y%m%d%H%M.%S",
         &format!("{}01010000.00", time::OffsetDateTime::now_utc().year()),
     );
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45296);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45296);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
 }
 
 #[test]
@@ -138,7 +155,7 @@ fn test_touch_2_digit_years_68() {
     assert!(at.file_exists(file));
 
     //  January 1, 2068, 00:00:00
-    let expected = FileTime::from_unix_time(3_092_601_600, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(3_092_601_600);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -159,7 +176,7 @@ fn test_touch_2_digit_years_2038() {
     assert!(at.file_exists(file));
 
     // January 1, 2038, 00:00:00
-    let expected = FileTime::from_unix_time(2_145_916_800, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(2_145_916_800);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -182,7 +199,7 @@ fn test_touch_2_digit_years_69() {
 
     assert!(at.file_exists(file));
     // January 1, 1969, 00:00:00
-    let expected = FileTime::from_unix_time(-31_536_000, 0);
+    let expected = SystemTime::UNIX_EPOCH - Duration::from_secs(31_536_000);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -200,11 +217,17 @@ fn test_touch_set_ymdhm_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
 }
 
 #[test]
@@ -218,11 +241,17 @@ fn test_touch_set_ymdhms_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M.%S", "201501010000.00");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45296);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45296);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
 }
 
 #[test]
@@ -236,11 +265,17 @@ fn test_touch_set_cymdhm_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
 }
 
 #[test]
@@ -254,11 +289,17 @@ fn test_touch_set_cymdhms_time() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M.%S", "201501010000.00");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M.%S", "201501010000.00");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45296);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45296);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45296)
+    );
 }
 
 #[test]
@@ -282,10 +323,13 @@ fn test_touch_set_only_atime() {
 
         assert!(at.file_exists(file));
 
-        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
         assert_ne!(atime, mtime);
-        assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert_eq!(
+            atime.duration_since(start_of_year).unwrap(),
+            Duration::from_secs(45240)
+        );
     }
 }
 
@@ -304,7 +348,7 @@ fn test_touch_set_both_time_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_time_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
@@ -320,7 +364,7 @@ fn test_touch_set_both_date_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501011234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
@@ -340,8 +384,8 @@ fn test_touch_set_both_offset_date_and_reference() {
     let ref_file = "test_touch_reference";
     let file = "test_touch_set_both_date_and_reference";
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
-    let five_days_later = str_to_filetime("%Y%m%d%H%M", "201501061234");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501011234");
+    let five_days_later = str_to_system_time("%Y%m%d%H%M", "201501061234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, start_of_year, start_of_year);
@@ -361,8 +405,8 @@ fn test_touch_offset_date_against_reference_with_different_atime_mtime() {
     let ref_file = "test_touch_reference_different_atime_mtime";
     let file = "test_touch_offset_date_different_atime_mtime";
 
-    let ref_atime = str_to_filetime("%Y%m%d%H%M", "201501011234");
-    let ref_mtime = str_to_filetime("%Y%m%d%H%M", "201502021234");
+    let ref_atime = str_to_system_time("%Y%m%d%H%M", "201501011234");
+    let ref_mtime = str_to_system_time("%Y%m%d%H%M", "201502021234");
 
     at.touch(ref_file);
     set_file_times(&at, ref_file, ref_atime, ref_mtime);
@@ -372,8 +416,8 @@ fn test_touch_offset_date_against_reference_with_different_atime_mtime() {
         .succeeds()
         .no_stderr();
     let (atime, mtime) = get_file_times(&at, file);
-    assert_eq!(atime, str_to_filetime("%Y%m%d%H%M", "201501021234"));
-    assert_eq!(mtime, str_to_filetime("%Y%m%d%H%M", "201502031234"));
+    assert_eq!(atime, str_to_system_time("%Y%m%d%H%M", "201501021234"));
+    assert_eq!(mtime, str_to_system_time("%Y%m%d%H%M", "201502031234"));
 }
 
 #[test]
@@ -405,10 +449,13 @@ fn test_touch_set_only_mtime() {
 
         assert!(at.file_exists(file));
 
-        let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+        let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
         let (atime, mtime) = get_file_times(&at, file);
         assert_ne!(atime, mtime);
-        assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+        assert_eq!(
+            mtime.duration_since(start_of_year).unwrap(),
+            Duration::from_secs(45240)
+        );
     }
 }
 
@@ -423,11 +470,17 @@ fn test_touch_set_both() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - start_of_year.unix_seconds(), 45240);
-    assert_eq!(mtime.unix_seconds() - start_of_year.unix_seconds(), 45240);
+    assert_eq!(
+        atime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
+    assert_eq!(
+        mtime.duration_since(start_of_year).unwrap(),
+        Duration::from_secs(45240)
+    );
 }
 
 #[test]
@@ -437,8 +490,8 @@ fn test_touch_no_dereference() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file_a = "test_touch_no_dereference_a";
     let file_b = "test_touch_no_dereference_b";
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
-    let end_of_year = str_to_filetime("%Y%m%d%H%M", "201512312359");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
+    let end_of_year = str_to_system_time("%Y%m%d%H%M", "201512312359");
 
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
@@ -467,7 +520,7 @@ fn test_touch_reference() {
     let (at, mut _ucmd) = (scenario.fixtures.clone(), scenario.ucmd());
     let file_a = "test_touch_reference_a";
     let file_b = "test_touch_reference_b";
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501010000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501010000");
 
     at.touch(file_a);
     set_file_times(&at, file_a, start_of_year, start_of_year);
@@ -525,7 +578,7 @@ fn test_touch_set_date() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "201501011234");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "201501011234");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, start_of_year);
@@ -543,7 +596,7 @@ fn test_touch_set_date2() {
 
     assert!(at.file_exists(file));
 
-    let start_of_year = str_to_filetime("%Y%m%d%H%M", "200001230000");
+    let start_of_year = str_to_system_time("%Y%m%d%H%M", "200001230000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, start_of_year);
@@ -561,7 +614,7 @@ fn test_touch_set_date3() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1_623_786_360, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(1_623_786_360);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -579,7 +632,7 @@ fn test_touch_set_date4() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(67413, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(67413);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
     assert_eq!(atime, expected);
@@ -600,9 +653,9 @@ fn test_touch_set_date5() {
     // Slightly different result on Windows for nano seconds
     // TODO: investigate
     #[cfg(windows)]
-    let expected = FileTime::from_unix_time(67413, 23_456_700);
+    let expected = SystemTime::UNIX_EPOCH + Duration::new(67413, 23_456_700);
     #[cfg(not(windows))]
-    let expected = FileTime::from_unix_time(67413, 23_456_789);
+    let expected = SystemTime::UNIX_EPOCH + Duration::new(67413, 23_456_789);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -621,7 +674,7 @@ fn test_touch_set_date6() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(946_684_800, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(946_684_800);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -640,7 +693,7 @@ fn test_touch_set_date7() {
 
     assert!(at.file_exists(file));
 
-    let expected = FileTime::from_unix_time(1_074_254_400, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(1_074_254_400);
 
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
@@ -662,7 +715,7 @@ fn test_touch_set_date_without_leading_zeroes() {
         .succeeds()
         .no_stderr();
 
-    let expected = FileTime::from_unix_time(1_782_537_120, 0);
+    let expected = SystemTime::UNIX_EPOCH + Duration::from_secs(1_782_537_120);
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, expected);
     assert_eq!(mtime, expected);
@@ -807,7 +860,7 @@ fn test_touch_mtime_dst_succeeds() {
 
     assert!(at.file_exists(file));
 
-    let target_time = str_to_filetime("%Y%m%d%H%M", "202103140300");
+    let target_time = str_to_system_time("%Y%m%d%H%M", "202103140300");
     let (_, mtime) = get_file_times(&at, file);
     assert_eq!(target_time, mtime);
 }
@@ -900,13 +953,12 @@ fn test_touch_dash_updates_stdout_file() {
     // `touch -` must update the times of the file open as stdout (fd 1), even
     // when it is read-only, and set them to "now" rather than a 1970 sentinel.
     use std::fs::File;
-    use std::time::SystemTime;
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("c");
     // Age the file so the update to "now" is detectable.
-    let old = FileTime::from_unix_time(1_000_000, 0);
-    filetime::set_file_times(at.plus("c"), old, old).unwrap();
+    let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000);
+    set_file_times(&at, "c", old, old);
 
     let file = File::open(at.plus("c")).unwrap();
     ucmd.set_stdout(file).arg("-").succeeds();
@@ -1100,11 +1152,17 @@ fn test_touch_leap_second() {
 
     assert!(at.file_exists(file));
 
-    let epoch = str_to_filetime("%Y%m%d%H%M", "197001010000");
+    let epoch = str_to_system_time("%Y%m%d%H%M", "197001010000");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, mtime);
-    assert_eq!(atime.unix_seconds() - epoch.unix_seconds(), 60);
-    assert_eq!(mtime.unix_seconds() - epoch.unix_seconds(), 60);
+    assert_eq!(
+        atime.duration_since(epoch).unwrap(),
+        Duration::from_secs(60)
+    );
+    assert_eq!(
+        mtime.duration_since(epoch).unwrap(),
+        Duration::from_secs(60)
+    );
 }
 
 #[test]
@@ -1222,13 +1280,13 @@ fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "foo.txt";
     let symlink = "bar.txt";
-    let initial_time = FileTime::from_unix_time(123, 0);
-    let updated_atime = FileTime::from_unix_time(456, 0);
+    let initial_time = SystemTime::UNIX_EPOCH + Duration::from_secs(123);
+    let updated_atime = SystemTime::UNIX_EPOCH + Duration::from_secs(456);
 
     at.touch(target);
     let target_times = get_file_times(&at, target);
     at.relative_symlink_file(target, symlink);
-    set_symlink_file_times(at.plus(symlink), initial_time, initial_time).unwrap();
+    set_symlink_times(at.plus(symlink), initial_time, initial_time);
 
     ucmd.args(&["-a", "--no-dereference", "-d", "@456", symlink])
         .succeeds();
@@ -1247,11 +1305,11 @@ fn test_touch_reference_symlink_with_no_deref() {
     let target = "foo.txt";
     let symlink = "bar.txt";
     let arg = "baz.txt";
-    let time = FileTime::from_unix_time(123, 0);
+    let time = SystemTime::UNIX_EPOCH + Duration::from_secs(123);
 
     at.touch(target);
     at.relative_symlink_file(target, symlink);
-    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+    set_symlink_times(at.plus(symlink), time, time);
     at.touch(arg);
 
     ucmd.args(&["--reference", symlink, "--no-dereference", arg])
@@ -1385,7 +1443,7 @@ fn test_touch_set_time_on_unreadable_unwritable_file() {
 
     // Restore permissions so the test harness can read back the metadata.
     std::fs::set_permissions(at.plus(file), std::fs::Permissions::from_mode(0o644)).unwrap();
-    let expected = str_to_filetime("%Y-%m-%d %H:%M", "2000-01-03 00:00");
+    let expected = str_to_system_time("%Y-%m-%d %H:%M", "2000-01-03 00:00");
     let (atime, mtime) = get_file_times(&at, file);
     assert_eq!(atime, expected);
     assert_eq!(mtime, expected);
