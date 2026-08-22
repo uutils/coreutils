@@ -33,6 +33,7 @@
 //! - `%^B`: Month name in uppercase (JUNE)
 //! - `%+4C`: Century with sign, padded to 4 characters (+019)
 
+use super::locale;
 use jiff::Zoned;
 use jiff::fmt::strtime::{BrokenDownTime, Config, PosixCustom};
 use std::fmt;
@@ -229,11 +230,26 @@ fn format_with_modifiers(
             }
 
             if let Some(parsed) = parse_format_spec(&format_string[i..]) {
-                // Format the base specifier first, reusing `base_format`.
-                base_format.clear();
-                base_format.push('%');
-                base_format.push_str(parsed.spec);
-                let formatted = broken_down.to_string_with_config(config, &base_format)?;
+                let formatted = match parsed.spec {
+                    "p" | "P" => {
+                        let base_format = format!("%{}", parsed.spec);
+                        let base_format =
+                            locale::localize_ampm_markers(&base_format, date.hour() >= 12);
+                        broken_down.to_string_with_config(config, &base_format)?
+                    }
+                    "r" => {
+                        let base_format = locale::get_locale_time_ampm_format();
+                        let base_format =
+                            locale::localize_ampm_markers(&base_format, date.hour() >= 12);
+                        broken_down.to_string_with_config(config, &base_format)?
+                    }
+                    _ => {
+                        base_format.clear();
+                        base_format.push('%');
+                        base_format.push_str(parsed.spec);
+                        broken_down.to_string_with_config(config, &base_format)?
+                    }
+                };
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
                     let modified = apply_modifiers(&formatted, &parsed)?;
