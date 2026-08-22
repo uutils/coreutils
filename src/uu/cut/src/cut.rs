@@ -1097,17 +1097,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // The list is the value of the option that selected the mode, so the
         // caret can be put under the one range that is at fault.
         let (short, long) = mode_arg_names(mode_arg);
-        let reported = diag_args.as_ref().is_some_and(|args| {
-            e.render_option_value(
-                args,
-                list,
-                Some(short),
-                long,
-                &translate!("cut-diag-label-zero-bound"),
-                &translate!("cut-diag-help-list-syntax"),
-            )
-        });
-        uucore::error::quiet_if_reported(reported, UUsageError::new(1, e.message))
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            UUsageError::new(1, e.message.clone()),
+            |args, _| {
+                e.render_option_value(
+                    args,
+                    list,
+                    Some(short),
+                    long,
+                    &translate!("cut-diag-label-zero-bound"),
+                    &translate!("cut-diag-help-list-syntax"),
+                )
+            },
+        )
     })?;
 
     let mode = match mode_arg {

@@ -93,7 +93,35 @@ pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
     capture(args.get(1..).unwrap_or_default())
 }
 
-pub use crate::features::diagnostics_boundary::{char_span, floor_boundary};
+pub use crate::features::diagnostics_boundary::{
+    OptionValue, char_span, floor_boundary, list_items,
+};
+
+/// The error to raise for something a caret may have just explained.
+///
+/// Draws the report when the arguments as typed were kept, and quiets `error`
+/// when it did: the report has already said everything the one-line message
+/// would, and the exit code is all that is left to carry. Every caret
+/// diagnostic ends this way, so it is written once here.
+///
+/// # Arguments
+///
+/// * `diag_args` - The arguments as typed, program name included, or `None`
+///   when they were not kept — as [`capture`] returns them.
+/// * `error` - The error to raise when nothing was drawn. It is lent to `draw`
+///   rather than moved into it, since it is usually the error the report is
+///   about as well.
+/// * `draw` - Draws the report against the arguments, and returns `false` when
+///   it could not — because the error is not about any one of them, or because
+///   none of them turned out to carry what the caret would point at.
+pub fn error_after_report<E: Into<Box<dyn crate::error::UError>>>(
+    diag_args: Option<&[OsString]>,
+    error: E,
+    draw: impl FnOnce(&[OsString], &E) -> bool,
+) -> Box<dyn crate::error::UError> {
+    let reported = diag_args.is_some_and(|args| draw(args, &error));
+    crate::error::quiet_if_reported(reported, error)
+}
 
 /// An argument list rendered as a single line, with the position of every
 /// argument inside it.
@@ -462,6 +490,39 @@ impl Snapshot {
             return false;
         };
         self.render_inside_at(index, operand, range, message, label, help)
+    }
+
+    /// Write a report pointing at `range` inside the value of an option.
+    ///
+    /// As [`Snapshot::render_option_value`], for a value that travels with the
+    /// option it was given to.
+    ///
+    /// # Arguments
+    ///
+    /// * `option` - The value at fault and the option it came from.
+    /// * `range` - Byte range inside the value to point at. An empty range
+    ///   marks the character it starts at.
+    /// * `message` - The error message, already localized.
+    /// * `label` - Text placed under the caret, already localized, or `None`
+    ///   for a bare underline.
+    /// * `help` - An optional line of advice, already localized.
+    pub fn render_option(
+        &self,
+        option: &OptionValue,
+        range: Range<usize>,
+        message: &str,
+        label: Option<&str>,
+        help: Option<&str>,
+    ) -> bool {
+        self.render_option_value(
+            &option.value,
+            option.short,
+            option.long,
+            range,
+            message,
+            label,
+            help,
+        )
     }
 
     /// Byte range covered by `range` — an offset inside `operand` — within the

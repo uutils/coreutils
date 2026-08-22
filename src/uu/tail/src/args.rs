@@ -12,6 +12,7 @@ use same_file::Handle;
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
 use std::time::Duration;
+use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
 use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
@@ -76,11 +77,9 @@ impl FilterMode {
         let raise = |message: String, arg: &str, short, long, error: &ParseSizeError| {
             error.size_value_error(
                 diag_args,
-                arg,
+                &OptionValue::new(arg, short, long),
                 // The parser never saw the sign; the caret has to count it back in.
                 number_offset(arg),
-                short,
-                long,
                 &message,
                 USimpleError::new(1, message.clone()),
             )

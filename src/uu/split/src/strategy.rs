@@ -10,6 +10,7 @@ use clap::{ArgMatches, parser::ValueSource};
 use std::ffi::OsString;
 use thiserror::Error;
 use uucore::{
+    diagnostics::OptionValue,
     display::Quotable,
     parser::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max},
     translate,
@@ -202,28 +203,20 @@ pub enum Strategy {
     Number(NumberType),
 }
 
-/// The option a failing SIZE was given to, and the value as typed.
-///
-/// Kept next to the error so that a caret knows which argument to point at;
-/// `None` for a size that did not come from an option, such as the obsolete
-/// `split -22` spelling.
-#[derive(Debug)]
-pub struct SizeOrigin {
-    value: String,
-    short: char,
-    long: &'static str,
-}
-
 /// An error when parsing a chunking strategy from command-line arguments.
+///
+/// A bad size carries the option it was given to, so that a caret can point
+/// inside it — `None` when it came from no option, as with the obsolete
+/// `split -22` spelling.
 #[derive(Debug, Error)]
 pub enum StrategyError {
     /// Invalid number of lines.
     #[error("{}", translate!("split-error-invalid-number-of-lines", "error" => .0))]
-    Lines(ParseSizeError, Option<SizeOrigin>),
+    Lines(ParseSizeError, Option<OptionValue>),
 
     /// Invalid number of bytes.
     #[error("{}", translate!("split-error-invalid-number-of-bytes", "error" => .0))]
-    Bytes(ParseSizeError, Option<SizeOrigin>),
+    Bytes(ParseSizeError, Option<OptionValue>),
 
     /// Invalid number type.
     #[error("{0}")]
@@ -248,20 +241,10 @@ impl StrategyError {
     /// nothing could be drawn; the caller then falls back to the plain
     /// one-line message.
     pub fn render(&self, diag_args: &[OsString], message: &str) -> bool {
-        let (Self::Lines(error, origin) | Self::Bytes(error, origin)) = self else {
+        let (Self::Lines(error, Some(option)) | Self::Bytes(error, Some(option))) = self else {
             return false;
         };
-        let Some(origin) = origin else {
-            return false;
-        };
-        error.render_size_value(
-            diag_args,
-            &origin.value,
-            0,
-            Some(origin.short),
-            Some(origin.long),
-            message,
-        )
+        error.render_size_value(diag_args, option, 0, message)
     }
 }
 
@@ -273,16 +256,12 @@ impl Strategy {
             option: &'static str,
             short: char,
             strategy: fn(u64) -> Strategy,
-            error: fn(ParseSizeError, Option<SizeOrigin>) -> StrategyError,
+            error: fn(ParseSizeError, Option<OptionValue>) -> StrategyError,
         ) -> Result<Strategy, StrategyError> {
             let s = matches.get_one::<String>(option).unwrap();
-            let origin = || {
-                Some(SizeOrigin {
-                    value: s.clone(),
-                    short,
-                    long: option,
-                })
-            };
+            // `None` for a size that did not come from an option, such as the
+            // obsolete `split -22` spelling: there is nothing to point at.
+            let origin = || Some(OptionValue::new(s, short, option));
             let n = parse_size_u64_max(s).map_err(|e| error(e, origin()))?;
             if n > 0 {
                 Ok(strategy(n))

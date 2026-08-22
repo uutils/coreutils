@@ -14,8 +14,8 @@
 use std::ffi::{OsStr, OsString};
 use std::ops::Range;
 
-use uucore::diagnostics::Snapshot;
-use uucore::error::{UError, quiet_if_reported};
+use uucore::diagnostics::{Snapshot, list_items};
+use uucore::error::UError;
 use uucore::translate;
 
 use crate::parseargs::ParseError;
@@ -37,8 +37,9 @@ pub fn operand_error(
     operand: &str,
     error: ParseError,
 ) -> Box<dyn UError> {
-    let reported = diag_args.is_some_and(|args| render(args, operand, &error));
-    quiet_if_reported(reported, error)
+    uucore::diagnostics::error_after_report(diag_args, error, |args, error| {
+        render(args, operand, error)
+    })
 }
 
 /// Render `error` against `args`, with a caret under the part of `operand`
@@ -53,20 +54,12 @@ fn render(args: &[OsString], operand: &str, error: &ParseError) -> bool {
     // The value starts past the `=`, or ends the operand when there is none.
     let value_start = operand.len().min(key_end + 1);
     let value = || value_start..operand.len();
-    // A flag inside a comma-separated value. The list is walked the way the
-    // parser walks it rather than searched for the flag's text, which would
-    // match inside an earlier flag the failing one is a prefix of — the `noc`
-    // of `nocache,noc`.
+    // A flag inside a comma-separated value, at its place in the list rather
+    // than wherever its text first turns up.
     let flag = |flag: &str| {
-        let mut at = value_start;
-        for part in operand[value_start..].split(',') {
-            if part == flag {
-                return Some(at..at + part.len());
-            }
-            // Every separator is one byte wide.
-            at += part.len() + 1;
-        }
-        None
+        list_items(&operand[value_start..], &[','])
+            .find(|&(part, _)| part == flag)
+            .map(|(_, span)| value_start + span.start..value_start + span.end)
     };
 
     let (span, help): (Range<usize>, &str) = match error {

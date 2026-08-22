@@ -45,9 +45,10 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, quiet_if_reported};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
@@ -2242,10 +2243,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let message = format_error_message(&error, size_str, options::BUF_SIZE);
             error.size_value_error(
                 key_args.as_deref(),
-                size_str,
+                &OptionValue::new(size_str, 'S', options::BUF_SIZE),
                 0,
-                'S',
-                options::BUF_SIZE,
                 &message,
                 USimpleError::new(2, message.clone()),
             )
@@ -2392,10 +2391,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let selector = match FieldSelector::parse(value, &settings) {
                 Ok(selector) => selector,
                 Err(error) => {
-                    let reported = key_args
-                        .as_ref()
-                        .is_some_and(|args| diagnostics::render(args, value, &error));
-                    return Err(quiet_if_reported(reported, error));
+                    return Err(uucore::diagnostics::error_after_report(
+                        key_args.as_deref(),
+                        error,
+                        |args, error| diagnostics::render(args, value, error),
+                    ));
                 }
             };
             settings.selectors.push(selector);

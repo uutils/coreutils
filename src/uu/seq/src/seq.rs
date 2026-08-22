@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use num_traits::ToPrimitive;
 use num_traits::Zero;
 
-use uucore::error::{FromIo, UResult, quiet_if_reported};
+use uucore::error::{FromIo, UResult};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
@@ -36,7 +36,7 @@ use uucore::translate;
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
 const OPT_EQUAL_WIDTH: &str = "equal-width";
-const OPT_FORMAT: &str = "format";
+pub(crate) const OPT_FORMAT: &str = "format";
 
 const ARG_NUMBERS: &str = "numbers";
 
@@ -161,10 +161,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let (format, padding, fast_allowed) = if let Some(str) = options.format {
         let format =
             Format::<num_format::Float, &ExtendedBigDecimal>::parse(str).map_err(|error| {
-                let reported = diag_args
-                    .as_deref()
-                    .is_some_and(|args| diagnostics::render(args, str, &error));
-                quiet_if_reported(reported, error)
+                uucore::diagnostics::error_after_report(
+                    diag_args.as_deref(),
+                    error,
+                    |args, error| diagnostics::render(args, str, error),
+                )
             })?;
         (format, 0, false)
     } else {

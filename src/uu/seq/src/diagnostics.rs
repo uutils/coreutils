@@ -9,7 +9,7 @@
 use std::ffi::OsString;
 use std::ops::Range;
 
-use uucore::diagnostics::Snapshot;
+use uucore::diagnostics::{OptionValue, Snapshot};
 use uucore::format::FormatError;
 use uucore::translate;
 
@@ -36,10 +36,8 @@ pub fn render(args: &[OsString], format: &str, error: &FormatError) -> bool {
         _ => return false,
     };
 
-    Snapshot::with_program(args).render_option_value(
-        format,
-        Some('f'),
-        Some("format"),
+    Snapshot::with_program(args).render_option(
+        &OptionValue::new(format, 'f', crate::OPT_FORMAT),
         span,
         &error.to_string(),
         None,

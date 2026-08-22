@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::ops::ControlFlow;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, UUsageError, quiet_if_reported};
+use uucore::error::{FromIo, UError, UResult, UUsageError};
 use uucore::format::{
     FormatArgument, FormatArguments, FormatError, FormatItem, parse_spec_and_escape,
 };
@@ -63,10 +63,9 @@ fn print_formatted(args: impl uucore::Args) -> UResult<()> {
     // A parse error is rendered against the argument list when stderr is a
     // terminal; the plain one-line message is kept anywhere else.
     let raise = |error: FormatError| -> Box<dyn UError> {
-        let reported = diag_args
-            .as_ref()
-            .is_some_and(|args| diagnostics::render(args, format, &error));
-        quiet_if_reported(reported, error)
+        uucore::diagnostics::error_after_report(diag_args.as_deref(), error, |args, error| {
+            diagnostics::render(args, format, error)
+        })
     };
 
     let mut format_seen = false;

@@ -12,6 +12,7 @@ use std::io::ErrorKind;
 #[cfg(unix)]
 use std::os::unix::fs::FileTypeExt;
 use std::path::Path;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, UUsageError};
 use uucore::format_usage;
@@ -314,12 +315,10 @@ fn truncate(
                 let message = translate!("truncate-error-invalid-number", "error" => &error);
                 return Err(error.size_value_error(
                     diag_args,
-                    string,
+                    &OptionValue::new(string, 's', "size"),
                     // The parser never saw the mode character; the caret has
                     // to count it back in.
                     size_offset(string, is_modifier),
-                    's',
-                    "size",
                     &message,
                     USimpleError::new(1, message.clone()),
                 ));
