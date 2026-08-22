@@ -124,6 +124,8 @@ pub fn base_app(about: String, usage: String) -> Command {
                 .short('w')
                 .long(options::WRAP)
                 .value_name("COLS")
+                // GNU takes the token after -w as the wrap size even when it starts with '-'.
+                .allow_hyphen_values(true)
                 .help(translate!("base-common-help-wrap", "default" => WRAP_DEFAULT))
                 .overrides_with(options::WRAP),
         )
