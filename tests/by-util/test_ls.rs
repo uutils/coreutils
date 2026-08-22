@@ -2569,8 +2569,6 @@ fn test_ls_order_time_breaks_ties_by_name() {
     // Every other sort in this utility falls back on the name, and GNU ls does
     // the same for -t. Without the fallback, entries sharing a timestamp come
     // out in whatever order the directory happened to be read in.
-    use filetime::{FileTime, set_file_times};
-
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
@@ -2579,9 +2577,15 @@ fn test_ls_order_time_breaks_ties_by_name() {
         at.touch(name);
         at.append(name, "x");
     }
-    let same = FileTime::from_unix_time(1_700_000_000, 0);
+    let same = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
     for name in names {
-        set_file_times(at.plus_as_string(name), same, same).unwrap();
+        std::fs::set_times(
+            at.plus(name),
+            std::fs::FileTimes::new()
+                .set_accessed(same)
+                .set_modified(same),
+        )
+        .unwrap();
     }
 
     scene

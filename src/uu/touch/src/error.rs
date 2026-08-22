@@ -5,8 +5,8 @@
 
 // spell-checker:ignore (misc) uioerror
 
-use filetime::FileTime;
 use std::path::PathBuf;
+use std::time::SystemTime;
 use uucore::display::Quotable;
 use uucore::error::{UError, UIoError};
 use uucore::translate;
@@ -17,8 +17,8 @@ pub enum TouchError {
     InvalidDateFormat(String),
 
     /// The source time couldn't be converted to a [`jiff::Zoned`]
-    #[error("{}", translate!("touch-error-invalid-filetime", "time" => .0))]
-    InvalidFiletime(FileTime),
+    #[error("{}", translate!("touch-error-invalid-filetime", "time" => format_time(*.0)))]
+    InvalidFiletime(SystemTime),
 
     /// The reference file's attributes could not be found or read
     #[error("{}", translate!("touch-error-reference-file-inaccessible", "path" => .0.quote(), "error" => to_uioerror(.1)))]
@@ -48,6 +48,11 @@ fn to_uioerror(err: &std::io::Error) -> UIoError {
         std::io::Error::from(err.kind())
     };
     UIoError::from(copy)
+}
+
+fn format_time(time: SystemTime) -> String {
+    let (secs, nanos) = crate::system_time_to_sec_nanos(time);
+    format!("{secs}.{nanos:09}s")
 }
 
 impl UError for TouchError {}
