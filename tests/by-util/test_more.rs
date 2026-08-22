@@ -148,7 +148,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg(".")
         .succeeds()
-        .stderr_contains("'.' is a directory.");
+        .stderr_contains("'.': Is a directory");
 
     // Single argument errors
     let (path, _controller, _replica) = pty_path();
@@ -158,7 +158,7 @@ fn test_file_arg() {
         .set_stdout(File::create(&path).unwrap())
         .arg("folder")
         .succeeds()
-        .stderr_contains("is a directory");
+        .stderr_contains("Is a directory");
 
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()
@@ -192,7 +192,7 @@ fn test_invalid_file_perms() {
         .set_stdout(File::create(&path).unwrap())
         .arg("invalid-perms.txt")
         .succeeds()
-        .stderr_contains("permission denied");
+        .stderr_contains("Permission denied");
 }
 
 #[test]
