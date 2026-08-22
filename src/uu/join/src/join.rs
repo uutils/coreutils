@@ -784,28 +784,36 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     if let Some(value_os) = matches.get_one::<OsString>("t") {
         settings.separator = parse_separator(value_os)?;
     }
-    if let Some(format) = matches.get_one::<String>("o") {
-        if format == "auto" {
+    if let Some(formats) = matches.get_many::<String>("o") {
+        let formats: Vec<&String> = formats.collect();
+        // GNU lets `-o` repeat and accumulates the fields. Auto mode applies only
+        // when every value is exactly `auto`; otherwise each `auto` is ignored.
+        if formats.iter().all(|f| *f == "auto") {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            // `-o` has no long form.
-            let option = OptionValue::with_names(format.clone(), Some('o'), None);
-            // Each field carries its place in the value, so that the caret can
-            // take the one that is at fault out of a long list.
-            for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
-                specs.push(Spec::parse(part).map_err(|error| {
-                    let message = error.to_string();
-                    uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
-                        uucore::diagnostics::Snapshot::with_program(args).render_option(
-                            &option,
-                            span,
-                            &message,
-                            None,
-                            Some(&translate!("join-diag-help-format")),
-                        )
-                    })
-                })?);
+            for format in formats {
+                if format == "auto" {
+                    continue;
+                }
+                // `-o` has no long form.
+                let option = OptionValue::with_names(format.clone(), Some('o'), None);
+                // Each field carries its place in the value, so that the caret can
+                // take the one that is at fault out of a long list.
+                for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                    specs.push(Spec::parse(part).map_err(|error| {
+                        let message = error.to_string();
+                        uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
+                            uucore::diagnostics::Snapshot::with_program(args).render_option(
+                                &option,
+                                span,
+                                &message,
+                                None,
+                                Some(&translate!("join-diag-help-format")),
+                            )
+                        })
+                    })?);
+                }
             }
             settings.format = specs;
         }
@@ -919,6 +927,8 @@ pub fn uu_app() -> Command {
             Arg::new("o")
                 .short('o')
                 .value_name("FORMAT")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .help(translate!("join-help-o")),
         )
         .arg(
