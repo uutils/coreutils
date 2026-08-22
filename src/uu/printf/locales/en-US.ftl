@@ -13,7 +13,7 @@ printf-after-help = basic anonymous string templating:
   literally, with the exception of the below
   escaped character sequences, and the substitution sequences described further down.
 
-  ### ESCAPE SEQUENCES
+  ESCAPE SEQUENCES:
 
   The following escape sequences, organized here in alphabetical order,
   will print the corresponding character literal:
@@ -51,9 +51,9 @@ printf-after-help = basic anonymous string templating:
 
   - %% a single %
 
-  ### SUBSTITUTIONS
+  SUBSTITUTIONS:
 
-  #### SUBSTITUTION QUICK REFERENCE
+  SUBSTITUTION QUICK REFERENCE:
 
   Fields
 
@@ -109,7 +109,7 @@ printf-after-help = basic anonymous string templating:
   - 0x: (e.g. 0xABC) interpret argument as hex (numeric output fields only)
   - \': (e.g. \'a) interpret argument as a character constant
 
-  #### HOW TO USE SUBSTITUTIONS
+  HOW TO USE SUBSTITUTIONS:
 
   Substitutions are used to pass additional argument(s) into the FORMAT string, to be formatted a
   particular way. E.g.
@@ -139,13 +139,13 @@ printf-after-help = basic anonymous string templating:
   an argument will default to empty strings, or for numeric fields
   the value 0
 
-  #### AVAILABLE SUBSTITUTIONS
+  AVAILABLE SUBSTITUTIONS:
 
   This program, like GNU coreutils printf,
   interprets a modified subset of the POSIX C printf spec,
   a quick reference to substitutions is below.
 
-  #### STRING SUBSTITUTIONS
+  STRING SUBSTITUTIONS:
 
   All string fields have a 'max width' parameter
   %.3s means 'print no more than three characters of the original input'
@@ -166,13 +166,13 @@ printf-after-help = basic anonymous string templating:
         and shell meta-characters are quoted appropriately.
         This is an equivalent format to ls --quoting=shell-escape output.
 
-  #### CHAR SUBSTITUTIONS
+  CHAR SUBSTITUTIONS:
 
   The character field does not have a secondary parameter.
 
   - %c: a single character
 
-  #### INTEGER SUBSTITUTIONS
+  INTEGER SUBSTITUTIONS:
 
   All integer fields have a 'pad with zero' parameter
   %.4i means an integer which if it is less than 4 digits in length,
@@ -187,7 +187,7 @@ printf-after-help = basic anonymous string templating:
 
   - %o: 64-bit unsigned integer printed in octal (base 8)
 
-  #### FLOATING POINT SUBSTITUTIONS
+  FLOATING POINT SUBSTITUTIONS:
 
   All floating point fields have a 'max decimal places / max significant digits' parameter
   %.10f means a decimal floating point with 7 decimal places past 0
@@ -220,7 +220,7 @@ printf-after-help = basic anonymous string templating:
   behavior in this utility is selected to reproduce in exact
   the behavior of GNU coreutils' printf from an inputs and outputs standpoint.
 
-  ### USING PARAMETERS
+  USING PARAMETERS:
 
   Most substitution fields can be parameterized using up to 2 numbers that can
   be passed to the field, between the % sign and the field letter.
@@ -231,7 +231,7 @@ printf-after-help = basic anonymous string templating:
   The 2nd parameter is proceeded by a dot.
   You do not have to use parameters
 
-  ### SPECIAL FORMS OF INPUT
+  SPECIAL FORMS OF INPUT:
 
   For numeric input, the following additional forms of input are accepted besides decimal:
 
