@@ -57,10 +57,7 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
         if group.is_empty() {
             None
         } else {
-            match parse_gid_from_str(group) {
-                Ok(g) => Some(g),
-                Err(e) => return Err(USimpleError::new(1, e)),
-            }
+            Some(parse_gid_from_str(group).map_err(|e| USimpleError::new(1, e))?)
         }
     };
     Ok((dest_gid, raw_group))
@@ -69,15 +66,14 @@ fn get_dest_gid(matches: &ArgMatches) -> UResult<(Option<u32>, String)> {
 fn parse_gid_and_uid(matches: &ArgMatches) -> UResult<GidUidOwnerFilter> {
     // Handle --from option
     let filter = if let Some(from_group) = matches.get_one::<String>(options::FROM) {
-        match parse_gid_from_str(from_group) {
-            Ok(g) => IfFrom::Group(g),
-            Err(_) => {
-                return Err(USimpleError::new(
+        parse_gid_from_str(from_group)
+            .map(IfFrom::Group)
+            .map_err(|_| {
+                USimpleError::new(
                     1,
                     translate!("chgrp-error-invalid-user", "from_group" => from_group),
-                ));
-            }
-        }
+                )
+            })?
     } else {
         IfFrom::All
     };
