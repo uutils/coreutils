@@ -48,7 +48,8 @@ fn parse_tab_num(word: &str, allow_zero: bool) -> Result<usize, ParseError> {
 }
 
 fn parse_tabstops(s: &str) -> Result<TabConfig, ParseError> {
-    let words = s.split(',');
+    // GNU accepts a blank (space or tab) or a comma as tab-list separators.
+    let words = s.split([' ', '\t', ',']);
 
     let mut nums = Vec::new();
     let mut increment_size: Option<usize> = None;
