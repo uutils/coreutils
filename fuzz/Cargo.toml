@@ -4,7 +4,6 @@ version = "0.0.0"
 description = "uutils ~ 'core' uutils fuzzers"
 repository = "https://github.com/uutils/coreutils/tree/main/fuzz/"
 edition.workspace = true
-rust-version.workspace = true
 license.workspace = true
 publish = false
 
@@ -17,8 +16,8 @@ members = ["."]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88.0"
 license = "MIT"
+# no need to pin rust-version for non-production
 
 # Enable debug symbols in release builds for readable backtraces
 # when fuzzing discovers crashes. This addresses issue #5343.
