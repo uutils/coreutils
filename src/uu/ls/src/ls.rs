@@ -1391,16 +1391,31 @@ fn enter_directory<O: LsOutput>(
         inode: Option<FileInformation>,
     }
 
+    /// Controls inode freeing precisely in the loop, so we correctly thread
+    /// cycle detection and inode discarding. Does away with many headaches.
+    enum StackItem {
+        Enter(StackEntry),
+        Exit(FileInformation),
+    }
+
     let mut stack = Vec::new();
-    let mut current = Some(StackEntry {
+    let mut current = Some(StackItem::Enter(StackEntry {
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
         inode: inode.cloned(),
-    });
+    }));
     let mut initial_read_dir = Some(read_dir);
 
     while let Some(entry) = current.take().or_else(|| stack.pop()) {
+        let entry = match entry {
+            StackItem::Exit(inode) => {
+                listed_ancestors.remove(&inode);
+                continue;
+            }
+            StackItem::Enter(entry) => entry,
+        };
+
         let path_data = PathData::new(
             entry.path.as_path().into(),
             None,
@@ -1427,8 +1442,7 @@ fn enter_directory<O: LsOutput>(
                         err,
                         entry.command_line,
                     ));
-                    // Release the inode. To be made a proper drop guard when
-                    // the [`std::mem::DropGuard`] API hits stable in our MSRV.
+                    // Force-free the inode if we encounter an error.
                     if let Some(ref inode) = entry.inode {
                         listed_ancestors.remove(inode);
                     }
@@ -1440,6 +1454,12 @@ fn enter_directory<O: LsOutput>(
 
         collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
+
+        // Sets the inode to be removed after all children and descendants have
+        // been processed. The exit marker sits under the children in the stack.
+        if let Some(ref inode) = entry.inode {
+            stack.push(StackItem::Exit(inode.clone()));
+        }
 
         if config.recursive {
             for child in entries
@@ -1461,21 +1481,18 @@ fn enter_directory<O: LsOutput>(
                 } else {
                     let inode = FileInformation::from_path(&child_path, child_must_dereference)?;
                     if listed_ancestors.insert(inode.clone()) {
-                        stack.push(StackEntry {
+                        stack.push(StackItem::Enter(StackEntry {
                             path: child_path,
                             command_line: child_command_line,
                             is_first: false,
                             inode: Some(inode),
-                        });
+                        }));
                     } else {
                         output.flush()?;
                         show!(LsError::AlreadyListedError(child_path));
                     }
                 }
             }
-        }
-        if let Some(ref inode) = entry.inode {
-            listed_ancestors.remove(inode);
         }
     }
 
