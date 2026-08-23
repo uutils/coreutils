@@ -124,6 +124,11 @@ dd-warning-signal-handler = Internal dd Warning: Unable to register signal handl
 
 # Diagnostics
 dd-diag-help-operand = an operand is KEY=VALUE, as in if=file bs=4k count=10
-dd-diag-help-flags = conv=, iflag= and oflag= take flags separated by commas, as in conv=ucase,sync
+dd-diag-label-conv = not a known conversion
+dd-diag-label-iflag = not a known input flag
+dd-diag-label-oflag = not a known output flag
+dd-diag-help-conv = conv= is one of ascii, ebcdic, ibm, lcase, ucase, block, unblock, swab, sync, noerror, sparse, excl, nocreat, notrunc, fdatasync or fsync
+dd-diag-help-iflag = iflag= is one of direct, directory, dsync, sync, nocache, nonblock, noatime, noctty, nofollow, fullblock, count_bytes or skip_bytes
+dd-diag-help-oflag = oflag= is one of direct, directory, dsync, sync, nocache, nonblock, noatime, noctty, nofollow, append or seek_bytes
 dd-diag-help-status = status= is one of none, noxfer or progress
 dd-diag-help-number = a number may be followed by a multiplier: c, w, b, then K, M, G and so on for 1024, kB, MB, GB for 1000
