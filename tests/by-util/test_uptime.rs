@@ -18,6 +18,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(not(target_os = "android"))]
 fn test_uptime() {
     let result = new_ucmd!().succeeds();
     result.stdout_contains(" up ");
@@ -52,7 +53,7 @@ fn test_write_error_handling() {
 /// Checks for files without utmpx records for which boot time cannot be calculated
 #[test]
 #[cfg(unix)]
-#[cfg(not(any(target_os = "openbsd", target_os = "freebsd")))]
+#[cfg(not(any(target_os = "openbsd", target_os = "freebsd", target_os = "android")))]
 // Disabled for freebsd, since it doesn't use the utmpxname() sys call to change the default utmpx
 // file that is accessed using getutxent()
 fn test_uptime_for_file_without_utmpx_records() {
@@ -69,6 +70,7 @@ fn test_uptime_for_file_without_utmpx_records() {
 /// Checks whether uptime displays the correct stderr msg when its called with a fifo
 #[test]
 #[cfg(all(unix, feature = "cp"))]
+#[cfg(not(target_os = "android"))]
 fn test_uptime_with_fifo() {
     use uutests::{util::TestScenario, util_name};
 
@@ -114,7 +116,7 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(unix)]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos")))]
+#[cfg(not(any(target_os = "openbsd", target_os = "macos", target_os = "android")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
