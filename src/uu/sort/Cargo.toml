@@ -24,9 +24,7 @@ i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
 bigdecimal = { workspace = true }
-binary-heap-plus = { workspace = true }
 clap = { workspace = true }
-compare = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
