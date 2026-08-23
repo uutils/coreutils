@@ -760,13 +760,11 @@ impl Config {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else if opt_hr {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-            } else if let Ok(size) = parse_size_non_zero_u64(opt_block_size) {
+            } else {
+                let size = parse_size_non_zero_u64(opt_block_size)
+                    .map_err(|_| LsError::BlockSizeParseError(opt_block_size.clone()))?;
                 // --block-size overrides -k
                 (size, size)
-            } else {
-                return Err(Box::new(LsError::BlockSizeParseError(
-                    opt_block_size.clone(),
-                )));
             }
         } else if !opt_si && !opt_hr {
             resolve_block_sizes_from_env(opt_kb)

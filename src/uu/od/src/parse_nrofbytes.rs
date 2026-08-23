@@ -69,10 +69,8 @@ pub fn parse_number_of_bytes(s: &str) -> Result<u64, ParseSizeError> {
         _ => {}
     }
 
-    let factor = match u64::from_str_radix(&s[start..len], radix) {
-        Ok(f) => f,
-        Err(e) => return Err(ParseSizeError::ParseFailure(e.to_string())),
-    };
+    let factor = u64::from_str_radix(&s[start..len], radix)
+        .map_err(|e| ParseSizeError::ParseFailure(e.to_string()))?;
     factor
         .checked_mul(multiply)
         .ok_or_else(|| ParseSizeError::SizeTooBig(s.to_string()))
