@@ -32,6 +32,8 @@ pub enum ParseError {
     MultipleExclNoCreate,
     #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone()))]
     FlagNoMatch(String),
+    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => .0.clone()))]
+    OutputFlagNoMatch(String),
     #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
     #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0.clone()))]
@@ -48,7 +50,7 @@ pub enum ParseError {
     BsOutOfRange(String),
     #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
     InvalidNumber(String),
-    #[error("invalid number: ‘{0}’: {1}")]
+    #[error("invalid number: '{0}': {1}")]
     InvalidNumberWithErrMsg(String, String),
 }
 
@@ -425,7 +427,7 @@ impl Parser {
                 "seek_bytes" => o.seek_bytes = true,
                 // GNU silently ignores iflags given as oflag.
                 "fullblock" | "count_bytes" | "skip_bytes" => {}
-                _ => return Err(ParseError::FlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::OutputFlagNoMatch(f.to_string())),
             }
         }
         Ok(())
@@ -472,11 +474,18 @@ impl UError for ParseError {
         1
     }
 
-    /// The one message that ends on a hint about the syntax it rejected. The
-    /// hint is left to this, rather than written into the message, so that it
-    /// survives a caret report replacing the message.
+    /// The messages that end on a hint about the syntax they rejected, as
+    /// GNU does. The hint is left to this, rather than written into the
+    /// message, so that it survives a caret report replacing the message.
     fn usage(&self) -> bool {
-        matches!(self, Self::FlagNoMatch(_))
+        matches!(
+            self,
+            Self::UnrecognizedOperand(_)
+                | Self::FlagNoMatch(_)
+                | Self::OutputFlagNoMatch(_)
+                | Self::ConvFlagNoMatch(_)
+                | Self::StatusLevelNotRecognized(_)
+        )
     }
 }
 

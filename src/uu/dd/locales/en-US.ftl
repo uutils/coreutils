@@ -90,20 +90,21 @@ dd-error-not-directory = setting flags for '{ $file }': Not a directory
 dd-error-failed-discard-cache = failed to discard cache for: { $file }
 
 # Parse errors
-dd-error-unrecognized-operand = Unrecognized operand '{ $operand }'
-dd-error-multiple-format-table = Only one of conv=ascii conv=ebcdic or conv=ibm may be specified
-dd-error-multiple-case = Only one of conv=lcase or conv=ucase may be specified
-dd-error-multiple-block = Only one of conv=block or conv=unblock may be specified
-dd-error-multiple-excl = Only one ov conv=excl or conv=nocreat may be specified
-dd-error-invalid-flag = invalid input flag: ‘{ $flag }’
-dd-error-conv-flag-no-match = Unrecognized conv=CONV -> { $flag }
+dd-error-unrecognized-operand = unrecognized operand '{ $operand }'
+dd-error-multiple-format-table = cannot combine any two of {"{"}ascii,ebcdic,ibm{"}"}
+dd-error-multiple-case = cannot combine lcase and ucase
+dd-error-multiple-block = cannot combine block and unblock
+dd-error-multiple-excl = cannot combine excl and nocreat
+dd-error-invalid-flag = invalid input flag: '{ $flag }'
+dd-error-invalid-output-flag = invalid output flag: '{ $flag }'
+dd-error-conv-flag-no-match = invalid conversion: '{ $flag }'
 dd-error-multiplier-parse-failure = invalid number: '{ $input }'
 dd-error-multiplier-overflow = Multiplier string would overflow on current system -> { $input }
 dd-error-block-without-cbs = conv=block or conv=unblock specified without cbs=N
-dd-error-status-not-recognized = status=LEVEL not recognized -> { $level }
+dd-error-status-not-recognized = invalid status level: '{ $level }'
 dd-error-unimplemented = feature not implemented on this system -> { $feature }
 dd-error-bs-out-of-range = { $param }=N cannot fit into memory
-dd-error-invalid-number = invalid number: ‘{ $input }’
+dd-error-invalid-number = invalid number: '{ $input }'
 
 # Progress messages
 dd-progress-records-in = { $complete }+{ $partial } records in

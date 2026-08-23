@@ -64,7 +64,9 @@ fn render(args: &[OsString], operand: &str, error: &ParseError) -> bool {
 
     let (span, help): (Range<usize>, &str) = match error {
         ParseError::UnrecognizedOperand(_) => (0..key_end, "dd-diag-help-operand"),
-        ParseError::FlagNoMatch(name) | ParseError::ConvFlagNoMatch(name) => {
+        ParseError::FlagNoMatch(name)
+        | ParseError::OutputFlagNoMatch(name)
+        | ParseError::ConvFlagNoMatch(name) => {
             (flag(name).unwrap_or_else(value), "dd-diag-help-flags")
         }
         ParseError::StatusLevelNotRecognized(_) => (value(), "dd-diag-help-status"),
