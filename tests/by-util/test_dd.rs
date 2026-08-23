@@ -153,6 +153,18 @@ fn test_huge_block_size_is_rejected_without_panicking() {
 }
 
 #[test]
+fn test_count_past_u64_is_rejected() {
+    // A number past u64 used to saturate, so count= silently copied the whole
+    // input and exited 0 where GNU rejects the operand.
+    for arg in ["count=99999999999999999999", "skip=18446744073709551616"] {
+        new_ucmd!()
+            .args(&["if=/dev/null", arg])
+            .fails_with_code(1)
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
 fn test_huge_obs_reports_memory_error_instead_of_aborting() {
     // Regression test for #12847: a valid but huge `obs` used to abort
     // ("memory allocation of N bytes failed"); it must fail gracefully instead.
