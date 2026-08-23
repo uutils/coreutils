@@ -3,6 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+mod diagnostics;
 mod operation;
 mod simd;
 mod unicode_table;
@@ -31,6 +32,9 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in set diagnostics, which needs the sets as typed.
+    let set_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let delete_flag = matches.get_flag(options::DELETE);
@@ -103,14 +107,24 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // According to the man page: translating only happens if deleting or if a second set is given
     let translating = !delete_flag && sets.len() > 1;
     let mut sets_iter = sets.iter().map(OsString::as_os_str);
-    let (set1, set2) = Sequence::solve_set_characters(
+    let solved = Sequence::solve_set_characters(
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         os_str_as_bytes(sets_iter.next().unwrap_or_default())?,
         complement_flag,
         // if we are not translating then we don't truncate set1
         truncate_set1_flag && translating,
         translating,
-    )?;
+    );
+    let (set1, set2) = match solved {
+        Ok(sets_solved) => sets_solved,
+        Err(error) => {
+            return Err(uucore::diagnostics::error_after_report(
+                set_args.as_deref(),
+                error,
+                |args, error| diagnostics::render(args, &sets, error),
+            ));
+        }
+    };
 
     if is_stdin_directory(&stdin) {
         return Err(USimpleError::new(1, translate!("tr-error-read-directory")));

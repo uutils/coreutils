@@ -9,7 +9,6 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
-use filetime::{FileTime, set_file_times};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -378,7 +377,7 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
             let message = translate!("install-error-invalid-mode", "error" => err.to_string());
             // When the diagnostic is rendered it is already on stderr; exit quietly.
-            if !diag_args.is_some_and(|args| err.render(args, x, 0, &message)) {
+            if !diag_args.is_some_and(|args| err.render_mode_value(args, x, 0, &message)) {
                 show_error!("{message}");
             }
             1
@@ -1084,7 +1083,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => {
             // Follow GNU's behavior: if strip fails, removes the target
             let _ = fs::remove_file(to);
-            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            return Err(InstallError::StripProgramFailed(strip_errno(&e)).into());
         }
     }
     Ok(())
@@ -1126,10 +1125,14 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
-    let modified_time = FileTime::from_last_modification_time(&meta);
-    let accessed_time = FileTime::from_last_access_time(&meta);
+    let modified_time = meta.modified()?;
+    let accessed_time = meta.accessed()?;
 
-    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+    let times = fs::FileTimes::new()
+        .set_accessed(accessed_time)
+        .set_modified(modified_time);
+    let file = File::options().write(true).open(to)?;
+    if let Err(e) = file.set_times(times) {
         show_error!("{e}");
         // ignore error
     }

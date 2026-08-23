@@ -1093,15 +1093,9 @@ fn test_mkdir_inside_inexistent_dir() {
 
 // The mode is only parsed where a mode means something.
 #[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
     use super::*;
-    /// Column of the caret in a report header such as `[ mkdir:1:8 ]`.
-    fn caret_column(stderr: &str) -> Option<usize> {
-        let header = stderr.lines().find(|line| line.contains("mkdir:1:"))?;
-        let column = header.rsplit(':').next()?;
-        column.trim_end_matches(" ]").parse().ok()
-    }
-
     #[test]
     fn test_snippet_points_at_the_bad_operator() {
         let result = new_ucmd!()
@@ -1112,7 +1106,7 @@ mod diagnostics {
 
         assert!(stderr.contains("invalid operator"), "{stderr}");
         // The caret lands on `?`: three columns of `-m ` and four of mode.
-        assert_eq!(caret_column(stderr), Some(8), "{stderr}");
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
     }
 
     #[test]
@@ -1125,7 +1119,7 @@ mod diagnostics {
 
         // Clauses are parsed one at a time, but the caret is placed in the
         // whole mode: `!` is its sixth character, after `-m `.
-        assert_eq!(caret_column(stderr), Some(9), "{stderr}");
+        assert_eq!(result.caret_column(), Some(9), "{stderr}");
     }
 
     #[test]

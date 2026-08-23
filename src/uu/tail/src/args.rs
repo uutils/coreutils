@@ -12,8 +12,9 @@ use same_file::Handle;
 use std::ffi::OsString;
 use std::io::{IsTerminal, Write};
 use std::time::Duration;
+use uucore::diagnostics::OptionValue;
 use uucore::error::{UResult, USimpleError, UUsageError};
-use uucore::parser::parse_signed_num::{SignPrefix, parse_signed_num_max};
+use uucore::parser::parse_signed_num::{SignPrefix, number_offset, parse_signed_num_max};
 use uucore::parser::parse_size::ParseSizeError;
 use uucore::parser::parse_time;
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
@@ -71,16 +72,27 @@ impl FilterMode {
         }
     }
 
-    fn from(matches: &ArgMatches) -> UResult<Self> {
+    fn from(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        // The plain message, or a caret under the part of the size at fault.
+        let raise = |message: String, arg: &str, short, long, error: &ParseSizeError| {
+            error.size_value_error(
+                diag_args,
+                &OptionValue::new(arg, short, long),
+                // The parser never saw the sign; the caret has to count it back in.
+                number_offset(arg),
+                &message,
+                USimpleError::new(1, message.clone()),
+            )
+        };
+
         let zero_term = matches.get_flag(options::ZERO_TERM);
         let mode = if let Some(arg) = matches.get_one::<String>(options::BYTES) {
             match parse_num(arg) {
                 Ok(signum) => Self::Bytes(signum),
                 Err(e) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string()),
-                    ));
+                    let message =
+                        translate!("tail-error-invalid-number-of-bytes", "arg" => e.to_string());
+                    return Err(raise(message, arg, 'c', "bytes", &e));
                 }
             }
         } else if let Some(arg) = matches.get_one::<String>(options::LINES) {
@@ -89,11 +101,10 @@ impl FilterMode {
                     let delimiter = if zero_term { 0 } else { b'\n' };
                     Self::Lines(signum, delimiter)
                 }
-                Err(_) => {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote()),
-                    ));
+                Err(e) => {
+                    let message =
+                        translate!("tail-error-invalid-number-of-lines", "arg" => arg.quote());
+                    return Err(raise(message, arg, 'n', "lines", &e));
                 }
             }
         } else if zero_term {
@@ -184,6 +195,13 @@ impl Settings {
     }
 
     pub fn from(matches: &ArgMatches) -> UResult<Self> {
+        Self::from_with_diagnostics(matches, None)
+    }
+
+    fn from_with_diagnostics(
+        matches: &ArgMatches,
+        diag_args: Option<&[OsString]>,
+    ) -> UResult<Self> {
         // We're parsing --follow, -F and --retry under the following conditions:
         // * -F sets --retry and --follow=name
         // * plain --follow or short -f is the same like specifying --follow=descriptor
@@ -223,7 +241,7 @@ impl Settings {
             follow,
             retry,
             use_polling: matches.get_flag(options::USE_POLLING),
-            mode: FilterMode::from(matches)?,
+            mode: FilterMode::from(matches, diag_args)?,
             verbose: matches.get_flag(options::verbosity::VERBOSE),
             presume_input_pipe: matches.get_flag(options::PRESUME_INPUT_PIPE),
             debug: matches.get_flag(options::DEBUG),
@@ -410,7 +428,12 @@ pub fn parse_args(args: impl uucore::Args) -> UResult<Settings> {
     let args_vec: Vec<OsString> = args.collect();
     let clap_args = uu_app().try_get_matches_from(args_vec.clone());
     let clap_result = match clap_args {
-        Ok(matches) => Ok(Settings::from(&matches)?),
+        // Kept for the caret in size diagnostics, which needs the value as
+        // typed.
+        Ok(matches) => Ok(Settings::from_with_diagnostics(
+            &matches,
+            uucore::diagnostics::capture(&args_vec).as_deref(),
+        )?),
         Err(err) => Err(err.into()),
     };
 

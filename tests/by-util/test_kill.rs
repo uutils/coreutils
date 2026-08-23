@@ -50,9 +50,17 @@ impl Target {
     fn assert_signaled(&mut self, signal: i32) {
         let status = self.reap();
         #[cfg(unix)]
-        assert_eq!(status.signal(), Some(signal));
+        assert_eq!(
+            status.signal(),
+            Some(signal),
+            "target exited with {status:?} instead of dying from signal {signal}"
+        );
         #[cfg(windows)]
-        assert_eq!(status.code(), Some(128 + signal));
+        assert_eq!(
+            status.code(),
+            Some(128 + signal),
+            "target exited with {status:?} instead of dying from signal {signal}"
+        );
     }
 
     #[cfg(windows)]
@@ -770,7 +778,7 @@ fn test_kill_windows_pid_zero_terminates_the_whole_job() {
         let (code, stderr) = shell.run(&format!("\"{}\" kill {args}", get_tests_binary()));
 
         // Read cmd's status first, so a broken kill surfaces its own message
-        // rather than only a 30-second victim timeout below.
+        // rather than only a hanging victim wait below.
         assert_eq!(
             code,
             Some(128 + signal),
@@ -816,9 +824,24 @@ fn test_kill_windows_exited_target_with_held_handle() {
         .stderr_contains("No such process");
 }
 
+/// Some CI containers leave real-time signals ignored; children inherit that,
+/// so `kill` succeeds but the target survives and exits 0 on its own.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn is_ignored(signal: i32) -> bool {
+    let mut action = std::mem::MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: a null new-action only queries the current disposition.
+    unsafe {
+        libc::sigaction(signal, std::ptr::null(), action.as_mut_ptr()) == 0
+            && action.assume_init().sa_sigaction == libc::SIG_IGN
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "android"))]
 #[test]
 fn test_kill_realtime_signal() {
+    if is_ignored(libc::SIGRTMIN()) {
+        return;
+    }
     let mut target = Target::new();
     // kill -s RTMIN should send SIGRTMIN and terminate the process
     new_ucmd!()
@@ -834,6 +857,9 @@ fn test_kill_realtime_signal() {
 fn test_kill_with_rtmax_offset() {
     let (_, rtmax) = realtime_signal_bounds().unwrap();
     let sig: i32 = (rtmax as i32) - 7;
+    if is_ignored(sig) {
+        return;
+    }
 
     let mut target = Target::new();
     new_ucmd!()
@@ -849,6 +875,9 @@ fn test_kill_with_rtmax_offset() {
 fn test_kill_with_rtmin_offset() {
     let (rtmin, _) = realtime_signal_bounds().unwrap();
     let sig: i32 = (rtmin as i32) + 7;
+    if is_ignored(sig) {
+        return;
+    }
 
     let mut target = Target::new();
     new_ucmd!()

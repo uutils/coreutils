@@ -19,6 +19,7 @@ doctest = false
 
 [features]
 default = ["i18n-collator"]
+diagnostics = ["uucore/diagnostics"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]

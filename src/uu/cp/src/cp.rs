@@ -17,7 +17,7 @@ use std::os::unix::net::UnixListener;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::{fmt, io};
 #[cfg(all(unix, not(target_os = "android")))]
-use uucore::fsxattr::{copy_acls, copy_xattrs, copy_xattrs_skip_selinux};
+use uucore::fsxattr::{copy_acls, copy_xattrs_fd, copy_xattrs_skip_selinux};
 use uucore::translate;
 
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::ValueParser, value_parser};
@@ -1737,8 +1737,12 @@ pub(crate) fn set_selinux_context(path: &Path, context: Option<&String>) -> Copy
 /// user-writable if needed and restoring its original permissions afterward. This avoids "Operation
 /// not permitted" errors on read-only files. Returns an error if permission or metadata operations fail,
 /// or if xattr copying fails.
+///
+/// Uses file descriptor-based operations to avoid TOCTOU races during xattr copying.
 #[cfg(all(unix, not(target_os = "android")))]
 fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyResult<()> {
+    use std::fs::File;
+    use uucore::fsxattr::copy_xattrs;
     let metadata = fs::symlink_metadata(dest)?;
 
     // Check if the destination file is currently read-only for the user.
@@ -1758,6 +1762,13 @@ fn copy_extended_attrs(source: &Path, dest: &Path, skip_selinux: bool) -> CopyRe
         // When -Z is used, skip copying security.selinux xattr so that
         // the default context can be set instead of preserving from source
         copy_xattrs_skip_selinux(source, dest)
+    } else if metadata.is_file() {
+        // Use file descriptor-based operations for regular files to avoid TOCTOU races.
+        // Directories cannot be opened with write mode for xattr operations
+        // Symlinks (especially dangling ones) cannot be opened via File::open
+        let source_file = File::open(source)?;
+        let dest_file = OpenOptions::new().write(true).open(dest)?;
+        copy_xattrs_fd(&source_file, &dest_file)
     } else {
         copy_xattrs(source, dest)
     };
@@ -2602,6 +2613,23 @@ fn copy_file(
                 return Ok(());
             }
         }
+    }
+
+    // `--attributes-only` skips `handle_existing_dest` above, so its
+    // same-file check never runs; GNU cp refuses self-copies in this
+    // mode too.
+    if initial_dest_metadata.is_some()
+        && options.attributes_only
+        && !matches!(
+            options.overwrite,
+            OverwriteMode::Clobber(ClobberMode::RemoveDestination)
+        )
+        && is_forbidden_to_copy_to_same_file(source, dest, options, source_in_command_line)
+    {
+        return Err(translate!("cp-error-same-file",
+                       "source" => source.quote(),
+                       "dest" => dest.quote())
+        .into());
     }
 
     if options.attributes_only

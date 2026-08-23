@@ -19,6 +19,14 @@ pub mod checksum;
 pub mod colors;
 #[cfg(feature = "diagnostics")]
 pub mod diagnostics;
+// Without the feature, a no-op stand-in keeps the API — and its callers —
+// compiling; they all fall back to their plain one-line messages.
+#[cfg(not(feature = "diagnostics"))]
+#[path = "features/diagnostics_stub.rs"]
+pub mod diagnostics;
+// The part of the diagnostics that is not a no-op without the feature: both
+// `diagnostics` above re-export it rather than each carrying a copy.
+mod diagnostics_boundary;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]

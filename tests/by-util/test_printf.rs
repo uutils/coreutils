@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore fffffffffffffffc
+// spell-checker:ignore fffffffffffffffc DFFF
 use uutests::new_ucmd;
 
 #[test]
@@ -1522,7 +1522,7 @@ fn test_write_error_omits_errno() {
 #[test]
 fn test_large_width_format() {
     // Test that extremely large width specifications fail gracefully with an error
-    // rather than panicking. This tests the fix for the printf-surprise.sh GNU test.
+    // rather than panicking.
     // When printf tries to format with a width of 20 million, it should return
     // an error message and exit code 1, not panic with exit code 101.
     let test_cases = [
@@ -1548,6 +1548,22 @@ fn test_extreme_field_width_overflow() {
         .args(&["%999999999999999999999999d", "1"])
         .fails_with_code(1)
         .stderr_contains("printf: write error"); //could contains additional message like "formatting width too large" not in GNU, thats fine.
+}
+
+#[test]
+fn test_asterisk_width_i64_min_no_panic() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13766
+    // An `i64::MIN` '*' width used to panic with "attempt to negate with overflow".
+    // It must not panic: on 64-bit it fails with a write error, on 32-bit the
+    // width is clamped to 0 and printf succeeds.
+    let result = new_ucmd!()
+        .args(&["|%*d|", &i64::MIN.to_string(), "1"])
+        .run();
+    assert!(
+        result.succeeded() || result.code() == 1,
+        "printf must not panic on an i64::MIN '*' width (got exit code {})",
+        result.code()
+    );
 }
 
 #[test]
@@ -1584,4 +1600,160 @@ fn test_empty_output_succeeds_on_full_device() {
         .set_stdout(std::fs::File::create("/dev/full").unwrap())
         .succeeds()
         .no_output();
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    #[cfg(unix)]
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_spec() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["%5.2c", "q"])
+            .fails_with_code(1);
+
+        // The caret covers the whole rejected spec, % included.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: %5.2c: invalid conversion specification
+   ╭─[ printf:1:8 ]
+   │
+ 1 │ printf %5.2c q
+   │        ─────
+   │
+   │ Help: %d, %s, %x, %f and the other C conversions are accepted, plus %b and %q; a literal % is written %%
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_incomplete_hex_escape() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&[r"a\xzb", "q"])
+            .fails_with_code(1);
+
+        // The caret covers `\x` alone — the characters around it are fine.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: missing hexadecimal number in escape
+   ╭─[ printf:1:9 ]
+   │
+ 1 │ printf a\\xzb q
+   │         ──
+   │
+   │ Help: \\x takes one or two hexadecimal digits, \\u takes four and \\U takes eight
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_code_point() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&[r"x\ud800y"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: invalid universal character name \\ud800
+   ╭─[ printf:1:9 ]
+   │
+ 1 │ printf x\\ud800y
+   │         ──────
+   │
+   │ Help: code points between D800 and DFFF or above 10FFFF are not Unicode characters
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_quoted_format() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["hello %s and %z", "world"])
+            .fails_with_code(1);
+
+        // A format with a space in it is echoed back quoted. The quotes only
+        // wrap it, so the caret still finds the one spec at fault rather than
+        // underlining the whole operand.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: %z: invalid conversion specification
+   ╭─[ printf:1:22 ]
+   │
+ 1 │ printf 'hello %s and %z' world
+   │                      ──
+   │
+   │ Help: %d, %s, %x, %f and the other C conversions are accepted, plus %b and %q; a literal % is written %%
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_a_format_that_looks_like_an_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-%z", "world"])
+            .fails_with_code(1);
+
+        // printf takes hyphen values, so `-%z` is the format and not an
+        // option; the caret belongs on it rather than on the argument after.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: %z: invalid conversion specification
+   ╭─[ printf:1:9 ]
+   │
+ 1 │ printf -%z world
+   │         ──
+   │
+   │ Help: %d, %s, %x, %f and the other C conversions are accepted, plus %b and %q; a literal % is written %%
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_keeps_an_operand_that_draws_like_the_report() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["╰%z"])
+            .fails_with_code(1);
+
+        // The report is drawn with box characters, and so is this operand;
+        // echoing the arguments must not lose the line to that collision.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+printf: %z: invalid conversion specification
+   ╭─[ printf:1:9 ]
+   │
+ 1 │ printf ╰%z
+   │         ──
+   │
+   │ Help: %d, %s, %x, %f and the other C conversions are accepted, plus %b and %q; a literal % is written %%
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_piped_stderr_keeps_the_plain_message() {
+        new_ucmd!()
+            .args(&["%5.2c", "q"])
+            .fails_with_code(1)
+            .stderr_only("printf: %5.2c: invalid conversion specification\n");
+    }
 }

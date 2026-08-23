@@ -104,16 +104,8 @@ fn report_verbose_write_error(result: UResult<()>) {
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!(
-            "{}",
-            translate!("rm-error-cannot-remove-permission-denied", "file" =>  path.quote())
-        );
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
-    }
+    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+    show_error!("{e}");
     true
 }
 

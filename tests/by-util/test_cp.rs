@@ -1211,6 +1211,26 @@ fn test_cp_arg_suffix_without_backup_option() {
 }
 
 #[test]
+fn test_cp_empty_backup_suffix_uses_default() {
+    for backup_arg in ["--backup=nil", "--backup"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        ucmd.arg(backup_arg)
+            .arg("--suffix=")
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HOW_ARE_YOU_SOURCE)
+            .succeeds()
+            .no_stderr();
+
+        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+        assert_eq!(
+            at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+            "How are you?\n"
+        );
+    }
+}
+
+#[test]
 fn test_cp_arg_suffix_hyphen_value() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -4808,6 +4828,34 @@ fn test_cp_cannot_create_regular_file_attributes_only() {
     ucmd.args(&["--attributes-only", "source.txt", "/dev/null/n.txt"])
         .fails_with_code(1)
         .stderr_only("cp: cannot create regular file '/dev/null/n.txt': Not a directory\n");
+}
+
+#[test]
+fn test_cp_attributes_only_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg("--attributes-only")
+        .arg(file)
+        .arg(file)
+        .fails_with_code(1)
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
+}
+
+#[test]
+fn test_cp_attributes_only_same_file_dot_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg("--attributes-only")
+        .arg(file)
+        .arg("./a")
+        .fails_with_code(1)
+        .stderr_contains(format!("'{file}' and './{file}' are the same file"));
 }
 
 #[test]

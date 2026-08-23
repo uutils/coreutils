@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore dirattr dirvalue setfattr getfattr
 
-use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
@@ -1170,6 +1170,7 @@ fn test_mv_backup_conflicting_options() {
 
 #[test]
 fn test_mv_update_option() {
+    use std::fs::{File, FileTimes};
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
@@ -1178,10 +1179,22 @@ fn test_mv_update_option() {
     at.touch(file_a);
     at.touch(file_b);
     let ts = time::OffsetDateTime::now_utc();
-    let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
-    let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
-    filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
-    filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
+    let now = ts.into();
+    let later = (ts + time::Duration::seconds(3600)).into();
+    let times_now = FileTimes::new().set_accessed(now).set_modified(now);
+    let times_later = FileTimes::new().set_accessed(now).set_modified(later);
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_a))
+        .unwrap()
+        .set_times(times_now)
+        .unwrap();
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_b))
+        .unwrap()
+        .set_times(times_later)
+        .unwrap();
 
     scene
         .ucmd()
@@ -2302,7 +2315,7 @@ mod inter_partition_copying {
         );
     }
 
-    // Test the exact GNU test scenario: hardlinks within directories being moved
+    // Test hardlinks within directories being moved
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
@@ -2702,7 +2715,7 @@ fn test_special_file_different_filesystem() {
 }
 
 /// Test cross-device move with permission denied error
-/// This test mimics the scenario from the GNU part-fail test where
+/// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
 #[test]
 #[cfg(target_os = "linux")]
@@ -3053,6 +3066,64 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Cross-device mv of a directory must preserve the directory's own xattrs.
+/// The fd-based xattr path has to open the destination read-only: a directory
+/// cannot be opened for writing, so a write-mode open would silently drop them.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_xattr_preserved() {
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("src_dir");
+    at.write("src_dir/file.txt", "content");
+
+    if !Command::new("setfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "-v",
+            "dirvalue",
+            &at.plus_as_string("src_dir"),
+        ])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("test skipped: setfattr failed");
+        return;
+    }
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_dir"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let out = Command::new("getfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "--only-values",
+            dst_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run getfattr on the moved directory");
+    assert!(
+        out.status.success(),
+        "directory xattr was not preserved across devices: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"dirvalue");
 }
 
 /// Cross-device mv of a symlink onto an existing file must replace the

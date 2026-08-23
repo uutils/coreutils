@@ -1053,6 +1053,31 @@ fn test_unreadable_file_prints_no_header() {
         .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
 }
 
+/// Regression for #13887: writing the `==> filename <==` verbose header to a
+/// full/closed stdout must surface the write error instead of panicking inside
+/// `print_verbatim(...).unwrap()`. A filename longer than the stdout buffer
+/// forces the header write to flush mid-write so the failure surfaces inside
+/// the filename write rather than at the next checked one.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_verbose_header_write_error_long_filename() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .arg("-v")
+        .arg(long_path)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
 /// Regression for #11972: head must reject directories detected on the
 /// open fd, not via a separate `Path::is_dir()` call. A symlink that
 /// resolves to a directory must still be rejected — verifying the fd
@@ -1092,4 +1117,67 @@ fn test_head_follows_symlink_to_regular_file() {
         .arg("link_to_regular")
         .succeeds()
         .stdout_is("hello\n");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; it is the unit that did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+head: invalid number of bytes: '1fb'
+   ╭─[ head:1:10 ]
+   │
+ 1 │ head -c 1fb /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_underlines_a_size_with_no_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--bytes=xyz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined, and the
+        // message already says what is wrong.
+        assert!(stderr.contains("head:1:14"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_preserves_obsolete_option_spelling() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-5", "-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ head -5 -c 1fb /dev/null"), "{stderr}");
+        assert!(!stderr.contains("head -n 5 -c"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("head: invalid number of bytes: '1fb'\n");
+    }
 }

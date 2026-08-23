@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
+use std::ops::Range;
+use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};
 use uucore::i18n::UEncoding;
 use uucore::quoting_style::{QuotingStyle as UucoreQuotingStyle, escape_name};
@@ -28,6 +30,7 @@ use std::fs::{FileType, Metadata};
 use std::io::{self, Write};
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{env, fs};
 
 use thiserror::Error;
@@ -81,20 +84,88 @@ struct Flags {
 /// checks if the string is within the specified bound,
 /// if it gets out of bound, error out by printing sub-string from index `beg` to`end`,
 /// where `beg` & `end` is the beginning and end index of sub-string, respectively
-fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> UResult<()> {
+fn check_bound(slice: &str, bound: usize, beg: usize, end: usize) -> Result<(), DirectiveError> {
     if end >= bound {
         // `beg`/`end` are char indices, so take the directive by chars: byte-slicing
         // `slice` could land mid-UTF-8 when a multibyte char precedes the directive.
         let directive: String = slice.chars().skip(beg).take(end - beg).collect();
-        return Err(USimpleError::new(
-            1,
-            StatError::InvalidDirective {
-                directive: directive.quote().to_string(),
-            }
-            .to_string(),
-        ));
+        return Err(DirectiveError::new(slice, &directive, beg, end));
     }
     Ok(())
+}
+
+/// Converts a character index to a byte index in a UTF-8 string
+///
+/// This is necessary because Rust strings are UTF-8 encoded, so character
+/// positions don't always align with byte positions for multi-byte characters.
+/// An index past the last character gives the end of the string.
+fn char_index_to_byte_index(format_str: &str, char_index: usize) -> usize {
+    format_str
+        .char_indices()
+        .nth(char_index)
+        .map_or(format_str.len(), |(byte_idx, _)| byte_idx)
+}
+
+/// A directive stat does not know, and where it sat in the format string.
+///
+/// The message is the one stat always printed; the byte range is what a caret
+/// needs to point inside the format rather than at all of it.
+#[derive(Debug)]
+struct DirectiveError {
+    directive: String,
+    span: Range<usize>,
+}
+
+impl DirectiveError {
+    /// # Arguments
+    ///
+    /// * `format_str` - The format string the directive came from.
+    /// * `directive` - The directive as written, without its quotes.
+    /// * `beg`, `end` - Its char indices in `format_str`; `end` may sit past
+    ///   the end, for a directive the format stops in the middle of.
+    fn new(format_str: &str, directive: &str, beg: usize, end: usize) -> Self {
+        Self {
+            directive: directive.quote().to_string(),
+            span: char_index_to_byte_index(format_str, beg)
+                ..char_index_to_byte_index(format_str, end),
+        }
+    }
+
+    /// The error to raise, a caret under the directive when the format was
+    /// given on the command line and stderr is a terminal.
+    ///
+    /// # Arguments
+    ///
+    /// * `diag_args` - The arguments as typed, or `None` when they were not
+    ///   kept.
+    /// * `option` - The format as typed and the option it was given to, or
+    ///   `None` for a format stat built itself, which is not on the command
+    ///   line and has nothing to point at.
+    fn into_error(
+        self,
+        diag_args: Option<&[OsString]>,
+        option: Option<&OptionValue>,
+    ) -> Box<dyn UError> {
+        let message = StatError::InvalidDirective {
+            directive: self.directive,
+        }
+        .to_string();
+        uucore::diagnostics::error_after_report(
+            diag_args,
+            USimpleError::new(1, message.clone()),
+            |args, _| {
+                option.is_some_and(|option| {
+                    uucore::diagnostics::Snapshot::with_program(args).render_option(
+                        option,
+                        self.span.clone(),
+                        &message,
+                        None,
+                        Some(&translate!("stat-diag-help-directive")),
+                    )
+                })
+            },
+        )
+    }
 }
 
 enum Padding {
@@ -174,7 +245,7 @@ pub enum OutputType<'a> {
     Unsigned(u64),
     UnsignedHex(u64),
     UnsignedOct(u32),
-    Float(f64),
+    Timestamp(i64, u32),
     Unknown,
 }
 
@@ -372,8 +443,15 @@ fn print_it(output: &OutputType, flags: Flags, width: usize, precision: Precisio
         OutputType::UnsignedHex(num) => {
             print_unsigned_hex(*num, flags, width, precision, padding_char);
         }
-        OutputType::Float(num) => {
-            print_float(*num, flags, width, precision, padding_char);
+        OutputType::Timestamp(seconds, nanoseconds) => {
+            print_timestamp(
+                *seconds,
+                *nanoseconds,
+                flags,
+                width,
+                precision,
+                padding_char,
+            );
         }
         OutputType::Unknown => print!("?"),
     }
@@ -589,47 +667,55 @@ fn print_integer(
     pad_and_print(&extended, flags.left, width, padding_char);
 }
 
-/// Truncate a float to the given number of digits after the decimal point.
-fn precision_trunc(num: f64, precision: Precision) -> String {
-    // GNU `stat` doesn't round, it just seems to truncate to the
-    // given precision:
-    //
-    //     $ stat -c "%.5Y" /dev/pts/ptmx
-    //     1736344012.76399
-    //     $ stat -c "%.4Y" /dev/pts/ptmx
-    //     1736344012.7639
-    //     $ stat -c "%.3Y" /dev/pts/ptmx
-    //     1736344012.763
-    //
-    // Contrast this with `printf`, which seems to round the
-    // numbers:
-    //
-    //     $ printf "%.5f\n" 1736344012.76399
-    //     1736344012.76399
-    //     $ printf "%.4f\n" 1736344012.76399
-    //     1736344012.7640
-    //     $ printf "%.3f\n" 1736344012.76399
-    //     1736344012.764
-    //
-    let num_str = num.to_string();
-    let n = num_str.len();
-    match (num_str.find('.'), precision) {
-        (None, Precision::NotSpecified)
-        | (None, Precision::NoNumber)
-        | (None, Precision::Number(0))
-        | (Some(_), Precision::NoNumber) => num_str,
-        (None, Precision::Number(p)) => format!("{num_str}.{zeros}", zeros = "0".repeat(p)),
-        (Some(i), Precision::NotSpecified) | (Some(i), Precision::Number(0)) => {
-            num_str[..i].to_string()
-        }
-        (Some(i), Precision::Number(p)) if p < n - i => num_str[..i + 1 + p].to_string(),
-        (Some(i), Precision::Number(p)) => {
-            format!("{num_str}{zeros}", zeros = "0".repeat(p - (n - i - 1)))
-        }
+fn format_timestamp(seconds: i64, nanoseconds: u32, precision: Precision) -> String {
+    let precision = match precision {
+        Precision::NotSpecified => return seconds.to_string(),
+        Precision::NoNumber => 9,
+        Precision::Number(p) => p,
+    };
+
+    let total_nanoseconds = i128::from(seconds) * 1_000_000_000 + i128::from(nanoseconds);
+    if precision <= 9 {
+        let divisor = 10_i128.pow((9 - precision) as u32);
+        let value = total_nanoseconds.div_euclid(divisor);
+        format_scaled_decimal(value, precision)
+    } else {
+        let mut result = format_scaled_decimal(total_nanoseconds, 9);
+        result.push_str(&"0".repeat(precision - 9));
+        result
     }
 }
 
-fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, padding_char: Padding) {
+fn system_time_to_timestamp(time: SystemTime) -> (i64, u32) {
+    let (mut seconds, mut nanoseconds) = system_time_to_sec(time);
+    if time < UNIX_EPOCH && nanoseconds != 0 {
+        seconds -= 1;
+        nanoseconds = 1_000_000_000 - nanoseconds;
+    }
+    (seconds, nanoseconds)
+}
+
+fn format_scaled_decimal(value: i128, precision: usize) -> String {
+    if precision == 0 {
+        return value.to_string();
+    }
+
+    let scale = 10_u128.pow(precision as u32);
+    let magnitude = value.unsigned_abs();
+    let whole = magnitude / scale;
+    let fraction = magnitude % scale;
+    let sign = if value < 0 { "-" } else { "" };
+    format!("{sign}{whole}.{fraction:0>precision$}")
+}
+
+fn print_timestamp(
+    seconds: i64,
+    nanoseconds: u32,
+    flags: Flags,
+    width: usize,
+    precision: Precision,
+    padding_char: Padding,
+) {
     let prefix = if flags.sign {
         "+"
     } else if flags.space {
@@ -637,7 +723,7 @@ fn print_float(num: f64, flags: Flags, width: usize, precision: Precision, paddi
     } else {
         ""
     };
-    let num_str = precision_trunc(num, precision);
+    let num_str = format_timestamp(seconds, nanoseconds, precision);
     let extended = format!("{prefix}{num_str}");
     pad_and_print(&extended, flags.left, width, padding_char);
 }
@@ -744,22 +830,12 @@ impl Stater {
         }
     }
 
-    /// Converts a character index to a byte index in a UTF-8 string
-    /// This is necessary because Rust strings are UTF-8 encoded, so character positions
-    /// don't always align with byte positions for multi-byte characters
-    fn char_index_to_byte_index(format_str: &str, char_index: usize) -> usize {
-        format_str
-            .char_indices()
-            .nth(char_index)
-            .map_or(format_str.len(), |(byte_idx, _)| byte_idx)
-    }
-
     fn handle_percent_case(
         chars: &[char],
         i: &mut usize,
         bound: usize,
         format_str: &str,
-    ) -> UResult<Token> {
+    ) -> Result<Token, DirectiveError> {
         let old = *i;
 
         *i += 1;
@@ -778,20 +854,20 @@ impl Stater {
         let mut precision = Precision::NotSpecified;
         let mut j = *i;
 
-        let j_byte = Self::char_index_to_byte_index(format_str, j);
+        let j_byte = char_index_to_byte_index(format_str, j);
         if let Some((field_width, offset)) = format_str[j_byte..].scan_num::<usize>() {
             width = field_width;
             j += offset;
 
             // Reject directives like `%<NUMBER>` by checking if width has been parsed.
             if j >= bound || chars[j] == '%' {
-                let invalid_directive: String = chars[old..=j.min(bound - 1)].iter().collect();
-                return Err(USimpleError::new(
-                    1,
-                    StatError::InvalidDirective {
-                        directive: invalid_directive.quote().to_string(),
-                    }
-                    .to_string(),
+                let end = j.min(bound - 1);
+                let invalid_directive: String = chars[old..=end].iter().collect();
+                return Err(DirectiveError::new(
+                    format_str,
+                    &invalid_directive,
+                    old,
+                    end + 1,
                 ));
             }
         }
@@ -801,7 +877,7 @@ impl Stater {
             j += 1;
             check_bound(format_str, bound, old, j)?;
 
-            let j_byte = Self::char_index_to_byte_index(format_str, j);
+            let j_byte = char_index_to_byte_index(format_str, j);
             match format_str[j_byte..].scan_num::<i32>() {
                 Some((value, offset)) => {
                     if value >= 0 {
@@ -882,7 +958,7 @@ impl Stater {
                 // Parse hexadecimal escape sequence (\xNN format)
                 // Uses UTF-8 safe byte indexing to handle multi-byte characters properly
                 if *i + 1 < bound {
-                    let byte_index = Self::char_index_to_byte_index(format_str, *i + 1);
+                    let byte_index = char_index_to_byte_index(format_str, *i + 1);
                     if let Some((c, offset)) = format_str[byte_index..].scan_char(16) {
                         *i += offset;
                         Token::Byte(c as u8)
@@ -905,7 +981,7 @@ impl Stater {
         }
     }
 
-    fn generate_tokens(format_str: &str, use_printf: bool) -> UResult<Vec<Token>> {
+    fn generate_tokens(format_str: &str, use_printf: bool) -> Result<Vec<Token>, DirectiveError> {
         let mut tokens = Vec::new();
         let chars = format_str.chars().collect::<Vec<char>>();
         let bound = chars.len();
@@ -957,7 +1033,7 @@ impl Stater {
         Ok(mount_list)
     }
 
-    fn new(matches: &ArgMatches) -> UResult<Self> {
+    fn new(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
@@ -979,13 +1055,30 @@ impl Stater {
         let terse = matches.get_flag(options::TERSE);
         let show_fs = matches.get_flag(options::FILE_SYSTEM);
 
+        // Only the format the user typed can be pointed at; the ones stat
+        // builds for itself never fail, and are not on the command line.
+        // `--printf` has no short form; `--format` also answers to `-c`.
+        let given_option = || {
+            OptionValue::with_names(
+                format_str,
+                if use_printf { None } else { Some('c') },
+                Some(if use_printf {
+                    options::PRINTF
+                } else {
+                    options::FORMAT
+                }),
+            )
+        };
         let default_tokens = if format_str.is_empty() {
-            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)?
+            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)
+                .map_err(|e| e.into_error(diag_args, None))?
         } else {
-            Self::generate_tokens(format_str, use_printf)?
+            Self::generate_tokens(format_str, use_printf)
+                .map_err(|e| e.into_error(diag_args, Some(&given_option())))?
         };
         let default_dev_tokens =
-            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)?;
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)
+                .map_err(|e| e.into_error(diag_args, None))?;
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
@@ -1171,7 +1264,7 @@ impl Stater {
                     // time of file birth, seconds since Epoch; 0 if unknown
                     'W' => OutputType::Integer(
                         metadata_get_time(meta, MetadataTimeField::Birth)
-                            .map_or(0, |x| system_time_to_sec(x).0),
+                            .map_or(0, |x| system_time_to_timestamp(x).0),
                     ),
 
                     // time of last access, human-readable
@@ -1179,24 +1272,24 @@ impl Stater {
                     // time of last access, seconds since Epoch
                     'X' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Access)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     // time of last data modification, human-readable
                     'y' => OutputType::Str(pretty_time(meta, MetadataTimeField::Modification)),
                     // time of last data modification, seconds since Epoch
                     'Y' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Modification)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     // time of last status change, human-readable
                     'z' => OutputType::Str(pretty_time(meta, MetadataTimeField::Change)),
                     // time of last status change, seconds since Epoch
                     'Z' => {
                         let (sec, nsec) = metadata_get_time(meta, MetadataTimeField::Change)
-                            .map_or((0, 0), system_time_to_sec);
-                        OutputType::Float(sec as f64 + nsec as f64 / 1_000_000_000.0)
+                            .map_or((0, 0), system_time_to_timestamp);
+                        OutputType::Timestamp(sec, nsec)
                     }
                     'R' => OutputType::UnsignedHex(meta.rdev()),
                     'r' if flag.major => OutputType::Unsigned(major(meta.rdev() as _) as u64),
@@ -1363,9 +1456,12 @@ impl Stater {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The command line is kept for the caret in format diagnostics, which
+    // needs the format as typed.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
-    let stater = Stater::new(&matches)?;
+    let stater = Stater::new(&matches, diag_args.as_deref())?;
     let exit_status = stater.exec();
     if exit_status == 0 {
         Ok(())
@@ -1447,7 +1543,7 @@ fn pretty_time(meta: &Metadata, md_time_field: MetadataTimeField) -> String {
 mod tests {
     use crate::{quote_file_name, write_padded_bytes, write_padding};
 
-    use super::{Flags, Precision, ScanUtil, Stater, Token, group_num, precision_trunc};
+    use super::{Flags, Precision, ScanUtil, Stater, Token, format_timestamp, group_num};
 
     #[test]
     fn test_scanners() {
@@ -1558,15 +1654,42 @@ mod tests {
     }
 
     #[test]
-    fn test_precision_trunc() {
-        assert_eq!(precision_trunc(123.456, Precision::NotSpecified), "123");
-        assert_eq!(precision_trunc(123.456, Precision::NoNumber), "123.456");
-        assert_eq!(precision_trunc(123.456, Precision::Number(0)), "123");
-        assert_eq!(precision_trunc(123.456, Precision::Number(1)), "123.4");
-        assert_eq!(precision_trunc(123.456, Precision::Number(2)), "123.45");
-        assert_eq!(precision_trunc(123.456, Precision::Number(3)), "123.456");
-        assert_eq!(precision_trunc(123.456, Precision::Number(4)), "123.4560");
-        assert_eq!(precision_trunc(123.456, Precision::Number(5)), "123.45600");
+    fn test_format_timestamp() {
+        let cases = [
+            (Precision::NotSpecified, "123"),
+            (Precision::NoNumber, "123.456000000"),
+            (Precision::Number(0), "123"),
+            (Precision::Number(1), "123.4"),
+            (Precision::Number(2), "123.45"),
+            (Precision::Number(3), "123.456"),
+            (Precision::Number(4), "123.4560"),
+            (Precision::Number(5), "123.45600"),
+        ];
+        for (precision, expected) in cases {
+            assert_eq!(format_timestamp(123, 456_000_000, precision), expected);
+        }
+
+        let zero_nanoseconds_cases = [
+            (Precision::NotSpecified, "123"),
+            (Precision::NoNumber, "123.000000000"),
+            (Precision::Number(9), "123.000000000"),
+        ];
+        for (precision, expected) in zero_nanoseconds_cases {
+            assert_eq!(format_timestamp(123, 0, precision), expected);
+        }
+
+        let pre_epoch_cases = [
+            (Precision::NotSpecified, "-1"),
+            (Precision::NoNumber, "-0.876543211"),
+            (Precision::Number(0), "-1"),
+            (Precision::Number(1), "-0.9"),
+            (Precision::Number(3), "-0.877"),
+            (Precision::Number(9), "-0.876543211"),
+            (Precision::Number(10), "-0.8765432110"),
+        ];
+        for (precision, expected) in pre_epoch_cases {
+            assert_eq!(format_timestamp(-1, 123_456_789, precision), expected);
+        }
     }
 
     #[test]

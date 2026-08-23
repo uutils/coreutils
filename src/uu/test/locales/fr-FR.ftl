@@ -164,13 +164,7 @@ test-error-invalid-integer = entier invalide { $value }
 test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
 
 # Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
-test-diag-label-expected = c'est ici que la parenthèse fermante était attendue
-test-diag-label-missing-argument = rien ne suit
-test-diag-label-extra-argument = l'expression était déjà complète ici
-test-diag-label-unknown-operator = n'est pas un opérateur connu
-test-diag-label-invalid-integer = un entier était attendu ici
 test-diag-label-unary-operator-expected = nécessite une expression de chaque côté
-test-diag-label-invalid-file-descriptor = un descripteur de fichier était attendu ici
 test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt et -ge comparent des entiers ; utilisez =, {"!"}=, {"<"} ou {">"} pour comparer des chaînes
 test-diag-help-integer-op-mnemonics = -eq égal, -ne différent, -lt inférieur, -le inférieur ou égal, -gt supérieur, -ge supérieur ou égal
 test-diag-help-file-descriptor = -t prend un numéro de descripteur de fichier : 0 pour l'entrée standard, 1 la sortie standard, 2 la sortie d'erreur

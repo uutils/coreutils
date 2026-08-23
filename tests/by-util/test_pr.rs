@@ -690,7 +690,7 @@ fn test_header_formatting_with_custom_date_format() {
 
     let test_file_path = "test_one_page.log";
 
-    // Set a specific date format like in the GNU test
+    // Set a specific date format for consistent output
     let output = new_ucmd!()
         .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
         .succeeds()
@@ -946,6 +946,34 @@ fn test_simple_expand_tab() {
 }
 
 #[test]
+fn test_expand_tab_at_end_of_short_flag_cluster() {
+    // `-e` closing a cluster of value-less short flags carries no attached argument, so it has
+    // to fall back to the defaults rather than report a missing value.
+    for (arg, expected) in [
+        ("-tre", "oi\n"),
+        ("-tre8", "oi\n"),
+        ("-tfre", "oi\n\x0c"),
+        ("-tfre8", "oi\n\x0c"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("oi\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_expand_tab_does_not_consume_following_operand() {
+    // A bare `-e` must leave the file operand alone.
+    new_ucmd!()
+        .args(&["-t", "-e"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_only("a       b\n");
+}
+
+#[test]
 fn test_simple_expand_tab_with_digit_argument() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
@@ -1142,6 +1170,34 @@ fn test_zero_page_width() {
         .args(&["-W", "0"])
         .fails_with_code(1)
         .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_page_length_ten_implies_omit_header() {
+    // `pr --help` states it twice: a page length of 10 or less implies `-t`.
+    // At exactly 10 the header and trailer were kept and then subtracted from
+    // the page, which left no room for content: `-h` printed empty pages and
+    // `-t` printed nothing at all.
+    new_ucmd!()
+        .args(&["-l", "10", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+
+    new_ucmd!()
+        .args(&["-l", "10", "-t"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_page_length_eleven_keeps_header() {
+    new_ucmd!()
+        .args(&["-l", "11", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_contains("hdr");
 }
 
 #[test]

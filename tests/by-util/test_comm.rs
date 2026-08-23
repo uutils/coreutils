@@ -309,7 +309,6 @@ fn zero_terminated_with_total() {
     }
 }
 
-#[ignore = "not implemented"]
 #[test]
 fn check_order() {
     let scene = TestScenario::new(util_name!());
@@ -320,36 +319,42 @@ fn check_order() {
         .ucmd()
         .args(&["--check-order", "bad_order_1", "bad_order_2"])
         .fails()
-        .stdout_is("\t\te")
-        .stderr_is("error to be defined");
+        .stdout_is("\t\te\n")
+        .stderr_is("comm: file 2 is not in sorted order\n");
 }
 
-#[ignore = "not implemented"]
 #[test]
 fn nocheck_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     at.write("bad_order_1", "e\nd\nb\na\n");
     at.write("bad_order_2", "e\nc\nb\na\n");
-    new_ucmd!()
+    scene
+        .ucmd()
         .args(&["--nocheck-order", "bad_order_1", "bad_order_2"])
         .succeeds()
-        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n");
+        .stdout_is("\t\te\n\tc\n\tb\n\ta\nd\nb\na\n")
+        .no_stderr();
 }
 
 // when neither --check-order nor --no-check-order is provided,
 // stderr and the error code behaves like check order, but stdout
 // behaves like nocheck_order. However with some quirks detailed below.
-#[ignore = "not implemented"]
 #[test]
 fn defaultcheck_order() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    at.write("a", "a\n");
     at.write("bad_order_1", "e\nd\nb\na\n");
-    new_ucmd!()
+    scene
+        .ucmd()
         .args(&["a", "bad_order_1"])
         .fails()
-        .stderr_only("error to be defined");
+        .stdout_is("a\n\te\n\td\n\tb\n\ta\n")
+        .stderr_is(
+            "comm: file 2 is not in sorted order\n\
+             comm: input is not in sorted order\n",
+        );
 }
 
 // * the first: if both files are not in order, the default behavior is the only
@@ -574,7 +579,7 @@ fn test_both_inputs_out_of_order_but_identical() {
 fn test_comm_arg_error() {
     let scene = TestScenario::new(util_name!());
 
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a", "b", "no-such"])
@@ -583,7 +588,7 @@ fn test_comm_arg_error() {
         .stderr_contains("error: unexpected argument 'no-such' found")
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a"])

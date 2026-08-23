@@ -25,7 +25,6 @@ bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
-dns-lookup = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
@@ -39,11 +38,6 @@ openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
-time = { workspace = true, optional = true, features = [
-  "formatting",
-  "local-offset",
-  "macros",
-] }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -101,6 +95,14 @@ tempfile = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
+# utmpx is unix-only, so its dependencies must not be pulled into other targets
+# (the uptime feature enables utmpx and now builds on windows too).
+dns-lookup = { workspace = true, optional = true }
+time = { workspace = true, optional = true, features = [
+  "formatting",
+  "local-offset",
+  "macros",
+] }
 nix = { workspace = true, features = [
   "dir",
   "fs",
@@ -175,7 +177,7 @@ i18n-datetime = [
   "jiff-icu",
   "jiff",
 ]
-mode = ["diagnostics", "libc"]
+mode = ["libc"]
 perms = ["entries", "libc", "walkdir"]
 buf-copy = []
 parser-num = ["extendedbigdecimal", "num-traits"]
