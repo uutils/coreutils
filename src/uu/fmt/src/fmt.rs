@@ -119,12 +119,10 @@ impl FmtOptions {
         let width_opt = extract_width(matches)?;
         let goal_opt_str = matches.get_one::<String>(options::GOAL);
         let goal_opt = if let Some(goal_str) = goal_opt_str {
-            match goal_str.parse::<usize>() {
-                Ok(goal) => Some(goal),
-                Err(_) => {
-                    return Err(FmtError::InvalidGoal(goal_str.clone()).into());
-                }
-            }
+            let goal = goal_str
+                .parse::<usize>()
+                .map_err(|_| FmtError::InvalidGoal(goal_str.clone()))?;
+            Some(goal)
         } else {
             None
         };
@@ -165,19 +163,12 @@ impl FmtOptions {
             return Err(FmtError::WidthOutOfRange(width).into());
         }
 
-        let mut tabwidth = 8;
-        if let Some(s) = matches.get_one::<String>(options::TAB_WIDTH) {
-            tabwidth = match s.parse::<usize>() {
-                Ok(t) => t,
-                Err(_) => {
-                    return Err(FmtError::InvalidTabWidth(s.clone()).into());
-                }
-            };
-        }
-
-        if tabwidth < 1 {
-            tabwidth = 1;
-        }
+        #[expect(clippy::unwrap_used, reason = "clap provides default width")]
+        let tabwidth_str = matches.get_one::<String>(options::TAB_WIDTH).unwrap();
+        let tabwidth = tabwidth_str
+            .parse::<usize>()
+            .map_err(|_| FmtError::InvalidTabWidth(tabwidth_str.to_owned()))?
+            .clamp(1, usize::MAX);
 
         Ok(Self {
             crown,
@@ -457,6 +448,7 @@ pub fn uu_app() -> Command {
                 .short('T')
                 .long("tab-width")
                 .help(translate!("fmt-tab-width-help"))
+                .default_value("8")
                 .value_name("TABWIDTH"),
         )
         .arg(
