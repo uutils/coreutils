@@ -8306,3 +8306,16 @@ fn test_time_style_ambiguous_and_invalid_prefixes() {
             .stderr_contains("invalid --time-style argument");
     }
 }
+
+#[test]
+fn test_ls_dereference_looped_symlinks_recursive_nested() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("loop");
+    at.mkdir("loop/a");
+    at.relative_symlink_dir("..", "loop/a/back");
+
+    ucmd.args(&["-RL", "loop"])
+        .fails_with_code(2)
+        .stderr_contains("not listing already-listed directory");
+}
