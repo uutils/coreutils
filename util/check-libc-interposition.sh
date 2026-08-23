@@ -13,59 +13,13 @@
 
 set -e
 
-: "${PROFILE:=release-small}"
-export PROFILE
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TEMP_DIR=$(mktemp -d)
-
-fail_immediately() {
-    echo "❌ FAILED: $1"
-    exit 1
-}
-
-cleanup() {
-    rm -rf "$TEMP_DIR"
-}
-trap cleanup EXIT
-
 echo "=== libc Interposition Verification ==="
 
-if [ -f "$PROJECT_ROOT/target/${PROFILE}/chmod" ]; then
-    echo "Using individual binaries"
-    USE_MULTICALL=0
-elif [ -f "$PROJECT_ROOT/target/${PROFILE}/coreutils" ]; then
-    echo "Using multicall binary"
-    USE_MULTICALL=1
-    COREUTILS_BIN="$PROJECT_ROOT/target/${PROFILE}/coreutils"
-    MULTICALL_UTILS=$("$COREUTILS_BIN" --list)
-else
-    echo "Error: No binaries found. Please build first with 'cargo build --profile=${PROFILE}'"
-    exit 1
-fi
+# shellcheck disable=SC2034  # read by check-common.sh once sourced
+CHECK_UTILS="chmod chown"
+. "$(dirname "${BASH_SOURCE[0]}")/check-common.sh"
 
-if ! command -v fakeroot >/dev/null 2>&1; then
-    echo "Error: fakeroot is required to observe libc interposition"
-    exit 1
-fi
-
-# Resolve a utility to a runnable command, or return 1 when it was not built.
-util_cmd() {
-    local util="$1"
-    if [ "$USE_MULTICALL" -eq 1 ]; then
-        # A multicall binary built without the unix feature set has no chmod or
-        # chown in it, so ask it what it actually dispatches.
-        if ! grep -qx "$util" <<<"$MULTICALL_UTILS"; then
-            return 1
-        fi
-        echo "$COREUTILS_BIN $util"
-    elif [ -f "$PROJECT_ROOT/target/${PROFILE}/$util" ]; then
-        echo "$PROJECT_ROOT/target/${PROFILE}/$util"
-    else
-        return 1
-    fi
-}
+require_command fakeroot
 
 # Run a utility under fakeroot and compare what fakeroot's database reports
 # afterwards against what the utility asked for. A raw syscall leaves the
