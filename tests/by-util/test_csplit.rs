@@ -237,6 +237,22 @@ fn test_up_to_match_negative_offset() {
 }
 
 #[test]
+fn test_up_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "/45/-2147483648"])
+        .fails()
+        .stderr_is("csplit: '/45/-2147483648': line number out of range\n");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "%45%-2147483648"])
+        .fails()
+        .stderr_is("csplit: '%45%-2147483648': line number out of range\n");
+}
+
+#[test]
 fn test_up_to_match_negative_offset_repeat_twice() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/9$/-3", "{2}"])
@@ -1432,6 +1448,21 @@ fn precision_format() {
 }
 
 #[test]
+fn zero_precision_format() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["numbers50.txt", "10", "--suffix-format", "%.0d"])
+        .succeeds()
+        .stdout_only("18\n123\n");
+
+    let count = glob(&at.plus_as_string("xx*"))
+        .expect("there should be splits created")
+        .count();
+    assert_eq!(count, 2);
+    assert_eq!(at.read("xx"), generate(1, 10));
+    assert_eq!(at.read("xx1"), generate(10, 51));
+}
+
+#[test]
 fn zero_error() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("in");
@@ -1581,4 +1612,23 @@ fn test_write_error_dev_full_keep_files() {
 
     assert!(at.file_exists("xx00"));
     assert_eq!(at.read("xx00"), "1\n");
+}
+
+/// Test that a failed split-file creation reports the filename.
+#[test]
+#[cfg(unix)]
+fn test_create_error_reports_filename() {
+    // Root can open a mode-000 file for writing, so File::create would not fail.
+    if rustix::process::geteuid().is_root() {
+        return;
+    }
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("input", "a\nb\nc\n");
+    // Pre-create the first split with no write permission so File::create fails.
+    at.touch("xx00");
+    at.set_mode("xx00", 0o000);
+
+    ucmd.args(&["input", "2"])
+        .fails()
+        .stderr_is("csplit: xx00: Permission denied\n");
 }

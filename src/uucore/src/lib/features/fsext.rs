@@ -60,11 +60,13 @@ fn to_nul_terminated_wide_string(s: impl AsRef<OsStr>) -> Vec<u16> {
 }
 
 #[cfg(unix)]
+use core::ffi::CStr;
+#[cfg(unix)]
 use libc::{
     S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFLNK, S_IFMT, S_IFREG, S_IFSOCK, mode_t, strerror,
 };
 #[cfg(unix)]
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 #[cfg(not(target_os = "wasi"))]
 use std::io::Error as IOError;
 #[cfg(unix)]
@@ -219,13 +221,7 @@ impl MountInfo {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::ffi::OsStringExt;
 
-        let dev_name;
-        let fs_type;
-        let mount_root;
-        let mount_dir;
-        let mount_option;
-
-        match file_name {
+        let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
@@ -237,21 +233,23 @@ impl MountInfo {
                     .unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                dev_name = String::from_utf8_lossy(raw[after_fields + 1]).to_string();
-                fs_type = String::from_utf8_lossy(raw[after_fields]).to_string();
-                mount_root = OsStr::from_bytes(raw[3]).to_owned();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[4]));
-                mount_option = String::from_utf8_lossy(raw[5]).to_string();
+                (
+                    String::from_utf8_lossy(raw[after_fields + 1]).to_string(),
+                    String::from_utf8_lossy(raw[after_fields]).to_string(),
+                    OsStr::from_bytes(raw[3]).to_owned(),
+                    OsString::from_vec(replace_special_chars(raw[4])),
+                    String::from_utf8_lossy(raw[5]).to_string(),
+                )
             }
-            LINUX_MTAB => {
-                dev_name = String::from_utf8_lossy(raw[0]).to_string();
-                fs_type = String::from_utf8_lossy(raw[2]).to_string();
-                mount_root = OsString::new();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[1]));
-                mount_option = String::from_utf8_lossy(raw[3]).to_string();
-            }
+            LINUX_MTAB => (
+                String::from_utf8_lossy(raw[0]).to_string(),
+                String::from_utf8_lossy(raw[2]).to_string(),
+                OsString::new(),
+                OsString::from_vec(replace_special_chars(raw[1])),
+                String::from_utf8_lossy(raw[3]).to_string(),
+            ),
             _ => return None,
-        }
+        };
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
@@ -428,7 +426,6 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     }
 }
 
-#[cfg(not(target_os = "wasi"))]
 use crate::error::UResult;
 #[cfg(any(
     target_os = "freebsd",
@@ -459,7 +456,7 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg(not(target_os = "wasi"))]
+#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -540,18 +537,12 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "wasi"
     ))]
     {
         // No method to read mounts on these platforms
         Ok(Vec::new())
     }
-}
-
-/// Read file system list.
-#[cfg(target_os = "wasi")]
-pub fn read_fs_list() -> Vec<MountInfo> {
-    // No method to read mounts on WASI
-    Vec::new()
 }
 
 #[derive(Debug, Clone)]
@@ -1012,9 +1003,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x1130_7854 => "inodefs".into(),
         0x0131_11A8 => "ibrix".into(),
         0x2BAD_1DEA => "inotifyfs".into(),
-        0x9660 => "isofs".into(),
-        0x4004 => "isofs".into(),
-        0x4000 => "isofs".into(),
+        0x9660 | 0x4004 | 0x4000 => "isofs".into(),
         0x07C0 => "jffs".into(),
         0x72B6 => "jffs2".into(),
         0x3153_464A => "jfs".into(),
@@ -1064,8 +1053,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x7472_6163 => "tracefs".into(),
         0x2405_1905 => "ubifs".into(),
         0x1501_3346 => "udf".into(),
-        0x0001_1954 => "ufs".into(),
-        0x5419_0100 => "ufs".into(),
+        0x0001_1954 | 0x5419_0100 => "ufs".into(),
         0x9FA2 => "usbdevfs".into(),
         0x0102_1997 => "v9fs".into(),
         0xBACB_ACBC => "vmhgfs".into(),
@@ -1076,8 +1064,7 @@ pub fn pretty_fstype<'a>(fstype: i64) -> Cow<'a, str> {
         0x012F_F7B4 => "xenix".into(),
         0x5846_5342 => "xfs".into(),
         0x012F_D16D => "xia".into(),
-        0x2FC1_2FC1 => "zfs".into(),
-        0xDE => "zfs".into(),
+        0x2FC1_2FC1 | 0xDE => "zfs".into(),
         other => format!("UNKNOWN ({other:#x})").into(),
     }
     // spell-checker:enable

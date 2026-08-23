@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
-use std::io::Write;
+use std::io::{self, Write as _};
 use uucore::{crate_version, translate};
 
 // uucore::main does not support no-result
@@ -13,19 +13,19 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
         return 1;
     };
 
-    let error = if flag == "--help" {
+    let res = if flag == "--help" {
         uu_app().print_help()
     } else if flag == "--version" {
         // avoid uu_app for smaller binary size
-        writeln!(std::io::stdout(), "false {}", crate_version!())
+        writeln!(io::stdout(), "false {}", crate_version!())
     } else {
         return 1;
     };
 
-    if let Err(print_fail) = error
-        && print_fail.kind() != std::io::ErrorKind::BrokenPipe
+    if let Err(e) = res
+        && e.kind() != io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(std::io::stderr(), "false: {print_fail}");
+        let _ = writeln!(io::stderr(), "false: {}", uucore::error::strip_errno(&e));
     }
     1
 }

@@ -133,6 +133,18 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_split_to_non_seekable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/stdout", "xaa");
+
+    ucmd.args(&["-"])
+        .pipe_in("string")
+        .succeeds()
+        .stdout_is("string");
+}
+
+#[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
@@ -631,6 +643,22 @@ fn test_split_obs_lines_as_other_option_value() {
         .args(&["--number", "-e200", "file"])
         .fails_with_code(1)
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
+}
+
+#[test]
+fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["-n", "l/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "r/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
 }
 
 /// Test for using more than one obsolete lines option (standalone)
@@ -1722,7 +1750,7 @@ fn test_split_non_utf8_argument_windows() {
     ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
-// Test '--separator' / '-t' option following GNU tests example
+// Test '--separator' / '-t' option
 // test separators: '\n' , '\0' , ';'
 // test with '--lines=2' , '--line-bytes=4' , '--number=l/3' , '--number=r/3' , '--number=l/1/3' , '--number=r/1/3'
 #[test]
@@ -2065,7 +2093,7 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+#[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2075,4 +2103,103 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_io_error() {
+    // /proc/self/mem causes EIO
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        //todo: add file path with proper distinction of input/output
+        .stderr_contains("Input/output error\n");
+}
+
+/// Writing a chunk to a full device must be reported and must stop the split.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_on_full_device() {
+    if !Path::new("/dev/full").exists() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The first chunk lands on /dev/full, so its write can never succeed.
+    at.symlink_file("/dev/full", "xaa");
+    at.write("input", "uv");
+
+    ucmd.args(&["-b", "1", "input"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("split: xaa: No space left on device");
+
+    // split must not have moved on to the next chunk.
+    assert!(!at.file_exists("xab"));
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-b", "7zq", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+split: invalid number of bytes: '7zq'
+   ╭─[ split:1:11 ]
+   │
+ 1 │ split -b 7zq /dev/null
+   │           ─┬
+   │            ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_line_bytes_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--line-bytes=3qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("split:1:21"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_count_with_no_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-l", "qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined and the
+        // message says the rest.
+        assert!(stderr.contains("invalid number of lines"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-b", "7zq", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("split: invalid number of bytes: '7zq'\n");
+    }
 }

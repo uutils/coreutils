@@ -12,9 +12,11 @@ cp-after-help = Ne pas copier un non-répertoire qui a une destination existante
   pour refléter les liens durs dans la source. ce qui donne plus de contrôle sur les fichiers existants dans la destination qui sont
   remplacés, et sa valeur peut être l'une des suivantes :
 
-  - all C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
-  - none Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
-  - older C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
+  - all : C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
+
+  - none : Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
+
+  - older : C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
 
 # Messages d'aide
 cp-help-target-directory = copier tous les arguments SOURCE dans le répertoire cible
@@ -88,6 +90,7 @@ cp-error-selinux-error = Erreur SELinux : { $error }
 cp-error-selinux-context-conflict = impossible de combiner --context (-Z) avec --preserve=context
 cp-error-cannot-create-fifo = impossible de créer le fifo { $path } : Le fichier existe
 cp-error-cannot-create-special-file = impossible de créer le fichier spécial { $path } : { $error }
+cp-error-cannot-create-regular-file = impossible de créer le fichier standard { $path }
 cp-error-invalid-attribute = attribut invalide { $value }
 cp-error-failed-to-create-whole-tree = échec de la création de l'arborescence complète
 cp-error-failed-to-create-directory = Échec de la création du répertoire : { $error }

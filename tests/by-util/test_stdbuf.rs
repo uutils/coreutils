@@ -15,6 +15,25 @@ fn invalid_input() {
     new_ucmd!().arg("-/").fails_with_code(125);
 }
 
+// linux-gated to match the `at_and_ucmd` import above; the check itself is not
+// platform-specific.
+#[cfg(all(target_os = "linux", not(feature = "feat_external_libstdbuf")))]
+#[test]
+fn test_tmpdir_with_colon_is_rejected() {
+    // The preload variable is a colon-separated list with no escaping, so a
+    // libstdbuf path containing ':' would be split by the loader and its leading
+    // component loaded as a library of its own. With $TMPDIR under an attacker's
+    // control that component is attacker-chosen, so refuse instead.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("evil.so:x");
+
+    ucmd.env("TMPDIR", at.plus("evil.so:x"))
+        .arg("-o0")
+        .arg("true")
+        .fails_with_code(125)
+        .stderr_contains("contains ':'");
+}
+
 #[cfg(all(unix, not(feature = "feat_external_libstdbuf")))]
 #[test]
 fn test_permission() {
@@ -413,4 +432,63 @@ fn test_stdbuf_no_fork_regression() {
     // Cleanup
     child.kill().ok();
     child.wait().ok();
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125);
+
+        // The number parsed; only the unit did not.
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
+stdbuf: invalid mode '6pq'
+   ╭─[ stdbuf:1:12 ]
+   │
+ 1 │ stdbuf -o 6pq head
+   │            ─┬
+   │             ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("stdbuf --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_inside_a_long_option_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--error=pq", "head"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("stdbuf:1:16"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "6pq", "head"])
+            .fails_with_code(125)
+            .usage_error("invalid mode '6pq'");
+    }
 }

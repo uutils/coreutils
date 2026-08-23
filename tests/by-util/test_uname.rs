@@ -134,3 +134,33 @@ fn test_uname_output_for_invisible_chars() {
     let result = new_ucmd!().arg("--all").succeeds();
     assert_eq!(re.find(result.stdout_str().trim_end()), None);
 }
+
+#[test]
+fn test_uname_all_labeled() {
+    let result = new_ucmd!().arg("-A").succeeds();
+    let stdout = result.stdout_str();
+    // One labeled "Label: value" line per item. Like GNU, an unknown processor or
+    // hardware platform is omitted, and we never determine either one.
+    assert_eq!(stdout.lines().count(), 6);
+    for label in [
+        "Kernel name: ",
+        "Node name: ",
+        "Kernel release: ",
+        "Kernel version: ",
+        "Machine: ",
+        "Operating system: ",
+    ] {
+        assert!(stdout.contains(label), "missing {label:?}");
+    }
+    assert!(!stdout.contains("Processor:"));
+    assert!(!stdout.contains("Hardware platform:"));
+}
+
+#[test]
+fn test_uname_all_labeled_long_flag() {
+    let short = new_ucmd!().arg("-A").succeeds();
+    new_ucmd!()
+        .arg("--all-labeled")
+        .succeeds()
+        .stdout_is(short.stdout_str());
+}

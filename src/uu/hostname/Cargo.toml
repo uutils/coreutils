@@ -14,9 +14,6 @@ readme.workspace = true
 [package.metadata.cargo-udeps.ignore]
 normal = ["uucore_procs"]
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/hostname.rs"
 test = false
@@ -49,3 +46,6 @@ harness = false
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true

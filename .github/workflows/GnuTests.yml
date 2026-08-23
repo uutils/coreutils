@@ -40,7 +40,7 @@ jobs:
     steps:
     #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -57,8 +57,9 @@ jobs:
         sudo apt-get update
         ## Check that build-gnu.sh works on the non SELinux system by installing libselinux only on lima
         sudo apt-get install -y gperf gdb python3-pyinotify valgrind libexpect-perl libacl1-dev libattr1-dev libcap-dev attr quilt
-        curl http://launchpadlibrarian.net/831710181/automake_1.18.1-3_all.deb > automake-1.18.deb
-        sudo dpkg -i --force-depends automake-1.18.deb
+        curl --fail --location --silent --show-error --retry 3 --retry-all-errors -o automake_1.18.1-3_all.deb https://sylvestre.ledru.info/debian/automake-1.18.deb
+        echo "0c6a249892120518ab7bb0711396dc8cd26f15ed4118d0b222ba3cd7368eb248  automake_1.18.1-3_all.deb" | sha256sum --check --strict -
+        sudo dpkg -i --force-depends automake_1.18.1-3_all.deb
     - name: Add various locales
       shell: bash
       run: |
@@ -182,7 +183,7 @@ jobs:
     steps:
     #### Get the code
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -194,7 +195,7 @@ jobs:
       uses: lima-vm/lima-actions/setup@v1
       id: lima-actions-setup
     - name: Cache ~/.cache/lima
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: ~/.cache/lima
         key: lima-${{ steps.lima-actions-setup.outputs.version }}
@@ -293,7 +294,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
@@ -349,12 +350,12 @@ jobs:
 
         outputs TEST_SUMMARY_FILE AGGREGATED_SUMMARY_FILE
     - name: Checkout code (uutils)
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7.0.1
       with:
         path: 'uutils'
         persist-credentials: false
     - name: Retrieve reference artifacts
-      uses: dawidd6/action-download-artifact@v21
+      uses: dawidd6/action-download-artifact@v24
       # ref: <https://github.com/dawidd6/action-download-artifact>
       continue-on-error: true ## don't break the build for missing reference artifacts (may be expired or just not generated yet)
       with:

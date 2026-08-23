@@ -149,6 +149,10 @@ test-after-help = Quitter avec le statut déterminé par EXPRESSION.
   NOTE : votre shell peut avoir sa propre version de test et/ou {"["}, qui remplace généralement la version décrite ici.
   Veuillez vous référer à la documentation de votre shell pour les détails sur les options qu'il prend en charge.
 
+  Les erreurs sont signalées en réaffichant l'expression avec un caret sous
+  l'argument fautif dès que la sortie d'erreur est un terminal ; sinon, le
+  message habituel sur une seule ligne est conservé.
+
 # Messages d'erreur
 test-error-missing-closing-bracket = '{"]"}' manquant
 test-error-expected = { $value } attendu
@@ -158,3 +162,12 @@ test-error-extra-argument = argument supplémentaire { $argument }
 test-error-unknown-operator = opérateur inconnu { $operator }
 test-error-invalid-integer = entier invalide { $value }
 test-error-unary-operator-expected = { $operator } : opérateur unaire attendu
+
+# Étiquettes de diagnostic, utilisées quand les erreurs sont rendues avec un extrait
+test-diag-label-unary-operator-expected = nécessite une expression de chaque côté
+test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt et -ge comparent des entiers ; utilisez =, {"!"}=, {"<"} ou {">"} pour comparer des chaînes
+test-diag-help-integer-op-mnemonics = -eq égal, -ne différent, -lt inférieur, -le inférieur ou égal, -gt supérieur, -ge supérieur ou égal
+test-diag-help-file-descriptor = -t prend un numéro de descripteur de fichier : 0 pour l'entrée standard, 1 la sortie standard, 2 la sortie d'erreur
+test-diag-help-missing-argument = une variable vide ou non définie ne produit aucun mot, laissant l'opérateur sans opérande ; mettez-la entre guillemets : "$var"
+test-diag-help-extra-argument = une variable non protégée qui produit plusieurs mots en est la cause habituelle ; mettez-la entre guillemets : "$var"
+test-diag-help-unknown-operator = lancez « { $name } --help » pour la liste des opérateurs pris en charge

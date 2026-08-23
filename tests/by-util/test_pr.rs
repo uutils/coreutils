@@ -54,6 +54,34 @@ fn test_invalid_flag() {
 }
 
 #[test]
+fn test_expand_tabs_multibyte_char_is_rejected() {
+    for arg in ["-e€", "-e€3"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-e' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_multibyte_separator_is_rejected() {
+    for arg in ["-n€", "-n€5"] {
+        new_ucmd!()
+            .args(&[arg, "test_one_page.log"])
+            .fails_with_code(1)
+            .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+    }
+}
+
+#[test]
+fn test_number_lines_empty_value_is_rejected() {
+    new_ucmd!()
+        .args(&["--number-lines=", "test_one_page.log"])
+        .fails_with_code(1)
+        .stderr_contains("pr: '-n' extra characters or invalid number in the argument");
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
@@ -189,6 +217,15 @@ fn test_with_valid_page_ranges() {
         .args(&["--pages=5:1", test_file_path])
         .fails()
         .stderr_is("pr: invalid --pages argument '5:1'\n")
+        .stdout_is("");
+}
+
+#[test]
+fn test_start_page_exceeds_page_count() {
+    new_ucmd!()
+        .args(&["--pages=2", "hosts.log"])
+        .succeeds()
+        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
         .stdout_is("");
 }
 
@@ -401,6 +438,142 @@ fn test_with_offset_space_option() {
 }
 
 #[test]
+fn test_offset_too_large() {
+    let arg = "2147483648";
+    new_ucmd!()
+        .args(&["-o", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-o MARGIN' invalid line offset: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_start_line_number_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", "-N", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-N NUMBER' invalid starting line number: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_page_length_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["-l", arg, "-3"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_number_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-n' extra characters or invalid number in the argument: '{arg}': Value too large for defined data type\nTry 'pr --help' for more information.\n"
+        ));
+}
+
+#[test]
+fn test_page_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-W", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-W PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-w", arg, "-2"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_count_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["--column", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+
+    // The legacy -COLUMN operand form behaves the same.
+    new_ucmd!()
+        .args(&[format!("-{arg}")])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_large_number_width_does_not_panic() {
+    // Widths above u16::MAX used to panic with "Formatting argument out
+    // of range"; GNU pads the number out to the full width instead.
+    // With -t (no page headers/footers) GNU emits no page padding, so the
+    // output is exactly the numbered line.
+    new_ucmd!()
+        .args(&["-t", "-n", "70000"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is(format!("{}1\tx\n", " ".repeat(69999)));
+}
+
+#[test]
+fn test_large_page_width_does_not_panic() {
+    // A page width above u16::MAX used to panic in the header layout.
+    new_ucmd!()
+        .args(&["-W", "200000"])
+        .pipe_in("x\n")
+        .succeeds();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_offset_large_value_does_not_abort_under_memory_limit() {
+    use rlimit::Resource;
+    use std::process::Stdio;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .set_stdout(Stdio::null())
+        .args(&["-t", "-o", "999999999"])
+        .pipe_in("hi\n")
+        .succeeds();
+}
+
+#[test]
+fn test_offset_invalid() {
+    new_ucmd!()
+        .args(&["--indent=-5"])
+        .fails_with_code(1)
+        .stderr_is("pr: '-o MARGIN' invalid line offset: '-5'\n");
+
+    new_ucmd!()
+        .args(&["-o", "abc"])
+        .fails_with_code(1)
+        .stderr_is("pr: '-o MARGIN' invalid line offset: 'abc'\n");
+}
+
+#[test]
 fn test_with_date_format() {
     let whitespace = " ".repeat(50);
     let blank_lines = "\n".repeat(61);
@@ -517,7 +690,7 @@ fn test_header_formatting_with_custom_date_format() {
 
     let test_file_path = "test_one_page.log";
 
-    // Set a specific date format like in the GNU test
+    // Set a specific date format for consistent output
     let output = new_ucmd!()
         .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
         .succeeds()
@@ -773,6 +946,34 @@ fn test_simple_expand_tab() {
 }
 
 #[test]
+fn test_expand_tab_at_end_of_short_flag_cluster() {
+    // `-e` closing a cluster of value-less short flags carries no attached argument, so it has
+    // to fall back to the defaults rather than report a missing value.
+    for (arg, expected) in [
+        ("-tre", "oi\n"),
+        ("-tre8", "oi\n"),
+        ("-tfre", "oi\n\x0c"),
+        ("-tfre8", "oi\n\x0c"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("oi\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_expand_tab_does_not_consume_following_operand() {
+    // A bare `-e` must leave the file operand alone.
+    new_ucmd!()
+        .args(&["-t", "-e"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_only("a       b\n");
+}
+
+#[test]
 fn test_simple_expand_tab_with_digit_argument() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
@@ -891,6 +1092,58 @@ fn test_zero_columns_shortcut() {
 }
 
 #[test]
+fn test_filename_ending_with_dash_number_is_not_an_option() {
+    for name in ["a-0", "a-b-0", "a-3"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(name, "RUST-pr\n");
+        ucmd.args(&["-t", name])
+            .succeeds()
+            .stdout_contains("RUST-pr");
+    }
+}
+
+#[test]
+fn test_double_dash_terminates_option_parsing() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-0", "RUST-pr\n");
+    ucmd.args(&["-t", "--", "-0"])
+        .succeeds()
+        .stdout_contains("RUST-pr");
+}
+
+#[test]
+fn test_double_dash_shields_expand_tabs_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-e", "RUST-pr\n");
+    ucmd.args(&["-t", "--", "-e"])
+        .succeeds()
+        .stdout_contains("RUST-pr");
+}
+
+#[test]
+fn test_double_dash_shields_number_lines_filename() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("-n", "first\n");
+    at.write("data", "second\n");
+    ucmd.args(&["-t", "--", "-n", "data"])
+        .succeeds()
+        .stdout_contains("first")
+        .stdout_contains("second");
+}
+
+#[test]
+fn test_double_dash_shields_filename_ending_with_dash_zero() {
+    for name in ["a-0", "a-b-0"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write(name, "RUST-pr\n");
+
+        ucmd.args(&["-t", "--", name])
+            .succeeds()
+            .stdout_contains("RUST-pr\n");
+    }
+}
+
+#[test]
 fn test_zero_expand_tab_width() {
     let expected = "pr: '-e' extra characters or invalid number in the argument: ‘0’\nTry 'pr --help' for more information.\n";
     new_ucmd!()
@@ -901,4 +1154,93 @@ fn test_zero_expand_tab_width() {
         .arg("-eX0")
         .fails_with_code(1)
         .stderr_only(expected);
+}
+
+#[test]
+fn test_zero_column_width() {
+    new_ucmd!()
+        .args(&["-w", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --width argument '0'\n");
+}
+
+#[test]
+fn test_zero_page_width() {
+    new_ucmd!()
+        .args(&["-W", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_page_length_ten_implies_omit_header() {
+    // `pr --help` states it twice: a page length of 10 or less implies `-t`.
+    // At exactly 10 the header and trailer were kept and then subtracted from
+    // the page, which left no room for content: `-h` printed empty pages and
+    // `-t` printed nothing at all.
+    new_ucmd!()
+        .args(&["-l", "10", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+
+    new_ucmd!()
+        .args(&["-l", "10", "-t"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_page_length_eleven_keeps_header() {
+    new_ucmd!()
+        .args(&["-l", "11", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_contains("hdr");
+}
+
+#[test]
+fn test_zero_length() {
+    new_ucmd!()
+        .args(&["-l", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --length argument '0'\n");
+}
+
+#[test]
+fn test_zero_pages() {
+    new_ucmd!()
+        .args(&["--pages", "0"])
+        .fails_with_code(1)
+        .stderr_is("pr: invalid --pages argument '0'\n");
+}
+
+#[test]
+fn test_negative_expand_tabs() {
+    new_ucmd!()
+        .arg("-e=-1")
+        .fails_with_code(1)
+        .stderr_is("pr: '-e' extra characters or invalid number in the argument: ‘-1’\nTry 'pr --help' for more information.\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn test_merge_empty_input() {
+    new_ucmd!()
+        .args(&["-m", "/dev/null", "/dev/null"])
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_missing_file_error_message() {
+    // A nonexistent operand must be reported as "pr: <file>: <message>", like
+    // GNU pr, with the raw "(os error N)" suffix stripped. The exact message
+    // text is platform dependent, so only assert the portable parts.
+    new_ucmd!()
+        .arg("nonexistent_file")
+        .fails_with_code(1)
+        .stderr_contains("pr: nonexistent_file: ")
+        .stderr_does_not_contain("(os error");
 }

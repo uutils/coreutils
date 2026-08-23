@@ -601,18 +601,16 @@ fn extract_quoting_style(
 fn extract_indicator_style(options: &clap::ArgMatches) -> Option<IndicatorStyle> {
     if let Some(field) = options.get_one::<String>(options::INDICATOR_STYLE) {
         match field.as_str() {
-            "none" => None,
             "file-type" => Some(IndicatorStyle::FileType),
             "classify" => Some(IndicatorStyle::Classify),
             "slash" => Some(IndicatorStyle::Slash),
-            &_ => None,
+            "none" | &_ => None,
         }
     } else if let Some(field) = options.get_one::<String>(options::indicator_style::CLASSIFY) {
         match field.as_str() {
-            "never" | "no" | "none" => None,
             "always" | "yes" | "force" => Some(IndicatorStyle::Classify),
             "auto" | "tty" | "if-tty" => stdout().is_terminal().then_some(IndicatorStyle::Classify),
-            &_ => None,
+            "never" | "no" | "none" | &_ => None,
         }
     } else if options.get_flag(options::indicator_style::SLASH) {
         Some(IndicatorStyle::Slash)
@@ -668,6 +666,20 @@ fn parse_width(width_match: Option<&String>) -> Result<u16, LsError> {
     Ok(ret)
 }
 
+/// Parses the tab size value from the command line
+fn parse_tab_size(size_str: &str) -> Result<usize, LsError> {
+    size_str
+        .parse::<usize>()
+        .ok()
+        .or_else(|| {
+            size_str
+                .strip_prefix("0x")
+                .or_else(|| size_str.strip_prefix("0X"))
+                .and_then(|hex| usize::from_str_radix(hex, 16).ok())
+        })
+        .ok_or_else(|| LsError::InvalidTabSize(size_str.to_string()))
+}
+
 impl Config {
     #[allow(clippy::cognitive_complexity)]
     pub fn from(options: &clap::ArgMatches) -> UResult<Self> {
@@ -712,13 +724,12 @@ impl Config {
             .any(|i| i >= idx)
             {
                 format = Format::Long;
-            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE) {
-                if options.value_source(options::format::ONE_LINE)
+            } else if let Some(mut indices) = options.indices_of(options::format::ONE_LINE)
+                && options.value_source(options::format::ONE_LINE)
                     == Some(clap::parser::ValueSource::CommandLine)
-                    && indices.any(|i| i > idx)
-                {
-                    format = Format::OneLine;
-                }
+                && indices.any(|i| i > idx)
+            {
+                format = Format::OneLine;
             }
         }
 
@@ -749,13 +760,11 @@ impl Config {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, 1000)
             } else if opt_hr {
                 (DEFAULT_FILE_SIZE_BLOCK_SIZE, DEFAULT_BLOCK_SIZE)
-            } else if let Ok(size) = parse_size_non_zero_u64(opt_block_size) {
+            } else {
+                let size = parse_size_non_zero_u64(opt_block_size)
+                    .map_err(|_| LsError::BlockSizeParseError(opt_block_size.clone()))?;
                 // --block-size overrides -k
                 (size, size)
-            } else {
-                return Err(Box::new(LsError::BlockSizeParseError(
-                    opt_block_size.clone(),
-                )));
             }
         } else if !opt_si && !opt_hr {
             resolve_block_sizes_from_env(opt_kb)
@@ -770,13 +779,11 @@ impl Config {
             let group = !options.get_flag(options::NO_GROUP)
                 && !options.get_flag(options::format::LONG_NO_GROUP);
             let owner = !options.get_flag(options::format::LONG_NO_OWNER);
-            #[cfg(unix)]
             let numeric_uid_gid = options.get_flag(options::format::LONG_NUMERIC_UID_GID);
             LongFormat {
                 author,
                 group,
                 owner,
-                #[cfg(unix)]
                 numeric_uid_gid,
             }
         };
@@ -912,20 +919,18 @@ impl Config {
             locale_quoting = None;
         }
 
-        if needs_color {
-            if let Err(err) = validate_ls_colors_env() {
-                if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
-                    show_warning!(
-                        "{}",
-                        translate!(
-                            "ls-warning-unrecognized-ls-colors-prefix",
-                            "prefix" => prefix.quote()
-                        )
-                    );
-                }
-                show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
-                needs_color = false;
+        if needs_color && let Err(err) = validate_ls_colors_env() {
+            if let LsColorsParseError::UnrecognizedPrefix(prefix) = &err {
+                show_warning!(
+                    "{}",
+                    translate!(
+                        "ls-warning-unrecognized-ls-colors-prefix",
+                        "prefix" => prefix.quote()
+                    )
+                );
             }
+            show_warning!("{}", translate!("ls-warning-unparsable-ls-colors"));
+            needs_color = false;
         }
 
         let color = if needs_color {
@@ -961,13 +966,11 @@ impl Config {
 
         let tab_size = if needs_color {
             Some(0)
+        } else if let Some(size_str) = options.get_one::<String>(options::format::TAB_SIZE) {
+            Some(parse_tab_size(size_str)?)
         } else {
-            options
-                .get_one::<String>(options::format::TAB_SIZE)
-                .and_then(|size| size.parse::<usize>().ok())
-                .or_else(|| std::env::var("TABSIZE").ok().and_then(|s| s.parse().ok()))
-        }
-        .unwrap_or(SPACES_IN_TAB);
+            None
+        };
 
         Ok(Self {
             format,
@@ -1002,7 +1005,7 @@ impl Config {
             line_ending: LineEnding::from_zero_flag(options.get_flag(options::ZERO)),
             dired,
             hyperlink,
-            tab_size,
+            tab_size: tab_size.unwrap_or(SPACES_IN_TAB),
         })
     }
 }
@@ -1054,19 +1057,19 @@ fn parse_time_style(options: &clap::ArgMatches) -> Result<(String, Option<String
                     Some(format::ISO.to_string() + " "),
                 )),
                 "locale" => ok(LOCALE_FORMAT),
-                _ => match field.chars().next().unwrap() {
-                    '+' => {
-                        // recent/older formats are (optionally) separated by a newline
-                        let mut it = field[1..].split('\n');
-                        let recent = it.next().unwrap_or_default();
-                        let older = it.next();
-                        match it.next() {
-                            None => ok((recent, older)),
-                            Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
-                        }
+                // `field` can be empty here (e.g. --time-style=posix-), so test
+                // the prefix instead of unwrapping the first char.
+                _ if field.starts_with('+') => {
+                    // recent/older formats are (optionally) separated by a newline
+                    let mut it = field[1..].split('\n');
+                    let recent = it.next().unwrap_or_default();
+                    let older = it.next();
+                    match it.next() {
+                        None => ok((recent, older)),
+                        Some(_) => Err(LsError::TimeStyleParseError(String::from(field))),
                     }
-                    _ => Err(LsError::TimeStyleParseError(String::from(field))),
-                },
+                }
+                _ => Err(LsError::TimeStyleParseError(String::from(field))),
             }
         }
     } else if options.get_flag(options::FULL_TIME) {

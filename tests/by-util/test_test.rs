@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) egid euid pseudofloat
+// spell-checker:ignore (words) egid euid icacls pseudofloat
 
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -255,11 +255,117 @@ fn test_some_int_compares() {
 }
 
 #[test]
-#[ignore = "fixme: evaluation error (code 1); GNU returns 0"]
 fn test_values_greater_than_i64_allowed() {
     new_ucmd!()
         .args(&["9223372036854775808", "-gt", "0"])
         .succeeds();
+}
+
+/// The 71-digit operand reported in GNU compatibility issue #12874.
+const BIG: &str = "16267277278126277227728782172782882627278282882172762677623672762783782";
+/// `BIG` with its final digit incremented, so the two operands have the same
+/// width and differ only in the least significant digit.
+const BIG_PLUS_ONE: &str =
+    "16267277278126277227728782172782882627278282882172762677623672762783783";
+/// One digit shorter than `BIG`, so the two operands differ in width.
+const SMALLER: &str = "1626727727812627722772878217278288262727828288217276267762367276278378";
+
+#[test]
+fn test_values_greater_than_i128_allowed() {
+    // i128::MAX + 1
+    new_ucmd!()
+        .args(&["170141183460469231731687303715884105728", "-gt", "0"])
+        .succeeds();
+    // i128::MIN - 1
+    new_ucmd!()
+        .args(&["-170141183460469231731687303715884105729", "-lt", "0"])
+        .succeeds();
+}
+
+#[test]
+fn test_large_int_compares() {
+    let scenario = TestScenario::new(util_name!());
+
+    let tests = [
+        [BIG, "-eq", BIG],
+        [BIG, "-ge", BIG],
+        [BIG, "-le", BIG],
+        [BIG, "-ne", "1"],
+        ["1", "-lt", BIG],
+        [BIG, "-gt", "1"],
+        // Same width, differing only in the least significant digit.
+        [BIG_PLUS_ONE, "-gt", BIG],
+        [BIG, "-lt", BIG_PLUS_ONE],
+        // Differing widths.
+        [BIG, "-gt", SMALLER],
+        [SMALLER, "-lt", BIG],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
+    }
+}
+
+#[test]
+fn test_large_negative_int_compares() {
+    let scenario = TestScenario::new(util_name!());
+    let neg_big = format!("-{BIG}");
+    let neg_smaller = format!("-{SMALLER}");
+
+    let tests = [
+        [neg_big.as_str(), "-eq", neg_big.as_str()],
+        [neg_big.as_str(), "-lt", "0"],
+        [neg_big.as_str(), "-lt", BIG],
+        [BIG, "-gt", neg_big.as_str()],
+        // A wider negative number is the smaller of the two.
+        [neg_big.as_str(), "-lt", neg_smaller.as_str()],
+        [neg_smaller.as_str(), "-gt", neg_big.as_str()],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+
+    // run the inverse of all these tests
+    for test in &tests {
+        scenario.ucmd().arg("!").args(&test[..]).fails_with_code(1);
+    }
+}
+
+#[test]
+fn test_int_compares_ignore_redundant_sign_and_leading_zeros() {
+    let scenario = TestScenario::new(util_name!());
+    let padded_big = format!("+00{BIG}");
+
+    let tests = [
+        // Zero carries no sign.
+        ["-0", "-eq", "0"],
+        ["+0", "-eq", "-0"],
+        ["0", "-eq", "0000000000"],
+        ["007", "-eq", "7"],
+        ["-007", "-eq", "-7"],
+        [padded_big.as_str(), "-eq", BIG],
+    ];
+
+    for test in &tests {
+        scenario.ucmd().args(&test[..]).succeeds();
+    }
+}
+
+#[test]
+fn test_malformed_integers_are_still_errors() {
+    // Accepting wider operands must not make any of these parse.
+    for operand in ["1_0", "0x10", "1e3", "++5", "5-", "-", "+", "", "4 2"] {
+        new_ucmd!()
+            .args(&[operand, "-eq", "0"])
+            .fails_with_code(2)
+            .stderr_is(format!("test: invalid integer '{operand}'\n"));
+    }
 }
 
 #[test]
@@ -296,6 +402,7 @@ fn test_float_inequality_is_error() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_utf8_integer_compare() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -335,11 +442,32 @@ fn test_isatty_whitespace_stripping() {
 }
 
 #[test]
-#[cfg(unix)]
+fn test_isatty_invalid_fd_is_false() {
+    // Asking the CRT about an unopened descriptor aborted the process.
+    new_ucmd!().args(&["-t", "99"]).fails_with_code(1);
+    new_ucmd!().args(&["-t", "-1"]).fails_with_code(1);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_isatty_unknown_fd_windows() {
+    // Only the standard streams are known on Windows.
+    new_ucmd!().args(&["-t", "3"]).fails_with_code(1);
+}
+
+#[test]
 fn test_file_is_itself() {
     new_ucmd!()
         .args(&["regular_file", "-ef", "regular_file"])
         .succeeds();
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+fn test_hard_link_is_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.hard_link("regular_file", "hard_link");
+    ucmd.args(&["regular_file", "-ef", "hard_link"]).succeeds();
 }
 
 #[test]
@@ -378,14 +506,12 @@ fn test_file_is_newer_than_non_existing_file() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_same_device_inode() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
-    scenario.cmd("touch").arg("regular_file").succeeds();
-    scenario.cmd("touch").arg("regular_file_second").succeeds();
-
+    at.touch("regular_file_second");
     at.symlink_file("regular_file", "symlink");
 
     scenario
@@ -459,7 +585,8 @@ fn test_file_is_readable() {
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_not_readable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -472,12 +599,13 @@ fn test_file_is_not_readable() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_writable() {
     new_ucmd!().args(&["-w", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
+#[cfg(not(windows))]
 fn test_file_is_not_writable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -516,6 +644,7 @@ fn test_file_is_not_executable() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");
@@ -540,10 +669,89 @@ fn test_file_is_not_writable_windows() {
 
 #[test]
 #[cfg(windows)]
+fn test_readonly_directory_is_writable_windows() {
+    // NTFS ignores the read-only attribute on directories.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("readonly_dir");
+    at.set_readonly("readonly_dir");
+    ucmd.args(&["-w", "readonly_dir"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
 fn test_file_is_executable_windows() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("program.exe");
-    ucmd.args(&["-x", "program.exe"]).succeeds();
+    at.touch("PROGRAM.EXE");
+    ucmd.args(&["-x", "PROGRAM.EXE"]).succeeds();
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+fn test_directory_is_executable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-x", "dir"]).succeeds();
+}
+
+// Denies a single right so cleanup still works: it needs DELETE and directory
+// listing.
+#[cfg(windows)]
+fn deny_everyone(scenario: &TestScenario, name: &str, rights: &str) {
+    let ace = format!("*S-1-1-0:({rights})");
+    scenario
+        .cmd("icacls")
+        .args(&[name, "/deny", ace.as_str()])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_readable_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.touch("crypto_file");
+    deny_everyone(&scenario, "crypto_file", "RD");
+
+    scenario.ucmd().args(&["!", "-r", "crypto_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_writable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+    at.touch("immutable_file");
+    at.mkdir("immutable_dir");
+    deny_everyone(&scenario, "immutable_file", "WD");
+    deny_everyone(&scenario, "immutable_dir", "WD");
+
+    scenario
+        .ucmd()
+        .args(&["!", "-w", "immutable_file"])
+        .succeeds();
+    scenario
+        .ucmd()
+        .args(&["!", "-w", "immutable_dir"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_executable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.touch("program.exe");
+    deny_everyone(&scenario, "program.exe", "X");
+
+    scenario.ucmd().args(&["!", "-x", "program.exe"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_directory_is_not_executable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.mkdir("locked_dir");
+    deny_everyone(&scenario, "locked_dir", "X");
+
+    scenario.ucmd().args(&["!", "-x", "locked_dir"]).succeeds();
 }
 
 #[test]
@@ -564,14 +772,12 @@ fn test_not_is_not_empty() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_symlink_is_symlink() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
     at.symlink_file("regular_file", "symlink");
 
-    // FIXME: implement on Windows
     scenario.ucmd().args(&["-h", "symlink"]).succeeds();
     scenario.ucmd().args(&["-L", "symlink"]).succeeds();
 }
@@ -608,6 +814,7 @@ fn test_nonexistent_file_is_not_symlink() {
 // Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -703,13 +910,12 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
-#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-O", "nonexistent_file"])
@@ -718,6 +924,7 @@ fn test_nonexistent_file_not_owned_by_euid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
@@ -726,6 +933,7 @@ fn test_file_not_owned_by_euid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_egid() {
     // On some platforms (mostly the BSDs) the test fixture files copied to the
     // /tmp directory will have a different gid than the current egid (due to
@@ -749,7 +957,6 @@ fn test_file_owned_by_egid() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_nonexistent_file_not_owned_by_egid() {
     new_ucmd!()
         .args(&["-G", "nonexistent_file"])
@@ -758,6 +965,7 @@ fn test_nonexistent_file_not_owned_by_egid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_egid() {
     let target_file = if cfg!(target_os = "freebsd") {
         // The coreutils test runner user has a primary group id of "wheel",
@@ -770,6 +978,24 @@ fn test_file_not_owned_by_egid() {
 
     new_ucmd!()
         .args(&["-f", target_file, "-a", "!", "-G", target_file])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_owned_by_current_group_windows() {
+    new_ucmd!().args(&["-G", "regular_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_not_owned_by_current_token_windows() {
+    // The system directory belongs to TrustedInstaller, so it is owned neither
+    // by the user nor by the Administrators group an elevated shell runs as.
+    let system_root = std::env::var("SystemRoot").expect("SystemRoot is not set");
+
+    new_ucmd!()
+        .args(&["-d", &system_root, "-a", "!", "-O", &system_root])
         .succeeds();
 }
 
@@ -964,7 +1190,6 @@ fn test_bracket_syntax_version() {
 
 #[test]
 #[allow(non_snake_case)]
-#[cfg(unix)]
 fn test_file_N() {
     use std::{fs::FileTimes, time::Duration};
 
@@ -980,6 +1205,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH);
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).fails();
 
@@ -990,6 +1216,7 @@ fn test_file_N() {
         .set_modified(std::time::UNIX_EPOCH + Duration::from_secs(123));
     f.set_times(times).unwrap();
     // TODO: stat call for debugging #7570, remove?
+    #[cfg(unix)]
     println!("{}", scene.cmd_shell("stat file").succeeds().stdout_str());
     scene.ucmd().args(&["-N", "file"]).succeeds();
 }
@@ -1068,4 +1295,210 @@ fn test_unary_op_as_literal_in_three_arg_form() {
     // `-f = a` is string comparison "-f" = "a", not file test
     new_ucmd!().args(&["-f", "=", "a"]).fails_with_code(1);
     new_ucmd!().args(&["-f", "=", "a", "-o", "b"]).succeeds();
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_offending_argument() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2);
+
+        // The whole report: the `test: ` prefix of the plain form, the
+        // expression echoed back, a caret on `zap`, and the operator advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'zap'
+   ╭─[ test:1:7 ]
+   │
+ 1 │ 7 -eq zap
+   │       ───
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_is_the_default() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["7", "-eq", "zap"])
+            .fails_with_code(2)
+            .stderr_is("test: invalid integer 'zap'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_extra_argument_points_past_the_expression() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["k", "!=", "m", "spare"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: extra argument 'spare'
+   ╭─[ test:1:8 ]
+   │
+ 1 │ k != m spare
+   │        ──┬──
+   │          ╰──── the expression was already complete here
+   │
+   │ Help: an unquoted variable expanding to several words is the usual cause; quote it as \"$var\" to keep it a single operand
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_missing_operand_suggests_quoting_the_variable() {
+        // `test "$empty" -gt 1` with an unset variable ends up here: the
+        // operator is left without a right-hand operand.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["31", "-gt"])
+            .fails_with_code(2);
+
+        // The caret sits on the operator left dangling, and the advice names
+        // the cause rather than restating the error.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: missing argument after '-gt'
+   ╭─[ test:1:4 ]
+   │
+ 1 │ 31 -gt
+   │    ───
+   │
+   │ Help: an unset or empty variable expands to nothing, leaving the operator without an operand; quote it as \"$var\"
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_missing_operand_plain_message_is_unchanged() {
+        // Piped stderr keeps the one-line form scripts match on.
+        new_ucmd!()
+            .args(&["31", "-gt"])
+            .fails_with_code(2)
+            .stderr_is("test: missing argument after '-gt'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_extra_operand_suggests_quoting_the_variable() {
+        // What `test x = $fruit` looks like when fruit="ripe pear".
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["x", "=", "ripe", "pear"])
+            .fails_with_code(2);
+
+        // The caret lands on the word past the end of the comparison, and the
+        // integer advice — which belongs to another error — stays out of it.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: extra argument 'pear'
+   ╭─[ test:1:10 ]
+   │
+ 1 │ x = ripe pear
+   │          ──┬─
+   │            ╰─── the expression was already complete here
+   │
+   │ Help: an unquoted variable expanding to several words is the usual cause; quote it as \"$var\" to keep it a single operand
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_dash_t_advises_about_descriptors_not_comparisons() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "stdout"])
+            .fails_with_code(2);
+
+        // The message stays the one GNU prints; only the label and the advice
+        // are specific to `-t`, which has nothing to do with `-eq` and friends.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'stdout'
+   ╭─[ test:1:4 ]
+   │
+ 1 │ -t stdout
+   │    ──────
+   │
+   │ Help: -t takes a file descriptor number: 0 is standard input, 1 standard output, 2 standard error
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_integer_comparison_keeps_its_own_advice() {
+        // The counterpart of the test above: the same operand under a real
+        // comparison still gets the operator advice, not the descriptor one.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["1", "-eq", "stdout"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+test: invalid integer 'stdout'
+   ╭─[ test:1:7 ]
+   │
+ 1 │ 1 -eq stdout
+   │       ──────
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_dash_t_plain_message_is_unchanged() {
+        new_ucmd!()
+            .args(&["-t", "stdout"])
+            .fails_with_code(2)
+            .stderr_is("test: invalid integer 'stdout'\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bracket_form_reports_under_its_own_name() {
+        // Both the header and the snippet name `[`, and the trailing `]` is
+        // dropped before the expression is echoed back.
+        let result = TestScenario::new("[")
+            .ucmd()
+            .terminal_sim_stderr()
+            .args(&["7", "-eq", "zap", "]"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+[: invalid integer 'zap'
+   ╭─[ [:1:7 ]
+   │
+ 1 │ 7 -eq zap
+   │       ───
+   │
+   │ Help: -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, !=, < or > to compare strings
+   │       -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+───╯"
+        );
+    }
 }

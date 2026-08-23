@@ -44,29 +44,20 @@ pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
         let mut split = locale_var_str.split(&['.', '@']);
 
         if let Some(simple) = split.next() {
-            // Handle explicit C and POSIX locales - these should always use byte comparison
-            if simple == "C" || simple == "POSIX" {
-                return (DEFAULT_LOCALE, UEncoding::Ascii);
-            }
-
             // Naively convert the locale name to BCP47 tag format.
             //
             // See https://en.wikipedia.org/wiki/IETF_language_tag
             let bcp47 = simple.replace('_', "-");
             let locale = Locale::try_from_str(&bcp47).unwrap_or(DEFAULT_LOCALE);
 
-            // If locale parsing failed, parse the encoding part of the
-            // locale. Treat the special case of the given locale being "C"
-            // which becomes the default locale.
-            let encoding = if (locale != DEFAULT_LOCALE || bcp47 == "C")
-                && split.next().is_some_and(|enc| {
+            // Determine encoding from the locale suffix (e.g. en_US.UTF-8, C.UTF-8).
+            let encoding = split
+                .next()
+                .filter(|enc| {
                     let lower = enc.to_lowercase();
                     lower == "utf-8" || lower == "utf8"
-                }) {
-                UEncoding::Utf8
-            } else {
-                UEncoding::Ascii
-            };
+                })
+                .map_or(UEncoding::Ascii, |_| UEncoding::Utf8);
             return (locale, encoding);
         }
     }
@@ -91,4 +82,11 @@ pub fn get_numeric_locale() -> &'static (Locale, UEncoding) {
 /// Return the encoding deduced from the locale environment variable.
 pub fn get_locale_encoding() -> UEncoding {
     get_collating_locale().1
+}
+
+/// Return the character-type encoding (`LC_CTYPE`) deduced from the environment.
+pub fn get_ctype_encoding() -> UEncoding {
+    static CTYPE_ENCODING: OnceLock<UEncoding> = OnceLock::new();
+
+    *CTYPE_ENCODING.get_or_init(|| get_locale_from_env("LC_CTYPE").1)
 }

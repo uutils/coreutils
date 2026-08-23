@@ -236,6 +236,12 @@ locales:
 		for locale_file in "$(BASEDIR)"/src/uucore/locales/*.ftl; do \
 			$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/"; \
 		done; \
+		if [ -d "$(BASEDIR)/src/uucore/locales/errors" ]; then \
+			$(INSTALL) -d "$(BUILDDIR)/locales/uucore/errors"; \
+			for locale_file in "$(BASEDIR)"/src/uucore/locales/errors/*.ftl; do \
+				$(INSTALL) -m 644 "$$locale_file" "$(BUILDDIR)/locales/uucore/errors/"; \
+			done; \
+		fi; \
 	fi; \
 	# Copy utility-specific locales
 	@for prog in $(INSTALLEES); do \
@@ -255,6 +261,15 @@ INSTALLEES_WITH_EXTRA_LOCALE = \
 	$(INSTALLEES) \
 	$(if $(findstring sum, $(INSTALLEES)),checksum_common, )
 install-locales:
+	@# Install lazy error locales shared by all utilities
+	@if [ -d "$(BASEDIR)/src/uucore/locales/errors" ]; then \
+		$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/errors"; \
+		for locale_file in "$(BASEDIR)"/src/uucore/locales/errors/*.ftl; do \
+			if [ "$$(basename "$$locale_file")" != "en-US.ftl" ]; then \
+				$(INSTALL) -m 644 "$$locale_file" "$(DESTDIR)$(DATAROOTDIR)/locales/uucore/errors/"; \
+			fi; \
+		done; \
+	fi
 	@for prog in $(INSTALLEES_WITH_EXTRA_LOCALE); do \
 		if [ -d "$(BASEDIR)/src/uu/$$prog/locales" ]; then \
 			$(INSTALL) -d "$(DESTDIR)$(DATAROOTDIR)/locales/$$prog"; \
@@ -273,10 +288,13 @@ endif
 install: build install-manpages install-completions install-locales
 	$(INSTALL) -d $(INSTALLDIR_BIN)
 ifneq (,$(and $(findstring stdbuf,$(UTILS)),$(findstring feat_external_libstdbuf,$(CARGOFLAGS))))
-	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 ifneq (,$(findstring cygwin,$(OS)))
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/stdbuf.dll $(DESTDIR)$(LIBSTDBUF_DIR)/libstdbuf.dll
+else ifneq (,$(findstring windows,$(OS)))
+	@echo "NOTE: Windows stdbuf depends on Cygwin's libstdbuf.dll"
 else
+	$(INSTALL) -d $(DESTDIR)$(LIBSTDBUF_DIR)
 	$(INSTALL) -m 755 $(BUILDDIR)/deps/libstdbuf.* $(DESTDIR)$(LIBSTDBUF_DIR)/
 endif
 endif

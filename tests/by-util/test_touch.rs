@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (formats) cymdhm cymdhms datetime mdhm mdhms mktime strtime ymdhm ymdhms
+// spell-checker:ignore (formats) cymdhm cymdhms datetime filestat mdhm mdhms mktime preopen strtime tzdb ymdhm ymdhms
 
 use filetime::FileTime;
 #[cfg(not(target_os = "freebsd"))]
@@ -166,6 +166,10 @@ fn test_touch_2_digit_years_2038() {
 }
 
 #[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_2_digit_years_69() {
     // 69 and after are 19xx
     let (at, mut ucmd) = at_and_ucmd!();
@@ -622,6 +626,26 @@ fn test_touch_set_date7() {
     assert_eq!(mtime, expected);
 }
 
+#[test]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so timezone-dependent timestamps differ"
+)]
+fn test_touch_set_date_without_leading_zeroes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_touch_set_date_without_leading_zeroes";
+
+    ucmd.env("TZ", "UTC-8")
+        .args(&["-d", "2026-6-27 13:12", file])
+        .succeeds()
+        .no_stderr();
+
+    let expected = FileTime::from_unix_time(1_782_537_120, 0);
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
+}
+
 /// Regression test for https://github.com/uutils/coreutils/issues/11804
 ///
 /// Setting a pre-epoch date like `0000-01-01` used to panic on 32-bit targets
@@ -629,7 +653,11 @@ fn test_touch_set_date7() {
 /// expected by the old nix-based implementation. After switching to rustix
 /// (which uses i64 `tv_sec` natively), this should succeed on all targets.
 #[test]
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: pre-epoch timestamps not representable by path_filestat_set_times"
+)]
 fn test_touch_set_date_year_zero() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "test_touch_year_zero";
@@ -764,6 +792,10 @@ fn test_touch_mtime_dst_succeeds() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: no tzdb; TZ env var is not honoured so DST validation is skipped"
+)]
 fn test_touch_mtime_dst_fails() {
     let file = "test_touch_set_mtime_dst_fails";
 
@@ -781,12 +813,52 @@ fn test_touch_mtime_dst_fails() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: guest root is a writable preopen, not the protected system root"
+)]
 fn test_touch_system_fails() {
     let file = "/";
     new_ucmd!()
         .args(&[file])
         .fails()
         .stderr_contains("setting times of '/'");
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no FIFO support")]
+fn test_touch_fifo() {
+    // touch must not hang on a reader-less FIFO and must update its times.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("fifo");
+    ucmd.args(&["-d", "2020-01-01 00:00:00", "fifo"])
+        .succeeds()
+        .no_output();
+    assert!(at.is_fifo("fifo"));
+}
+
+#[test]
+#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI: no stdout-to-file redirection")]
+fn test_touch_dash_updates_stdout_file() {
+    // `touch -` must update the times of the file open as stdout (fd 1), even
+    // when it is read-only, and set them to "now" rather than a 1970 sentinel.
+    use std::fs::File;
+    use std::time::SystemTime;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.touch("c");
+    // Age the file so the update to "now" is detectable.
+    let old = FileTime::from_unix_time(1_000_000, 0);
+    filetime::set_file_times(at.plus("c"), old, old).unwrap();
+
+    let file = File::open(at.plus("c")).unwrap();
+    ucmd.set_stdout(file).arg("-").succeeds();
+
+    let mtime = at.metadata("c").modified().unwrap();
+    let age = SystemTime::now().duration_since(mtime).unwrap();
+    assert!(age.as_secs() < 60, "touch - left mtime stale: {age:?}");
 }
 
 #[test]
@@ -822,6 +894,7 @@ fn test_touch_no_such_file_error_msg() {
 
 #[test]
 #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_changes_time_of_file_in_stdout() {
     // command like: `touch - 1< ./c`
     // should change the timestamp of c
@@ -844,6 +917,10 @@ fn test_touch_changes_time_of_file_in_stdout() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: filesystem permission errors surface as ENOENT rather than EACCES"
+)]
 fn test_touch_permission_denied_error_msg() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -964,8 +1041,18 @@ fn test_touch_no_dereference_dangling() {
 
 #[test]
 #[cfg(not(target_os = "openbsd"))]
+#[cfg_attr(wasi_runner, ignore = "WASI: touch - (stdout) is unsupported")]
 fn test_touch_dash() {
     new_ucmd!().args(&["-h", "-"]).succeeds().no_output();
+}
+
+#[test]
+#[cfg(wasi_runner)]
+fn test_touch_dash_unsupported() {
+    new_ucmd!()
+        .arg("-")
+        .fails_with_code(1)
+        .stderr_only("touch: touch - (stdout) is not supported on WASI\n");
 }
 
 #[test]
@@ -979,20 +1066,47 @@ fn test_touch_invalid_date_format() {
 }
 
 #[test]
+fn test_touch_invalid_timestamp_leading_multibyte_char() {
+    for ts in ["€123456789", "€23456789012"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
+    }
+}
+
+#[test]
+fn test_touch_invalid_timestamp_reports_original_input() {
+    for ts in ["2026-04-10", "26-04-10", "00000000"] {
+        new_ucmd!()
+            .args(&["-t", ts, "f"])
+            .fails_with_code(1)
+            .stderr_only(format!("touch: invalid date format '{ts}'\n"));
+    }
+}
+
+#[test]
 #[cfg(not(target_os = "freebsd"))]
 fn test_touch_symlink_with_no_deref() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "foo.txt";
     let symlink = "bar.txt";
-    let time = FileTime::from_unix_time(123, 0);
+    let initial_time = FileTime::from_unix_time(123, 0);
+    let updated_atime = FileTime::from_unix_time(456, 0);
 
     at.touch(target);
+    let target_times = get_file_times(&at, target);
     at.relative_symlink_file(target, symlink);
-    set_symlink_file_times(at.plus(symlink), time, time).unwrap();
+    set_symlink_file_times(at.plus(symlink), initial_time, initial_time).unwrap();
 
-    ucmd.args(&["-a", "--no-dereference", symlink]).succeeds();
-    // Modification time shouldn't be set to the destination's modification time
-    assert_eq!(time, get_symlink_times(&at, symlink).1);
+    ucmd.args(&["-a", "--no-dereference", "-d", "@456", symlink])
+        .succeeds();
+
+    assert_eq!(
+        (updated_atime, initial_time),
+        get_symlink_times(&at, symlink)
+    );
+    assert_eq!(target_times, get_file_times(&at, target));
 }
 
 #[test]
@@ -1052,6 +1166,7 @@ fn test_touch_f_option() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_touch_non_utf8_paths() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -1068,6 +1183,7 @@ fn test_touch_non_utf8_paths() {
 
 #[test]
 #[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_touch_device_files() {
     let (_, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["/dev/null", "/dev/zero", "/dev/full", "/dev/random"])
@@ -1083,6 +1199,10 @@ fn test_touch_device_files() {
 // check in util/check-safe-traversal.sh.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_does_not_truncate_symlink_target() {
     use std::os::unix::fs::symlink;
 
@@ -1098,6 +1218,10 @@ fn test_touch_does_not_truncate_symlink_target() {
 // Touching a dangling symlink creates its target as an empty file, like GNU.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI sandbox: absolute symlink targets cannot be followed"
+)]
 fn test_touch_through_dangling_symlink_creates_target() {
     use std::os::unix::fs::symlink;
 
@@ -1108,4 +1232,30 @@ fn test_touch_through_dangling_symlink_creates_target() {
 
     assert!(at.file_exists("missing"));
     assert_eq!(at.read("missing"), "");
+}
+
+// touch must be able to update the times of an owned file that is neither
+// readable nor writable (mode 0). Setting explicit times via utimensat-by-path
+// only requires ownership, so this succeeds even though the file cannot be
+// opened. Regression test: touch should fail gracefully on unwritable directory.
+#[test]
+#[cfg(unix)]
+fn test_touch_set_time_on_unreadable_unwritable_file() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "no_rights";
+    at.touch(file);
+    std::fs::set_permissions(at.plus(file), std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    ucmd.args(&["-d", "2000-01-03 00:00", "-c", file])
+        .succeeds()
+        .no_output();
+
+    // Restore permissions so the test harness can read back the metadata.
+    std::fs::set_permissions(at.plus(file), std::fs::Permissions::from_mode(0o644)).unwrap();
+    let expected = str_to_filetime("%Y-%m-%d %H:%M", "2000-01-03 00:00");
+    let (atime, mtime) = get_file_times(&at, file);
+    assert_eq!(atime, expected);
+    assert_eq!(mtime, expected);
 }

@@ -12,10 +12,21 @@ pub mod backup_control;
 pub mod benchmark;
 #[cfg(feature = "buf-copy")]
 pub mod buf_copy;
+pub mod char_width;
 #[cfg(feature = "checksum")]
 pub mod checksum;
 #[cfg(feature = "colors")]
 pub mod colors;
+#[cfg(feature = "diagnostics")]
+pub mod diagnostics;
+// Without the feature, a no-op stand-in keeps the API — and its callers —
+// compiling; they all fall back to their plain one-line messages.
+#[cfg(not(feature = "diagnostics"))]
+#[path = "features/diagnostics_stub.rs"]
+pub mod diagnostics;
+// The part of the diagnostics that is not a no-op without the feature: both
+// `diagnostics` above re-export it rather than each carrying a copy.
+mod diagnostics_boundary;
 #[cfg(feature = "encoding")]
 pub mod encoding;
 #[cfg(feature = "extendedbigdecimal")]
@@ -73,7 +84,7 @@ pub mod perms;
 pub mod pipes;
 #[cfg(all(target_os = "linux", feature = "proc-info"))]
 pub mod proc_info;
-#[cfg(all(unix, feature = "process"))]
+#[cfg(all(any(unix, windows), feature = "process"))]
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
@@ -88,7 +99,10 @@ pub mod fsxattr;
 pub mod hardware;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub mod selinux;
-#[cfg(all(unix, not(target_os = "fuchsia"), feature = "signals"))]
+#[cfg(all(
+    any(windows, all(unix, not(target_os = "fuchsia"))),
+    feature = "signals"
+))]
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
 pub mod smack;

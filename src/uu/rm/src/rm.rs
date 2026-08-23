@@ -10,7 +10,7 @@ use clap::{Arg, ArgAction, Command, parser::ValueSource};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, Metadata};
-use std::io::{self, IsTerminal, stdin};
+use std::io::{self, IsTerminal, Write, stdin};
 use std::ops::BitOr;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
@@ -18,10 +18,12 @@ use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult};
+use uucore::error::{FromIo, UError, UResult, USimpleError, strip_errno};
 use uucore::parser::shortcut_value_parser::ShortcutValueParser;
+use uucore::quoting_style::{QuotingStyle, locale_aware_escape_name};
 use uucore::translate;
 use uucore::{format_usage, os_str_as_bytes, prompt_yes, show_error};
 
@@ -51,41 +53,69 @@ enum RmError {
 
 impl UError for RmError {}
 
+/// Write one verbose line to standard output, turning a write failure
+/// (e.g. a full device or a closed pipe) into an error instead of
+/// panicking like `println!` would.
+fn write_verbose_line(message: &str) -> UResult<()> {
+    writeln!(io::stdout().lock(), "{message}").map_err(|err| {
+        USimpleError::new(
+            1,
+            translate!("rm-error-standard-output", "error" => strip_errno(&err)),
+        )
+    })?;
+    Ok(())
+}
+
 /// Helper function to print verbose message for removed file
-fn verbose_removed_file(path: &Path, options: &Options) {
+fn verbose_removed_file(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
     }
+    Ok(())
 }
 
 /// Helper function to print verbose message for removed directory
-fn verbose_removed_directory(path: &Path, options: &Options) {
+fn verbose_removed_directory(path: &Path, options: &Options) -> UResult<()> {
     if options.verbose {
-        println!(
-            "{}",
-            translate!("rm-verbose-removed-directory", "file" => uucore::fs::normalize_path(path).quote())
-        );
+        write_verbose_line(&translate!(
+            "rm-verbose-removed-directory",
+            "file" => uucore::fs::normalize_path(path).quote()
+        ))?;
+    }
+    Ok(())
+}
+
+/// Set once a verbose write failure has happened. Like GNU, a broken standard
+/// output neither interrupts the removal nor is reported more than once, but it
+/// does make `rm` exit with a failure status.
+static VERBOSE_WRITE_FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Helper function to report a verbose output write error, at most once
+fn report_verbose_write_error(result: UResult<()>) {
+    if let Err(e) = result
+        && !VERBOSE_WRITE_FAILED.swap(true, Ordering::Relaxed)
+    {
+        show_error!("{e}");
     }
 }
 
 /// Helper function to show error with context and return error status
 fn show_removal_error(error: io::Error, path: &Path) -> bool {
-    if error.kind() == io::ErrorKind::PermissionDenied {
-        show_error!("cannot remove {}: Permission denied", path.quote());
-    } else {
-        let e =
-            error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
-        show_error!("{e}");
-    }
+    let e = error.map_err_context(|| translate!("rm-error-cannot-remove", "file" => path.quote()));
+    show_error!("{e}");
     true
 }
 
 /// Helper function for permission denied errors
 fn show_permission_denied_error(path: &Path) -> bool {
-    show_error!("cannot remove {}: Permission denied", path.quote());
+    show_error!(
+        "{}",
+        translate!("rm-error-cannot-remove-permission-denied", "file" =>  path.quote())
+    );
+
     true
 }
 
@@ -93,7 +123,7 @@ fn show_permission_denied_error(path: &Path) -> bool {
 fn remove_dir_with_feedback(path: &Path, options: &Options) -> bool {
     match fs::remove_dir(path) {
         Ok(_) => {
-            verbose_removed_directory(path, options);
+            report_verbose_write_error(verbose_removed_directory(path, options));
             false
         }
         Err(e) => show_removal_error(e, path),
@@ -150,11 +180,12 @@ pub struct Options {
     /// If no other option sets this mode, [`InteractiveMode::PromptProtected`]
     /// is used
     pub interactive: InteractiveMode,
-    #[allow(dead_code)]
     /// `--one-file-system`
     pub one_fs: bool,
     /// `--preserve-root`/`--no-preserve-root`
     pub preserve_root: bool,
+    /// `--preserve-root=all`
+    pub preserve_root_all: bool,
     /// `-r`, `--recursive`
     pub recursive: bool,
     /// `-d`, `--dir`
@@ -176,6 +207,7 @@ impl Default for Options {
             interactive: InteractiveMode::PromptProtected,
             one_fs: false,
             preserve_root: true,
+            preserve_root_all: false,
             recursive: false,
             dir: false,
             verbose: false,
@@ -203,7 +235,9 @@ static ARG_FILES: &str = "files";
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args.iter())?;
+    let matches = uu_app()
+        .try_get_matches_from(args.iter())
+        .map_err(|e| handle_parse_error(e, &args))?;
 
     let files: Vec<_> = matches
         .get_many::<OsString>(ARG_FILES)
@@ -230,6 +264,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     };
 
     let preserve_root = !matches.get_flag(OPT_NO_PRESERVE_ROOT);
+    let preserve_root_all = matches
+        .get_one::<String>(OPT_PRESERVE_ROOT)
+        .is_some_and(|value| value == "all");
     let recursive = matches.get_flag(OPT_RECURSIVE);
 
     let options = Options {
@@ -249,6 +286,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         },
         one_fs: matches.get_flag(OPT_ONE_FILE_SYSTEM),
         preserve_root,
+        preserve_root_all,
         recursive,
         dir: matches.get_flag(OPT_DIR),
         verbose: matches.get_flag(OPT_VERBOSE),
@@ -286,11 +324,43 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    if remove(&files, &options) {
+    if remove(&files, &options) || VERBOSE_WRITE_FAILED.load(Ordering::Relaxed) {
         return Err(1.into());
     }
 
     Ok(())
+}
+
+/// Turn a clap parsing error into a `UError`, reproducing GNU's hint when an
+/// unknown `-foo` option is actually the name of an existing file: it suggests
+/// `rm ./-foo` so the name is treated as a path.
+fn handle_parse_error(e: clap::Error, args: &[OsString]) -> Box<dyn UError> {
+    let dash_file = args.iter().skip(1).find(|a| {
+        os_str_as_bytes(a).is_ok_and(|b| b.len() >= 2 && b[0] == b'-')
+            && fs::symlink_metadata(a).is_ok()
+    });
+    if let (true, Some(file)) = (e.exit_code() != 0, dash_file) {
+        // The path is shell-escaped (quoted only if needed), the file name is
+        // always quoted, matching GNU's two quoting styles.
+        let path = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE);
+        let quoted = locale_aware_escape_name(file, QuotingStyle::SHELL_ESCAPE_QUOTE);
+        let _ = writeln!(
+            io::stderr(),
+            "{}",
+            translate!(
+                "rm-hint-dash-file",
+                "util_name" => uucore::execution_phrase(),
+                "path" => path.to_string_lossy(),
+                "file" => quoted.to_string_lossy()
+            )
+        );
+        return 1.into();
+    }
+    // Otherwise defer to the standard clap handling (incl. `--help`/`--version`).
+    match uucore::clap_localization::handle_clap_result(uu_app(), args.iter()) {
+        Ok(_) => 1.into(),
+        Err(e) => e,
+    }
 }
 
 pub fn uu_app() -> Command {
@@ -354,7 +424,12 @@ pub fn uu_app() -> Command {
             Arg::new(OPT_PRESERVE_ROOT)
                 .long(OPT_PRESERVE_ROOT)
                 .help(translate!("rm-help-preserve-root"))
-                .action(ArgAction::SetTrue),
+                // `--preserve-root` alone protects only '/'; `--preserve-root=all`
+                // additionally refuses to cross into another file system.
+                .num_args(0..=1)
+                .require_equals(true)
+                .value_name("all")
+                .value_parser(["all"]),
         )
         .arg(
             Arg::new(OPT_RECURSIVE)
@@ -468,7 +543,6 @@ fn count_files_in_directory(p: &Path) -> u64 {
     1 + entries_count
 }
 
-// TODO: implement one-file-system (this may get partially implemented in walkdir)
 /// Remove (or unlink) the given files
 ///
 /// Returns true if it has encountered an error.
@@ -535,10 +609,10 @@ pub fn remove(files: &[&OsStr], options: &Options) -> bool {
     }
 
     // Only finish progress bar if it was created and files were processed
-    if let Some(pb) = progress_bar {
-        if any_files_processed {
-            pb.finish();
-        }
+    if let Some(pb) = progress_bar
+        && any_files_processed
+    {
+        pb.finish();
     }
 
     had_err
@@ -614,17 +688,15 @@ fn remove_dir_recursive(
     // Fallback for non-Unix, Redox, or use fs::remove_dir_all for very long paths
     #[cfg(any(not(unix), target_os = "redox"))]
     {
-        if let Some(s) = path.to_str() {
-            if s.len() > 1000 {
-                match fs::remove_dir_all(path) {
-                    Ok(_) => return false,
-                    Err(e) => {
-                        let e = e.map_err_context(
-                            || translate!("rm-error-cannot-remove", "file" => path.quote()),
-                        );
-                        show_error!("{e}");
-                        return true;
-                    }
+        if path.to_str().is_some_and(|s| s.len() > 1000) {
+            match fs::remove_dir_all(path) {
+                Ok(_) => return false,
+                Err(e) => {
+                    let e = e.map_err_context(
+                        || translate!("rm-error-cannot-remove", "file" => path.quote()),
+                    );
+                    show_error!("{e}");
+                    return true;
                 }
             }
         }
@@ -677,7 +749,7 @@ fn remove_dir_recursive(
                 // show another error message as we return from each level
                 // of the recursion.
             }
-            Ok(_) => verbose_removed_directory(path, options),
+            Ok(_) => report_verbose_write_error(verbose_removed_directory(path, options)),
         }
 
         error
@@ -802,7 +874,7 @@ fn remove_file(path: &Path, options: &Options, progress_bar: Option<&ProgressBar
         // Fallback method for non-Unix, Redox, or when safe traversal is unavailable
         match fs::remove_file(path) {
             Ok(_) => {
-                verbose_removed_file(path, options);
+                report_verbose_write_error(verbose_removed_file(path, options));
             }
             Err(e) => {
                 if e.kind() == io::ErrorKind::PermissionDenied {
@@ -954,6 +1026,7 @@ fn handle_writable_directory(path: &Path, options: &Options, metadata: &Metadata
         is_writable_metadata(metadata),
         options.interactive,
     ) {
+        #[expect(clippy::match_same_arms)] // needs comment
         (false, _, _, InteractiveMode::PromptProtected) => true,
         (false, false, false, InteractiveMode::Never) => true, // Don't prompt when interactive is never
         (_, false, false, _) => prompt_yes!(

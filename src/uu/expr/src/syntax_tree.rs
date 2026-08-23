@@ -519,11 +519,11 @@ fn evaluate_match_expression(left_bytes: Vec<u8>, right_bytes: Vec<u8>) -> ExprR
         let left_encoded = onig::EncodedBytes::ascii(&left_bytes);
         let pos = regex_search(&regex, left_encoded, left_bytes.len(), &mut region);
 
-        if pos.is_some() {
-            if let Some((start, end)) = region.pos(1) {
-                let capture_bytes = &left_bytes[start..end];
-                return Ok(MaybeNonUtf8String::from(capture_bytes.to_vec()).into());
-            }
+        if pos.is_some()
+            && let Some((start, end)) = region.pos(1)
+        {
+            let capture_bytes = &left_bytes[start..end];
+            return Ok(MaybeNonUtf8String::from(capture_bytes.to_vec()).into());
         }
     }
 
@@ -595,10 +595,10 @@ impl NumOrStr {
     pub fn eval_as_bigint(self) -> ExprResult<BigInt> {
         match self {
             Self::Num(num) => Ok(num),
-            Self::Str(str) => String::from_utf8(str)
-                .map_err(|_| ExprError::NonIntegerArgument)?
-                .parse::<BigInt>()
-                .map_err(|_| ExprError::NonIntegerArgument),
+            Self::Str(str) => std::str::from_utf8(&str)
+                .ok()
+                .and_then(|s| s.parse::<BigInt>().ok())
+                .ok_or_else(|| ExprError::NonIntegerArgument(str.clone())),
         }
     }
 
@@ -616,12 +616,14 @@ pub struct AstNode {
     inner: AstNodeInner,
 }
 
-// We derive Eq and PartialEq only for tests because we want to ignore the id field.
+// Eq and PartialEq are implemented only for tests, ignoring the id and
+// position fields.
 #[derive(Debug, Clone)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
 pub enum AstNodeInner {
     Leaf {
         value: MaybeNonUtf8String,
+        /// Index of the argument the value came from, for diagnostics.
+        position: usize,
     },
     BinOp {
         op_type: BinOp,
@@ -639,17 +641,40 @@ pub enum AstNodeInner {
 }
 
 impl AstNode {
-    pub fn parse(input: &[impl AsRef<MaybeNonUtf8Str>]) -> ExprResult<Self> {
-        Parser::new(input).parse()
+    fn new(inner: AstNodeInner) -> Self {
+        Self {
+            id: get_next_id(),
+            inner,
+        }
     }
 
+    /// Parse `input`, reporting on failure how many arguments the parser had
+    /// consumed. Together with the error kind that is enough to say which
+    /// argument is at fault.
+    pub fn parse_located(
+        input: &[impl AsRef<MaybeNonUtf8Str>],
+    ) -> Result<Self, (ExprError, usize)> {
+        let mut parser = Parser::new(input);
+        parser.parse().map_err(|e| (e, parser.index))
+    }
+
+    /// [`AstNode::eval_located`] without the location, for tests that only
+    /// care about the value.
+    #[cfg(test)]
     pub fn eval(&self) -> ExprResult<NumOrStr> {
+        self.eval_located().map_err(|(error, _)| error)
+    }
+
+    /// Evaluate, reporting on failure the index of the argument the error is
+    /// about, when there is one single argument to blame.
+    pub fn eval_located(&self) -> Result<NumOrStr, (ExprError, Option<usize>)> {
         // This function implements a recursive tree-walking algorithm, but uses an explicit
         // stack approach instead of native recursion to avoid potential stack overflow
         // on deeply nested expressions.
 
         let mut stack = vec![self];
-        let mut result_stack = BTreeMap::new();
+        let mut result_stack: BTreeMap<u32, Result<NumOrStr, (ExprError, Option<usize>)>> =
+            BTreeMap::new();
 
         while let Some(node) = stack.pop() {
             match &node.inner {
@@ -661,7 +686,7 @@ impl AstNode {
                     left,
                     right,
                 } => {
-                    let (Some(right), Some(left)) = (
+                    let (Some(right_result), Some(left_result)) = (
                         result_stack.remove(&right.id),
                         result_stack.remove(&left.id),
                     ) else {
@@ -671,7 +696,23 @@ impl AstNode {
                         continue;
                     };
 
-                    let result = op_type.eval(left, right);
+                    // The operator takes plain results — some, like `|`,
+                    // swallow their children's errors — so the positions are
+                    // held back and re-attached if an error comes out.
+                    let (left_result, left_position) = split(left_result);
+                    let (right_result, right_position) = split(right_result);
+                    let result = op_type.eval(left_result, right_result).map_err(|error| {
+                        let position = match &error {
+                            // Born here from a leaf operand, unless a child
+                            // already located it deeper in the expression.
+                            ExprError::NonIntegerArgument(value) => left_position
+                                .or(right_position)
+                                .or_else(|| leaf_position(left, value))
+                                .or_else(|| leaf_position(right, value)),
+                            _ => left_position.or(right_position),
+                        };
+                        (error, position)
+                    });
                     result_stack.insert(node.id, result);
                 }
                 AstNodeInner::Substr {
@@ -738,6 +779,67 @@ impl AstNode {
     }
 }
 
+/// Take the position out of a located result, leaving the plain result the
+/// operator evaluators work on.
+fn split(
+    result: Result<NumOrStr, (ExprError, Option<usize>)>,
+) -> (ExprResult<NumOrStr>, Option<usize>) {
+    match result {
+        Ok(value) => (Ok(value), None),
+        Err((error, position)) => (Err(error), position),
+    }
+}
+
+/// The position of `node`, when it is a leaf holding exactly `value`.
+fn leaf_position(node: &AstNode, value: &MaybeNonUtf8Str) -> Option<usize> {
+    match &node.inner {
+        AstNodeInner::Leaf {
+            value: leaf,
+            position,
+        } if leaf == value => Some(*position),
+        _ => None,
+    }
+}
+
+impl Drop for AstNode {
+    // This is a tree-walking algorithm, so like `eval` it uses an explicit
+    // stack instead of native recursion to avoid a stack overflow when
+    // dropping a deeply nested AST.
+    fn drop(&mut self) {
+        fn detach_children(inner: &mut AstNodeInner, stack: &mut Vec<AstNode>) {
+            let empty = AstNodeInner::Leaf {
+                value: Vec::new(),
+                position: 0,
+            };
+            match std::mem::replace(inner, empty) {
+                AstNodeInner::Leaf { .. } => {}
+                AstNodeInner::BinOp { left, right, .. } => {
+                    stack.push(*left);
+                    stack.push(*right);
+                }
+                AstNodeInner::Substr {
+                    string,
+                    pos,
+                    length,
+                } => {
+                    stack.push(*string);
+                    stack.push(*pos);
+                    stack.push(*length);
+                }
+                AstNodeInner::Length { string } => stack.push(*string),
+            }
+        }
+
+        let mut stack = Vec::new();
+        detach_children(&mut self.inner, &mut stack);
+        // The detached nodes are leaves by now, so dropping them at the end of
+        // each iteration doesn't recurse.
+        while let Some(mut node) = stack.pop() {
+            detach_children(&mut node.inner, &mut stack);
+        }
+    }
+}
+
 thread_local! {
     static NODE_ID: Cell<u32> = const { Cell::new(1) };
 }
@@ -751,6 +853,77 @@ fn get_next_id() -> u32 {
         id.set(current + 1);
         current
     })
+}
+
+/// A prefix keyword that takes a fixed number of simple-expression arguments
+#[derive(Debug, Clone, Copy)]
+enum Keyword {
+    Match,
+    Substr,
+    Index,
+    Length,
+}
+
+impl Keyword {
+    fn arity(self) -> usize {
+        match self {
+            Self::Length => 1,
+            Self::Match | Self::Index => 2,
+            Self::Substr => 3,
+        }
+    }
+
+    fn build(self, args: Vec<AstNode>) -> AstNodeInner {
+        let mut args = args.into_iter();
+        let mut next = || Box::new(args.next().expect("arity checked by caller"));
+        match self {
+            Self::Match => AstNodeInner::BinOp {
+                op_type: BinOp::String(StringOp::Match),
+                left: next(),
+                right: next(),
+            },
+            Self::Substr => AstNodeInner::Substr {
+                string: next(),
+                pos: next(),
+                length: next(),
+            },
+            Self::Index => AstNodeInner::BinOp {
+                op_type: BinOp::String(StringOp::Index),
+                left: next(),
+                right: next(),
+            },
+            Self::Length => AstNodeInner::Length { string: next() },
+        }
+    }
+}
+
+/// What the parser has to parse next
+enum ParseState {
+    /// An expression containing operators of at least `min_prec` precedence
+    Expression { min_prec: usize },
+    /// A simple expression: a leaf token, or a keyword/parenthesized expression
+    Simple,
+    /// Nothing; a sub-expression has been fully parsed
+    Value(AstNode),
+}
+
+/// Work to resume once the pending sub-expression is parsed
+enum ParseFrame {
+    /// Use the value as the left operand of the operator loop at `min_prec`
+    ContinueExpression { min_prec: usize },
+    /// Use the value as the right operand of `op`, then continue at `min_prec`
+    CombineBinOp {
+        min_prec: usize,
+        op: BinOp,
+        left: AstNode,
+    },
+    /// Use the value as the next argument of `keyword`
+    KeywordArg {
+        keyword: Keyword,
+        args: Vec<AstNode>,
+    },
+    /// The value is a parenthesized expression; a closing parenthesis must follow
+    CloseParen,
 }
 
 struct Parser<'a, S: AsRef<MaybeNonUtf8Str>> {
@@ -801,108 +974,126 @@ impl<'a, S: AsRef<MaybeNonUtf8Str>> Parser<'a, S> {
         Ok(res)
     }
 
-    fn parse_expression(&mut self) -> ExprResult<AstNode> {
-        self.parse_precedence(0)
-    }
-
-    fn parse_op(&mut self, precedence: usize) -> Option<BinOp> {
+    /// Accept the next token if it is an operator of at least `min_prec`
+    /// precedence, returning the operator and its precedence
+    fn parse_op(&mut self, min_prec: usize) -> Option<(usize, BinOp)> {
         self.accept(|s| {
-            for (op_string, op) in PRECEDENCE[precedence] {
-                if s == *op_string {
-                    return Some(*op);
+            for (prec, ops) in PRECEDENCE.iter().enumerate().skip(min_prec) {
+                for (op_string, op) in *ops {
+                    if s == *op_string {
+                        return Some((prec, *op));
+                    }
                 }
             }
             None
         })
     }
 
-    fn parse_precedence(&mut self, precedence: usize) -> ExprResult<AstNode> {
-        if precedence >= PRECEDENCE.len() {
-            return self.parse_simple_expression();
-        }
-
-        let mut left = self.parse_precedence(precedence + 1)?;
-        while let Some(op) = self.parse_op(precedence) {
-            let right = self.parse_precedence(precedence + 1)?;
-            left = AstNode {
-                id: get_next_id(),
-                inner: AstNodeInner::BinOp {
-                    op_type: op,
-                    left: Box::new(left),
-                    right: Box::new(right),
+    // This is a recursive-descent algorithm (precedence climbing), but like
+    // `eval` it uses an explicit stack instead of native recursion to avoid a
+    // stack overflow on deeply nested expressions (e.g. thousands of nested
+    // parentheses or `length` keywords).
+    fn parse_expression(&mut self) -> ExprResult<AstNode> {
+        let mut stack = Vec::new();
+        let mut state = ParseState::Expression { min_prec: 0 };
+        loop {
+            state = match state {
+                ParseState::Expression { min_prec } => {
+                    stack.push(ParseFrame::ContinueExpression { min_prec });
+                    ParseState::Simple
+                }
+                ParseState::Simple => match self.next()? {
+                    b"match" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Match,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"substr" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Substr,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"index" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Index,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"length" => {
+                        stack.push(ParseFrame::KeywordArg {
+                            keyword: Keyword::Length,
+                            args: Vec::new(),
+                        });
+                        ParseState::Simple
+                    }
+                    b"+" => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
+                        value: self.next()?.into(),
+                        position: self.index - 1,
+                    })),
+                    b"(" => {
+                        stack.push(ParseFrame::CloseParen);
+                        ParseState::Expression { min_prec: 0 }
+                    }
+                    s => ParseState::Value(AstNode::new(AstNodeInner::Leaf {
+                        value: s.into(),
+                        position: self.index - 1,
+                    })),
+                },
+                ParseState::Value(value) => match stack.pop() {
+                    None => return Ok(value),
+                    Some(ParseFrame::ContinueExpression { min_prec }) => {
+                        if let Some((prec, op)) = self.parse_op(min_prec) {
+                            stack.push(ParseFrame::CombineBinOp {
+                                min_prec,
+                                op,
+                                left: value,
+                            });
+                            ParseState::Expression { min_prec: prec + 1 }
+                        } else {
+                            ParseState::Value(value)
+                        }
+                    }
+                    Some(ParseFrame::CombineBinOp { min_prec, op, left }) => {
+                        stack.push(ParseFrame::ContinueExpression { min_prec });
+                        ParseState::Value(AstNode::new(AstNodeInner::BinOp {
+                            op_type: op,
+                            left: Box::new(left),
+                            right: Box::new(value),
+                        }))
+                    }
+                    Some(ParseFrame::KeywordArg { keyword, mut args }) => {
+                        args.push(value);
+                        if args.len() < keyword.arity() {
+                            stack.push(ParseFrame::KeywordArg { keyword, args });
+                            ParseState::Simple
+                        } else {
+                            ParseState::Value(AstNode::new(keyword.build(args)))
+                        }
+                    }
+                    Some(ParseFrame::CloseParen) => match self.next() {
+                        Ok(b")") => ParseState::Value(value),
+                        // Since we have parsed at least a '(', there will be a token
+                        // at `self.index - 1`. So this indexing won't panic.
+                        Ok(_) => {
+                            return Err(ExprError::ExpectedClosingBraceInsteadOf(
+                                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
+                            ));
+                        }
+                        Err(ExprError::MissingArgument(_)) => {
+                            return Err(ExprError::ExpectedClosingBraceAfter(
+                                String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
+                            ));
+                        }
+                        Err(e) => return Err(e),
+                    },
                 },
             };
         }
-        Ok(left)
-    }
-
-    fn parse_simple_expression(&mut self) -> ExprResult<AstNode> {
-        let first = self.next()?;
-        let inner = match first {
-            b"match" => {
-                let left = self.parse_simple_expression()?;
-                let right = self.parse_simple_expression()?;
-                AstNodeInner::BinOp {
-                    op_type: BinOp::String(StringOp::Match),
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }
-            }
-            b"substr" => {
-                let string = self.parse_simple_expression()?;
-                let pos = self.parse_simple_expression()?;
-                let length = self.parse_simple_expression()?;
-                AstNodeInner::Substr {
-                    string: Box::new(string),
-                    pos: Box::new(pos),
-                    length: Box::new(length),
-                }
-            }
-            b"index" => {
-                let left = self.parse_simple_expression()?;
-                let right = self.parse_simple_expression()?;
-                AstNodeInner::BinOp {
-                    op_type: BinOp::String(StringOp::Index),
-                    left: Box::new(left),
-                    right: Box::new(right),
-                }
-            }
-            b"length" => {
-                let string = self.parse_simple_expression()?;
-                AstNodeInner::Length {
-                    string: Box::new(string),
-                }
-            }
-            b"+" => AstNodeInner::Leaf {
-                value: self.next()?.into(),
-            },
-            b"(" => {
-                let s = self.parse_expression()?;
-
-                match self.next() {
-                    Ok(b")") => {}
-                    // Since we have parsed at least a '(', there will be a token
-                    // at `self.index - 1`. So this indexing won't panic.
-                    Ok(_) => {
-                        return Err(ExprError::ExpectedClosingBraceInsteadOf(
-                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
-                        ));
-                    }
-                    Err(ExprError::MissingArgument(_)) => {
-                        return Err(ExprError::ExpectedClosingBraceAfter(
-                            String::from_utf8_lossy(self.input[self.index - 1].as_ref()).into(),
-                        ));
-                    }
-                    Err(e) => return Err(e),
-                }
-                s.inner
-            }
-            s => AstNodeInner::Leaf { value: s.into() },
-        };
-        Ok(AstNode {
-            id: get_next_id(),
-            inner,
-        })
     }
 }
 
@@ -933,13 +1124,18 @@ pub fn is_truthy(s: &NumOrStr) -> bool {
 
 #[cfg(test)]
 mod test {
-    use crate::ExprError;
     use crate::syntax_tree::verify_range_quantifier;
+    use crate::{ExprError, ExprResult};
 
     use super::{
-        AstNode, AstNodeInner, BinOp, NumericOp, RelationOp, StringOp, check_posix_regex_errors,
-        get_next_id,
+        AstNode, AstNodeInner, BinOp, MaybeNonUtf8Str, NumericOp, RelationOp, StringOp,
+        check_posix_regex_errors, get_next_id,
     };
+
+    /// Parse an expression, discarding how far the parser got.
+    fn parse<S: AsRef<MaybeNonUtf8Str>>(input: &[S]) -> ExprResult<AstNode> {
+        AstNode::parse_located(input).map_err(|(e, _)| e)
+    }
 
     impl PartialEq for AstNode {
         fn eq(&self, other: &Self) -> bool {
@@ -949,12 +1145,51 @@ mod test {
 
     impl Eq for AstNode {}
 
+    // Hand-built expectations cannot know real argument positions, so
+    // equality ignores them, like it ignores ids.
+    impl PartialEq for AstNodeInner {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (Self::Leaf { value: a, .. }, Self::Leaf { value: b, .. }) => a == b,
+                (
+                    Self::BinOp {
+                        op_type: a_op,
+                        left: a_left,
+                        right: a_right,
+                    },
+                    Self::BinOp {
+                        op_type: b_op,
+                        left: b_left,
+                        right: b_right,
+                    },
+                ) => a_op == b_op && a_left == b_left && a_right == b_right,
+                (
+                    Self::Substr {
+                        string: a_string,
+                        pos: a_pos,
+                        length: a_length,
+                    },
+                    Self::Substr {
+                        string: b_string,
+                        pos: b_pos,
+                        length: b_length,
+                    },
+                ) => a_string == b_string && a_pos == b_pos && a_length == b_length,
+                (Self::Length { string: a }, Self::Length { string: b }) => a == b,
+                _ => false,
+            }
+        }
+    }
+
+    impl Eq for AstNodeInner {}
+
     impl From<&str> for AstNode {
         fn from(value: &str) -> Self {
             Self {
                 id: get_next_id(),
                 inner: AstNodeInner::Leaf {
                     value: value.into(),
+                    position: 0,
                 },
             }
         }
@@ -1014,31 +1249,28 @@ mod test {
             (":", BinOp::String(StringOp::Match)),
         ];
         for (string, value) in cases {
-            assert_eq!(AstNode::parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
+            assert_eq!(parse(&["1", string, "2"]), Ok(op(value, "1", "2")));
         }
     }
 
     #[test]
     fn other_operators() {
         assert_eq!(
-            AstNode::parse(&["match", "1", "2"]),
+            parse(&["match", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Match), "1", "2")),
         );
         assert_eq!(
-            AstNode::parse(&["index", "1", "2"]),
+            parse(&["index", "1", "2"]),
             Ok(op(BinOp::String(StringOp::Index), "1", "2")),
         );
-        assert_eq!(AstNode::parse(&["length", "1"]), Ok(length("1")));
-        assert_eq!(
-            AstNode::parse(&["substr", "1", "2", "3"]),
-            Ok(substr("1", "2", "3")),
-        );
+        assert_eq!(parse(&["length", "1"]), Ok(length("1")));
+        assert_eq!(parse(&["substr", "1", "2", "3"]), Ok(substr("1", "2", "3")),);
     }
 
     #[test]
     fn precedence() {
         assert_eq!(
-            AstNode::parse(&["1", "+", "2", "*", "3"]),
+            parse(&["1", "+", "2", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 "1",
@@ -1046,7 +1278,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["(", "1", "+", "2", ")", "*", "3"]),
+            parse(&["(", "1", "+", "2", ")", "*", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Mul),
                 op(BinOp::Numeric(NumericOp::Add), "1", "2"),
@@ -1054,7 +1286,7 @@ mod test {
             ))
         );
         assert_eq!(
-            AstNode::parse(&["1", "*", "2", "+", "3"]),
+            parse(&["1", "*", "2", "+", "3"]),
             Ok(op(
                 BinOp::Numeric(NumericOp::Add),
                 op(BinOp::Numeric(NumericOp::Mul), "1", "2"),
@@ -1064,13 +1296,30 @@ mod test {
     }
 
     #[test]
+    fn deeply_nested_parse_eval_drop() {
+        // Deeply nested expressions should parse, evaluate and drop without
+        // overflowing the stack.
+        let depth = 100_000;
+        let mut input: Vec<&str> = vec!["("; depth];
+        input.push("1");
+        input.extend(std::iter::repeat_n(")", depth));
+        let result = parse(&input).unwrap().eval().unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+
+        let mut input: Vec<&str> = vec!["length"; depth];
+        input.push("1");
+        let result = parse(&input).unwrap().eval().unwrap();
+        assert_eq!(result.eval_as_string(), b"1");
+    }
+
+    #[test]
     fn missing_closing_parenthesis() {
         assert_eq!(
-            AstNode::parse(&["(", "42"]),
+            parse(&["(", "42"]),
             Err(ExprError::ExpectedClosingBraceAfter("42".to_string()))
         );
         assert_eq!(
-            AstNode::parse(&["(", "42", "a"]),
+            parse(&["(", "42", "a"]),
             Err(ExprError::ExpectedClosingBraceInsteadOf("a".to_string()))
         );
     }
@@ -1078,34 +1327,22 @@ mod test {
     #[test]
     fn empty_substitution() {
         // causes a panic in 0.0.25
-        let result = AstNode::parse(&["a", ":", r"\(b\)*"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["a", ":", r"\(b\)*"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"");
     }
 
     #[test]
     fn starting_stars_become_escaped() {
-        let result = AstNode::parse(&["cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
 
-        let result = AstNode::parse(&["*cats", ":", r"*cats"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["*cats", ":", r"*cats"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"5");
     }
 
     #[test]
     fn only_match_in_beginning() {
-        let result = AstNode::parse(&["budget", ":", r"get"])
-            .unwrap()
-            .eval()
-            .unwrap();
+        let result = parse(&["budget", ":", r"get"]).unwrap().eval().unwrap();
         assert_eq!(result.eval_as_string(), b"0");
     }
 

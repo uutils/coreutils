@@ -12,9 +12,11 @@ cp-after-help = Do not copy a non-directory that has an existing destination wit
   to mirror hard links in the source. which gives more control over which existing files in the destination are
   replaced, and its value can be one of the following:
 
-  - all This is the default operation when an --update option is not specified, and results in all existing files in the destination being replaced.
-  - none This is similar to the --no-clobber option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
-  - older This is the default operation when --update is specified, and results in files being replaced if they're older than the corresponding source file.
+  - all: This is the default operation when an --update option is not specified, and results in all existing files in the destination being replaced.
+
+  - none: This is similar to the --no-clobber option, in that no files in the destination are replaced, but also skipping a file does not induce a failure.
+
+  - older: This is the default operation when --update is specified, and results in files being replaced if they're older than the corresponding source file.
 
 # Help messages
 cp-help-target-directory = copy all SOURCE arguments into target-directory
@@ -88,12 +90,14 @@ cp-error-selinux-error = SELinux error: { $error }
 cp-error-selinux-context-conflict = cannot combine --context (-Z) with --preserve=context
 cp-error-cannot-create-fifo = cannot create fifo { $path }: File exists
 cp-error-cannot-create-special-file = cannot create special file { $path }: { $error }
+cp-error-cannot-create-regular-file = cannot create regular file { $path }
 cp-error-invalid-attribute = invalid attribute { $value }
 cp-error-failed-to-create-whole-tree = failed to create whole tree
 cp-error-failed-to-create-directory = Failed to create directory: { $error }
 cp-error-backup-format = cp: { $error }
   Try '{ $exec } --help' for more information.
 cp-error-setting-attributes = setting attributes for { $path }
+cp-error-write = write error
 
 # Debug enum strings
 cp-debug-enum-no = no

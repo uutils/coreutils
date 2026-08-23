@@ -270,3 +270,34 @@ fn test_mknod_selinux_invalid_cleanup() {
     // invalid context → node must not exist
     assert!(!at.file_exists(dest));
 }
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-m", "u+rw?", "some_node", "p"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        let result = new_ucmd!()
+            .args(&["-m", "u+rw?", "some_node", "p"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("mknod: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
+}

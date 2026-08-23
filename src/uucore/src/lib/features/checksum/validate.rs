@@ -281,12 +281,13 @@ impl LineFormat {
         // find the next parenthesis  using byte search (not next whitespace) because openssl's
         // tagged format does not put a space before (filename)
 
-        let par_idx = rest.iter().position(|&b| b == b'(')?;
-        // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
-        // it's not a validly formatted line.
-        if par_idx == 0 {
-            return None;
-        }
+        let par_idx = rest
+            .iter()
+            .position(|&b| b == b'(')
+            // If the parenthesis is the first character (minus whitespace, which has already been stripped out), then,
+            // it's not a validly formatted line.
+            .filter(|b| *b != 0)?;
+
         let sub_case = if rest[par_idx - 1] == b' ' {
             SubCase::Posix
         } else {
@@ -508,10 +509,10 @@ fn get_raw_expected_digest(checksum: &str, len_hint: Option<HashLength>) -> Opti
 
     // If the length of the string matches the one to be expected (in case it's
     // given) AND the digest can be decoded as hexadecimal, just go with it.
-    if checks_hint(checksum.len() / 2) {
-        if let Ok(raw_ck) = hex::decode(checksum) {
-            return Some(raw_ck);
-        }
+    if checks_hint(checksum.len() / 2)
+        && let Ok(raw_ck) = hex::decode(checksum)
+    {
+        return Some(raw_ck);
     }
 
     // If the checksum cannot be decoded as hexadecimal, interpret it as Base64
@@ -620,10 +621,8 @@ fn identify_algo_name_and_length(
 ) -> Result<(AlgoKind, Option<HashLength>), LineCheckError> {
     use AlgoKind as ak;
     let algo_from_line = line_info.algo_name.clone().unwrap_or_default();
-    let Ok(line_algo) = AlgoKind::from_cksum(algo_from_line.to_lowercase()) else {
-        // Unknown algorithm
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_algo = AlgoKind::from_cksum(algo_from_line.to_lowercase())
+        .map_err(|_| LineCheckError::ImproperlyFormatted)?;
     *last_algo = Some(algo_from_line);
 
     // check if we are called with XXXsum (example: md5sum) but we detected a
@@ -642,10 +641,9 @@ fn identify_algo_name_and_length(
     let hash_len = if let Some(bitlen) = line_info.algo_bit_len {
         match line_algo {
             algo @ (ak::Blake2b | ak::Blake3) => {
-                match parse_blake_length(algo, BlakeLength::Int(bitlen)) {
-                    Ok(len) => Some(len),
-                    Err(_) => return Err(LineCheckError::ImproperlyFormatted),
-                }
+                let len = parse_blake_length(algo, BlakeLength::Int(bitlen))
+                    .map_err(|_| LineCheckError::ImproperlyFormatted)?;
+                Some(len)
             }
             ak::Sha2 | ak::Sha3 if [224, 256, 384, 512].contains(&bitlen) => {
                 Some(HashLength::from_bits(bitlen))
@@ -693,10 +691,11 @@ fn compute_and_check_digest_from_file(
     // Read the file and calculate the checksum
     let mut digest = algo.create_digest();
 
-    // Set binary to false because --binary is not supported with --check
-
+    // Hash the raw bytes, matching the generation path: as decided in #9168,
+    // the text/binary distinction is ignored when computing digests, so on
+    // Windows no CRLF -> LF conversion must happen here either.
     let (calculated_checksum, _) =
-        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Text) {
+        match digest_reader(&mut digest, &mut file_reader, ReadingMode::Binary) {
             Ok(result) => result,
             Err(err) => {
                 show!(err.map_err_context(|| {
@@ -833,9 +832,8 @@ fn process_checksum_line(
 
     // Use `LineInfo` to extract the data of a line.
     // Then, depending on its format, apply a different pre-treatment.
-    let Some(line_info) = LineInfo::parse(line, cached_line_format) else {
-        return Err(LineCheckError::ImproperlyFormatted);
-    };
+    let line_info =
+        LineInfo::parse(line, cached_line_format).ok_or(LineCheckError::ImproperlyFormatted)?;
 
     if line_info.format == LineFormat::AlgoBased {
         process_algo_based_line(&line_info, cli_algo_name, opts, last_algo)
@@ -951,9 +949,7 @@ fn process_checksum_file(
     // not a single line correctly formatted found
     // return an error
     if res.total_properly_formatted() == 0 {
-        if opts.verbose.over_status() {
-            log_no_properly_formatted(filename_display());
-        }
+        log_no_properly_formatted(filename_display());
         return Err(FileCheckError::Failed);
     }
 
@@ -1290,6 +1286,8 @@ mod tests {
                 FileChecksumResult::CantOpen,
                 b"filename: FAILED open or read\n",
             ),
+            // A non-UTF-8 OsString cannot be built from bytes on Windows.
+            #[cfg(unix)]
             (
                 #[allow(clippy::unwrap_used, reason = "deterministic unwrap does not fail")]
                 os_str_from_bytes(b"funky\xffname").unwrap().to_os_string(),

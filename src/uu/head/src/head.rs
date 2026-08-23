@@ -17,9 +17,12 @@ use std::os::fd::AsFd;
 use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
+use uucore::parser::parse_signed_num::number_offset;
+use uucore::parser::parse_size::ParseSizeError;
 use uucore::show;
 use uucore::translate;
 
@@ -76,19 +79,59 @@ impl Default for Mode {
     }
 }
 
+/// A `-c` or `-n` value that does not parse.
+///
+/// The message is built where it always was; the rest is what a caret needs:
+/// the value as typed, the option it was given to, and what the size parser
+/// made of it.
+pub struct SizeError {
+    pub message: String,
+    option: OptionValue,
+    error: ParseSizeError,
+}
+
+impl SizeError {
+    /// The error to raise, a caret under the part of the value at fault when
+    /// the arguments as typed were kept.
+    fn into_error(self, diag_args: Option<&[OsString]>) -> Box<dyn UError> {
+        self.error.size_value_error(
+            diag_args,
+            &self.option,
+            // The parser never saw the sign; the caret has to count it back in.
+            number_offset(&self.option.value),
+            &self.message,
+            HeadError::MatchOption(self.message.clone()),
+        )
+    }
+}
+
 impl Mode {
-    fn from(matches: &ArgMatches) -> Result<Self, String> {
+    fn from(matches: &ArgMatches) -> Result<Self, SizeError> {
+        fn failed(
+            value: &str,
+            short: char,
+            long: &'static str,
+            key: &'static str,
+        ) -> impl FnOnce(ParseSizeError) -> SizeError {
+            let option = OptionValue::new(value, short, long);
+            move |error| SizeError {
+                message: translate!(key, "err" => &error),
+                option,
+                error,
+            }
+        }
+
         if let Some(v) = matches.get_one::<String>(options::BYTES) {
-            let (n, all_but_last) = parse::parse_num(v)
-                .map_err(|err| translate!("head-error-invalid-bytes", "err" => err))?;
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(failed(v, 'c', "bytes", "head-error-invalid-bytes"))?;
             if all_but_last {
                 Ok(Self::AllButLastBytes(n))
             } else {
                 Ok(Self::FirstBytes(n))
             }
         } else if let Some(v) = matches.get_one::<String>(options::LINES) {
-            let (n, all_but_last) = parse::parse_num(v)
-                .map_err(|err| translate!("head-error-invalid-lines", "err" => err))?;
+            let (n, all_but_last) =
+                parse::parse_num(v).map_err(failed(v, 'n', "lines", "head-error-invalid-lines"))?;
             if all_but_last {
                 Ok(Self::AllButLastLines(n))
             } else {
@@ -141,7 +184,7 @@ struct HeadOptions {
 
 impl HeadOptions {
     ///Construct options from matches
-    pub fn get_from(matches: &ArgMatches) -> Result<Self, String> {
+    pub fn get_from(matches: &ArgMatches) -> Result<Self, SizeError> {
         let mut options = Self::default();
 
         options.quiet = matches.get_flag(options::QUIET);
@@ -150,11 +193,12 @@ impl HeadOptions {
         options.presume_input_pipe = matches.get_flag(options::PRESUME_INPUT_PIPE);
 
         options.mode = Mode::from(matches)?;
-
-        options.files = match matches.get_many::<OsString>(options::FILES) {
-            Some(v) => v.cloned().collect(),
-            None => vec![OsString::from("-")],
-        };
+        // #[allow(clippy::unwrap_used, reason = "clap provides '-' by default")] <https://github.com/rust-lang/rust/issues/15701>
+        options.files = matches
+            .get_many::<OsString>(options::FILES)
+            .unwrap()
+            .cloned()
+            .collect();
 
         Ok(options)
     }
@@ -329,7 +373,7 @@ where
 
         for separator_offset in memrchr_iter(separator, &buffer[..]) {
             lines += 1;
-            if lines == n + 1 {
+            if lines > n {
                 input.rewind()?;
                 return Ok(read_start_offset
                     + TryInto::<u64>::try_into(separator_offset).unwrap()
@@ -460,7 +504,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file).unwrap();
+                    print_verbatim(file)?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }
@@ -472,20 +516,18 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                 Err(err) => {
                     #[cfg(windows)]
                     // On Windows, `File::open` on a directory fails with "Permission denied".
-                    if err.kind() == io::ErrorKind::PermissionDenied {
-                        if let Ok(m) = Path::new(file).metadata() {
-                            if m.is_dir() {
-                                // We need to print the header, as we have an existing directory
-                                print_header()?;
-                                if !zero_output {
-                                    show!(USimpleError::new(
-                                        1,
-                                        translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
-                                    ));
-                                }
-                                continue;
-                            }
+                    if err.kind() == io::ErrorKind::PermissionDenied
+                        && Path::new(file).metadata().is_ok_and(|m| m.is_dir())
+                    {
+                        // We need to print the header, as we have an existing directory
+                        print_header()?;
+                        if !zero_output {
+                            show!(USimpleError::new(
+                                1,
+                                translate!("head-error-reading-file", "name" => file.quote(), "err" => "Is a directory")
+                            ));
                         }
+                        continue;
                     }
 
                     show!(err.map_err_context(
@@ -537,9 +579,13 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<_> = arg_iterate(args)?.collect();
+    let raw_args: Vec<_> = args.collect();
+    // Capture before obsolete options such as `-5` are rewritten to `-n 5`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let args: Vec<_> = arg_iterate(raw_args.into_iter())?.collect();
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-    let options = HeadOptions::get_from(&matches).map_err(HeadError::MatchOption)?;
+    let options =
+        HeadOptions::get_from(&matches).map_err(|e| e.into_error(diag_args.as_deref()))?;
     uu_head(&options)
 }
 
@@ -551,11 +597,12 @@ mod tests {
     use super::*;
 
     fn options(args: &str) -> Result<HeadOptions, String> {
+        // The unit tests compare messages, not the rest of the failure.
         let combined = "head ".to_owned() + args;
         let args = combined.split_whitespace().map(OsString::from);
         let matches = uu_app()
             .get_matches_from(arg_iterate(args).map_err(|_| String::from("Arg iterate failed"))?);
-        HeadOptions::get_from(&matches)
+        HeadOptions::get_from(&matches).map_err(|e| e.message)
     }
 
     #[test]

@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/groups.rs"
 test = false
@@ -24,6 +21,9 @@ clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "groups"

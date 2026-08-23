@@ -99,18 +99,11 @@ impl<'a> SplitIterator<'a> {
             parser: self.get_parser_mut(),
         };
 
-        let (name, default) = var_parse.parse_variable()?;
+        let name = var_parse.parse_variable()?;
 
         let varname_os_str_cow = from_native_int_representation(Cow::Borrowed(name));
-        let value = std::env::var_os(varname_os_str_cow);
-        match (&value, default) {
-            (None, None) => {} // do nothing, just replace it with ""
-            (Some(value), _) => {
-                self.expander.put_string(value);
-            }
-            (None, Some(default)) => {
-                self.expander.put_native_string(default);
-            }
+        if let Some(value) = std::env::var_os(varname_os_str_cow) {
+            self.expander.put_string(value);
         }
 
         Ok(())
@@ -286,15 +279,10 @@ impl<'a> SplitIterator<'a> {
                 self.take_one()?;
                 Ok(())
             }
-            Some(c) if REPLACEMENTS.iter().any(|&x| x.0 == c) => {
-                // See GNU test-suite e11: In single quotes, \t remains as it is.
-                // Comparing with GNU behavior: \a is not accepted and issues an error.
-                // So apparently only known sequences are allowed, even though they are not expanded.... bug of GNU?
+            Some(_) => {
                 self.push_char_to_word(BACKSLASH);
-                self.take_one()?;
                 Ok(())
             }
-            Some(c) => Err(self.make_invalid_sequence_backslash_xin_minus_s(c)),
         }
     }
 

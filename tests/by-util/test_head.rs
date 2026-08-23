@@ -222,6 +222,35 @@ fn test_negative_zero_bytes() {
         .succeeds()
         .stdout_is("qwerty");
 }
+
+#[test]
+fn test_zero_bytes_with_suffix() {
+    // --bytes=0K makes head stop before draining stdin, so the harness's write may fail
+    // with EPIPE. That is expected and must not fail the test.
+    //
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    new_ucmd!()
+        .args(&["--bytes=0K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=00K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=+0K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+}
 #[test]
 fn test_no_such_file_or_directory() {
     new_ucmd!()
@@ -872,6 +901,24 @@ fn test_value_too_large() {
 }
 
 #[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_all_but_last_lines() {
     new_ucmd!()
         .args(&["-n", "-15", "lorem_ipsum.txt"])
@@ -1004,4 +1051,133 @@ fn test_unreadable_file_prints_no_header() {
         .stdout_is("==> readable <==\nhello")
         .stdout_does_not_contain("==> unreadable <==")
         .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
+}
+
+/// Regression for #13887: writing the `==> filename <==` verbose header to a
+/// full/closed stdout must surface the write error instead of panicking inside
+/// `print_verbatim(...).unwrap()`. A filename longer than the stdout buffer
+/// forces the header write to flush mid-write so the failure surfaces inside
+/// the filename write rather than at the next checked one.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_verbose_header_write_error_long_filename() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .arg("-v")
+        .arg(long_path)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+/// Regression for #11972: head must reject directories detected on the
+/// open fd, not via a separate `Path::is_dir()` call. A symlink that
+/// resolves to a directory must still be rejected — verifying the fd
+/// check survives an indirection.
+#[test]
+#[cfg(unix)]
+fn test_head_rejects_directory_through_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("real_dir");
+    symlink("real_dir", at.plus("link_to_dir")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_dir")
+        .fails_with_code(1)
+        .stderr_contains("Is a directory");
+}
+
+/// Regression for #11972: a symlink that points to a regular file must
+/// still be readable by head (the fd-based check must distinguish the
+/// fd's mode, not the symlink's).
+#[test]
+#[cfg(unix)]
+fn test_head_follows_symlink_to_regular_file() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("regular", "hello\n");
+    symlink("regular", at.plus("link_to_regular")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_regular")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; it is the unit that did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+head: invalid number of bytes: '1fb'
+   ╭─[ head:1:10 ]
+   │
+ 1 │ head -c 1fb /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_underlines_a_size_with_no_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--bytes=xyz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined, and the
+        // message already says what is wrong.
+        assert!(stderr.contains("head:1:14"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_preserves_obsolete_option_spelling() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-5", "-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ head -5 -c 1fb /dev/null"), "{stderr}");
+        assert!(!stderr.contains("head -n 5 -c"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("head: invalid number of bytes: '1fb'\n");
+    }
 }

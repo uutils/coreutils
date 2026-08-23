@@ -11,11 +11,12 @@ use memchr::{Memchr3, memchr_iter, memmem::Finder};
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
+use std::io::{self, BufRead, BufReader, BufWriter, Split, Stdin, Write, stdin, stdout};
 use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::i18n::collator::{
@@ -27,7 +28,7 @@ use uucore::{format_usage, show_error, translate};
 #[derive(Debug, Error)]
 enum JoinError {
     #[error("{}", translate!("join-error-io", "error" => .0))]
-    IOError(#[from] std::io::Error),
+    IOError(#[from] io::Error),
 
     #[error("{0}")]
     UnorderedInput(String),
@@ -219,38 +220,37 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
         !self.format.is_empty()
     }
 
-    /// Write the field or empty filler if the field is not set.
-    fn write_field(
-        &self,
-        writer: &mut impl Write,
-        field: Option<&[u8]>,
-    ) -> Result<(), std::io::Error> {
-        let value = match field {
-            Some(field) => field,
-            None => self.empty,
-        };
+    /// Resolve an output field to the bytes that should be printed for it.
+    ///
+    /// The `-e` filler stands in for output fields that are empty, which
+    /// covers both fields missing from the input line and fields that are
+    /// present but zero length. When `-e` is not given the filler is itself
+    /// empty, so this leaves the output unchanged.
+    fn field_or_empty<'b>(&'b self, field: Option<&'b [u8]>) -> &'b [u8] {
+        match field {
+            Some(field) if !field.is_empty() => field,
+            _ => self.empty,
+        }
+    }
 
-        writer.write_all(value)
+    /// Write the field or the empty filler if the field is empty or not set.
+    fn write_field(&self, writer: &mut impl Write, field: Option<&[u8]>) -> io::Result<()> {
+        writer.write_all(self.field_or_empty(field))
     }
 
     /// Write each field except the one at the index.
-    fn write_fields(
-        &self,
-        writer: &mut impl Write,
-        line: &Line,
-        index: usize,
-    ) -> Result<(), std::io::Error> {
+    fn write_fields(&self, writer: &mut impl Write, line: &Line, index: usize) -> io::Result<()> {
         for i in 0..line.field_ranges.len() {
             if i != index {
                 writer.write_all(self.separator.output_separator())?;
-                writer.write_all(line.get_field(i).unwrap())?;
+                writer.write_all(self.field_or_empty(line.get_field(i)))?;
             }
         }
         Ok(())
     }
 
-    /// Write each field or the empty filler if the field is not set.
-    fn write_format<F>(&self, writer: &mut impl Write, f: F) -> Result<(), std::io::Error>
+    /// Write each field or the empty filler if the field is empty or not set.
+    fn write_format<F>(&self, writer: &mut impl Write, f: F) -> io::Result<()>
     where
         F: Fn(&Spec) -> Option<&'a [u8]>,
     {
@@ -259,17 +259,12 @@ impl<'a, Sep: Separator> Repr<'a, Sep> {
                 writer.write_all(self.separator.output_separator())?;
             }
 
-            let field = match f(&self.format[i]) {
-                Some(value) => value,
-                None => self.empty,
-            };
-
-            writer.write_all(field)?;
+            writer.write_all(self.field_or_empty(f(&self.format[i])))?;
         }
         Ok(())
     }
 
-    fn write_line_ending(&self, writer: &mut impl Write) -> Result<(), std::io::Error> {
+    fn write_line_ending(&self, writer: &mut impl Write) -> io::Result<()> {
         writer.write_all(&[self.line_ending as u8])
     }
 }
@@ -496,7 +491,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         other: &State,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         if self.has_line() {
             if other.has_line() {
                 self.combine(writer, other, repr)?;
@@ -516,7 +511,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         other: &State,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         let key = self.get_current_key();
 
         for line1 in &self.seq {
@@ -558,10 +553,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn reset_read_line<Sep: Separator>(
-        &mut self,
-        input: &Input<Sep>,
-    ) -> Result<(), std::io::Error> {
+    fn reset_read_line<Sep: Separator>(&mut self, input: &Input<Sep>) -> io::Result<()> {
         let line = self.read_line(&input.separator)?;
         self.reset(line);
         Ok(())
@@ -581,7 +573,7 @@ impl<'a> State<'a> {
         &mut self,
         read_sep: &Sep,
         autoformat: bool,
-    ) -> std::io::Result<usize> {
+    ) -> io::Result<usize> {
         if let Some(line) = self.read_line(read_sep)? {
             self.seq.push(line);
 
@@ -617,7 +609,7 @@ impl<'a> State<'a> {
     }
 
     /// Get the next line without the order check.
-    fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> Result<Option<Line>, std::io::Error> {
+    fn read_line<Sep: Separator>(&mut self, sep: &Sep) -> io::Result<Option<Line>> {
         match self.lines.next() {
             Some(value) => {
                 self.line_num += 1;
@@ -669,7 +661,7 @@ impl<'a> State<'a> {
         writer: &mut impl Write,
         line: &Line,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         if repr.uses_format() {
             repr.write_format(writer, |spec| match *spec {
                 Spec::Key => line.get_field(self.key),
@@ -693,7 +685,7 @@ impl<'a> State<'a> {
         &self,
         writer: &mut impl Write,
         repr: &Repr<'a, Sep>,
-    ) -> Result<(), std::io::Error> {
+    ) -> io::Result<()> {
         self.write_line(writer, &self.seq[0], repr)
     }
 }
@@ -773,7 +765,7 @@ fn get_and_parse_field_number(matches: &clap::ArgMatches, key: &str) -> UResult<
 /// This function takes the matches from the command-line arguments, processes them,
 /// and returns a `Settings` struct that encapsulates the configuration for the program.
 #[allow(clippy::field_reassign_with_default)]
-fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
+fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Settings> {
     let keys = get_and_parse_field_number(matches, "j")?;
     let key1 = get_and_parse_field_number(matches, "1")?;
     let key2 = get_and_parse_field_number(matches, "2")?;
@@ -797,8 +789,23 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            for part in format.split([' ', ',', '\t']) {
-                specs.push(Spec::parse(part)?);
+            // `-o` has no long form.
+            let option = OptionValue::with_names(format.clone(), Some('o'), None);
+            // Each field carries its place in the value, so that the caret can
+            // take the one that is at fault out of a long list.
+            for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                specs.push(Spec::parse(part).map_err(|error| {
+                    let message = error.to_string();
+                    uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
+                        uucore::diagnostics::Snapshot::with_program(args).render_option(
+                            &option,
+                            span,
+                            &message,
+                            None,
+                            Some(&translate!("join-diag-help-format")),
+                        )
+                    })
+                })?);
             }
             settings.format = specs;
         }
@@ -827,13 +834,16 @@ fn parse_settings(matches: &clap::ArgMatches) -> UResult<Settings> {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The command line is kept for the caret in `-o` diagnostics, which needs
+    // the list as typed.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);
     let _ = try_init_collator(opts);
 
-    let settings = parse_settings(&matches)?;
+    let settings = parse_settings(&matches, diag_args.as_deref())?;
 
     let file1 = matches.get_one::<OsString>("file1").unwrap();
     let file2 = matches.get_one::<OsString>("file2").unwrap();

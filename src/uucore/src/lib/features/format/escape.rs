@@ -126,10 +126,10 @@ pub fn parse_escape_code(
         // This is for the \NNN syntax for octal sequences.
         // Note that '0' is intentionally omitted because that
         // would be the \0NNN syntax.
-        if let b'1'..=b'7' = c {
-            if let Some(parsed) = parse_code(rest, Base::Oct(OctalParsing::ThreeDigits)) {
-                return Ok(EscapedChar::Byte(parsed));
-            }
+        if let b'1'..=b'7' = c
+            && let Some(parsed) = parse_code(rest, Base::Oct(OctalParsing::ThreeDigits))
+        {
+            return Ok(EscapedChar::Byte(parsed));
         }
 
         *rest = new_rest;
@@ -149,7 +149,7 @@ pub fn parse_escape_code(
                 if let Some(c) = parse_code(rest, Base::Hex) {
                     Ok(EscapedChar::Byte(c))
                 } else {
-                    Err(FormatError::MissingHex)
+                    Err(FormatError::MissingHex(None))
                 }
             }
             b'0' => Ok(EscapedChar::Byte(
@@ -157,16 +157,16 @@ pub fn parse_escape_code(
             )),
             b'u' => match parse_unicode(rest, 4) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
-                Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex),
+                Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {
-                    Err(FormatError::InvalidCharacter('u', chars))
+                    Err(FormatError::InvalidCharacter('u', chars, None))
                 }
             },
             b'U' => match parse_unicode(rest, 8) {
                 Ok(c) => Ok(EscapedChar::Char(c)),
-                Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex),
+                Err(EscapeError::MissingHexadecimalNumber) => Err(FormatError::MissingHex(None)),
                 Err(EscapeError::InvalidCharacters(chars)) => {
-                    Err(FormatError::InvalidCharacter('U', chars))
+                    Err(FormatError::InvalidCharacter('U', chars, None))
                 }
             },
             c => Ok(EscapedChar::Backslash(*c)),

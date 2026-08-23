@@ -90,12 +90,6 @@ fn test_failed() {
 }
 
 #[test]
-fn test_failed_2() {
-    let (_at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&[FILE1]).fails();
-}
-
-#[test]
 fn test_failed_incorrect_arg() {
     let (_at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-s", "+5A", FILE1]).fails();
@@ -291,6 +285,18 @@ fn test_truncate_bytes_size() {
         .stderr_only("truncate: Invalid number: '1Y': Value too large for defined data type\n");
 }
 
+#[test]
+fn test_relative_size_overflow_preserves_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write(FILE1, "x");
+
+    ucmd.args(&["--size=+18446744073709551615", FILE1])
+        .fails_with_code(1)
+        .stderr_contains("Value too large for defined data type");
+
+    assert_eq!(at.read(FILE1), "x");
+}
+
 /// Test that truncating a non-existent file creates that file.
 #[test]
 fn test_new_file() {
@@ -404,6 +410,19 @@ fn test_no_such_dir() {
         .stderr_contains("cannot open 'a/b' for writing: No such file or directory");
 }
 
+/// Test that truncate processes every file even if one fails.
+#[test]
+fn test_continue_after_error() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-s", "0", "a", "dir", "b"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("dir");
+    assert!(at.file_exists("a"));
+    assert!(at.file_exists("b"));
+}
+
 /// Test that truncate with a relative size less than 0 is not an error.
 #[test]
 fn test_underflow_relative_size() {
@@ -482,4 +501,53 @@ fn test_truncate_stdin_reference() {
         .terminal_simulation(true)
         .fails()
         .stderr_contains("Illegal seek");
+}
+
+#[test]
+fn test_empty_size() {
+    new_ucmd!()
+        .args(&["-s", "", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: ''\n");
+}
+
+#[test]
+fn test_sign_as_a_size() {
+    new_ucmd!()
+        .args(&["-s", "+", "asd"])
+        .fails()
+        .stderr_is("truncate: Invalid number: '+'\n");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_counts_the_mode_character_before_the_size() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["--size=+2Zx", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The `+` is part of the operand but not of the size, so the caret has
+        // to count it back in to land on the unit.
+        assert!(stderr.contains("truncate:1:19"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        ucmd.args(&["-s", "10fb", "probe"])
+            .fails_with_code(1)
+            .stderr_contains("Invalid number: '10fb'");
+    }
 }

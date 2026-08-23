@@ -53,6 +53,22 @@ macro_rules! test_digest {
             }
 
             #[test]
+            fn test_stdin_with_dash_directory() {
+                let ts = TestScenario::new(util_name!());
+                ts.fixtures.mkdir("-");
+                assert_eq!(
+                    ts.fixtures.read(EXPECTED_FILE),
+                    get_hash!(
+                        ts.ucmd()
+                            .pipe_in_fixture(INPUT_FILE)
+                            .succeeds()
+                            .no_stderr()
+                            .stdout_str()
+                    )
+                );
+            }
+
+            #[test]
             fn test_check() {
                 let ts = TestScenario::new(util_name!());
                 println!("File content='{}'", ts.fixtures.read(INPUT_FILE));
@@ -208,6 +224,26 @@ fn test_check_md5sum_only_one_space() {
         .arg("check.md5sum")
         .succeeds()
         .stdout_only("a: OK\n' b': OK\nc: OK\n");
+}
+
+// A generated checksum file must verify against the same file on all
+// platforms: generation and --check both hash raw bytes, so on Windows a file
+// containing CRLFs must not be hashed with CRLF -> LF conversion in check mode.
+#[test]
+fn test_check_generate_round_trip_crlf_file() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write_bytes("f", b"abc\r\nd\r");
+    let result = scene.ccmd("md5sum").arg("f").succeeds();
+    at.write_bytes("CHECKSUM", result.stdout());
+
+    scene
+        .ccmd("md5sum")
+        .arg("--check")
+        .arg("CHECKSUM")
+        .succeeds()
+        .stdout_only("f: OK\n");
 }
 
 #[test]
@@ -459,6 +495,18 @@ fn test_check_status_code() {
         .arg(at.subdir.join("in.md5"))
         .fails()
         .no_output();
+}
+
+#[test]
+fn test_check_status_reports_malformed_input() {
+    // --status should still print "no properly formatted checksum lines found"
+    // when all input lines are invalid (issue #12867)
+    new_ucmd!()
+        .args(&["-c", "--status"])
+        .pipe_in("I'mNotAHash\n")
+        .fails()
+        .no_stdout()
+        .stderr_contains("no properly formatted checksum lines found");
 }
 
 #[test]

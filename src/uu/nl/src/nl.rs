@@ -376,7 +376,7 @@ pub fn uu_app() -> Command {
                 .long(options::NUMBER_WIDTH)
                 .help(translate!("nl-help-number-width"))
                 .value_name("NUMBER")
-                .value_parser(clap::value_parser!(usize)),
+                .value_parser(clap::value_parser!(u64).range(1..=(i32::MAX as u64))),
         )
 }
 
@@ -391,16 +391,26 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
     let mut writer = BufWriter::new(stdout());
     let mut current_numbering_style = &settings.body_numbering;
     let mut line = Vec::new();
+    // Written before every unnumbered line. Capped to avoid OOM on 32-bit targets
+    // when -w i32::MAX is passed (allocating 2 GiB would panic).
+    let blank_width = settings.number_width + 1;
+    let space_buf = vec![b' '; blank_width.min(4096)];
 
     loop {
         line.clear();
         // reads up to and including b'\n'; returns 0 on EOF
-        let n = reader
-            .read_until(b'\n', &mut line)
-            .map_err_context(|| translate!("nl-error-could-not-read-line"))?;
-        if n == 0 {
-            break;
-        }
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) => break,
+            Ok(bytes_read) => bytes_read,
+            Err(err) => {
+                show_error!(
+                    "{}",
+                    err.map_err_context(|| translate!("nl-error-could-not-read-line"))
+                );
+                set_exit_code(1);
+                break;
+            }
+        };
 
         let _ = line.pop_if(|byte| *byte == b'\n');
 
@@ -444,12 +454,9 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
             };
 
             if is_line_numbered {
-                let Some(line_number) = stats.line_number else {
-                    return Err(USimpleError::new(
-                        1,
-                        translate!("nl-error-line-number-overflow"),
-                    ));
-                };
+                let line_number = stats.line_number.ok_or_else(|| {
+                    USimpleError::new(1, translate!("nl-error-line-number-overflow"))
+                })?;
                 settings
                     .number_format
                     .format_to(&mut writer, line_number, settings.number_width)
@@ -459,10 +466,14 @@ fn nl<T: Read>(reader: &mut BufReader<T>, stats: &mut Stats, settings: &Settings
                     .map_err_context(|| translate!("nl-error-could-not-write"))?;
                 stats.line_number = line_number.checked_add(settings.line_increment);
             } else {
-                let prefix = " ".repeat(settings.number_width + 1);
-                writer
-                    .write_all(prefix.as_bytes())
-                    .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                let mut remaining = blank_width;
+                while remaining > 0 {
+                    let chunk = remaining.min(space_buf.len());
+                    writer
+                        .write_all(&space_buf[..chunk])
+                        .map_err_context(|| translate!("nl-error-could-not-write"))?;
+                    remaining -= chunk;
+                }
             }
             write_line(&mut writer, &line)
                 .map_err_context(|| translate!("nl-error-could-not-write"))?;
