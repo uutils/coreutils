@@ -7795,3 +7795,37 @@ fn test_ls_dereference_looped_symlinks_recursive_nested() {
         .fails_with_code(2)
         .stderr_contains("not listing already-listed directory");
 }
+
+#[test]
+fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir_all("top/a/target");
+    at.touch("top/a/target/file");
+    at.mkdir_all("top/b");
+    at.relative_symlink_dir("../a/target", "top/b/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("target:")
+        .stdout_contains("link:")
+        .stdout_contains("file")
+        .no_stderr();
+}
+
+#[test]
+fn test_ls_dereference_sibling_alias_not_already_listed() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("top");
+    at.mkdir("top/real");
+    at.touch("top/real/file");
+    at.relative_symlink_dir("real", "top/link");
+
+    let result = ucmd.args(&["-RL", "top"]).succeeds();
+    result
+        .stdout_contains("real:")
+        .stdout_contains("link:")
+        .stdout_contains("file")
+        .no_stderr();
+}
