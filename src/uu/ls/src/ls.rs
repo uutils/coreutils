@@ -1416,6 +1416,16 @@ fn enter_directory<O: LsOutput>(
             StackItem::Enter(entry) => entry,
         };
 
+        // Check for duplicates at entry time, so we can reliably track cycles.
+        if !entry.is_first
+            && let Some(ref inode) = entry.inode
+            && !listed_ancestors.insert(inode.clone())
+        {
+            output.flush()?;
+            show!(LsError::AlreadyListedError(entry.path.clone()));
+            continue;
+        }
+
         let path_data = PathData::new(
             entry.path.as_path().into(),
             None,
@@ -1471,6 +1481,7 @@ fn enter_directory<O: LsOutput>(
                 let child_must_dereference = child.must_dereference;
                 let child_command_line = child.command_line;
 
+                // Try to read_dir now to eagerly report errors, matching GNU.
                 if let Err(err) = fs::read_dir(&child_path) {
                     output.flush()?;
                     show!(LsError::IOErrorContext(
@@ -1478,20 +1489,16 @@ fn enter_directory<O: LsOutput>(
                         err,
                         child_command_line,
                     ));
-                } else {
-                    let inode = FileInformation::from_path(&child_path, child_must_dereference)?;
-                    if listed_ancestors.insert(inode.clone()) {
-                        stack.push(StackItem::Enter(StackEntry {
-                            path: child_path,
-                            command_line: child_command_line,
-                            is_first: false,
-                            inode: Some(inode),
-                        }));
-                    } else {
-                        output.flush()?;
-                        show!(LsError::AlreadyListedError(child_path));
-                    }
+                    continue;
                 }
+
+                let inode = FileInformation::from_path(&child_path, child_must_dereference)?;
+                stack.push(StackItem::Enter(StackEntry {
+                    path: child_path,
+                    command_line: child_command_line,
+                    is_first: false,
+                    inode: Some(inode),
+                }));
             }
         }
     }
