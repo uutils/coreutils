@@ -62,19 +62,32 @@ fn render(args: &[OsString], operand: &str, error: &ParseError) -> bool {
             .map(|(_, span)| value_start + span.start..value_start + span.end)
     };
 
-    let (span, help): (Range<usize>, &str) = match error {
-        ParseError::UnrecognizedOperand(_) => (0..key_end, "dd-diag-help-operand"),
-        ParseError::FlagNoMatch(name)
-        | ParseError::OutputFlagNoMatch(name)
-        | ParseError::ConvFlagNoMatch(name) => {
-            (flag(name).unwrap_or_else(value), "dd-diag-help-flags")
-        }
-        ParseError::StatusLevelNotRecognized(_) => (value(), "dd-diag-help-status"),
+    // The label says what is wrong with the span, the help what would have
+    // been right; a flag list names the flags rather than the commas, which
+    // are not what the parser tripped on.
+    let (span, label, help): (Range<usize>, Option<&str>, &str) = match error {
+        ParseError::UnrecognizedOperand(_) => (0..key_end, None, "dd-diag-help-operand"),
+        ParseError::FlagNoMatch(name) => (
+            flag(name).unwrap_or_else(value),
+            Some("dd-diag-label-iflag"),
+            "dd-diag-help-iflag",
+        ),
+        ParseError::OutputFlagNoMatch(name) => (
+            flag(name).unwrap_or_else(value),
+            Some("dd-diag-label-oflag"),
+            "dd-diag-help-oflag",
+        ),
+        ParseError::ConvFlagNoMatch(name) => (
+            flag(name).unwrap_or_else(value),
+            Some("dd-diag-label-conv"),
+            "dd-diag-help-conv",
+        ),
+        ParseError::StatusLevelNotRecognized(_) => (value(), None, "dd-diag-help-status"),
         ParseError::MultiplierStringParseFailure(_)
         | ParseError::MultiplierStringOverflow(_)
         | ParseError::InvalidNumber(_)
         | ParseError::InvalidNumberWithErrMsg(_, _)
-        | ParseError::BsOutOfRange(_) => (value(), "dd-diag-help-number"),
+        | ParseError::BsOutOfRange(_) => (value(), None, "dd-diag-help-number"),
         // The rest is about how operands combine rather than about one of
         // them, so there is nothing to point a caret at.
         _ => return false,
@@ -84,12 +97,13 @@ fn render(args: &[OsString], operand: &str, error: &ParseError) -> bool {
     let Some(index) = snapshot.index_of(OsStr::new(operand)) else {
         return false;
     };
+    let label = label.map(|key| translate!(key));
     snapshot.render_inside_at(
         index,
         operand,
         span,
         &error.to_string(),
-        None,
+        label.as_deref(),
         Some(&translate!(help)),
     )
 }

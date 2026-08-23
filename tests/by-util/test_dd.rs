@@ -2319,6 +2319,22 @@ dd: unrecognized operand 'bsx=1'
 
     #[cfg(unix)]
     #[test]
+    fn test_snippet_names_the_flags_rather_than_the_commas() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The list syntax parsed: it is the flag that is unknown, so the
+        // report names the conversions instead of explaining commas.
+        assert!(stderr.contains("not a known conversion"), "{stderr}");
+        assert!(stderr.contains("conv= is one of ascii"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn test_snippet_points_at_the_failing_flag_and_not_the_one_it_starts() {
         let result = new_ucmd!()
             .terminal_sim_stderr()
