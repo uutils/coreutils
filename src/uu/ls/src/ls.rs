@@ -1427,6 +1427,11 @@ fn enter_directory<O: LsOutput>(
                         err,
                         entry.command_line,
                     ));
+                    // Release the inode. To be made a proper drop guard when
+                    // the [`std::mem::DropGuard`] API hits stable in our MSRV.
+                    if let Some(ref inode) = entry.inode {
+                        listed_ancestors.remove(inode);
+                    }
                     continue;
                 }
                 Ok(rd) => rd,
