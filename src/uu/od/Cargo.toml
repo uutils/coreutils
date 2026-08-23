@@ -15,7 +15,6 @@ readme.workspace = true
 path = "src/od.rs"
 
 [dependencies]
-byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
 rustix = { workspace = true, features = ["stdio"] }
