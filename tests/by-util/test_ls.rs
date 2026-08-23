@@ -7782,3 +7782,16 @@ ls: invalid --block-size argument '1fb'
             .stderr_is("ls: invalid --block-size argument '1fb'\n");
     }
 }
+
+#[test]
+fn test_ls_dereference_looped_symlinks_recursive_nested() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("loop");
+    at.mkdir("loop/a");
+    at.relative_symlink_dir("..", "loop/a/back");
+
+    ucmd.args(&["-RL", "loop"])
+        .fails_with_code(2)
+        .stderr_contains("not listing already-listed directory");
+}
