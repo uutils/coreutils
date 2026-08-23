@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore strtime ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
+// spell-checker:ignore strtime rsplit ; (format) DATEFILE MMDDhhmm ; (vars) datetime datetimes getres AWST ACST AEST foobarbaz unparseable
 
 mod format_modifiers;
 mod locale;
@@ -281,6 +281,60 @@ fn parse_military_timezone_with_offset(s: &str) -> Option<(i32, DayDelta)> {
     Some((hours_from_midnight, day_delta))
 }
 
+/// Parse a positional argument with format `MMDDhhmm[[CC]YY][.ss]`
+fn parse_positional_set_datetime(s: &str, utc: bool) -> Option<Zoned> {
+    let (base, ss) = if let Some((before, after)) = s.rsplit_once('.') {
+        if after.len() != 2 || !after.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        (before, Some(after))
+    } else {
+        (s, None)
+    };
+
+    if !base.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    let tz = if utc {
+        TimeZone::UTC
+    } else {
+        TimeZone::system()
+    };
+
+    let rearranged = match base.len() {
+        8 => {
+            let year = Timestamp::now().to_zoned(tz.clone()).year();
+            format!("{year}{base}")
+        }
+        10 => {
+            let yy: u32 = base[8..10].parse().ok()?;
+            let century = if yy > 68 { 19 } else { 20 };
+            format!("{century}{}{}", &base[8..], &base[..8])
+        }
+        12 => format!("{}{}", &base[8..], &base[..8]),
+        _ => return None,
+    };
+
+    let with_seconds = if let Some(seconds) = ss {
+        format!("{rearranged}.{seconds}")
+    } else {
+        rearranged
+    };
+
+    let parse_format = if ss.is_none() {
+        "%Y%m%d%H%M"
+    } else {
+        "%Y%m%d%H%M.%S"
+    };
+
+    let dt = strtime::parse(parse_format, &with_seconds)
+        .and_then(|parsed| parsed.to_datetime())
+        .ok()?;
+
+    tz.to_ambiguous_zoned(dt).unambiguous().ok()
+}
+
 #[uucore::main]
 #[allow(clippy::cognitive_complexity)]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -318,25 +372,31 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
+    let utc = matches.get_flag(OPT_UNIVERSAL);
+
+    let mut positional_set_to: Option<Zoned> = None;
+
     let format = if let Some(fmt) = matches.get_one::<String>(OPT_FORMAT) {
-        if !fmt.starts_with('+') {
-            // if an optional Format String was found but the user has not provided an input date
-            // GNU prints an invalid date Error
-            if !matches!(date_source, DateSource::Human(_)) {
-                return Err(USimpleError::new(
-                    1,
-                    translate!("date-error-invalid-date", "date" => fmt),
-                ));
-            }
-            // If the user did provide an input date with the --date flag and the Format String is
-            // not starting with '+' GNU prints the missing '+' error message
+        if let Some(stripped) = fmt.strip_prefix('+') {
+            Format::Custom(stripped.to_string())
+        } else if !matches!(date_source, DateSource::Now)
+            || matches.get_one::<String>(OPT_SET).is_some()
+        {
+            // When an option supplies the date source, a positional operand
+            // must be a +FORMAT rather than a date-setting timestamp.
             return Err(USimpleError::new(
                 1,
                 translate!("date-error-format-missing-plus", "arg" => fmt),
             ));
+        } else if let Some(zoned) = parse_positional_set_datetime(fmt, utc) {
+            positional_set_to = Some(zoned);
+            Format::Default
+        } else {
+            return Err(USimpleError::new(
+                1,
+                translate!("date-error-invalid-date", "date" => fmt),
+            ));
         }
-        let fmt = fmt[1..].to_string();
-        Format::Custom(fmt)
     } else if let Some(fmt) = matches
         .get_many::<String>(OPT_ISO_8601)
         .map(|mut iter| iter.next().unwrap_or(&DATE.to_string()).as_str().into())
@@ -355,7 +415,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         Format::Default
     };
 
-    let utc = matches.get_flag(OPT_UNIVERSAL);
     let debug_mode = matches.get_flag(OPT_DEBUG);
 
     // Get the current time, either in the local time zone or UTC.
@@ -377,6 +436,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             }
         },
     };
+
+    // positional_set_to and set_to are mutually exclusive:
+    // MMDDhhmm parsing is only attempted when -s is absent.
+    let set_to = positional_set_to.or(set_to);
 
     let settings = Settings {
         utc,
@@ -1388,5 +1451,101 @@ mod tests {
         assert_eq!(strip_parenthesized_comments("a(b(c)d)e"), "ae"); // Nested balanced
         assert_eq!(strip_parenthesized_comments("a(b(c)d"), "a"); // Nested unbalanced
         assert_eq!(strip_parenthesized_comments("a(b)c(d)e(f"), "ace"); // Multiple groups, last unmatched
+    }
+
+    #[test]
+    fn test_parse_positional_valid_inputs() {
+        // 12 digits: full date with 4-digit year
+        let result = parse_positional_set_datetime("010112002025", true).unwrap();
+        assert_eq!(result.year(), 2025);
+        assert_eq!(result.month(), 1);
+        assert_eq!(result.day(), 1);
+        assert_eq!(result.hour(), 12);
+        assert_eq!(result.minute(), 0);
+        assert_eq!(result.second(), 0);
+
+        // 8 digits: year defaults to current year
+        let result = parse_positional_set_datetime("01011200", true).unwrap();
+        let current_year = Timestamp::now().to_zoned(TimeZone::UTC).year();
+        assert_eq!(result.year(), current_year);
+        assert_eq!(result.month(), 1);
+        assert_eq!(result.day(), 1);
+        assert_eq!(result.hour(), 12);
+        assert_eq!(result.minute(), 0);
+
+        // 10 digits: 2-digit year century rule (00-68 -> 20xx, 69-99 -> 19xx)
+        assert_eq!(
+            parse_positional_set_datetime("0101120025", true)
+                .unwrap()
+                .year(),
+            2025
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120068", true)
+                .unwrap()
+                .year(),
+            2068
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120069", true)
+                .unwrap()
+                .year(),
+            1969
+        );
+        assert_eq!(
+            parse_positional_set_datetime("0101120099", true)
+                .unwrap()
+                .year(),
+            1999
+        );
+
+        // Optional .ss seconds suffix on each length variant
+        let result = parse_positional_set_datetime("010112002025.45", true).unwrap();
+        assert_eq!(result.year(), 2025);
+        assert_eq!(result.second(), 45);
+        let result = parse_positional_set_datetime("0101120025.30", true).unwrap();
+        assert_eq!(result.year(), 2025);
+        assert_eq!(result.second(), 30);
+        let result = parse_positional_set_datetime("01011200.59", true).unwrap();
+        assert_eq!(result.hour(), 12);
+        assert_eq!(result.second(), 59);
+        assert_eq!(
+            parse_positional_set_datetime("010112002025.00", true)
+                .unwrap()
+                .second(),
+            0
+        );
+
+        // Local timezone (utc = false)
+        let result = parse_positional_set_datetime("010112002025", false).unwrap();
+        assert_eq!(result.year(), 2025);
+        assert_eq!(result.month(), 1);
+        assert_eq!(result.day(), 1);
+        assert_eq!(result.hour(), 12);
+        assert_eq!(result.minute(), 0);
+    }
+
+    #[test]
+    fn test_parse_positional_invalid_inputs() {
+        // Invalid month
+        assert!(parse_positional_set_datetime("13011200", true).is_none());
+        // Invalid day
+        assert!(parse_positional_set_datetime("01321200", true).is_none());
+        // Invalid hour
+        assert!(parse_positional_set_datetime("01012500", true).is_none());
+        // Invalid minute
+        assert!(parse_positional_set_datetime("01011261", true).is_none());
+        // Feb 30
+        assert!(parse_positional_set_datetime("02301200", true).is_none());
+        // Wrong length
+        assert!(parse_positional_set_datetime("0101120", true).is_none());
+        // Non-digits
+        assert!(parse_positional_set_datetime("0101120a", true).is_none());
+        // Empty string
+        assert!(parse_positional_set_datetime("", true).is_none());
+        // Bad seconds suffix
+        assert!(parse_positional_set_datetime("01011200.1", true).is_none());
+        assert!(parse_positional_set_datetime("01011200.abc", true).is_none());
+        assert!(parse_positional_set_datetime("01011200.123", true).is_none());
     }
 }
