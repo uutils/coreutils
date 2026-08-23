@@ -1257,6 +1257,7 @@ pub fn list_with_output<O: LsOutput>(
             path_data,
             read_dir,
             config,
+            inode.as_ref(),
             &mut listed_ancestors,
             output,
             &mut entries,
@@ -1378,6 +1379,7 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
+    inode: Option<&FileInformation>,
     listed_ancestors: &mut FxHashSet<FileInformation>,
     output: &mut O,
     entries: &mut Vec<PathData>,
@@ -1386,7 +1388,7 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
-        inode: FileInformation,
+        inode: Option<FileInformation>,
     }
 
     let mut stack = Vec::new();
@@ -1394,7 +1396,7 @@ fn enter_directory<O: LsOutput>(
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-        inode: FileInformation::from_path(path_data.path(), path_data.must_dereference)?,
+        inode: inode.cloned(),
     });
     let mut initial_read_dir = Some(read_dir);
 
@@ -1458,7 +1460,7 @@ fn enter_directory<O: LsOutput>(
                             path: child_path,
                             command_line: child_command_line,
                             is_first: false,
-                            inode,
+                            inode: Some(inode),
                         });
                     } else {
                         output.flush()?;
@@ -1467,7 +1469,9 @@ fn enter_directory<O: LsOutput>(
                 }
             }
         }
-        listed_ancestors.remove(&entry.inode);
+        if let Some(ref inode) = entry.inode {
+            listed_ancestors.remove(inode);
+        }
     }
 
     Ok(())
