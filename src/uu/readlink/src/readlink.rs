@@ -12,6 +12,8 @@ use std::fs;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
+#[cfg(windows)]
+use uucore::display::strip_windows_verbatim_prefix;
 use uucore::error::{FromIo, UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
 use uucore::libc::EINVAL;
@@ -186,6 +188,12 @@ pub fn uu_app() -> Command {
 }
 
 fn show(path: &Path, line_ending: Option<LineEnding>) -> std::io::Result<()> {
+    #[cfg(windows)]
+    let path = {
+        let path_str = path.to_string_lossy();
+        strip_windows_verbatim_prefix(&path_str).unwrap_or_else(|| path.to_path_buf())
+    };
+
     uucore::display::print_verbatim(path)?;
     if let Some(line_ending) = line_ending {
         write!(stdout(), "{line_ending}")?;
