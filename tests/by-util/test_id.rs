@@ -152,6 +152,40 @@ fn test_id_real() {
 }
 
 #[test]
+fn test_id_groups_ordering() {
+    // `groups=` is headed by the effective gid and `-G` by the real gid, so the
+    // two forms list the same set in a different order. Only observable when the
+    // real and effective gids differ, which needs a setgid wrapper, but the set
+    // and the `-r`-independence of `-G` hold either way.
+    let ts = TestScenario::new(util_name!());
+
+    let groups = ts.ucmd().arg("-G").succeeds().stdout_move_str();
+    let mut from_flag: Vec<&str> = groups.split_whitespace().collect();
+    assert!(!from_flag.is_empty());
+
+    // `-G` heads with the real gid
+    let rgid = ts.ucmd().args(&["-g", "-r"]).succeeds().stdout_move_str();
+    assert_eq!(from_flag[0], rgid.trim_end());
+
+    let default = ts.ucmd().succeeds().stdout_move_str();
+    let field = default.split(" groups=").nth(1).unwrap();
+    let mut from_default: Vec<&str> = field
+        .split(&[' ', '\n'][..])
+        .next()
+        .unwrap()
+        .split(',')
+        .map(|g| g.split('(').next().unwrap())
+        .collect();
+
+    from_flag.sort_unstable();
+    from_default.sort_unstable();
+    assert_eq!(from_flag, from_default);
+
+    // `-r` does not affect `-G`, matching GNU
+    ts.ucmd().args(&["-G", "-r"]).succeeds().stdout_is(&groups);
+}
+
+#[test]
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 fn test_id_pretty_print() {
     // `-p` is BSD only and not supported on GNU's `id`
