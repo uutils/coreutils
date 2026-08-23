@@ -864,6 +864,71 @@ fn test_columns() {
 }
 
 #[test]
+fn test_columns_partly_filled_page() {
+    // Three lines do not divide evenly into two columns. GNU pr puts the
+    // ceiling of 3 / 2 in the first column and what is left in the second, so
+    // "c" has to show up next to "a".
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tc        \nb        \n");
+}
+
+#[test]
+fn test_columns_partly_filled_page_across() {
+    // Same input read across instead of down.
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -a -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-a", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tb        \nc        \n");
+}
+
+#[test]
+fn test_columns_fewer_lines_than_columns() {
+    // Fewer lines than columns still has to print those lines.
+    //
+    // Command line: `printf "a\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_is("a     \n");
+
+    // Command line: `printf "a\nb\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a     \tb     \n");
+}
+
+#[test]
+fn test_columns_last_page() {
+    // Nine lines over pages that hold four each leave the ninth alone on page
+    // three, which must not come out as an empty page.
+    //
+    // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
+    let header = "\n\nDATE          Page ";
+    let expected = format!(
+        "{header}1\n\n\n1        \t3        \n2        \t4        \n{blank}\
+         {header}2\n\n\n5        \t7        \n6        \t8        \n{blank}\
+         {header}3\n\n\n9        \n\n\n\n\n\n\n",
+        blank = "\n".repeat(5),
+    );
+    new_ucmd!()
+        .args(&["-2", "-l", "12", "-w", "20", "-D", "DATE"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+        .succeeds()
+        .stdout_is(expected);
+}
+
+#[test]
 fn test_merge() {
     // Create the two files to merge.
     let (at, mut ucmd) = at_and_ucmd!();
