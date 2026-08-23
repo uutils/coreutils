@@ -464,6 +464,8 @@ fn test_file_is_itself() {
 
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+// Disabled for android, since the temp dir doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
 fn test_hard_link_is_same_file() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.hard_link("regular_file", "hard_link");
