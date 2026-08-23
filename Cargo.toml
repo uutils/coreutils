@@ -435,7 +435,6 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 dunce = "1.0.4"
-exacl = "0.13.0"
 file_diff = "1.0.0"
 filetime = "0.2.29"
 foldhash = "0.2.0"
