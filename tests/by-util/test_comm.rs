@@ -579,7 +579,7 @@ fn test_both_inputs_out_of_order_but_identical() {
 fn test_comm_arg_error() {
     let scene = TestScenario::new(util_name!());
 
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a", "b", "no-such"])
@@ -588,7 +588,7 @@ fn test_comm_arg_error() {
         .stderr_contains("error: unexpected argument 'no-such' found")
         .stderr_contains("Usage: comm [OPTION]... FILE1 FILE2")
         .stderr_contains("For more information, try '--help'.");
-    // Test extra argument error case from GNU test
+    // Test extra argument error case
     scene
         .ucmd()
         .args(&["a"])

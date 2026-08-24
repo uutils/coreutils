@@ -196,10 +196,13 @@ feat_common_core = [
 feat_Tier1 = [
   "feat_common_core",
   "arch",
+  "kill",
   "hostname",
   "nproc",
   "sync",
+  "timeout",
   "uname",
+  "uptime",
   "whoami",
 ]
 ## (primary platforms) feature sets
@@ -303,7 +306,7 @@ feat_os_unix_musl = [
   "feat_require_unix_utmpx",
 ]
 # "feat_os_windows" == set of utilities which can be built/run on modern windows platforms
-feat_os_windows = ["feat_Tier1", "kill", "stdbuf", "timeout", "uptime"]
+feat_os_windows = ["feat_Tier1", "stdbuf"]
 ## (secondary platforms) feature sets
 # "feat_os_unix_gnueabihf" == set of utilities which can be built/run on the "arm-unknown-linux-gnueabihf" target (ARMv6 Linux [hardfloat])
 feat_os_unix_gnueabihf = [
@@ -415,15 +418,12 @@ ansi-width = "0.1.0"
 ariadne = "0.6.0"
 base64-simd = "0.8"
 bigdecimal = "0.4"
-binary-heap-plus = "0.5.0"
 bstr = "1.9.1"
 bytecount = "0.6.8"
-byteorder = "1.5.0"
 cfg_aliases = "0.2.2"
 clap = { version = "4.5", features = ["wrap_help", "cargo", "color"] }
 clap_complete = "4.4"
 clap_mangen = "0.3"
-compare = "0.1.0"
 crossterm = { version = "0.29.0", default-features = false }
 ctor = "1.0.0"
 ctrlc = { version = "3.5.2", features = ["termination"] }
@@ -432,8 +432,6 @@ data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
 dns-lookup = { version = "3.0.0" }
 dunce = "1.0.4"
-exacl = "0.13.0"
-file_diff = "1.0.0"
 filetime = "0.2.29"
 foldhash = "0.2.0"
 fs_extra = "1.3.0"
@@ -499,21 +497,20 @@ utmp-classic = "0.1.6"
 uutils_term_grid = "0.8"
 walkdir = "2.5"
 wild = "2.2.1"
-winapi-util = "0.1.8"
 windows-sys = { version = "0.61.0", default-features = false }
 xattr = "1.3.1"
 z85 = "3.0.5"
 zip = { version = "8.0.0", default-features = false, features = ["deflate"] }
 
 hex = "0.4.3"
-md-5 = "0.11.0"
-sha1 = "0.11.0"
-sha2 = "0.11.0"
-sha3 = "0.12.0"
+md-5 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha1 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.11.0", default-features = false, features = ["alloc"] }
+sha3 = { version = "0.12.0", default-features = false, features = ["alloc"] }
 shake = "0.1.0"
 blake2b_simd = "1.0.2"
 blake3 = "1.5.1"
-sm3 = "0.5.0"
+sm3 = { version = "0.5.0", default-features = false, features = ["alloc"] }
 crc-fast = { version = "1.5.0", default-features = false }
 digest = "0.11.0"
 openssl = { version = "0.10", features = ["vendored"] }
@@ -581,6 +578,7 @@ implicit_hasher = "allow"
 doc_link_with_quotes = "allow"
 format_push_string = "allow"
 flat_map_option = "allow"
+# TODO lint is deprecated since Rust 1.98, can be removed when we have a MSRV >= 1.98
 from_iter_instead_of_collect = "allow"
 large_types_passed_by_value = "allow"
 
