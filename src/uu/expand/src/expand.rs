@@ -15,7 +15,7 @@ use std::str::from_utf8;
 use thiserror::Error;
 use uucore::char_width::char_width_at;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::{format_usage, show, translate};
 
 pub mod options {
@@ -269,22 +269,22 @@ pub fn uu_app() -> Command {
 }
 
 fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
-    let file_buf;
     if path == "-" {
-        Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>))
-    } else {
-        let path_ref = Path::new(path);
-        if path_ref.is_dir() {
-            return Err(USimpleError::new(
-                1,
-                translate!("expand-error-is-directory", "file" => path.maybe_quote()),
-            ));
-        }
-        file_buf = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        let _ = rustix::fs::fadvise(&file_buf, 0, None, rustix::fs::Advice::Sequential);
-        Ok(BufReader::new(Box::new(file_buf) as Box<dyn Read>))
+        return Ok(BufReader::new(Box::new(stdin()) as Box<dyn Read>));
     }
+    let path_ref = Path::new(path);
+    // some platforms cannot catch this as read error. accept additional overhead.
+    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    if path_ref.is_dir() {
+        return Err(uucore::error::USimpleError::new(
+            1,
+            translate!("expand-error-is-directory", "file" => path.maybe_quote()),
+        ));
+    }
+    let file = File::open(path_ref).map_err_context(|| path.maybe_quote().to_string())?;
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);
+    Ok(BufReader::new(Box::new(file) as Box<dyn Read>))
 }
 
 /// Compute the number of spaces to the next tabstop.

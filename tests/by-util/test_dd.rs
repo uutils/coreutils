@@ -1974,8 +1974,7 @@ fn test_oflag_direct_partial_block() {
             "status=none".to_string(),
         ])
         .succeeds()
-        .stdout_is("")
-        .stderr_is("");
+        .no_output();
     assert!(output_path.exists());
     let output_size = output_path.metadata().unwrap().len() as usize;
     assert_eq!(output_size, input_size);
