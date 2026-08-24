@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 use clap::{Arg, ArgAction, Command};
 use std::io::{self, Write as _};
+use uucore::error::strip_errno;
 use uucore::{crate_version, translate};
 
 // uucore::main does not support no-result
@@ -25,7 +26,7 @@ pub fn uumain(mut args: impl uucore::Args) -> i32 {
     if let Err(e) = res
         && e.kind() != io::ErrorKind::BrokenPipe
     {
-        let _ = writeln!(io::stderr(), "false: {}", uucore::error::strip_errno(&e));
+        let _ = writeln!(io::stderr(), "false: {}", strip_errno(&e));
     }
     1
 }
