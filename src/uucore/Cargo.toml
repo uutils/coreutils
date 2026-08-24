@@ -120,7 +120,6 @@ procfs = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = { workspace = true }
-winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
   "Win32_Security",
@@ -150,7 +149,7 @@ encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "winapi-util", "windows-sys"]
+fs = ["dunce", "libc", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []

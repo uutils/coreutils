@@ -13,11 +13,11 @@ use clap::{Arg, ArgAction, ArgMatches, Command, ValueHint, builder::ValueParser}
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use uucore::error::UResult;
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 use uucore::libc::time_t;
 use uucore::translate;
 use uucore::uptime::get_uptime;
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 use uucore::utmpx::{BOOT_TIME, USER_PROCESS, Utmpx};
 
 use crate::{UptimeError, options, print_loadavg, print_nusers, print_time, print_uptime};
@@ -47,12 +47,12 @@ pub(crate) fn maybe_uptime_from_file(matches: &ArgMatches) -> Option<UResult<()>
 /// `BOOT_TIME` record where utmpx is available (on OpenBSD, from
 /// [`get_uptime`] directly).
 pub(crate) fn system_uptime_seconds() -> UResult<i64> {
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
     {
         let (boot_time, _) = process_utmpx(None);
         get_uptime(boot_time)
     }
-    #[cfg(target_os = "openbsd")]
+    #[cfg(any(target_os = "openbsd", target_os = "android"))]
     get_uptime(None)
 }
 
@@ -114,7 +114,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     print_time()?;
     let user_count;
 
-    #[cfg(not(target_os = "openbsd"))]
+    #[cfg(not(any(target_os = "openbsd", target_os = "android")))]
     {
         let (boot_time, count) = process_utmpx(Some(file_path));
         if let Some(time) = boot_time {
@@ -128,7 +128,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
         user_count = count;
     }
 
-    #[cfg(target_os = "openbsd")]
+    #[cfg(any(target_os = "openbsd", target_os = "android"))]
     {
         let upsecs = get_uptime(None)?;
         if upsecs >= 0 {
@@ -139,8 +139,15 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
 
             write!(stdout(), "{}", translate!("uptime-output-unknown-uptime"))?;
         }
-        user_count =
-            uucore::uptime::get_nusers(file_path.to_str().expect("invalid utmp path file"));
+        #[cfg(target_os = "openbsd")]
+        {
+            user_count =
+                uucore::uptime::get_nusers(file_path.to_str().expect("invalid utmp path file"));
+        }
+        #[cfg(target_os = "android")]
+        {
+            user_count = 0;
+        }
     }
 
     print_nusers(Some(user_count))?;
@@ -149,7 +156,7 @@ fn uptime_with_file(file_path: &OsString) -> UResult<()> {
     Ok(())
 }
 
-#[cfg(not(target_os = "openbsd"))]
+#[cfg(not(any(target_os = "openbsd", target_os = "android")))]
 fn process_utmpx(file: Option<&OsString>) -> (Option<time_t>, usize) {
     let mut nusers = 0;
     let mut boot_time = None;

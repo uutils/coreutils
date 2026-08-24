@@ -3603,7 +3603,7 @@ fn test_seek_bytes_forward_outside_file() {
         .arg("+100")
         .arg(FOOBAR_TXT)
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 // Some basic tests for ---presume-input-pipe. These tests build upon the
