@@ -1783,4 +1783,3 @@ fn test_width_above_u16_max_does_not_panic() {
     assert_eq!(out.len(), 65536, "expected width-padded output, got len {}", out.len());
     assert!(out.ends_with('5'));
 }
-
