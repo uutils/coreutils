@@ -12,9 +12,11 @@ cp-after-help = Ne pas copier un non-répertoire qui a une destination existante
   pour refléter les liens durs dans la source. ce qui donne plus de contrôle sur les fichiers existants dans la destination qui sont
   remplacés, et sa valeur peut être l'une des suivantes :
 
-  - all C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
-  - none Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
-  - older C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
+  - all : C'est l'opération par défaut lorsqu'une option --update n'est pas spécifiée, et entraîne le remplacement de tous les fichiers existants dans la destination.
+
+  - none : Cela est similaire à l'option --no-clobber, en ce sens qu'aucun fichier dans la destination n'est remplacé, mais ignorer un fichier n'induit pas d'échec.
+
+  - older : C'est l'opération par défaut lorsque --update est spécifié, et entraîne le remplacement des fichiers s'ils sont plus anciens que le fichier source correspondant.
 
 # Messages d'aide
 cp-help-target-directory = copier tous les arguments SOURCE dans le répertoire cible
