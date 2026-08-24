@@ -8,7 +8,6 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use file_diff::diff;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -24,7 +23,7 @@ use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
-use uucore::fs::dir_strip_dot_for_creation;
+use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
@@ -1344,7 +1343,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+    if !are_files_identical(from, to).unwrap_or(false) {
         return true;
     }
 

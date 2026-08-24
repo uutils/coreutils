@@ -637,6 +637,89 @@ pub fn infos_refer_to_same_file(
     info1.is_ok() && info1.ok() == info2.ok()
 }
 
+/// Check if two files are identical by comparing their contents.
+///
+/// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
+/// Returns `Ok(false)` if the files differ in size, aren't both regular files, or have different contents.
+/// Returns `Err` if an I/O error occurs while opening or reading either file.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+/// use uucore::fs::are_files_identical;
+///
+/// let mut file1 = NamedTempFile::new().unwrap();
+/// let mut file2 = NamedTempFile::new().unwrap();
+/// file1.write_all(b"hello world").unwrap();
+/// file2.write_all(b"hello world").unwrap();
+///
+/// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+/// ```
+pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
+    use std::fs::{File, metadata};
+    use std::io::{BufReader, ErrorKind, Read};
+
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
+
+    // First compare file sizes
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
+
+    if metadata1.len() != metadata2.len() {
+        return Ok(false);
+    }
+
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
+    let file1 = File::open(path1)?;
+    let file2 = File::open(path2)?;
+
+    let mut reader1 = BufReader::new(file1);
+    let mut reader2 = BufReader::new(file2);
+
+    let mut buffer1 = [0; 8192];
+    let mut buffer2 = [0; 8192];
+
+    loop {
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        if bytes1 != bytes2 {
+            return Ok(false);
+        }
+
+        if bytes1 == 0 {
+            return Ok(true);
+        }
+
+        if buffer1[..bytes1] != buffer2[..bytes2] {
+            return Ok(false);
+        }
+    }
+}
+
 /// Converts absolute `path` to be relative to absolute `to` path.
 pub fn make_path_relative_to<P1: AsRef<Path>, P2: AsRef<Path>>(path: P1, to: P2) -> PathBuf {
     let path = path.as_ref();
@@ -1338,5 +1421,33 @@ mod tests {
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+    }
+
+    #[test]
+    fn test_are_files_identical() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut file1 = NamedTempFile::new().unwrap();
+        let mut file2 = NamedTempFile::new().unwrap();
+        let mut file3 = NamedTempFile::new().unwrap();
+
+        file1.write_all(b"hello world").unwrap();
+        file2.write_all(b"hello world").unwrap();
+        file3.write_all(b"hello rust!").unwrap();
+
+        // Identical contents
+        assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+
+        // Same size, different contents
+        assert!(!are_files_identical(file1.path(), file3.path()).unwrap());
+
+        // Different size
+        let mut file4 = NamedTempFile::new().unwrap();
+        file4.write_all(b"hello").unwrap();
+        assert!(!are_files_identical(file1.path(), file4.path()).unwrap());
+
+        // Non-existent file
+        assert!(are_files_identical(file1.path(), "non_existent_file_path").is_err());
     }
 }

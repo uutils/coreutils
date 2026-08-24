@@ -7,13 +7,13 @@
 
 use std::cmp::Ordering;
 use std::ffi::OsString;
-use std::fs::{File, metadata};
-use std::io::{self, BufRead, BufReader, BufWriter, Read, StdinLock, Write, stderr, stdin};
+use std::fs::File;
+use std::io::{self, BufRead, BufReader, BufWriter, StdinLock, Write, stderr, stdin};
 use std::path::Path;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError};
 use uucore::format_usage;
-use uucore::fs::paths_refer_to_same_file;
+use uucore::fs::{are_files_identical, paths_refer_to_same_file};
 use uucore::line_ending::LineEnding;
 use uucore::translate;
 
@@ -124,64 +124,6 @@ impl OrderChecker {
 
         self.last_line = current_line.to_vec();
         is_ordered || !self.check_order
-    }
-}
-
-// Check if two files are identical by comparing their contents
-pub fn are_files_identical(path1: &Path, path2: &Path) -> io::Result<bool> {
-    // First compare file sizes
-    let metadata1 = metadata(path1)?;
-    let metadata2 = metadata(path2)?;
-
-    if metadata1.len() != metadata2.len() {
-        return Ok(false);
-    }
-
-    // only proceed if both are regular files
-    if !metadata1.is_file() || !metadata2.is_file() {
-        return Ok(false);
-    }
-
-    let file1 = File::open(path1)?;
-    let file2 = File::open(path2)?;
-
-    let mut reader1 = BufReader::new(file1);
-    let mut reader2 = BufReader::new(file2);
-
-    let mut buffer1 = [0; 8192];
-    let mut buffer2 = [0; 8192];
-
-    loop {
-        // Read from first file with EINTR retry handling
-        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
-        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
-        let bytes1 = loop {
-            match reader1.read(&mut buffer1) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                result => break result?,
-            }
-        };
-
-        // Read from second file with EINTR retry handling
-        // Same retry logic as above for the second file to ensure consistent behavior
-        let bytes2 = loop {
-            match reader2.read(&mut buffer2) {
-                Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-                result => break result?,
-            }
-        };
-
-        if bytes1 != bytes2 {
-            return Ok(false);
-        }
-
-        if bytes1 == 0 {
-            return Ok(true);
-        }
-
-        if buffer1[..bytes1] != buffer2[..bytes2] {
-            return Ok(false);
-        }
     }
 }
 
@@ -332,7 +274,7 @@ fn open_file(name: &OsString, line_ending: LineEnding) -> io::Result<LineReader>
         // some platforms shows different read error
         // try to override the error message, but failure of it is not serious
         #[cfg(any(target_os = "wasi", target_os = "windows"))]
-        if metadata(name).is_ok_and(|m| m.is_dir()) {
+        if std::fs::metadata(name).is_ok_and(|m| m.is_dir()) {
             return Err(io::Error::other(translate!("comm-error-is-directory")));
         }
         let f = File::open(name)?;
