@@ -3343,7 +3343,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "uucore",
- "winapi-util",
  "windows-sys 0.61.2",
 ]
 
@@ -4608,7 +4607,6 @@ dependencies = [
  "uucore_procs",
  "walkdir",
  "wild",
- "winapi-util",
  "windows-sys 0.61.2",
  "xattr",
  "z85",

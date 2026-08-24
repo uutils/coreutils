@@ -27,12 +27,12 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
-#[cfg(target_os = "windows")]
-use winapi_util::AsHandleRef;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+use windows_sys::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
+};
 #[cfg(windows)]
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
@@ -53,7 +53,7 @@ macro_rules! has {
 #[derive(Clone)]
 pub struct FileInformation(
     #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
-    #[cfg(windows)] winapi_util::file::Information,
+    #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
 );
 
 impl FileInformation {
@@ -66,8 +66,12 @@ impl FileInformation {
 
     /// Get information from a currently open file
     #[cfg(target_os = "windows")]
-    pub fn from_file(file: &impl AsHandleRef) -> IOResult<Self> {
-        let info = winapi_util::file::information(file.as_handle_ref())?;
+    pub fn from_file(file: &impl AsRawHandle) -> IOResult<Self> {
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: `info` is a valid pointer to be populated by GetFileInformationByHandle.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
+            return Err(Error::last_os_error());
+        }
         Ok(Self(info))
     }
 
@@ -88,7 +92,7 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             use std::fs::OpenOptions;
-            use std::os::windows::prelude::*;
+            use std::os::windows::fs::OpenOptionsExt;
             let mut open_options = OpenOptions::new();
             let mut custom_flags = 0;
             if !dereference {
@@ -110,13 +114,13 @@ impl FileInformation {
         }
         #[cfg(target_os = "windows")]
         {
-            self.0.file_size()
+            ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
         }
     }
 
     #[cfg(windows)]
     pub fn file_index(&self) -> u64 {
-        self.0.file_index()
+        ((self.0.nFileIndexHigh as u64) << 32) | (self.0.nFileIndexLow as u64)
     }
 
     pub fn number_of_links(&self) -> u64 {
@@ -163,7 +167,7 @@ impl FileInformation {
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
-        return self.0.number_of_links();
+        return self.0.nNumberOfLinks as u64;
     }
 
     #[cfg(any(unix, target_os = "wasi"))]
@@ -186,8 +190,8 @@ impl PartialEq for FileInformation {
 #[cfg(target_os = "windows")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        self.0.volume_serial_number() == other.0.volume_serial_number()
-            && self.0.file_index() == other.0.file_index()
+        self.0.dwVolumeSerialNumber == other.0.dwVolumeSerialNumber
+            && self.file_index() == other.file_index()
     }
 }
 
@@ -202,8 +206,8 @@ impl Hash for FileInformation {
         }
         #[cfg(target_os = "windows")]
         {
-            self.0.volume_serial_number().hash(state);
-            self.0.file_index().hash(state);
+            self.0.dwVolumeSerialNumber.hash(state);
+            self.file_index().hash(state);
         }
     }
 }
