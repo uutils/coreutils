@@ -105,9 +105,7 @@ struct ParsedSpec<'a> {
 /// valid specifier follows.
 fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     let bytes = s.as_bytes();
-    if bytes.first() != Some(&b'%') {
-        return None;
-    }
+    bytes.first().filter(|b| *b == &b'%')?;
 
     let mut pos = 1;
 
@@ -134,9 +132,7 @@ fn parse_format_spec(s: &str) -> Option<ParsedSpec<'_>> {
     while bytes.get(pos) == Some(&b':') && pos - spec_start < 3 {
         pos += 1;
     }
-    if bytes.get(pos).is_none_or(|c| !c.is_ascii_alphabetic()) {
-        return None;
-    }
+    bytes.get(pos).filter(|c| c.is_ascii_alphabetic())?;
     pos += 1;
     let spec = &s[spec_start..pos];
 

@@ -10,8 +10,10 @@ use std::ffi::OsString;
 use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
+use uucore::error::strip_errno;
 use uucore::error::{UResult, UUsageError, set_exit_code};
 use uucore::format_usage;
+use uucore::show_error;
 use uucore::translate;
 
 // operating mode
@@ -255,7 +257,7 @@ fn check_searchable(path: &str) -> bool {
             if e.kind() == ErrorKind::NotFound {
                 true
             } else {
-                writeln!(std::io::stderr(), "{e}");
+                show_error!("{}: {}", path, strip_errno(&e));
                 false
             }
         }

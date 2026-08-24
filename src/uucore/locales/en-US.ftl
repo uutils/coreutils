@@ -29,6 +29,7 @@ help-flag-version = Print version information
 error-io = I/O error
 error-permission-denied = Permission denied
 error-file-not-found = No such file or directory
+error-no-such-process = No such process
 error-invalid-argument = Invalid argument
 error-is-a-directory = { $file }: Is a directory
 
@@ -67,7 +68,6 @@ safe-traversal-directory = <directory>
 # checksum-related messages
 checksum-no-properly-formatted = { $checksum_file }: no properly formatted checksum lines found
 checksum-no-file-verified = { $checksum_file }: no file was verified
-checksum-error-failed-to-read-input = failed to read input
 checksum-bad-format = { $count ->
     [1] { $count } line is improperly formatted
    *[other] { $count } lines are improperly formatted
@@ -80,7 +80,6 @@ checksum-failed-open-file = { $count ->
     [1] { $count } listed file could not be read
    *[other] { $count } listed files could not be read
 }
-checksum-error-algo-bad-format = { $file }: { $line }: improperly formatted { $algo } checksum line
 
 # uudoc tldr examples messages
 uudoc-tldr-attribution = The examples are provided by the [tldr-pages project](https://tldr.sh) under the [CC BY 4.0 License](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
@@ -89,3 +88,8 @@ uudoc-tldr-disclaimer = Please note that, as uutils is a work in progress, some 
 # Symbolic mode parsing messages
 mode-error-unexpected-end = unexpected end of mode
 mode-error-invalid-operator = invalid operator (expected +, -, or =, but found { $operator })
+
+# Diagnostic labels: what the caret points at in a mode
+mode-diag-label-missing-operator = this clause says who, but not what to change
+mode-diag-label-invalid-number = not an octal mode
+mode-diag-help-syntax = a mode is either octal, as in 644, or clauses such as u+rwx,go-w

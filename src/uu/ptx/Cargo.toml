@@ -19,9 +19,14 @@ doctest = false
 [dependencies]
 clap = { workspace = true }
 regex = { workspace = true }
+rustc-hash = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[dev-dependencies]
+divan = { workspace = true }
+uucore = { workspace = true, features = ["benchmark"] }
 
 [lints]
 workspace = true
@@ -29,3 +34,7 @@ workspace = true
 [[bin]]
 name = "ptx"
 path = "src/main.rs"
+
+[[bench]]
+name = "ptx_bench"
+harness = false

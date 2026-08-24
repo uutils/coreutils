@@ -237,6 +237,22 @@ fn test_up_to_match_negative_offset() {
 }
 
 #[test]
+fn test_up_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "/45/-2147483648"])
+        .fails()
+        .stderr_is("csplit: '/45/-2147483648': line number out of range\n");
+}
+
+#[test]
+fn test_skip_to_match_negative_offset_min_i32() {
+    new_ucmd!()
+        .args(&["numbers50.txt", "%45%-2147483648"])
+        .fails()
+        .stderr_is("csplit: '%45%-2147483648': line number out of range\n");
+}
+
+#[test]
 fn test_up_to_match_negative_offset_repeat_twice() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "/9$/-3", "{2}"])
@@ -654,8 +670,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -665,8 +680,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")

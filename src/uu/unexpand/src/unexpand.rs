@@ -10,11 +10,10 @@ use std::ffi::OsString;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Stdin, Stdout, Write, stdin, stdout};
 use std::num::IntErrorKind;
-use std::path::Path;
 use thiserror::Error;
 use uucore::char_width::char_info_at;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, set_exit_code};
 use uucore::translate;
 use uucore::{format_usage, show};
 
@@ -296,20 +295,24 @@ impl Read for Input {
 }
 
 fn open(path: &OsString) -> UResult<BufReader<Input>> {
-    let filename = Path::new(path);
-    if filename.is_dir() {
-        Err(USimpleError::new(
-            1,
-            translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
-        ))
-    } else if path == "-" {
-        Ok(BufReader::new(Input::Stdin(stdin())))
-    } else {
-        let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
-        #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
-        let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
-        Ok(BufReader::new(Input::File(f)))
+    // some platforms show different read error
+    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    {
+        let filename = std::path::Path::new(path);
+        if filename.is_dir() {
+            return Err(uucore::error::USimpleError::new(
+                1,
+                translate!("unexpand-error-is-directory", "path" => filename.maybe_quote()),
+            ));
+        }
     }
+    if path == "-" {
+        return Ok(BufReader::new(Input::Stdin(stdin())));
+    }
+    let f = File::open(path).map_err_context(|| path.maybe_quote().to_string())?;
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
+    let _ = rustix::fs::fadvise(&f, 0, None, rustix::fs::Advice::Sequential);
+    Ok(BufReader::new(Input::File(f)))
 }
 
 fn next_tabstop(tab_config: &TabConfig, col: usize) -> Option<usize> {
@@ -651,23 +654,19 @@ fn unexpand_file(
         pending_wide: Vec::new(),
     };
 
-    loop {
-        match input.read(buf) {
-            Ok(0) => break,
-            Ok(n) => {
-                for line in buf[..n].split_inclusive(|b| *b == b'\n') {
-                    unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
-                    if let Some(b'\n') = line.last() {
-                        print_state.new_line();
-                    }
-                }
+    while let n @ 1.. = input
+        .read(buf)
+        .map_err(|e| e.map_err_context(|| file.maybe_quote().to_string()) as Box<dyn UError>)?
+    {
+        for line in buf[..n].split_inclusive(|b| *b == b'\n') {
+            unexpand_buf(line, output, options, lastcol, tab_config, &mut print_state)?;
+            if let Some(b'\n') = line.last() {
+                print_state.new_line();
             }
-            Err(e) => return Err(e.map_err_context(|| file.maybe_quote().to_string())),
         }
     }
     // write out anything remaining
-    write_tabs(output, tab_config, &mut print_state, options.aflag)?;
-    Ok(())
+    write_tabs(output, tab_config, &mut print_state, options.aflag)
 }
 
 fn unexpand(options: &Options) -> UResult<()> {

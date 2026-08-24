@@ -19,12 +19,12 @@ all-features = true
 path = "src/lib/lib.rs"
 
 [dependencies]
+ariadne = { workspace = true, optional = true }
 base64-simd = { workspace = true, optional = true }
 bstr = { workspace = true, optional = true }
 clap = { workspace = true }
 data-encoding = { workspace = true, optional = true }
 data-encoding-macro = { workspace = true, optional = true }
-dns-lookup = { workspace = true, optional = true }
 dunce = { workspace = true, optional = true }
 glob = { workspace = true, optional = true }
 itertools = { workspace = true, optional = true }
@@ -34,14 +34,10 @@ jiff = { workspace = true, optional = true, features = [
   "tzdb-concatenated",
 ] }
 libc = { workspace = true, optional = true }
+openssl = { workspace = true, optional = true }
 os_display = { workspace = true }
 rustc-hash = { workspace = true }
 rustix = { workspace = true, features = ["fs", "net", "pipe", "process"] }
-time = { workspace = true, optional = true, features = [
-  "formatting",
-  "local-offset",
-  "macros",
-] }
 # Not optional: os_display already pulls unicode-width into every uucore build,
 # so making it a direct dependency here is free and keeps char_width available
 # on all targets (a feature-gated optional dep failed to activate on wasm).
@@ -99,6 +95,14 @@ tempfile = { workspace = true }
 selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
+# utmpx is unix-only, so its dependencies must not be pulled into other targets
+# (the uptime feature enables utmpx and now builds on windows too).
+dns-lookup = { workspace = true, optional = true }
+time = { workspace = true, optional = true, features = [
+  "formatting",
+  "local-offset",
+  "macros",
+] }
 nix = { workspace = true, features = [
   "dir",
   "fs",
@@ -108,9 +112,6 @@ nix = { workspace = true, features = [
   "user",
   "zerocopy",
 ] }
-# OpenSSL is only used on Unix targets. On Windows, enabling the `openssl`
-# feature is a no-op and the pure-Rust digest implementations are used.
-openssl = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 xattr = { workspace = true, optional = true }
 
@@ -119,7 +120,6 @@ procfs = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wild = { workspace = true }
-winapi-util = { workspace = true, optional = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",
   "Win32_Security",
@@ -143,12 +143,13 @@ default = ["signals"]
 # * non-default features
 backup-control = []
 colors = []
+diagnostics = ["dep:ariadne"]
 checksum = ["quoting-style", "sum", "base64-simd"]
 encoding = ["data-encoding", "data-encoding-macro", "z85", "base64-simd"]
 entries = ["libc"]
 extendedbigdecimal = ["bigdecimal", "num-traits"]
 fast-inc = []
-fs = ["dunce", "libc", "winapi-util", "windows-sys"]
+fs = ["dunce", "libc", "windows-sys"]
 fsext = ["libc", "windows-sys", "bstr"]
 fsxattr = ["xattr", "itertools", "libc"]
 hardware = []

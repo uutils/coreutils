@@ -183,8 +183,30 @@ fn test_number_width_zero() {
         new_ucmd!()
             .arg(arg)
             .fails()
-            .stderr_contains("Invalid line number field width: ‘0’: Numerical result out of range");
+            .stderr_contains("is not in 1..=2147483647");
     }
+}
+
+#[test]
+fn test_number_width_too_large() {
+    // Values > i32::MAX must be rejected to match GNU nl behavior and avoid
+    // a capacity-overflow panic in " ".repeat(number_width + 1).
+    for arg in ["-w2147483648", "--number-width=2147483648"] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("")
+            .fails()
+            .stderr_contains("is not in 1..=2147483647");
+    }
+}
+
+#[test]
+fn test_number_width_max_i32() {
+    // i32::MAX (2147483647) is the largest value GNU nl accepts; it must not panic.
+    new_ucmd!()
+        .args(&["-w", "2147483647"])
+        .pipe_in("")
+        .succeeds();
 }
 
 #[test]
@@ -754,23 +776,23 @@ fn test_one_byte_section_delimiter() {
 }
 
 #[test]
-fn test_non_ascii_one_char_section_delimiter() {
+fn test_multi_byte_one_char_section_delimiter() {
     for arg in ["-dä", "--section-delimiter=ä"] {
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\näää\nb") // header section
+            .pipe_in("a\nä:ä:ä:\nb") // header section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nää\nb") // body section
+            .pipe_in("a\nä:ä:\nb") // body section
             .succeeds()
             .stdout_is("     1\ta\n\n     1\tb\n");
 
         new_ucmd!()
             .arg(arg)
-            .pipe_in("a\nä\nb") // footer section
+            .pipe_in("a\nä:\nb") // footer section
             .succeeds()
             .stdout_is("     1\ta\n\n       b\n");
     }

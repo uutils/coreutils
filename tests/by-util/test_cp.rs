@@ -28,7 +28,6 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::{FileTypeExt, MetadataExt};
 #[cfg(windows)]
 use std::os::windows::fs::symlink_file;
-#[cfg(not(windows))]
 use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
@@ -964,6 +963,62 @@ fn test_cp_arg_symlink() {
         .succeeds();
 
     assert!(at.is_symlink(TEST_HELLO_WORLD_DEST));
+    assert_eq!(
+        std::fs::read_link(at.plus(TEST_HELLO_WORLD_DEST)).unwrap(),
+        Path::new(TEST_HELLO_WORLD_SOURCE)
+    );
+    assert_eq!(at.read(TEST_HELLO_WORLD_DEST), "Hello, World!\n");
+}
+
+// Recursively copying a tree that contains a symlink must not run chmod through
+// the destination symlink cp just created. chmod() follows symlinks, so doing so
+// would change the mode of the link target, which can live outside the copied
+// tree. GNU cp leaves the target untouched.
+#[test]
+#[cfg(unix)]
+fn test_cp_recursive_symlink_preserves_target_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.mkdir("target_dir");
+    at.touch("target_dir/file.txt");
+    at.set_mode("target_dir/file.txt", 0o600);
+
+    at.mkdir("src");
+    at.symlink_file("target_dir/file.txt", "src/link");
+
+    ucmd.arg("-r").arg("src").arg("dst").succeeds();
+
+    assert!(at.is_symlink("dst/link"));
+    assert_eq!(
+        at.metadata("target_dir/file.txt").permissions().mode() & 0o777,
+        0o600
+    );
+}
+
+// With --remove-destination onto a symlink, cp removes the link and creates a
+// fresh regular file, so the final chmod must not be skipped based on the
+// destination's pre-copy symlink state. GNU cp gives the new file the source
+// mode masked by the umask (664 & ~022 = 644 here); skipping the chmod leaves
+// it at the restrictive 0o600 creation mode (or at the raw cloned source mode
+// on filesystems that copy via clonefile).
+#[test]
+#[cfg(unix)]
+fn test_cp_remove_destination_symlink_applies_mode() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.touch("src");
+    at.set_mode("src", 0o664);
+    at.touch("target");
+    at.symlink_file("target", "dst");
+
+    ucmd.umask(0o022)
+        .arg("--remove-destination")
+        .arg("src")
+        .arg("dst")
+        .succeeds();
+
+    assert!(!at.is_symlink("dst"));
+    assert_eq!(at.metadata("dst").permissions().mode() & 0o777, 0o644);
 }
 
 #[test]
@@ -1193,6 +1248,26 @@ fn test_cp_arg_suffix_without_backup_option() {
         at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}.bak")),
         "How are you?\n"
     );
+}
+
+#[test]
+fn test_cp_empty_backup_suffix_uses_default() {
+    for backup_arg in ["--backup=nil", "--backup"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        ucmd.arg(backup_arg)
+            .arg("--suffix=")
+            .arg(TEST_HELLO_WORLD_SOURCE)
+            .arg(TEST_HOW_ARE_YOU_SOURCE)
+            .succeeds()
+            .no_stderr();
+
+        assert_eq!(at.read(TEST_HOW_ARE_YOU_SOURCE), "Hello, World!\n");
+        assert_eq!(
+            at.read(&format!("{TEST_HOW_ARE_YOU_SOURCE}~")),
+            "How are you?\n"
+        );
+    }
 }
 
 #[test]
@@ -4793,6 +4868,34 @@ fn test_cp_cannot_create_regular_file_attributes_only() {
     ucmd.args(&["--attributes-only", "source.txt", "/dev/null/n.txt"])
         .fails_with_code(1)
         .stderr_only("cp: cannot create regular file '/dev/null/n.txt': Not a directory\n");
+}
+
+#[test]
+fn test_cp_attributes_only_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg("--attributes-only")
+        .arg(file)
+        .arg(file)
+        .fails_with_code(1)
+        .stderr_contains(format!("'{file}' and '{file}' are the same file"));
+}
+
+#[test]
+fn test_cp_attributes_only_same_file_dot_path() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "a";
+
+    at.touch(file);
+
+    ucmd.arg("--attributes-only")
+        .arg(file)
+        .arg("./a")
+        .fails_with_code(1)
+        .stderr_contains(format!("'{file}' and './{file}' are the same file"));
 }
 
 #[test]

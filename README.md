@@ -136,7 +136,7 @@ To speed up the checksum utilities (`md5sum`, `sha1sum`, `sha224sum`, `sha256sum
 `sha384sum`, `sha512sum`, and `cksum`) by using OpenSSL's `libcrypto` instead of
 the pure-Rust digest crates, enable the `openssl` feature:
 ```
-cargo build --release --features unix,openssl
+cargo build --release --features openssl
 ```
 By default OpenSSL is built from source and statically linked into the
 binary (mirroring how `expr` links `oniguruma`), so no runtime dependency

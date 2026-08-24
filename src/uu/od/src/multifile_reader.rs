@@ -9,9 +9,7 @@ use std::io;
 #[cfg(unix)]
 use std::io::{Seek, SeekFrom};
 
-use uucore::display::Quotable;
-use uucore::show_error;
-use uucore::translate;
+use uucore::{display::Quotable, error::strip_errno, show_error, translate};
 
 /// Buffer size used when skipping bytes by reading and discarding them.
 const SKIP_BUFFER_SIZE: usize = 16 * 1024;
@@ -37,6 +35,16 @@ impl io::Read for CurrentReader {
         match self {
             Self::File(f) => f.read(buf),
             Self::Stdin(r) => r.read(buf),
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+impl rustix::fd::AsFd for CurrentReader {
+    fn as_fd(&self) -> rustix::fd::BorrowedFd<'_> {
+        match self {
+            Self::File(f) => f.as_fd(),
+            Self::Stdin(s) => s.0,
         }
     }
 }
@@ -108,15 +116,13 @@ impl MultifileReader<'_> {
                         Err(e) => {
                             // If any file can't be opened,
                             // print an error at the time that the file is needed,
-                            // then move to the next file.
-                            // This matches the behavior of the original `od`
-                            // Format error without OS error code to match GNU od
+                            // then move to the next file
                             let error_msg = match e.kind() {
+                                #[cfg(target_os = "windows")]
                                 io::ErrorKind::NotFound => "No such file or directory",
-                                io::ErrorKind::PermissionDenied => "Permission denied",
-                                _ => "I/O error",
+                                _ => &strip_errno(&e),
                             };
-                            show_error!("{}: {error_msg}", fname.maybe_quote().external(true));
+                            show_error!("{}: {error_msg}", fname.maybe_quote().external(true),);
                             self.any_err = true;
                         }
                     }
@@ -186,8 +192,17 @@ fn skip_in_file(curr: &mut CurrentReader, n_skip: u64) -> io::Result<u64> {
             }
         }
     }
-    let read = uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?;
-    Ok(n_skip - read)
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    match uucore::pipes::discard_n_bytes(&curr, n_skip as usize) {
+        Ok(spliced) => Ok(n_skip - spliced as u64),
+        Err(spliced) => {
+            let read =
+                uucore::io::read_and_discard(curr, n_skip - spliced as u64, SKIP_BUFFER_SIZE)?;
+            Ok(n_skip - spliced as u64 - read)
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    Ok(n_skip - uucore::io::read_and_discard(curr, n_skip, SKIP_BUFFER_SIZE)?)
 }
 
 /// Seek `f` forward by `n` bytes. Returns `Ok(true)` if the seek happened, or
@@ -223,7 +238,7 @@ impl io::Read for MultifileReader<'_> {
                                 show_error!(
                                     "{}: {}",
                                     self.file_name.unwrap_or("I/O"),
-                                    uucore::error::strip_errno(&e)
+                                    strip_errno(&e)
                                 );
                                 self.any_err = true;
                                 break;

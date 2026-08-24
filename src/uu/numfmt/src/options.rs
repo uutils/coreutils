@@ -2,11 +2,26 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-use std::str::FromStr;
+use std::fmt::Display;
+use std::iter::Peekable;
+// `Range` alone is the field range from uucore, so byte ranges are named apart.
+use std::ops::Range as ByteRange;
+use std::str::{CharIndices, FromStr};
 
 use crate::units::Unit;
 use uucore::ranges::Range;
 use uucore::translate;
+
+/// Byte offset the parser stopped at, the end of input when nothing is left.
+fn offset(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> usize {
+    iter.peek().map_or(s.len(), |&(i, _)| i)
+}
+
+/// Byte range of the character the parser stopped at, empty at end of input.
+fn at(iter: &mut Peekable<CharIndices<'_>>, s: &str) -> ByteRange<usize> {
+    iter.peek()
+        .map_or(s.len()..s.len(), |&(i, c)| i..i + c.len_utf8())
+}
 
 pub const DEBUG: &str = "debug";
 pub const DELIMITER: &str = "delimiter";
@@ -108,8 +123,90 @@ pub struct FormatOptions {
     pub zero_padding: bool,
 }
 
+/// A `--format` string that does not parse, and where the parse stopped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormatError {
+    pub message: String,
+    /// Byte range inside the format string.
+    pub span: ByteRange<usize>,
+    pub kind: FormatErrorKind,
+}
+
+/// What went wrong, so a caller can label the caret.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormatErrorKind {
+    /// No `%f` directive at all, or one that never ends.
+    MissingDirective,
+    /// A character that has no place in a directive.
+    UnexpectedCharacter,
+    /// A directive ending on something other than `f`, such as `%d` or `%e`.
+    UnexpectedConversion,
+    /// A width or precision that does not fit.
+    NumberOverflow,
+    /// A `%` in the suffix that is not part of a `%%` pair.
+    StrayPercent,
+}
+
+impl Display for FormatError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+/// An option value that does not parse as a whole — a unit name, a unit size,
+/// a padding — so that the caret can underline it where it was typed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OptionValueError {
+    pub message: String,
+    /// Long name of the option the value came from, as in `from-unit`.
+    pub option: &'static str,
+    /// The value as given, which is how it is found among the arguments.
+    pub value: String,
+    /// Fluent identifier of the label under the caret, when one would add to
+    /// the message.
+    pub label: Option<&'static str>,
+    /// Fluent identifier of the line of advice under the report.
+    pub help: &'static str,
+}
+
+/// Why option parsing failed: a format error that still knows where in the
+/// format string it happened, or a plain message.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseError {
+    Format(FormatError),
+    /// A `--field` list that does not parse, knowing where in the list.
+    Field(uucore::ranges::RangeError),
+    /// An option value that is wrong from end to end.
+    Value(Box<OptionValueError>),
+    Other(String),
+}
+
+impl From<OptionValueError> for ParseError {
+    fn from(error: OptionValueError) -> Self {
+        Self::Value(Box::new(error))
+    }
+}
+
+impl From<FormatError> for ParseError {
+    fn from(error: FormatError) -> Self {
+        Self::Format(error)
+    }
+}
+
+impl From<String> for ParseError {
+    fn from(message: String) -> Self {
+        Self::Other(message)
+    }
+}
+
+impl From<uucore::ranges::RangeError> for ParseError {
+    fn from(error: uucore::ranges::RangeError) -> Self {
+        Self::Field(error)
+    }
+}
+
 impl FromStr for FormatOptions {
-    type Err = String;
+    type Err = FormatError;
 
     // The recognized format is: [PREFIX]%[0]['][-][N][.][N]f[SUFFIX]
     //
@@ -121,8 +218,15 @@ impl FromStr for FormatOptions {
     // An optional precision (%.1f) determines the precision of the number.
     #[allow(clippy::cognitive_complexity)]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut iter = s.chars().peekable();
+        // Byte offsets are tracked alongside the characters so that a failure
+        // can say where in the format it gave up.
+        let mut iter = s.char_indices().peekable();
         let mut options = Self::default();
+        let error = |message: String, span: ByteRange<usize>, kind: FormatErrorKind| FormatError {
+            message,
+            span,
+            kind,
+        };
 
         let mut padding = String::new();
         let mut precision = String::new();
@@ -131,9 +235,9 @@ impl FromStr for FormatOptions {
         // '%' chars in the prefix, if any, must appear in blocks of even length, for example: "%%%%" and
         // "%% %%" are ok, "%%% %" is not ok. A single '%' is treated as the beginning of the
         // floating point argument.
-        while let Some(c) = iter.next() {
+        while let Some((_, c)) = iter.next() {
             match c {
-                '%' if iter.peek() == Some(&'%') => {
+                '%' if matches!(iter.peek(), Some((_, '%'))) => {
                     iter.next();
                     double_percentage_counter += 1;
 
@@ -152,16 +256,26 @@ impl FromStr for FormatOptions {
         }
 
         if iter.peek().is_none() {
-            return if options.prefix == s {
-                Err(translate!("numfmt-error-format-no-percent", "format" => s))
+            // Nothing to point inside: the directive is missing from the whole
+            // format, or it is the trailing '%' that never became one.
+            return Err(if options.prefix == s {
+                error(
+                    translate!("numfmt-error-format-no-percent", "format" => s),
+                    0..s.len(),
+                    FormatErrorKind::MissingDirective,
+                )
             } else {
-                Err(translate!("numfmt-error-format-ends-in-percent", "format" => s))
-            };
+                error(
+                    translate!("numfmt-error-format-ends-in-percent", "format" => s),
+                    s.len().saturating_sub(1)..s.len(),
+                    FormatErrorKind::MissingDirective,
+                )
+            });
         }
 
         // GNU numfmt allows to mix the characters " ", "'", and "0" in any way, so we do the same
-        while matches!(iter.peek(), Some(' ' | '\'' | '0')) {
-            match iter.next().unwrap() {
+        while matches!(iter.peek(), Some((_, ' ' | '\'' | '0'))) {
+            match iter.next().unwrap().1 {
                 ' ' => (),
                 '\'' => options.grouping = true,
                 '0' => options.zero_padding = true,
@@ -169,18 +283,23 @@ impl FromStr for FormatOptions {
             }
         }
 
-        if let Some('-') = iter.peek() {
+        if let Some((_, '-')) = iter.peek() {
             iter.next();
 
             match iter.peek() {
-                Some(c) if c.is_ascii_digit() => padding.push('-'),
+                Some((_, c)) if c.is_ascii_digit() => padding.push('-'),
                 _ => {
-                    return Err(translate!("numfmt-error-invalid-format-directive", "format" => s));
+                    return Err(error(
+                        translate!("numfmt-error-invalid-format-directive", "format" => s),
+                        at(&mut iter, s),
+                        FormatErrorKind::UnexpectedCharacter,
+                    ));
                 }
             }
         }
 
-        while let Some(c) = iter.peek() {
+        let padding_start = offset(&mut iter, s);
+        while let Some((_, c)) = iter.peek() {
             if c.is_ascii_digit() {
                 padding.push(*c);
                 iter.next();
@@ -193,20 +312,27 @@ impl FromStr for FormatOptions {
             if let Ok(p) = padding.parse() {
                 options.padding = Some(p);
             } else {
-                return Err(
+                return Err(error(
                     translate!("numfmt-error-invalid-format-width-overflow", "format" => s),
-                );
+                    padding_start..offset(&mut iter, s),
+                    FormatErrorKind::NumberOverflow,
+                ));
             }
         }
 
-        if let Some('.') = iter.peek() {
+        if let Some((_, '.')) = iter.peek() {
             iter.next();
 
-            if matches!(iter.peek(), Some(' ' | '+' | '-')) {
-                return Err(translate!("numfmt-error-invalid-precision", "format" => s));
+            if matches!(iter.peek(), Some((_, ' ' | '+' | '-'))) {
+                return Err(error(
+                    translate!("numfmt-error-invalid-precision", "format" => s),
+                    at(&mut iter, s),
+                    FormatErrorKind::UnexpectedCharacter,
+                ));
             }
 
-            while let Some(c) = iter.peek() {
+            let precision_start = offset(&mut iter, s);
+            while let Some((_, c)) = iter.peek() {
                 if c.is_ascii_digit() {
                     precision.push(*c);
                     iter.next();
@@ -220,28 +346,48 @@ impl FromStr for FormatOptions {
             } else if let Ok(p) = precision.parse() {
                 options.precision = Some(p);
             } else {
-                return Err(translate!("numfmt-error-invalid-precision", "format" => s));
+                return Err(error(
+                    translate!("numfmt-error-invalid-precision", "format" => s),
+                    precision_start..offset(&mut iter, s),
+                    FormatErrorKind::NumberOverflow,
+                ));
             }
         }
 
-        if let Some('f') = iter.peek() {
+        if let Some((_, 'f')) = iter.peek() {
             iter.next();
         } else {
-            return Err(translate!("numfmt-error-invalid-format-directive", "format" => s));
+            // Only the character standing where the conversion belongs is at
+            // fault: whatever follows it would have been a valid suffix. At end
+            // of input there is no conversion to name, only one missing.
+            let kind = if iter.peek().is_none() {
+                FormatErrorKind::MissingDirective
+            } else {
+                FormatErrorKind::UnexpectedConversion
+            };
+            return Err(error(
+                translate!("numfmt-error-invalid-format-directive", "format" => s),
+                at(&mut iter, s),
+                kind,
+            ));
         }
 
         // '%' chars in the suffix, if any, must appear in blocks of even length, otherwise
         // it is an error. For example: "%%%%" and "%% %%" are ok, "%%% %" is not ok.
-        while let Some(c) = iter.next() {
+        while let Some((i, c)) = iter.next() {
             if c != '%' {
                 options.suffix.push(c);
-            } else if iter.peek() == Some(&'%') {
+            } else if matches!(iter.peek(), Some((_, '%'))) {
                 for _ in 0..2 {
                     options.suffix.push('%');
                 }
                 iter.next();
             } else {
-                return Err(translate!("numfmt-error-format-too-many-percent", "format" => s));
+                return Err(error(
+                    translate!("numfmt-error-format-too-many-percent", "format" => s),
+                    i..i + 1,
+                    FormatErrorKind::StrayPercent,
+                ));
             }
         }
 

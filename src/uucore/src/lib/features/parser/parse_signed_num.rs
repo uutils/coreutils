@@ -8,7 +8,7 @@
 //! These utilities accept arguments like `-5`, `+10`, `-100K` where the leading
 //! sign indicates different behavior (e.g., "first N" vs "last N" vs "starting from N").
 
-use super::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max};
+use super::parse_size::{ParseSizeError, parse_size_u64, parse_size_u64_max, size_offset};
 
 /// The sign prefix found on a numeric argument.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,6 +127,20 @@ pub fn parse_signed_num(src: &str) -> Result<SignedNum, ParseSizeError> {
     Ok(SignedNum { value, sign })
 }
 
+/// Where the number starts inside `src`, past what this module strips before
+/// parsing: the surrounding whitespace and the sign prefix.
+///
+/// The prefix here is the sign this module's own `strip_sign_prefix` takes, so
+/// the two agree on what was stripped; see [`size_offset`] for the rest of the
+/// reasoning.
+///
+/// # Arguments
+///
+/// * `src` - The argument as typed, the one [`parse_signed_num_max`] was given.
+pub fn number_offset(src: &str) -> usize {
+    size_offset(src, |c| matches!(c, '+' | '-'))
+}
+
 /// Strip the sign prefix from a string and return both the sign and remaining string.
 fn strip_sign_prefix(src: &str) -> (Option<SignPrefix>, &str) {
     let trimmed = src.trim();
@@ -143,6 +157,30 @@ fn strip_sign_prefix(src: &str) -> (Option<SignPrefix>, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The offset a caret counts has to be the one the parser skipped, or the
+    /// underline lands beside what went wrong — under the sign rather than
+    /// under the unit that was not a unit.
+    #[test]
+    fn number_offset_counts_what_the_parser_stripped() {
+        assert_eq!(number_offset("1fb"), 0);
+        assert_eq!(number_offset("-1fb"), 1);
+        assert_eq!(number_offset("+5zz"), 1);
+        assert_eq!(number_offset("  -1fb"), 3);
+        // The parser reads leading zeros as part of the number, so they stay.
+        assert_eq!(number_offset("-001fb"), 1);
+    }
+
+    /// What the two agree on is the point: `span` is only right about an
+    /// operand once the sign in front of it has been counted out.
+    #[test]
+    fn the_span_lands_on_the_unit_of_a_signed_operand() {
+        let operand = "-1fb";
+        let error = parse_signed_num_max(operand).unwrap_err();
+        let at = number_offset(operand);
+        assert_eq!(error.span(&operand[at..]), 1..3);
+        assert_eq!(&operand[at..][1..3], "fb");
+    }
 
     #[test]
     fn test_no_sign() {

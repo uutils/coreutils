@@ -12,7 +12,7 @@ use memchr::memmem;
 use memmap2::Mmap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufWriter, Read, Write, stdin, stdout};
-use std::{fs::File, io::copy, path::Path};
+use std::{fs::File, path::Path};
 #[cfg(unix)]
 use uucore::error::UError;
 use uucore::error::UResult;
@@ -350,25 +350,22 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
                 set_exit_code(1);
                 continue;
             }
-            if let Some(mmap1) = try_mmap_stdin() {
-                mmap = mmap1;
-                &mmap
-            } else {
-                // Copy stdin to a temp file (respects TMPDIR), then mmap it.
-                // Falls back to Vec buffer if temp file creation fails (e.g., bad TMPDIR).
-                match buffer_stdin() {
-                    Ok(StdinData::Mmap(mmap1)) => {
-                        mmap = mmap1;
-                        &mmap
-                    }
-                    Ok(StdinData::Vec(buf1)) => {
-                        buf = buf1;
-                        &buf
-                    }
-                    Err(e) => {
-                        show!(TacError::ReadError(OsString::from("stdin"), e));
-                        continue;
-                    }
+            // Spool stdin to a temp file and mmap that (buffer_stdin explains
+            // why mapping the temp file is sound). Mapping the raw stdin fd
+            // would expose `tac < file` to the same truncation SIGBUS as #9748,
+            // and the temp file also bounds memory for huge stdin (#10094).
+            match buffer_stdin() {
+                Ok(StdinData::Mmap(mmap1)) => {
+                    mmap = mmap1;
+                    &mmap
+                }
+                Ok(StdinData::Vec(buf1)) => {
+                    buf = buf1;
+                    &buf
+                }
+                Err(e) => {
+                    show!(TacError::ReadError(OsString::from("stdin"), e));
+                    continue;
                 }
             }
         } else {
@@ -381,47 +378,33 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
                 }
             };
 
-            if let Some(mmap1) = try_mmap_file(&file) {
-                mmap = mmap1;
-                &mmap
-            } else {
-                let mut contents = Vec::new();
-                match file.read_to_end(&mut contents) {
-                    Ok(_) => {
-                        buf = contents;
-                        &buf
-                    }
-                    Err(e) => {
-                        show!(TacError::ReadError(filename.clone(), e));
-                        continue;
-                    }
+            // Read the file into memory rather than memory-mapping it: a
+            // concurrent truncation of a mapped file raises SIGBUS and kills the
+            // process (e.g. during log rotation; #9748). This holds the whole
+            // file in memory, unlike the stdin path; reading seekable files
+            // backwards in blocks could bound memory without copying (future work).
+            let mut contents = Vec::new();
+            match file.read_to_end(&mut contents) {
+                Ok(_) => {
+                    buf = contents;
+                    &buf
+                }
+                Err(e) => {
+                    show!(TacError::ReadError(filename.clone(), e));
+                    continue;
                 }
             }
         };
 
         // Select the appropriate `tac` algorithm based on whether the
         // separator is given as a regular expression or a fixed string.
-        let result = match maybe_pattern {
+        match maybe_pattern {
             Some(ref pattern) => buffer_tac_regex(data, pattern, before),
             None => buffer_tac(data, before, separator),
-        };
-
-        // If there is any error in writing the output, terminate immediately.
-        if let Err(e) = result {
-            return Err(TacError::WriteError(e).into());
         }
+        .map_err(TacError::WriteError)?;
     }
     Ok(())
-}
-
-fn try_mmap_stdin() -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    let mmap = unsafe { Mmap::map(&stdin()).ok()? };
-    // On Windows, mmap on a pipe handle can "succeed" but return 0 bytes
-    // (the file size of a pipe is reported as 0). When that happens, return
-    // None so we fall through to buffer_stdin() which reads the pipe properly.
-    if mmap.is_empty() { None } else { Some(mmap) }
 }
 
 enum StdinData {
@@ -433,25 +416,20 @@ enum StdinData {
 /// Falls back to reading directly into memory if temp file creation fails.
 fn buffer_stdin() -> std::io::Result<StdinData> {
     // Try to create a temp file (respects TMPDIR)
-    if let Ok(mut tmp) = tempfile::tempfile() {
-        // Temp file created - copy stdin to it, then read back
-        copy(&mut stdin(), &mut tmp)?;
-        // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-        // and our process will be terminated, thus preventing access of invalid memory.
-        let mmap = unsafe { Mmap::map(&tmp)? };
-        Ok(StdinData::Mmap(mmap))
-    } else {
+    let Ok(mut tmp) = tempfile::tempfile() else {
         // Fall back to reading directly into memory (e.g., bad TMPDIR)
         let mut buf = Vec::new();
         stdin().read_to_end(&mut buf)?;
-        Ok(StdinData::Vec(buf))
-    }
-}
-
-fn try_mmap_file(file: &File) -> Option<Mmap> {
-    // SAFETY: If the file is truncated while we map it, SIGBUS will be raised
-    // and our process will be terminated, thus preventing access of invalid memory.
-    unsafe { Mmap::map(file).ok() }
+        return Ok(StdinData::Vec(buf));
+    };
+    // Temp file created - copy stdin to it, then read back
+    uucore::buf_copy::copy_fast(&mut stdin(), &mut tmp)?;
+    // SAFETY: `tmp` is an unlinked file owned by this process, so no other
+    // process can open and truncate it. The mapping therefore stays valid
+    // for its whole lifetime and cannot trigger SIGBUS (unlike mapping a
+    // caller-provided file; see #9748).
+    let mmap = unsafe { Mmap::map(&tmp)? };
+    Ok(StdinData::Mmap(mmap))
 }
 
 #[cfg(test)]

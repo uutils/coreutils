@@ -8,10 +8,11 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
+use std::ffi::OsString;
 use std::io::{self, Write as _};
 
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{ExitCode, UResult, USimpleError, UUsageError, set_exit_code};
 use uucore::format_usage;
 use uucore::fs::makedev;
 use uucore::translate;
@@ -139,6 +140,9 @@ fn mknod(file_name: &str, config: Config) -> i32 {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let file_type = matches.get_one::<FileType>("type").unwrap();
@@ -148,7 +152,26 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         None => MODE_RW_UGO,
         Some(str_mode) => {
             use_umask = false;
-            parse_mode(str_mode).map_err(|e| USimpleError::new(1, e))?
+            let mode =
+                uucore::mode::parse_chmod(MODE_RW_UGO, str_mode, true, uucore::mode::get_umask())
+                    .map_err(|err| {
+                    let message =
+                        translate!("mknod-error-invalid-mode", "error" => err.to_string());
+                    if let Some(args) = &diag_args
+                        && err.render_mode_value(args, str_mode, 0, &message)
+                    {
+                        // The diagnostic is already on stderr; exit quietly.
+                        return ExitCode::new(1);
+                    }
+                    USimpleError::new(1, message)
+                })?;
+            if mode > 0o777 {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("mknod-error-mode-permission-bits-only"),
+                ));
+            }
+            mode
         }
     };
     let mode = Mode::from_bits_truncate(mode_permissions as mode_t);
@@ -268,24 +291,6 @@ pub fn uu_app() -> Command {
                 .require_equals(true)
                 .help(translate!("mknod-help-context")),
         )
-}
-
-fn parse_mode(str_mode: &str) -> Result<u32, String> {
-    let default_mode = MODE_RW_UGO;
-    uucore::mode::parse_chmod(default_mode, str_mode, true, uucore::mode::get_umask())
-        .map_err(|e| {
-            translate!(
-                "mknod-error-invalid-mode",
-                "error" => e
-            )
-        })
-        .and_then(|mode| {
-            if mode > 0o777 {
-                Err(translate!("mknod-error-mode-permission-bits-only"))
-            } else {
-                Ok(mode)
-            }
-        })
 }
 
 fn parse_type(tpe: &str) -> Result<FileType, String> {

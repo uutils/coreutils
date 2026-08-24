@@ -595,6 +595,37 @@ fn test_chmod_preserve_root_symlink_during_recursion() {
 }
 
 #[test]
+fn test_chmod_recursive_reference_does_not_follow_inner_symlink() {
+    // A symlink met inside the tree during `chmod -R` must not have its referent
+    // touched: chmod(2) follows the link, and the target can live outside the
+    // tree. GNU never follows such a link, and the --reference path has to behave
+    // like the symbolic/numeric path, which already skips it.
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // A file that lives outside the tree being modified.
+    at.touch("outside_target");
+    at.set_mode("outside_target", 0o600);
+
+    // The reference file carries a distinctive mode.
+    at.touch("ref");
+    at.set_mode("ref", 0o745);
+
+    // The tree holds a symlink pointing at the outside file.
+    at.mkdir("tree");
+    at.symlink_file("outside_target", "tree/link");
+
+    ucmd.arg("-R").arg("--reference=ref").arg("tree").succeeds();
+
+    // The referent outside the tree keeps its mode, while the walked directory
+    // still picks up the reference mode.
+    assert_eq!(
+        at.metadata("outside_target").permissions().mode() & 0o7777,
+        0o600
+    );
+    assert_eq!(at.metadata("tree").permissions().mode() & 0o7777, 0o745);
+}
+
+#[test]
 fn test_chmod_symlink_non_existing_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -909,6 +940,141 @@ fn test_gnu_special_options() {
     at.touch("file");
     scene.ucmd().arg("--").arg("--").arg("file").succeeds();
     scene.ucmd().arg("--").arg("--").fails();
+}
+
+/// Every row of the operand matrix from
+/// <https://github.com/uutils/coreutils/issues/3147>.
+///
+/// The left column is the argument list, the right column is the exact list of operands, in order,
+/// that must end up being changed. Three files named `f`, `--` and `-w` exist in every case, so a
+/// row that expects `[]` is asserting that the arguments are rejected outright rather than being
+/// resolved to some file that happens to exist. None of the rows are redundant: they only differ
+/// pairwise in where a `--` sits, which is precisely what decides whether a leading-hyphen argument
+/// is a mode or a file name.
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_gnu_usage_matrix() {
+    let matrix: &[(&[&str], &[&str])] = &[
+        (&["--"], &[]),
+        (&["--", "--"], &[]),
+        (&["--", "--", "--", "f"], &["--", "f"]),
+        (&["--", "--", "-w", "f"], &["-w", "f"]),
+        (&["--", "--", "f"], &["f"]),
+        (&["--", "-w"], &[]),
+        (&["--", "-w", "--", "f"], &["--", "f"]),
+        (&["--", "-w", "-w", "f"], &["-w", "f"]),
+        (&["--", "-w", "f"], &["f"]),
+        (&["--", "f"], &[]),
+        (&["-w"], &[]),
+        (&["-w", "--"], &[]),
+        (&["-w", "--", "--", "f"], &["--", "f"]),
+        (&["-w", "--", "-w", "f"], &["-w", "f"]),
+        (&["-w", "--", "f"], &["f"]),
+        (&["-w", "-w"], &[]),
+        (&["-w", "-w", "--", "f"], &["f"]),
+        (&["-w", "-w", "-w", "f"], &["f"]),
+        (&["-w", "-w", "f"], &["f"]),
+        (&["-w", "f"], &["f"]),
+        (&["f"], &[]),
+        (&["f", "--"], &[]),
+        (&["f", "-w"], &["f"]),
+        (&["f", "f"], &[]),
+        (&["u+gr", "f"], &[]),
+        (&["ug,+x", "f"], &[]),
+    ];
+
+    for (args, expected) in matrix {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        // 0o644 has no group or other write bit, so `-w` lands on 0o444 under any umask. This test
+        // is about which operands get picked, not about umask arithmetic.
+        for name in ["f", "--", "-w"] {
+            make_file(&at.plus_as_string(name), 0o644);
+        }
+
+        let result = scene.ucmd().arg("-v").args(args).run();
+        let context = format!("chmod -v {}", args.join(" "));
+
+        // `-v` names every operand it visits, whether or not the mode ends up changing anything.
+        let visited: Vec<&str> = result
+            .stdout_str()
+            .lines()
+            .filter_map(|line| line.strip_prefix("mode of '"))
+            .filter_map(|rest| rest.split('\'').next())
+            .collect();
+        assert_eq!(visited, *expected, "{context}: acted on the wrong operands");
+
+        // A row that names no operand is an error (a missing or invalid mode), never a silent
+        // no-op.
+        assert_eq!(
+            result.succeeded(),
+            !expected.is_empty(),
+            "{context}: unexpected exit status"
+        );
+
+        // Independently of `-v`, nothing outside the expected list may be touched. This is what
+        // catches an implementation that mistakes the file named `--` for a separator.
+        for name in ["f", "--", "-w"] {
+            if !expected.contains(&name) {
+                assert_eq!(
+                    at.metadata(name).permissions().mode() & 0o7777,
+                    0o644,
+                    "{context}: {name} should have been left alone"
+                );
+            }
+        }
+    }
+}
+
+/// `chmod` warns that the umask kept bits the mode asked to remove only when the mode was written
+/// in the option-like form, i.e. as a leading-hyphen argument before any `--`. Once `--` has been
+/// seen the operand is unambiguously a mode, and the change is applied silently.
+#[test]
+#[cfg(not(target_os = "android"))]
+fn test_umask_conflict_reported_only_for_option_like_mode() {
+    // (arguments, resulting permission bits, whether the umask conflict is reported)
+    let cases: &[(&[&str], u32, bool)] = &[
+        (&["-w", "file"], 0o466, true),
+        // A `--` after the mode does not retroactively make it an ordinary operand.
+        (&["-w", "--", "file"], 0o466, true),
+        (&["file", "-w"], 0o466, true),
+        (&["-w", "-w", "--", "file"], 0o466, true),
+        (&["--", "-w", "file"], 0o466, false),
+        (&["--", "-rw", "file"], 0o022, false),
+        // What matters is whether the argument itself began with a hyphen, not whether the mode
+        // contains an umask-relative clause: these two modes do the same thing, and only the one
+        // that looks like an option is reported.
+        (&["u+x,-w", "file"], 0o566, false),
+        (&["-w,u+x", "file"], 0o566, true),
+        (&["--", "-w,u+x", "file"], 0o566, false),
+    ];
+
+    for (args, expected_mode, reported) in cases {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        // 0o666 is required: on 0o644 the umask has nothing left to keep, so the conflict never
+        // arises and every one of these cases would pass vacuously.
+        make_file(&at.plus_as_string("file"), 0o666);
+
+        let result = scene.ucmd().umask(0o022).args(args).run();
+        let context = format!("chmod {}", args.join(" "));
+
+        assert_eq!(
+            at.metadata("file").permissions().mode() & 0o7777,
+            *expected_mode,
+            "{context}: wrong resulting permissions"
+        );
+        if *reported {
+            result.code_is(1);
+            assert!(
+                result.stderr_str().contains("new permissions are"),
+                "{context}: expected the umask conflict to be reported, got {:?}",
+                result.stderr_str()
+            );
+        } else {
+            result.success().no_stderr();
+        }
+    }
 }
 
 #[test]
@@ -1523,4 +1689,150 @@ fn test_chmod_symlink_two_links_same_dir() {
         .stdout_contains("mode of 'base/link1/file'")
         .stdout_contains("mode of 'base/link2/file'");
     // cSpell:enable
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["g+rw?x", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // The caret lands on `?`, the fifth character of the mode.
+        assert_eq!(result.caret_column(), Some(5), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_the_second_clause() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["o=r,ug!w", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // Clauses are parsed one at a time, but the caret is placed in the
+        // whole mode: `!` is its seventh character.
+        assert_eq!(result.caret_column(), Some(7), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_clause_with_no_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["go", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid mode"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(1), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_marks_a_non_octal_mode() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        ucmd.terminal_sim_stderr()
+            .args(&["779", "probe"])
+            .fails_with_code(1)
+            .stderr_contains("779");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_a_negative_mode() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // A leading-dash mode is pulled out of the argument list before clap
+        // sees it, but the caret still lands on `%`, its fourth character.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-rw%x", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(4), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_the_right_negative_mode() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // Several negative modes are joined into one mode string before being
+        // parsed, but the caret still lands on `%` inside the one argument
+        // that carries the bad clause.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-w", "-r%x", "probe"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // Column 6 of `-w -r%x probe` is the `%`.
+        assert_eq!(result.caret_column(), Some(6), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_mode_not_a_file_with_the_same_name() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("g+rw?x");
+
+        // The file is named exactly like the mode; the caret belongs to the
+        // mode operand, the first of the two.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["g+rw?x", "g+rw?x"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        assert_eq!(result.caret_column(), Some(5), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // The test harness pipes stderr, so the report must not appear.
+        ucmd.args(&["g+rw?x", "probe"])
+            .fails_with_code(1)
+            .stderr_only("chmod: invalid operator (expected +, -, or =, but found ?)\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_quiet_stays_quiet() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("probe");
+
+        // -f suppresses the message entirely, report included.
+        ucmd.terminal_sim_stderr()
+            .args(&["-f", "g+rw?x", "probe"])
+            .fails_with_code(1)
+            .no_output();
+    }
 }

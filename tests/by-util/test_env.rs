@@ -632,21 +632,21 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 }
 
 // FixMe: This test fails on MACOS:
-// thread 'test_env::test_gnu_e20' panicked at 'assertion failed: `(left == right)`
-// left: `"A=B C=D\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
-// right: `"A=B C=D\n"`', tests/by-util/test_env.rs:369:5
+// thread 'test_env::test_env_split_quoted_with_backslash_space' panicked at 'assertion failed: `(left == right)`
+// left: `"X=Y Z=W\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
+// right: `"X=Y Z=W\n"`', tests/by-util/test_env.rs:369:5
 #[cfg(not(target_os = "macos"))]
 #[test]
-fn test_gnu_e20() {
+fn test_env_split_quoted_with_backslash_space() {
     let scene = TestScenario::new(util_name!());
 
     let env_bin = String::from(uutests::util::get_tests_binary()) + " " + util_name!();
     let input = [
         String::from("-i"),
-        String::from(r#"-SA="B\_C=D" "#) + env_bin.escape_default().to_string().as_str() + "",
+        String::from(r#"-SX="Y\_Z=W" "#) + env_bin.escape_default().to_string().as_str() + "",
     ];
 
-    let mut output = "A=B C=D\n".to_string();
+    let mut output = "X=Y Z=W\n".to_string();
 
     // Workaround for the test to pass when coverage is being run.
     // If enabled, the binary called by env_bin will most probably be
@@ -830,8 +830,7 @@ fn test_env_overwrite_arg0() {
     ts.ucmd()
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -845,32 +844,28 @@ fn test_env_arg_argv0_overwrite() {
         .args(&["--argv0", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by -a
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite --argv0 by -a
     ts.ucmd()
         .args(&["--argv0", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by --argv0
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -884,31 +879,27 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S--argv0 dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // normal following string arg
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-S-a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // one large string arg
     ts.ucmd()
         .args(&["-S--argv0 dirname -a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // two string args
     ts.ucmd()
         .args(&["-S-a dirname"])
         .args(&["-S--argv0 hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // three args: normal, string, normal
     ts.ucmd()
@@ -916,8 +907,7 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S-a dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 #[test]
@@ -2138,4 +2128,103 @@ fn test_env_disallow_double_underscore_all() {
         .args(&["--block-signal=__ALL__", "true"])
         .fails()
         .stderr_contains("invalid signal");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unterminated_quote() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo 'unterminated"])
+            .fails_with_code(125);
+
+        // The string is echoed back quoted, since it holds spaces; the caret
+        // still lands inside it, on the run that never closes.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+env: no terminating quote in -S string at position 18 for quote '''
+   ╭─[ env:1:9 ]
+   │
+ 1 │ env -S \"echo 'unterminated\"
+   │         ──────────────────
+   │
+   │ Help: -S quotes as the shell does: ' and \" come in pairs, and \\' escapes a quote
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_invalid_escape() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo \\q"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // The caret covers the backslash and the character it was meant to
+        // escape, not just the one the parser stopped on.
+        assert!(stderr.contains("invalid sequence '\\q'"), "{stderr}");
+        assert!(stderr.contains(" 1 │ env -S 'echo \\q'"), "{stderr}");
+        assert!(stderr.contains("\n   │              ──"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_whole_variable_reference() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo ${1FOO}"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // Raised on the digit, but the caret covers the reference from its
+        // `$`, which is what the reader has to fix.
+        assert!(stderr.contains("only ${VARNAME} expansion"), "{stderr}");
+        assert!(
+            stderr.contains("a variable name cannot start with a digit"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("\n   │              ─┬─"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_follows_the_string_when_it_is_glued_to_the_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-Secho ${FOO"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        // `-Secho …` carries the string in the same argument, so the caret
+        // shifts by the two columns the option takes.
+        assert!(stderr.contains("this { is never closed"), "{stderr}");
+        assert!(stderr.contains(" 1 │ env '-Secho ${FOO'"), "{stderr}");
+        assert!(stderr.contains("\n   │             ──┬──"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_into_the_right_argument() {
+        // The same text appears as the command env is asked to run; the caret
+        // belongs to the -S string, which is where the parse failed.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "echo \\q", "echo \\q"])
+            .fails_with_code(125);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("env:1:14"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["-S", "echo 'unterminated"])
+            .fails_with_code(125)
+            .stderr_is("env: no terminating quote in -S string at position 18 for quote '''\n");
+    }
 }

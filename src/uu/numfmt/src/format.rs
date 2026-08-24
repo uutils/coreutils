@@ -43,9 +43,7 @@ fn find_numeric_beginning(s: &str) -> Option<&str> {
             continue;
         }
         let num_str = s[..i].replace(dec_sep, ".");
-        if num_str.parse::<f64>().is_err() {
-            return None;
-        }
+        num_str.parse::<f64>().ok()?;
         return Some(&s[..i]);
     }
 
@@ -102,6 +100,65 @@ fn valid_end_with_unit_separator(
     Some(valid_part.len() + unit_separator.len() + suffix_len)
 }
 
+/// Length of the leading part of `s` that reads as a number, suffix included.
+fn valid_prefix_len(s: &str, unit: Unit, unit_separator: &str) -> usize {
+    let Some(number_prefix) = find_valid_number_with_suffix(s, unit) else {
+        return 0;
+    };
+
+    // When a unit separator is in use, the valid part may extend beyond the
+    // contiguous number+suffix found by find_valid_number_with_suffix.
+    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
+    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
+    if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
+        valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
+            .unwrap_or(number_prefix.len())
+    } else {
+        number_prefix.len()
+    }
+}
+
+/// Byte range of the part of a refused `input` a caret should point at: what
+/// follows the number that could be read, or the whole of it when there is
+/// none. Surrounding whitespace, reproduced rather than converted, is left out.
+pub fn invalid_span(input: &str, options: &NumfmtOptions) -> std::ops::Range<usize> {
+    let start = input.len() - input.trim_start().len();
+    let mut end = input.trim_end().len();
+
+    // Whitespace only: there is no number to point past, and the two offsets
+    // above have crossed — `start` is the whole length, `end` is zero.
+    if start >= end {
+        return 0..input.len();
+    }
+
+    // A declared --suffix is stripped before parsing, so it is not at fault.
+    if let Some(suffix) = &options.suffix
+        && !suffix.is_empty()
+        && let Some(stripped) = input[start..end].strip_suffix(suffix.as_str())
+    {
+        end = start + stripped.len();
+    }
+
+    let valid = valid_prefix_len(
+        &input[start..end],
+        options.transform.from,
+        &options.unit_separator,
+    );
+    start + valid..end.max(start + valid)
+}
+
+/// Whether `input` begins with something that reads as a number, so that advice
+/// about what may follow one is only given where there is one. A lone sign or
+/// decimal separator is the leading part of a number, but not yet a number.
+pub fn holds_number(input: &str) -> bool {
+    find_numeric_beginning(input.trim_start()).is_some_and(|number| {
+        number
+            .replace(locale_decimal_separator(), ".")
+            .parse::<f64>()
+            .is_ok()
+    })
+}
+
 fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<String> {
     if s.is_empty() {
         return Some(translate!("numfmt-error-invalid-number-empty"));
@@ -119,19 +176,7 @@ fn detailed_error_message(s: &str, unit: Unit, unit_separator: &str) -> Option<S
         return Some(translate!("numfmt-error-invalid-number", "input" => s.quote()));
     }
 
-    // When a unit separator is in use, the valid part may extend beyond the
-    // contiguous number+suffix found by find_valid_number_with_suffix.
-    // For example "5 K Field2" with unit_separator=" " has number_prefix="5" but
-    // the real valid prefix is "5 K"; the trailing " Field2" is the garbage.
-    let valid_end =
-        if !unit_separator.is_empty() && number_prefix == find_numeric_beginning(s).unwrap_or("") {
-            valid_end_with_unit_separator(s, number_prefix, unit, unit_separator)
-                .unwrap_or(number_prefix.len())
-        } else {
-            number_prefix.len()
-        };
-
-    let valid_part = &s[..valid_end];
+    let valid_part = &s[..valid_prefix_len(s, unit, unit_separator)];
 
     if valid_part != s && valid_part.parse::<f64>().is_ok() {
         return match s.chars().nth(valid_part.len()) {
@@ -608,6 +653,30 @@ fn format_gnu_scientific(v: f64) -> String {
     }
 }
 
+/// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
+///
+/// Most of what numfmt prints is a whole number — `348M`, `1024` — and the
+/// general float formatter reaches for a big-integer expansion of the value to
+/// get its last digit right. When the value is an integer the answer needs no
+/// expansion, so take the short way and let the rest fall through.
+fn format_float(value: f64, precision: usize) -> String {
+    // Past 2^53 an f64 no longer holds every integer, and the two routes would
+    // not agree on what to print.
+    const EXACT_INTEGERS_UP_TO: f64 = 9_007_199_254_740_992.0;
+
+    if precision == 0 && value.is_finite() && value.abs() < EXACT_INTEGERS_UP_TO {
+        // Both routes round halves to even; they part only on the sign of a
+        // negative value that rounds to zero, which `{:.0}` keeps.
+        let rounded = value.round_ties_even();
+        if rounded == 0.0 && value.is_sign_negative() {
+            return "-0".to_string();
+        }
+        return (rounded as i64).to_string();
+    }
+
+    format!("{value:.precision$}")
+}
+
 fn transform_to(
     s: ParsedNumber,
     opts: &TransformOptions,
@@ -632,22 +701,24 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
-            "{:.precision$}",
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
             round_with_precision(i2, round_method, precision),
+            precision,
         )),
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
-            localize(format!("{i2:.precision$}"))
+            localize(format_float(i2, precision))
         }
-        None => localize(format!("{i2:.0}")),
+        None => localize(format_float(i2, 0)),
         Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
-        Some(s) if is_precision_specified => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) if is_precision_specified => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
         Some(s) if i2.abs() < 10.0 => {
             // single digit before the decimal, like 1.5K
             localize(format!(
@@ -655,9 +726,11 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to)
             ))
         }
-        Some(s) => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
     })
 }
 
@@ -886,6 +959,41 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_float_matches_the_general_formatter() {
+        // The short route must be indistinguishable from `{:.precision$}`,
+        // including the halves, the signed zero and the values that leave the
+        // range where an f64 holds every integer.
+        for value in [
+            0.0,
+            -0.0,
+            -0.4,
+            0.5,
+            1.5,
+            2.5,
+            -1.5,
+            -2.5,
+            -0.5,
+            348.123_456,
+            1023.999,
+            9_007_199_254_740_992.0,
+            9_007_199_254_740_994.0,
+            -9_007_199_254_740_994.0,
+            1e300,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ] {
+            for precision in [0, 1, 2, 6] {
+                assert_eq!(
+                    format_float(value, precision),
+                    format!("{value:.precision$}"),
+                    "value {value}, precision {precision}"
+                );
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::cognitive_complexity)]

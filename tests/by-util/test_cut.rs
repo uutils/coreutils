@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore defg naïve nave
+// spell-checker:ignore defg naïve nave närd nøys ntøys nfjärd undelimited xbfw
 
 use uutests::{at_and_ucmd, new_ucmd};
 
@@ -45,14 +45,95 @@ const COMPLEX_SEQUENCE: &str = "9-,6-7,-2,4";
 
 #[test]
 fn test_no_args() {
-    new_ucmd!().fails().stderr_is(
-        "cut: invalid usage: expects one of --fields (-f), --chars (-c) or --bytes (-b)\n",
-    );
+    new_ucmd!()
+        .fails()
+        .stderr_contains("cut: you must specify a list of bytes, characters, or fields");
 }
 
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+}
+
+#[test]
+fn test_help_uses_plain_text_headings() {
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("\nSpecifying a mode:\n")
+        .stdout_contains("\nSet the delimiter:\n")
+        .stdout_does_not_contain("###");
+}
+
+#[test]
+fn test_range_error_messages() {
+    // Mode-aware diagnostics for invalid ranges.
+    let cases: &[(&[&str], &str)] = &[
+        (
+            &["-c0"],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (
+            &["-b0-7"],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (&["-f0-9"], "cut: fields are numbered from 1"),
+        (&["-f", ""], "cut: fields are numbered from 1"),
+        (
+            &["-c", ""],
+            "cut: byte/character positions are numbered from 1",
+        ),
+        (&["-f", "q"], "cut: invalid field value 'q'"),
+        (&["-c", "zz"], "cut: invalid byte/character position 'zz'"),
+        (&["-f", "9-4"], "cut: invalid decreasing range"),
+        (&["-c", "-"], "cut: invalid range with no endpoint: -"),
+        (&["-f", "8,-"], "cut: invalid range with no endpoint: -"),
+        // The offending text is what could not be consumed, not the whole item.
+        (&["-f", "7k"], "cut: invalid field value 'k'"),
+        (&["-f", "4-w2"], "cut: invalid field value 'w2'"),
+        (
+            &["-c", "3x-5"],
+            "cut: invalid byte/character position 'x-5'",
+        ),
+        // A leading sign is not part of a number here.
+        (&["-f", "+6"], "cut: invalid field value '+6'"),
+        // A second dash makes it a malformed range instead.
+        (&["-f", "2-5-8"], "cut: invalid field range"),
+        (&["-c", "3--6"], "cut: invalid byte or character range"),
+        // `usize::MAX` itself is rejected, and so is anything above it.
+        (
+            &["-f", "18446744073709551615"],
+            "cut: field number '18446744073709551615' is too large",
+        ),
+        (
+            &["-c", "4-77777777777777777777777"],
+            "cut: byte/character offset '77777777777777777777777' is too large",
+        ),
+    ];
+    for (args, expected) in cases {
+        new_ucmd!()
+            .args(args)
+            .fails_with_code(1)
+            .stderr_contains(*expected);
+    }
+}
+
+#[test]
+fn test_field_only_options_without_fields() {
+    new_ucmd!()
+        .args(&["-s", "-c7"])
+        .fails_with_code(1)
+        .stderr_contains(
+            "cut: suppressing non-delimited lines makes sense\n\tonly when operating on fields",
+        );
+}
+
+#[test]
+fn test_delimiter_and_whitespace_are_exclusive() {
+    new_ucmd!()
+        .args(&["-w", "-d,", "-f3"])
+        .fails_with_code(1)
+        .stderr_contains("cut: -d and -w are mutually exclusive");
 }
 
 #[test]
@@ -109,16 +190,19 @@ fn test_whitespace_with_explicit_delimiter() {
 
 #[test]
 fn test_whitespace_with_byte() {
+    // `-w` counts as an input delimiter for the purpose of this diagnostic.
     new_ucmd!()
         .args(&["-w", "-b", COMPLEX_SEQUENCE])
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("cut: an input delimiter makes sense\n\tonly when operating on fields");
 }
 
 #[test]
 fn test_whitespace_with_char() {
     new_ucmd!()
         .args(&["-c", COMPLEX_SEQUENCE, "-w"])
-        .fails_with_code(1);
+        .fails_with_code(1)
+        .stderr_contains("cut: an input delimiter makes sense\n\tonly when operating on fields");
 }
 
 #[test]
@@ -127,8 +211,9 @@ fn test_delimiter_with_byte_and_char() {
         new_ucmd!()
             .args(&[conflicting_arg, COMPLEX_SEQUENCE, "-d="])
             .fails_with_code(1)
-            .stderr_is("cut: invalid input: The '--delimiter' ('-d') option can only be used when printing a sequence of fields\n")
-;
+            .stderr_contains(
+                "cut: an input delimiter makes sense\n\tonly when operating on fields",
+            );
     }
 }
 
@@ -562,9 +647,9 @@ fn test_multiple_mode_args() {
         vec!["-b1", "-c2", "-f3"],
     ] {
         new_ucmd!()
-        .args(&args)
-        .fails()
-        .stderr_is("cut: invalid usage: expects no more than one of --fields (-f), --chars (-c) or --bytes (-b)\n");
+            .args(&args)
+            .fails()
+            .stderr_contains("cut: only one list may be specified");
     }
 }
 
@@ -610,13 +695,255 @@ fn test_output_delimiter_with_adjacent_ranges() {
 }
 
 #[test]
-fn test_emoji_delim() {
+fn test_fields_merged() {
+    // -F: merge adjacent delimiters, default delimiter whitespace, output a space.
     new_ucmd!()
+        .args(&["-F", "1,3"])
+        .pipe_in("one\ttwo   three\n")
+        .succeeds()
+        .stdout_only("one three\n");
+    new_ucmd!()
+        .args(&["-F", "1,3", "-O", "+"])
+        .pipe_in("one\ttwo   three\n")
+        .succeeds()
+        .stdout_only("one+three\n");
+    // -F with an explicit delimiter still uses a space as the output delimiter.
+    new_ucmd!()
+        .args(&["-F", "2,4", "-d", ";"])
+        .pipe_in("p;q;r;s\n")
+        .succeeds()
+        .stdout_only("q s\n");
+}
+
+#[test]
+fn test_fields_merged_conflicts_with_fields() {
+    new_ucmd!()
+        .args(&["-f", "3", "-F", "5"])
+        .fails_with_code(1)
+        .stderr_contains("cut: only one list may be specified");
+}
+
+#[test]
+fn test_whitespace_delimited_long_and_trimmed() {
+    // Long form behaves like -w (leading blanks make an empty first field).
+    new_ucmd!()
+        .args(&["--whitespace-delimited", "-f1,2"])
+        .pipe_in("   alpha beta\n")
+        .succeeds()
+        .stdout_only("\talpha\n");
+    // =trimmed (or it's shortcuts) strips leading/trailing blanks before splitting.
+    for trimmed in ["trimmed", "tri", ""] {
+        new_ucmd!()
+            .arg(format!("--whitespace-delimited={trimmed}"))
+            .arg("-f1,2")
+            .pipe_in("  hello world  \n")
+            .succeeds()
+            .stdout_only("hello\tworld\n");
+    }
+    // With -s a single (undelimited) field is suppressed.
+    new_ucmd!()
+        .args(&["-s", "--whitespace-delimited=trimmed", "-f1"])
+        .pipe_in("   solo   \n")
+        .succeeds()
+        .stdout_only("");
+    // Without -s an undelimited line is printed whole, whatever field is asked
+    // for, while a blank-only line collapses to an empty one.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=trimmed", "-f4"])
+        .pipe_in("  loner\n\t\n one two\n")
+        .succeeds()
+        .stdout_only("loner\n\n\n");
+    // Only `trimmed` is a valid value.
+    new_ucmd!()
+        .args(&["--whitespace-delimited=middle", "-f1"])
+        .fails_with_code(1);
+}
+
+#[test]
+fn test_whitespace_delimited_trimmed_zero_terminated() {
+    // The record terminator must not count as a non-blank when trimming, or the
+    // trailing blanks of a record would survive and add a phantom field. NUL is
+    // the interesting case: unlike `\n` it is not whitespace to begin with.
+    new_ucmd!()
+        .args(&["-z", "--whitespace-delimited=trimmed", "-f2"])
+        .pipe_in(&b"  red  blue  \0 green  pink \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"blue\0pink\0"[..]);
+    // Asking past the last field yields an empty record, not the stray blanks.
+    new_ucmd!()
+        .args(&["-z", "--whitespace-delimited=trimmed", "-f3"])
+        .pipe_in(&b"  red  blue  \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"\0"[..]);
+    // A blank-only record has no delimiter left after trimming, so -s drops it.
+    new_ucmd!()
+        .args(&["-z", "-s", "--whitespace-delimited=trimmed", "-f1"])
+        .pipe_in(&b"\t \0 amber violet \0"[..])
+        .succeeds()
+        .stdout_only_bytes(&b"amber\0"[..]);
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_byte_no_split_partially_selected_char() {
+    // -b -n: the selected bytes of a character must reach its end without a
+    // hole. "🗿" (f0 9f 97 bf) spans bytes 1-4, "w" is byte 5.
+    let stone = &b"\xf0\x9f\x97\xbfw\n"[..];
+    // Byte 3 is left out, so the character is split and dropped.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1-2,4-5", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(b"w\n");
+    // The same holds when the hole comes from a single-byte range.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b2,4", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(b"\n");
+    // Selecting only the tail of the character still prints it whole.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b3-", "-n"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(stone);
+    // Adjacent ranges cover it without a hole, and the boundary inside the
+    // character emits no output delimiter.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1-3,4-5", "-n", "--output-d=|"])
+        .pipe_in(stone)
+        .succeeds()
+        .stdout_only_bytes(stone);
+    // "q€é r": q is byte 1, € (e2 82 ac) bytes 2-4, é (c3 a9) bytes 5-6.
+    let mixed = &b"q\xe2\x82\xac\xc3\xa9r\n"[..];
+    // The delimiter a range owes is carried to whatever prints next, and only
+    // a boundary between two printed characters produces one.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,2,5-7", "-n", "--output-d=|"])
+        .pipe_in(mixed)
+        .succeeds()
+        .stdout_only_bytes(&b"q|\xc3\xa9r\n"[..]);
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,2-4,5-6", "-n", "--output-d=|"])
+        .pipe_in(mixed)
+        .succeeds()
+        .stdout_only_bytes(&b"q|\xe2\x82\xac|\xc3\xa9\n"[..]);
+}
+
+#[test]
+fn test_unset_locale_is_byte_oriented() {
+    // With no locale set the POSIX default is C, so characters are bytes.
+    // "ж" is d0 b6, and -c3 must take just the b6.
+    new_ucmd!()
+        .env("LC_ALL", "")
+        .args(&["-c3"])
+        .pipe_in(&b"p\xd0\xb6t\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"\xb6\n");
+}
+
+#[test]
+fn test_newline_delim_suppress_missing_field() {
+    // -s with the newline as delimiter must not emit a spurious blank line.
+    new_ucmd!()
+        .args(&["-s", "-d", "\n", "-f3"])
+        .pipe_in("solo\n")
+        .succeeds()
+        .stdout_only("");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_byte_no_split_with_output_delimiter() {
+    // -b -n with an output delimiter: a range covering only part of a
+    // multibyte character contributes nothing and emits no delimiter.
+    // "ü" (c3 bc) spans bytes 1-2; byte 1 alone selects no whole character.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-b1,3", "-n", "--output-d=|"])
+        .pipe_in(&b"\xc3\xbcZ\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"Z\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_field_delimiter_not_split_inside_multibyte_char() {
+    use std::os::unix::ffi::OsStrExt;
+    // In a UTF-8 locale, a delimiter byte that is part of a multibyte character
+    // must not split it. Here U+20AC (€ = e2 82 ac) contains 0xac, and 0xac is
+    // also used as a standalone delimiter byte.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .arg("-d")
+        .arg(std::ffi::OsStr::from_bytes(b"\xac"))
+        .arg("-f2")
+        .pipe_in(&b"1\xe2\x82\xac2\xac3\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"3\n");
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .arg("-d")
+        .arg(std::ffi::OsStr::from_bytes(b"\xac"))
+        .arg("-f1")
+        .pipe_in(&b"1\xe2\x82\xac2\xac3\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"1\xe2\x82\xac2\n");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+#[cfg(target_os = "linux")]
+fn test_whitespace_delimiter_unicode_blank() {
+    // U+2002 (EN SPACE) is a Unicode blank and splits fields under -w.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-w", "-f2"])
+        .pipe_in(&b"x\xe2\x80\x82y\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"y\n");
+    // U+2007 (FIGURE SPACE) is not a blank: the line stays a single field and
+    // is suppressed by -s.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
+        .args(&["-s", "-w", "-f2"])
+        .pipe_in(&b"x\xe2\x80\x87y\n"[..])
+        .succeeds()
+        .stdout_only_bytes(b"");
+}
+
+#[test]
+fn test_delimiter_multibyte_rejected_in_c_locale() {
+    // In the C locale a valid UTF-8 multibyte sequence is several characters.
+    // The delimiter is passed as ordinary text so this also runs on Windows.
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .args(&["-d", "\u{20ac}", "-f1"])
+        .fails_with_code(1)
+        .stderr_contains("cut: the delimiter must be a single character");
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: the guest does not inherit LC_ALL")]
+fn test_emoji_delim() {
+    // A multibyte delimiter is only a single character in a UTF-8 locale.
+    new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["-d🗿", "-f1"])
         .pipe_in("💐🗿🌹\n")
         .succeeds()
         .stdout_only("💐\n");
     new_ucmd!()
+        .env("LC_ALL", "C.UTF-8")
         .args(&["-d🗿", "-f2"])
         .pipe_in("💐🗿🌹\n")
         .succeeds()
@@ -886,4 +1213,128 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .pipe_in(input)
         .succeeds()
         .stdout_only("okk\när\nmba\nøys\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error() {
+    new_ucmd!()
+        .args(&["-c1", "/proc/self/mem"])
+        .fails_with_code(1)
+        .stderr_is("cut: Input/output error\n");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_inverted_range() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+
+        // One item of the list is at fault, not the whole of it.
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
+cut: invalid decreasing range
+   ╭─[ cut:1:10 ]
+   │
+ 1 │ cut -f 1,4-2 /dev/null
+   │          ─┬─
+   │           ╰─── this range ends before it starts
+   │
+   │ Help: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
+───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("cut --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_finds_fields_merged_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-F", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ cut -F 1,4-2 /dev/null"), "{stderr}");
+        assert!(
+            stderr.contains("this range ends before it starts"),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_zero_bound() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-f1,0,3", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Glued to the option, so the caret counts the two columns it takes.
+        assert!(stderr.contains("cut:1:9"), "{stderr}");
+        assert!(stderr.contains("counting starts at 1"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_points_at_the_bound_that_is_not_a_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1-3,x", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The message names the item, so a bare underline is enough.
+        assert!(
+            stderr.contains("invalid byte/character position 'x'"),
+            "{stderr}"
+        );
+        assert!(stderr.contains("cut:1:12"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_ignores_a_file_named_like_the_list() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("1,0");
+
+        // The file is named exactly like the list; the caret belongs to the
+        // value of -f.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-f", "1,0", "1,0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("cut:1:10"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let result = new_ucmd!()
+            .args(&["-f", "1,4-2", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // The message reads as it always has, and nothing is drawn under it;
+        // the usage hint that follows is cut's own.
+        assert!(
+            stderr.starts_with("cut: invalid decreasing range\n"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
 }

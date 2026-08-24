@@ -9,6 +9,7 @@ mod unit_tests;
 
 use super::{ConversionMode, IConvFlags, IFlags, Num, OConvFlags, OFlags, Settings, StatusLevel};
 use crate::conversion_tables::ConversionTable;
+use std::ffi::OsString;
 use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::UError;
@@ -29,7 +30,7 @@ pub enum ParseError {
     MultipleBlockUnblock,
     #[error("{}", translate!("dd-error-multiple-excl"))]
     MultipleExclNoCreate,
-    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone(), "cmd" => uucore::execution_phrase()))]
+    #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone()))]
     FlagNoMatch(String),
     #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
@@ -129,19 +130,42 @@ impl Parser {
         Self::default()
     }
 
-    pub(crate) fn parse(
+    /// Parse the operands, pointing a caret at the one that is at fault.
+    ///
+    /// # Arguments
+    ///
+    /// * `operands` - The operands as typed.
+    /// * `diag_args` - The whole argument list, program name included, or
+    ///   `None` when it was not kept.
+    pub(crate) fn parse_with_diagnostics(
         self,
         operands: impl IntoIterator<Item: AsRef<str>>,
-    ) -> Result<Settings, ParseError> {
-        self.read(operands)?.validate()
+        diag_args: Option<&[OsString]>,
+    ) -> Result<Settings, Box<dyn UError>> {
+        match self.read(operands) {
+            Err((operand, error)) => Err(crate::diagnostics::operand_error(
+                diag_args, &operand, error,
+            )),
+            // A validation error is about how the operands combine rather than
+            // about any one of them, so it keeps its plain message.
+            Ok(parser) => parser.validate().map_err(Into::into),
+        }
     }
 
+    /// Read the operands into the parser state.
+    ///
+    /// # Returns
+    ///
+    /// The operand at fault along with the error, so that a caller with the
+    /// command line at hand can point a caret inside it.
     pub(crate) fn read(
         mut self,
         operands: impl IntoIterator<Item: AsRef<str>>,
-    ) -> Result<Self, ParseError> {
+    ) -> Result<Self, (String, ParseError)> {
         for operand in operands {
-            self.parse_operand(operand.as_ref())?;
+            let operand = operand.as_ref();
+            self.parse_operand(operand)
+                .map_err(|error| (operand.to_string(), error))?;
         }
 
         Ok(self)
@@ -446,6 +470,13 @@ impl Parser {
 impl UError for ParseError {
     fn code(&self) -> i32 {
         1
+    }
+
+    /// The one message that ends on a hint about the syntax it rejected. The
+    /// hint is left to this, rather than written into the message, so that it
+    /// survives a caret report replacing the message.
+    fn usage(&self) -> bool {
+        matches!(self, Self::FlagNoMatch(_))
     }
 }
 

@@ -32,6 +32,7 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
+  "i18n-collator",
   "parser-size",
   "parser-glob",
   "quoting-style",
