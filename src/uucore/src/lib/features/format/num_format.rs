@@ -374,6 +374,39 @@ impl Formatter<&ExtendedBigDecimal> for Float {
 /// standard formatting machinery, which panics with "Formatting argument out
 /// of range" once the dynamic width exceeds `u16::MAX`. A large precision such
 /// as `%.100000d` is valid input for `printf`/`seq`, so it must not panic.
+
+/// Write `sign_indicator` and `s` into `writer` with space padding to `width`
+/// without using Rust dynamic format widths (which panic above `u16::MAX`).
+fn align_pad_write(
+    mut writer: impl Write,
+    sign_indicator: &str,
+    s: &str,
+    width: usize,
+    alignment: NumberAlignment,
+) -> std::io::Result<()> {
+    let content_len = sign_indicator.len() + s.len();
+    let pad = width.saturating_sub(content_len);
+    match alignment {
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            writer.write_all(&vec![b' '; pad])?;
+        }
+        NumberAlignment::RightSpace => {
+            // Keep the sign adjacent to the number (GNU printf style).
+            writer.write_all(&vec![b' '; pad])?;
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+        }
+        NumberAlignment::RightZero => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(&vec![b'0'; pad])?;
+            writer.write_all(s.as_bytes())?;
+        }
+    }
+    Ok(())
+}
+
 fn zero_pad_to(s: &str, width: usize) -> String {
     if s.len() >= width {
         s.to_string()
@@ -768,6 +801,26 @@ fn write_output(
 
     // Check if the width is too large for formatting
     super::check_width(remaining_width)?;
+
+    // Rust's format width is a u16. Above that, pad manually so we match GNU
+    // printf instead of panicking with "Formatting argument out of range" (#13850).
+    const RUST_FMT_WIDTH_MAX: usize = u16::MAX as usize;
+    if remaining_width > RUST_FMT_WIDTH_MAX {
+        return match alignment {
+            NumberAlignment::RightZero => {
+                let (prefix, rest) = if s.len() >= 2 && s[..2].eq_ignore_ascii_case("0x") {
+                    (&s[..2], &s[2..])
+                } else {
+                    ("", s.as_str())
+                };
+                let body = zero_pad_to(rest, remaining_width.saturating_sub(prefix.len()));
+                writer.write_all(sign_indicator.as_bytes())?;
+                writer.write_all(prefix.as_bytes())?;
+                writer.write_all(body.as_bytes())
+            }
+            other => align_pad_write(writer, &sign_indicator, &s, width, other),
+        };
+    }
 
     match alignment {
         NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),

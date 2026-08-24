@@ -1770,3 +1770,17 @@ printf: %z: invalid conversion specification
             .stderr_only("printf: %5.2c: invalid conversion specification\n");
     }
 }
+
+#[test]
+fn test_width_above_u16_max_does_not_panic() {
+    // Field widths above u16::MAX used to panic inside Rust's formatter (#13850).
+    // GNU prints the padded field; we must not abort.
+    let out = new_ucmd!()
+        .args(&["%65536d", "5"])
+        .succeeds()
+        .stdout_str()
+        .to_string();
+    assert_eq!(out.len(), 65536, "expected width-padded output, got len {}", out.len());
+    assert!(out.ends_with('5'));
+}
+
