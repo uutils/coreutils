@@ -16,8 +16,9 @@ use std::num::IntErrorKind;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UError, UResult, USimpleError, quiet_if_reported, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, set_exit_code};
 use uucore::i18n::collator::{
     AlternateHandling, CollatorOptions, locale_cmp, should_use_locale_collation, try_init_collator,
 };
@@ -788,27 +789,23 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            // Where the current field sits in the value, so that the caret can
-            // take the one field that is at fault out of a long list.
-            let mut at = 0;
-            for part in format.split([' ', ',', '\t']) {
+            // `-o` has no long form.
+            let option = OptionValue::with_names(format.clone(), Some('o'), None);
+            // Each field carries its place in the value, so that the caret can
+            // take the one that is at fault out of a long list.
+            for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
                 specs.push(Spec::parse(part).map_err(|error| {
                     let message = error.to_string();
-                    let reported = diag_args.is_some_and(|args| {
-                        uucore::diagnostics::Snapshot::with_program(args).render_option_value(
-                            format,
-                            Some('o'),
-                            None,
-                            at..at + part.len(),
+                    uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
+                        uucore::diagnostics::Snapshot::with_program(args).render_option(
+                            &option,
+                            span,
                             &message,
                             None,
                             Some(&translate!("join-diag-help-format")),
                         )
-                    });
-                    quiet_if_reported(reported, error)
+                    })
                 })?);
-                // Every separator is one byte wide.
-                at += part.len() + 1;
             }
             settings.format = specs;
         }
@@ -837,10 +834,10 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let raw_args: Vec<OsString> = args.collect();
-    // Kept for the caret in `-o` diagnostics, which needs the list as typed.
-    let diag_args = uucore::diagnostics::capture(&raw_args);
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), raw_args)?;
+    // The command line is kept for the caret in `-o` diagnostics, which needs
+    // the list as typed.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);

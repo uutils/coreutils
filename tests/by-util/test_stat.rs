@@ -627,11 +627,15 @@ fn test_printf_invalid_directive() {
 #[test]
 fn test_invalid_directive_after_multibyte_char() {
     let ts = TestScenario::new(util_name!());
-    for (fmt, directive) in [("€%-", "%-"), ("ä%0", "%0"), ("€%.", "%.")] {
+    // The text before the directive is printed, as GNU does. What is checked
+    // here is the directive named: a multibyte char must not shift its offset.
+    for (fmt, before, directive) in [("€%-", "€", "%-"), ("ä%0", "ä", "%0"), ("€%.", "€", "%.")]
+    {
         ts.ucmd()
             .args(&["-c", fmt, "."])
             .fails_with_code(1)
-            .stderr_only(format!("stat: '{directive}': invalid directive\n"));
+            .stdout_is(before)
+            .stderr_is(format!("stat: '{directive}': invalid directive\n"));
     }
 }
 

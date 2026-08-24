@@ -729,7 +729,7 @@ fn tr_delete_xdigit_all() {
         .args(&["-d", "[:xdigit:]"])
         .pipe_in("0123456789acbdefABCDEF")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -747,7 +747,7 @@ fn tr_delete_digit_all() {
         .args(&["-d", "[:digit:]"])
         .pipe_in("0123456789")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -765,7 +765,7 @@ fn tr_delete_lower_all() {
         .args(&["-d", "[:lower:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -774,7 +774,7 @@ fn tr_delete_upper_all() {
         .args(&["-d", "[:upper:]"])
         .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -783,7 +783,7 @@ fn tr_delete_alpha_all() {
         .args(&["-d", "[:lower:][:upper:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -792,7 +792,7 @@ fn tr_delete_alnum_all() {
         .args(&["-d", "[:alpha:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -801,7 +801,7 @@ fn tr_delete_space_class() {
         .args(&["-d", "[:alnum:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -1081,7 +1081,7 @@ fn tr_ross_translate_complement_squeeze() {
         .args(&["-cs", "[:upper:][:digit:]", "[Z*]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -1108,7 +1108,7 @@ fn tr_ross_translate_overlong() {
         .args(&["-dcs", "[:alnum:]", "[:digit:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -1117,7 +1117,7 @@ fn tr_ross_translate_squeeze_overlong() {
         .args(&["-dc", "[:lower:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -1126,7 +1126,7 @@ fn tr_ross_translate_squeeze_delete() {
         .args(&["-dc", "[:upper:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]

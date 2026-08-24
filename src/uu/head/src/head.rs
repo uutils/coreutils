@@ -17,6 +17,7 @@ use std::os::fd::AsFd;
 use std::path::Path;
 use std::path::PathBuf;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::{Quotable, print_verbatim};
 use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::line_ending::LineEnding;
@@ -85,9 +86,7 @@ impl Default for Mode {
 /// made of it.
 pub struct SizeError {
     pub message: String,
-    value: String,
-    short: char,
-    long: &'static str,
+    option: OptionValue,
     error: ParseSizeError,
 }
 
@@ -97,11 +96,9 @@ impl SizeError {
     fn into_error(self, diag_args: Option<&[OsString]>) -> Box<dyn UError> {
         self.error.size_value_error(
             diag_args,
-            &self.value,
+            &self.option,
             // The parser never saw the sign; the caret has to count it back in.
-            number_offset(&self.value),
-            self.short,
-            self.long,
+            number_offset(&self.option.value),
             &self.message,
             HeadError::MatchOption(self.message.clone()),
         )
@@ -116,12 +113,10 @@ impl Mode {
             long: &'static str,
             key: &'static str,
         ) -> impl FnOnce(ParseSizeError) -> SizeError {
-            let value = value.to_string();
+            let option = OptionValue::new(value, short, long);
             move |error| SizeError {
                 message: translate!(key, "err" => &error),
-                value,
-                short,
-                long,
+                option,
                 error,
             }
         }
@@ -509,7 +504,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file).unwrap();
+                    print_verbatim(file)?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }
