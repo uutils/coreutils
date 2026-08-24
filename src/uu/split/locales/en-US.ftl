@@ -8,12 +8,12 @@ split-after-help = Output fixed-size pieces of INPUT to PREFIXaa, PREFIXab, ...;
 
   CHUNKS may be:
 
-  - N split into N files based on size of input
-  - K/N output Kth of N to stdout
-  - l/N split into N files without splitting lines/records
-  - l/K/N output Kth of N to stdout without splitting lines/records
-  - r/N like 'l' but use round robin distribution
-  - r/K/N likewise but only output Kth of N to stdout
+    - N split into N files based on size of input
+    - K/N output Kth of N to stdout
+    - l/N split into N files without splitting lines/records
+    - l/K/N output Kth of N to stdout without splitting lines/records
+    - r/N like 'l' but use round robin distribution
+    - r/K/N likewise but only output Kth of N to stdout
 
 # messages
 split-creating-file = creating file { $file }

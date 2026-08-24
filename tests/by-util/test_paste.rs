@@ -378,13 +378,13 @@ fn test_backslash_zero_delimiter() {
 }
 
 #[test]
-fn test_gnu_escape_sequences() {
+fn test_paste_delimiter_escape_sequences() {
     let cases: &[(&str, u8)] = &[(r"\b", 0x08), (r"\f", 0x0C), (r"\r", 0x0D), (r"\v", 0x0B)];
     for &(esc, byte) in cases {
-        let expected = [b'1', byte, b'2', byte, b'3', b'\n'];
+        let expected = [b'a', byte, b'b', byte, b'c', b'\n'];
         new_ucmd!()
             .args(&["-s", "-d", esc])
-            .pipe_in("1\n2\n3\n")
+            .pipe_in("a\nb\nc\n")
             .succeeds()
             .stdout_only_bytes(expected);
     }

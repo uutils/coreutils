@@ -2489,41 +2489,41 @@ fn test_date_write_error_dev_full() {
         .stderr_contains("write error");
 }
 
-// Tests for GNU test leap-1: leap year overflow in date arithmetic
+// Tests for leap year overflow in date arithmetic
 #[test]
-fn test_date_leap1_leap_year_overflow() {
-    // GNU test leap-1: Adding years to Feb 29 should overflow to March 1
+fn test_date_leap_year_arithmetic_overflow() {
+    // Adding years to Feb 29 should overflow to March 1
     // if target year is not a leap year
     new_ucmd!()
-        .args(&["--date", "02/29/1996 1 year", "+%Y-%m-%d"])
+        .args(&["--date", "02/29/2000 1 year", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("1997-03-01\n");
+        .stdout_is("2001-03-01\n");
 
     // Additional cases: 2 years
     new_ucmd!()
-        .args(&["--date", "1996-02-29 + 2 years", "+%Y-%m-%d"])
+        .args(&["--date", "2000-02-29 + 2 years", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("1998-03-01\n");
+        .stdout_is("2002-03-01\n");
 
     // Leap year to leap year should not overflow
     new_ucmd!()
-        .args(&["--date", "1996-02-29 + 4 years", "+%Y-%m-%d"])
+        .args(&["--date", "2000-02-29 + 4 years", "+%Y-%m-%d"])
         .succeeds()
-        .stdout_is("2000-02-29\n");
+        .stdout_is("2004-02-29\n");
 }
 
-// Tests for GNU test rel-2b: month arithmetic precision
+// Tests for month arithmetic precision
 #[test]
-fn test_date_rel2b_month_arithmetic() {
-    // GNU test rel-2b: Subtracting months should maintain same day of month
+fn test_date_month_subtraction_keeps_day() {
+    // Subtracting months should maintain same day of month
     new_ucmd!()
         .args(&[
             "--date",
-            "1997-01-19 08:17:48 +0 7 months ago",
+            "2003-08-31 12:00:00 +0 7 months ago",
             "+%Y-%m-%d %T",
         ])
         .succeeds()
-        .stdout_contains("1996-06-19");
+        .stdout_contains("2003-01-31");
 
     // Month overflow: Adding months should overflow to next month if day doesn't exist
     new_ucmd!()
@@ -2532,37 +2532,37 @@ fn test_date_rel2b_month_arithmetic() {
         .stdout_is("1996-03-02\n");
 }
 
-// Tests for GNU test cross-TZ-mishandled: embedded timezone parsing
+// Tests for embedded timezone parsing
 #[test]
-fn test_date_cross_tz_mishandled() {
-    // GNU test cross-TZ-mishandled: Parse date with embedded timezone
+fn test_date_embedded_timezone_conversion() {
+    // Parse date with embedded timezone
     // Date should be interpreted in embedded TZ, then displayed in environment TZ
     new_ucmd!()
-        .env("TZ", "PST8")
+        .env("TZ", "UTC0")
         .env("LC_ALL", "C")
-        .args(&["-d", r#"TZ="EST5" 1970-01-01 00:00"#])
+        .args(&["-d", r#"TZ="CET-1" 1970-01-01 00:00"#])
         .succeeds()
         .stdout_contains("Dec 31")
-        .stdout_contains("21:00:00")
+        .stdout_contains("23:00:00")
         .stdout_contains("1969");
 }
 
-// Tests for GNU test invalid-high-bit-set: invalid UTF-8 in date string
+// Tests for invalid UTF-8 in date string
 #[test]
 #[cfg(unix)]
-fn test_date_invalid_high_bit_set() {
+fn test_date_invalid_utf8_byte_rejected() {
     use std::os::unix::ffi::OsStrExt;
 
-    // GNU test invalid-high-bit-set: Invalid UTF-8 byte (0xb0) should produce
+    // Invalid UTF-8 byte (0xb0) should produce
     // GNU-compatible error message with octal escape sequence
-    let invalid_bytes = b"\xb0";
+    let invalid_bytes = b"\xe0";
     let invalid_arg = std::ffi::OsStr::from_bytes(invalid_bytes);
 
     new_ucmd!()
         .args(&[std::ffi::OsStr::new("-d"), invalid_arg])
         .fails()
         .code_is(1)
-        .stderr_contains("invalid date '\\260'");
+        .stderr_contains("invalid date '\\340'");
 }
 
 // Tests for GNU format modifiers

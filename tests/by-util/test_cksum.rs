@@ -2239,8 +2239,8 @@ fn test_check_incorrectly_formatted_checksum_keeps_processing_hex() {
         .stderr_contains("cksum: WARNING: 1 line is improperly formatted");
 }
 
-/// This module reimplements the cksum-base64.pl GNU test.
-mod gnu_cksum_base64 {
+/// Tests for cksum with base64 output encoding.
+mod cksum_base64_encoding {
     use super::*;
     use uutests::util::log_info;
 
@@ -2285,7 +2285,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_generating() {
+    fn test_cksum_base64_generating() {
         // Ensure that each algorithm works with `--base64`.
         let scene = make_scene();
 
@@ -2303,7 +2303,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk() {
+    fn test_cksum_base64_verify() {
         // For each algorithm that accepts `--check`,
         // ensure that it works with base64 digests.
         let scene = make_scene();
@@ -2335,7 +2335,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk_eq1() {
+    fn test_cksum_base64_verify_truncated_eq1() {
         // For digests ending with '=', ensure `--check` fails if '=' is removed.
         let scene = make_scene();
 
@@ -2361,7 +2361,7 @@ mod gnu_cksum_base64 {
     }
 
     #[test]
-    fn test_chk_eq2() {
+    fn test_cksum_base64_verify_truncated_eq2() {
         // For digests ending with '==',
         // ensure `--check` fails if '==' is removed.
         let scene = make_scene();
@@ -2386,8 +2386,8 @@ mod gnu_cksum_base64 {
     }
 }
 
-/// This module reimplements the cksum-base64-untagged.sh GNU test.
-mod gnu_cksum_base64_untagged {
+/// Tests for cksum with base64 output encoding (untagged mode).
+mod cksum_base64_untagged_encoding {
     use super::*;
 
     macro_rules! decl_sha_test {
@@ -2499,8 +2499,8 @@ mod gnu_cksum_base64_untagged {
     decl_blake_test!(blake2b_504, 504);
     decl_blake_test!(blake2b_512, 512);
 }
-/// This module reimplements the cksum-c.sh GNU test.
-mod gnu_cksum_c {
+/// Tests for cksum check mode (-c/--check).
+mod cksum_check_mode {
     use super::*;
 
     const INVALID_SUM: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaafdb57c725157cb40b5aee8d937b8351477e";

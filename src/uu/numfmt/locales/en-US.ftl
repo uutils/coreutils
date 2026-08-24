@@ -3,6 +3,7 @@ numfmt-usage = numfmt [OPTION]... [NUMBER]...
 numfmt-after-help = UNIT options:
 
   - none: no auto-scaling is done; suffixes will trigger an error
+
   - auto: accept optional single/two letter suffix:
 
       1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
