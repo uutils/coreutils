@@ -134,8 +134,7 @@ fn test_check_sha1() {
         .arg("-c")
         .arg(at.subdir.join("testf.sha1"))
         .succeeds()
-        .stdout_is("testf: OK\n")
-        .stderr_is("");
+        .stdout_only("testf: OK\n");
 }
 
 #[test]

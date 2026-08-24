@@ -830,8 +830,7 @@ fn test_env_overwrite_arg0() {
     ts.ucmd()
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -845,32 +844,28 @@ fn test_env_arg_argv0_overwrite() {
         .args(&["--argv0", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by -a
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite --argv0 by -a
     ts.ucmd()
         .args(&["--argv0", "dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // overwrite -a by --argv0
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 // Do not assume that coreutils uses argv0
@@ -884,31 +879,27 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S--argv0 dirname"])
         .args(&["--argv0", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // normal following string arg
     ts.ucmd()
         .args(&["-a", "dirname"])
         .args(&["-S-a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // one large string arg
     ts.ucmd()
         .args(&["-S--argv0 dirname -a hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // two string args
     ts.ucmd()
         .args(&["-S-a dirname"])
         .args(&["-S--argv0 hijacked sh -c 'echo $0'"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 
     // three args: normal, string, normal
     ts.ucmd()
@@ -916,8 +907,7 @@ fn test_env_arg_argv0_overwrite_mixed_with_string_args() {
         .args(&["-S-a dirname"])
         .args(&["-a", "hijacked", "sh", "-c", "echo $0"])
         .succeeds()
-        .stdout_is("hijacked\n")
-        .stderr_is("");
+        .stdout_only("hijacked\n");
 }
 
 #[test]

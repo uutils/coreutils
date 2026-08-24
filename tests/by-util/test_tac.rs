@@ -145,7 +145,7 @@ fn test_before_no_separator() {
 
 #[test]
 fn test_before_empty_file() {
-    new_ucmd!().arg("-b").pipe_in("").succeeds().stdout_is("");
+    new_ucmd!().arg("-b").pipe_in("").succeeds().no_output();
 }
 
 #[test]

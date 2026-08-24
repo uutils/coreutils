@@ -1595,7 +1595,7 @@ fn test_du_exclude() {
         .arg("--exclude=subdir")
         .arg("subdir")
         .succeeds()
-        .stdout_is("");
+        .no_output();
     ts.ucmd()
         .arg("--exclude=subdir")
         .arg("--verbose")
@@ -1888,8 +1888,7 @@ fn test_du_files0_from_missing_file_listed_twice() {
     ts.ucmd()
         .arg("--files0-from=filelist")
         .fails_with_code(1)
-        .stdout_is("")
-        .stderr_is(
+        .stderr_only(
             "du: cannot access 'missing': No such file or directory\n\
              du: cannot access 'missing': No such file or directory\n",
         );

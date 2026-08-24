@@ -1290,8 +1290,7 @@ fn test_pipe() {
     new_ucmd!()
         .pipe_in("one\ntwo\nfour")
         .succeeds()
-        .stdout_is("four\none\ntwo\n")
-        .stderr_is("");
+        .stdout_only("four\none\ntwo\n");
 }
 
 #[test]
@@ -1314,7 +1313,7 @@ fn test_check() {
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stderr_is("");
+            .no_output();
     }
 }
 
@@ -1333,7 +1332,7 @@ fn test_check_silent() {
             .arg(silent_arg)
             .arg("check_fail.txt")
             .fails()
-            .stdout_is("");
+            .no_output();
         new_ucmd!()
             .arg(silent_arg)
             .arg("empty.txt")

@@ -180,7 +180,7 @@ fn test_negative_byte_syntax() {
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]

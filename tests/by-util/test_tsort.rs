@@ -229,8 +229,7 @@ fn test_odd_number_of_tokens() {
     new_ucmd!()
         .pipe_in("a\n")
         .fails_with_code(1)
-        .stdout_is("")
-        .stderr_is(TSORT_ODD_ERROR);
+        .stderr_only(TSORT_ODD_ERROR);
 }
 
 #[test]
@@ -242,6 +241,5 @@ fn test_only_one_input_file() {
     ucmd.arg("f")
         .arg("g")
         .fails_with_code(1)
-        .stdout_is("")
-        .stderr_is(TSORT_EXTRA_OPERAND_ERROR);
+        .stderr_only(TSORT_EXTRA_OPERAND_ERROR);
 }

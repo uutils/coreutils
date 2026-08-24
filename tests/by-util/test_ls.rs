@@ -7623,7 +7623,7 @@ fn test_ls_recursive_no_fd_leak() {
         .arg("1")
         .limit(Resource::NOFILE, 20, 20)
         .succeeds()
-        .stderr_is("");
+        .no_stderr();
 }
 
 #[test]

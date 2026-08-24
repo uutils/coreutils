@@ -111,7 +111,7 @@ fn test_runlevel() {
         ts.ucmd().arg(opt).succeeds().stdout_is(expected_stdout);
 
         #[cfg(not(target_os = "linux"))]
-        ts.ucmd().arg(opt).succeeds().stdout_is("");
+        ts.ucmd().arg(opt).succeeds().no_output();
     }
 }
 
