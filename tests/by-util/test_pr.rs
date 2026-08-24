@@ -197,8 +197,7 @@ fn test_with_valid_page_ranges() {
     scenario
         .args(&["--pages=20:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '20:5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '20:5'\n");
     new_ucmd!()
         .args(&["--pages=1:5", test_file_path])
         .succeeds();
@@ -206,18 +205,15 @@ fn test_with_valid_page_ranges() {
     new_ucmd!()
         .args(&["--pages=-1:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '-1:5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '-1:5'\n");
     new_ucmd!()
         .args(&["--pages=1:-5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '1:-5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '1:-5'\n");
     new_ucmd!()
         .args(&["--pages=5:1", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '5:1'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '5:1'\n");
 }
 
 #[test]
@@ -225,8 +221,7 @@ fn test_start_page_exceeds_page_count() {
     new_ucmd!()
         .args(&["--pages=2", "hosts.log"])
         .succeeds()
-        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
-        .stdout_is("");
+        .stderr_only("pr: starting page number 2 exceeds page count 1\n");
 }
 
 #[test]
@@ -293,8 +288,7 @@ fn test_with_suppress_error_option() {
     scenario
         .args(&["--pages=20:5", "-r", test_file_path])
         .fails()
-        .stderr_is("")
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -407,14 +401,12 @@ fn test_with_mpr_and_column_options() {
     new_ucmd!()
         .args(&["--column=2", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify number of columns when printing in parallel\n")
-        .stdout_is("");
+        .stderr_only("pr: cannot specify number of columns when printing in parallel\n");
 
     new_ucmd!()
         .args(&["-a", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify both printing across and printing in parallel\n")
-        .stdout_is("");
+        .stderr_only("pr: cannot specify both printing across and printing in parallel\n");
 }
 
 #[test]
@@ -861,6 +853,71 @@ fn test_columns() {
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_matches(&regex);
+}
+
+#[test]
+fn test_columns_partly_filled_page() {
+    // Three lines do not divide evenly into two columns. GNU pr puts the
+    // ceiling of 3 / 2 in the first column and what is left in the second, so
+    // "c" has to show up next to "a".
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tc        \nb        \n");
+}
+
+#[test]
+fn test_columns_partly_filled_page_across() {
+    // Same input read across instead of down.
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -a -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-a", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tb        \nc        \n");
+}
+
+#[test]
+fn test_columns_fewer_lines_than_columns() {
+    // Fewer lines than columns still has to print those lines.
+    //
+    // Command line: `printf "a\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_is("a     \n");
+
+    // Command line: `printf "a\nb\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a     \tb     \n");
+}
+
+#[test]
+fn test_columns_last_page() {
+    // Nine lines over pages that hold four each leave the ninth alone on page
+    // three, which must not come out as an empty page.
+    //
+    // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
+    let header = "\n\nDATE          Page ";
+    let expected = format!(
+        "{header}1\n\n\n1        \t3        \n2        \t4        \n{blank}\
+         {header}2\n\n\n5        \t7        \n6        \t8        \n{blank}\
+         {header}3\n\n\n9        \n\n\n\n\n\n\n",
+        blank = "\n".repeat(5),
+    );
+    new_ucmd!()
+        .args(&["-2", "-l", "12", "-w", "20", "-D", "DATE"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]

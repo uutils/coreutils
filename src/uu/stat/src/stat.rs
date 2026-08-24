@@ -141,13 +141,13 @@ impl DirectiveError {
     /// * `option` - The format as typed and the option it was given to, or
     ///   `None` for a format stat built itself, which is not on the command
     ///   line and has nothing to point at.
-    fn into_error(
-        self,
+    fn to_error(
+        &self,
         diag_args: Option<&[OsString]>,
         option: Option<&OptionValue>,
     ) -> Box<dyn UError> {
         let message = StatError::InvalidDirective {
-            directive: self.directive,
+            directive: self.directive.clone(),
         }
         .to_string();
         uucore::diagnostics::error_after_report(
@@ -388,6 +388,11 @@ struct Stater {
     mount_list_needed: bool,
     default_tokens: Vec<Token>,
     default_dev_tokens: Vec<Token>,
+    /// A bad directive, raised once the tokens before it are printed.
+    format_error: Option<DirectiveError>,
+    /// What the caret needs: the format as typed, and the command line.
+    format_option: Option<OptionValue>,
+    diag_args: Option<Vec<OsString>>,
 }
 
 /// Prints a formatted output based on the provided output type, flags, width, and precision.
@@ -981,16 +986,22 @@ impl Stater {
         }
     }
 
-    fn generate_tokens(format_str: &str, use_printf: bool) -> Result<Vec<Token>, DirectiveError> {
+    /// Split a format into its tokens, up to a directive stat does not know.
+    ///
+    /// Returns the tokens parsed before the bad one, so the caller can print
+    /// them the way GNU does, and the error that stopped the parse. A format
+    /// that ends in a bad directive keeps no trailing newline.
+    fn generate_tokens(format_str: &str, use_printf: bool) -> (Vec<Token>, Option<DirectiveError>) {
         let mut tokens = Vec::new();
         let chars = format_str.chars().collect::<Vec<char>>();
         let bound = chars.len();
         let mut i = 0;
         while i < bound {
             match chars.get(i) {
-                Some('%') => tokens.push(Self::handle_percent_case(
-                    &chars, &mut i, bound, format_str,
-                )?),
+                Some('%') => match Self::handle_percent_case(&chars, &mut i, bound, format_str) {
+                    Ok(token) => tokens.push(token),
+                    Err(error) => return (tokens, Some(error)),
+                },
                 Some('\\') => {
                     if use_printf {
                         tokens.push(Self::handle_escape_sequences(
@@ -1008,7 +1019,7 @@ impl Stater {
         if !use_printf && !format_str.ends_with('\n') {
             tokens.push(Token::Char('\n'));
         }
-        Ok(tokens)
+        (tokens, None)
     }
 
     fn populate_mount_list() -> UResult<Vec<OsString>> {
@@ -1069,16 +1080,26 @@ impl Stater {
                 }),
             )
         };
+        // A format stat built itself cannot hold an unknown directive, so an
+        // error there is our bug, has nothing to point at, and is raised now.
+        let mut format_error = None;
         let default_tokens = if format_str.is_empty() {
-            Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf)
-                .map_err(|e| e.into_error(diag_args, None))?
+            let (tokens, error) =
+                Self::generate_tokens(&Self::default_format(show_fs, terse, false), use_printf);
+            if let Some(error) = error {
+                return Err(error.to_error(diag_args, None));
+            }
+            tokens
         } else {
-            Self::generate_tokens(format_str, use_printf)
-                .map_err(|e| e.into_error(diag_args, Some(&given_option())))?
+            let (tokens, error) = Self::generate_tokens(format_str, use_printf);
+            format_error = error;
+            tokens
         };
-        let default_dev_tokens =
-            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf)
-                .map_err(|e| e.into_error(diag_args, None))?;
+        let (default_dev_tokens, default_dev_error) =
+            Self::generate_tokens(&Self::default_format(show_fs, terse, true), use_printf);
+        if let Some(error) = default_dev_error {
+            return Err(error.to_error(diag_args, None));
+        }
 
         // mount points aren't displayed when showing filesystem information, or
         // whenever the format string does not request the mount point.
@@ -1096,6 +1117,9 @@ impl Stater {
             mount_list_needed,
             default_tokens,
             default_dev_tokens,
+            format_option: format_error.is_some().then(given_option),
+            format_error,
+            diag_args: diag_args.map(<[OsString]>::to_vec),
         })
     }
 
@@ -1125,16 +1149,15 @@ impl Stater {
             .find(|root| path.starts_with(root))
     }
 
-    fn exec(&self) -> i32 {
-        #[cfg(unix)]
+    fn exec(&self) -> UResult<i32> {
         let stdin_is_fifo = rustix::fs::fstat(io::stdin())
             .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
         let mut ret = 0;
         for f in &self.files {
-            ret |= self.do_stat(f, stdin_is_fifo);
+            ret |= self.do_stat(f, stdin_is_fifo)?;
         }
-        ret
+        Ok(ret)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1303,12 +1326,25 @@ impl Stater {
         Ok(())
     }
 
-    fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> i32 {
+    /// Raise a bad directive, now that the tokens before it are printed.
+    ///
+    /// stdout is flushed first, or the report would land ahead of them.
+    fn raise_format_error(&self) -> UResult<()> {
+        match &self.format_error {
+            None => Ok(()),
+            Some(error) => {
+                io::stdout().flush()?;
+                Err(error.to_error(self.diag_args.as_deref(), self.format_option.as_ref()))
+            }
+        }
+    }
+
+    fn do_stat(&self, file: &OsStr, stdin_is_fifo: bool) -> UResult<i32> {
         let display_name = file.to_string_lossy();
         let file = if cfg!(unix) && display_name == "-" {
             if self.show_fs {
                 show_error!("{}", StatError::StdinFilesystemMode);
-                return 1;
+                return Ok(1);
             }
             if let Ok(p) = Path::new("/dev/stdin").canonicalize() {
                 p.into_os_string()
@@ -1327,6 +1363,7 @@ impl Stater {
                     for t in tokens {
                         process_token_filesystem(t, &meta, &display_name);
                     }
+                    self.raise_format_error()?;
                 }
                 Err(error) => {
                     show_error!(
@@ -1336,7 +1373,7 @@ impl Stater {
                             error
                         }
                     );
-                    return 1;
+                    return Ok(1);
                 }
             }
         } else {
@@ -1367,9 +1404,10 @@ impl Stater {
                             self.from_user,
                             follow_symbolic_links,
                         ) {
-                            return code;
+                            return Ok(code);
                         }
                     }
+                    self.raise_format_error()?;
                 }
                 Err(e) => {
                     show_error!(
@@ -1379,11 +1417,11 @@ impl Stater {
                             error: strip_errno(&e)
                         }
                     );
-                    return 1;
+                    return Ok(1);
                 }
             }
         }
-        0
+        Ok(0)
     }
 
     fn default_format(show_fs: bool, terse: bool, show_dev_type: bool) -> String {
@@ -1462,7 +1500,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
     let stater = Stater::new(&matches, diag_args.as_deref())?;
-    let exit_status = stater.exec();
+    let exit_status = stater.exec()?;
     if exit_status == 0 {
         Ok(())
     } else {
@@ -1607,7 +1645,9 @@ mod tests {
             },
             Token::Char('\n'),
         ];
-        assert_eq!(&expected, &Stater::generate_tokens(s, false).unwrap());
+        let (tokens, error) = Stater::generate_tokens(s, false);
+        assert!(error.is_none());
+        assert_eq!(&expected, &tokens);
     }
 
     #[test]
@@ -1650,7 +1690,9 @@ mod tests {
             Token::Byte(b'J'),
             Token::Byte(b'\n'),
         ];
-        assert_eq!(&expected, &Stater::generate_tokens(s, true).unwrap());
+        let (tokens, error) = Stater::generate_tokens(s, true);
+        assert!(error.is_none());
+        assert_eq!(&expected, &tokens);
     }
 
     #[test]
