@@ -90,6 +90,10 @@ fi
 
 export RUST_BACKTRACE=1
 
+# The GNU tests compare stderr byte for byte: never let a dev shell force a
+# caret report into their pipes.
+unset UUTILS_DIAG
+
 # Determine if we have SELinux tests
 has_selinux_tests=false
 if test $# -ge 1; then
