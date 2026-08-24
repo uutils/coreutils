@@ -10,7 +10,7 @@
 //
 // spell-checker:ignore CLOEXEC RDONLY TOCTOU closedir dirp fdopendir fstatat openat REMOVEDIR unlinkat smallfile
 // spell-checker:ignore RAII dirfd fchownat fchown FchmodatFlags fchmodat fchmod mkdirat CREAT WRONLY ELOOP ENOTDIR
-// spell-checker:ignore atimensec mtimensec ctimensec opath chmods
+// spell-checker:ignore atimensec mtimensec ctimensec opath chmods fakeroot fakechroot
 
 #[cfg(test)]
 use std::os::unix::ffi::OsStringExt;
@@ -289,6 +289,10 @@ impl DirFd {
     }
 
     /// Change mode of a file relative to this directory
+    ///
+    /// Goes through the libc `fchmodat()` symbol, which `LD_PRELOAD` tools
+    /// (fakeroot, fakechroot, pseudo) interpose and a raw syscall would bypass.
+    /// glibc issues `fchmodat2` from there anyway, so nothing is lost.
     pub fn chmod_at(
         &self,
         name: &OsStr,
@@ -298,7 +302,38 @@ impl DirFd {
         let name_cstr =
             CString::new(name.as_bytes()).map_err(|_| SafeTraversalError::PathContainsNull)?;
 
-        // --- fchmodat2 path (Linux 6.6+, asm-generic arches only) ---
+        let flags = if symlink_behavior.should_follow() {
+            FchmodatFlags::FollowSymlink
+        } else {
+            FchmodatFlags::NoFollowSymlink
+        };
+
+        // nix rather than rustix: rustix defaults to its linux_raw backend, so
+        // its `chmod` is a raw syscall that no LD_PRELOAD wrapper can see.
+        // A libc that cannot honor AT_SYMLINK_NOFOLLOW reports it rather than
+        // following the symlink, so falling back on that error is safe.
+        // Only the non-Linux tail below consumes this; on Linux the O_PATH
+        // fallback takes over instead.
+        #[cfg_attr(target_os = "linux", allow(unused_variables))]
+        let libc_err = match fchmodat(
+            &self.fd,
+            name_cstr.as_c_str(),
+            Mode::from_bits_truncate(mode as libc::mode_t),
+            flags,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(e)
+                if !symlink_behavior.should_follow()
+                    && (e == nix::errno::Errno::ENOSYS
+                        || e == nix::errno::Errno::EOPNOTSUPP
+                        || e == nix::errno::Errno::ENOTSUP) =>
+            {
+                io::Error::from_raw_os_error(e as i32)
+            }
+            Err(e) => return Err(io::Error::from_raw_os_error(e as i32)),
+        };
+
+        // --- fchmodat2 fallback (Linux 6.6+, asm-generic arches only) ---
         // Uses the raw mode value directly; no nix::Mode conversion needed.
         // Only enabled on asm-generic architectures where syscall number 452 is
         // correct (x86_64, x86, arm, aarch64, riscv). MIPS/SPARC/PowerPC/Alpha
@@ -315,7 +350,7 @@ impl DirFd {
                 target_arch = "riscv32",
             ),
         ))]
-        if matches!(symlink_behavior, SymlinkBehavior::NoFollow) {
+        {
             use std::sync::atomic::{AtomicBool, Ordering};
 
             // Cache: if fchmodat2 returned ENOSYS once, the kernel is too old
@@ -346,42 +381,20 @@ impl DirFd {
                 match err.raw_os_error() {
                     Some(libc::ENOSYS) => {
                         FCHMODAT2_UNAVAILABLE.store(true, Ordering::Relaxed);
-                        // Fall through to fchmodat
+                        // Fall through to the O_PATH fallback
                     }
                     _ => return Err(err),
                 }
             }
         }
 
-        // --- fchmodat fallback path ---
-        // nix::Mode conversion is needed here because fchmodat() requires it.
-        let nix_mode = Mode::from_bits_truncate(mode as libc::mode_t);
-
-        let flags = if symlink_behavior.should_follow() {
-            FchmodatFlags::FollowSymlink
-        } else {
-            FchmodatFlags::NoFollowSymlink
-        };
-
-        match fchmodat(&self.fd, name_cstr.as_c_str(), nix_mode, flags) {
-            Ok(()) => Ok(()),
-            Err(e)
-                if !symlink_behavior.should_follow()
-                    && (e == nix::errno::Errno::EOPNOTSUPP || e == nix::errno::Errno::ENOTSUP) =>
-            {
-                // musl does not emulate AT_SYMLINK_NOFOLLOW via /proc/self/fd
-                // like glibc does, so fchmodat returns EOPNOTSUPP on old kernels.
-                // Fall back to O_PATH + /proc/self/fd/{fd} + fchmod.
-                #[cfg(target_os = "linux")]
-                {
-                    self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
-                }
-                #[cfg(not(target_os = "linux"))]
-                {
-                    Err(io::Error::from_raw_os_error(e as i32))
-                }
-            }
-            Err(e) => Err(io::Error::from_raw_os_error(e as i32)),
+        #[cfg(target_os = "linux")]
+        {
+            self.chmod_at_via_opath(name_cstr.as_c_str(), mode)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            Err(libc_err)
         }
     }
 
@@ -394,22 +407,23 @@ impl DirFd {
     ///
     #[cfg(target_os = "linux")]
     fn chmod_at_via_opath(&self, name: &core::ffi::CStr, mode: u32) -> io::Result<()> {
-        use rustix::fs::{Mode, OFlags, chmod, openat};
+        // Same reason as in chmod_at: rustix's linux_raw backend would make
+        // these raw syscalls, invisible to LD_PRELOAD wrappers.
+        use std::os::unix::fs::PermissionsExt;
 
         let fd = openat(
             &self.fd,
             name,
-            OFlags::PATH | OFlags::NOFOLLOW | OFlags::CLOEXEC,
+            OFlag::O_PATH | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
             Mode::empty(),
         )
-        .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))?;
+        .map_err(|e| io::Error::from_raw_os_error(e as i32))?;
 
-        let proc_path = format!("/proc/self/fd/{}\0", fd.as_raw_fd());
-        let proc_cstr = core::ffi::CStr::from_bytes_with_nul(proc_path.as_bytes())
-            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid proc path"))?;
-
-        chmod(proc_cstr, Mode::from_bits_truncate(mode))
-            .map_err(|e| io::Error::from_raw_os_error(e.raw_os_error()))
+        // set_permissions goes through the libc chmod() symbol.
+        fs::set_permissions(
+            format!("/proc/self/fd/{}", fd.as_raw_fd()),
+            fs::Permissions::from_mode(mode),
+        )
     }
 
     /// Change mode of this directory

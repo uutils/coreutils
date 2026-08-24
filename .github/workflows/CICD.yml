@@ -1034,6 +1034,24 @@ jobs:
     - name: Run safe traversal verification
       run: ./util/check-safe-traversal.sh
 
+  test_libc_interposition:
+    name: libc Interposition Check
+    runs-on: ubuntu-latest
+    needs: [ min_version, deps ]
+
+    steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install fakeroot
+      run: sudo apt-get update && sudo apt-get install -y fakeroot
+    - name: Build utilities that must stay interposable
+      run: cargo build --profile=release-small -p uu_chmod -p uu_chown
+    - name: Run libc interposition verification
+      run: ./util/check-libc-interposition.sh
+
   test_toctou:
     name: TOCTOU Security Check
     runs-on: ubuntu-latest
