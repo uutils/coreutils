@@ -1150,7 +1150,6 @@ impl Stater {
     }
 
     fn exec(&self) -> UResult<i32> {
-        #[cfg(unix)]
         let stdin_is_fifo = rustix::fs::fstat(io::stdin())
             .is_ok_and(|s| rustix::fs::FileType::from_raw_mode(s.st_mode).is_fifo());
 
