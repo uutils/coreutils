@@ -514,6 +514,10 @@ pub fn get_message(id: &str) -> String {
 /// let message = get_message_with_args("notification", args);
 /// println!("{message}");
 /// ```
+pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
+    get_message_internal(id, Some(ftl_args))
+}
+
 /// The value as an `i64` when Fluent can represent it exactly, else `None`.
 #[doc(hidden)]
 pub fn exact_fluent_integer(s: &str) -> Option<i64> {
@@ -534,10 +538,6 @@ pub fn exact_fluent_integer(s: &str) -> Option<i64> {
 pub fn is_integer_literal(s: &str) -> bool {
     let digits = s.strip_prefix(['-', '+']).unwrap_or(s);
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
-}
-
-pub fn get_message_with_args(id: &str, ftl_args: FluentArgs) -> String {
-    get_message_internal(id, Some(ftl_args))
 }
 
 /// Function to detect system locale from environment variables
@@ -842,6 +842,12 @@ pub use {translate, translate_text};
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
     #[test]
     fn integers_beyond_f64_precision_stay_exact() {
         // Fluent's number type is f64-backed, so values past 2^53 must travel
@@ -862,12 +868,6 @@ mod tests {
         assert!(!is_integer_literal("-"));
         assert!(!is_integer_literal("12a"));
     }
-
-    use super::*;
-    use std::env;
-    use std::fs;
-    use std::path::PathBuf;
-    use tempfile::TempDir;
 
     /// Test-specific helper function to create a bundle from test directory only
     #[cfg(test)]

@@ -1121,14 +1121,6 @@ fn exec<Sep: Separator>(
     Ok(())
 }
 
-/// Render a zero-based field index as its one-based equivalent.
-///
-/// `parse_field_number` clamps an out-of-range field to `usize::MAX`, so the
-/// increment has to saturate rather than overflow.
-fn one_based(k: usize) -> usize {
-    k.saturating_add(1)
-}
-
 /// Check that keys for both files and for a particular file are not
 /// contradictory and return the key index.
 fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
@@ -1136,10 +1128,12 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
         // Show zero-based field numbers as one-based.
         (Some(k1), Some(k2)) if k1 != k2 => Err(USimpleError::new(
             1,
+            // `parse_field_number` clamps an out-of-range field to `usize::MAX`,
+            // so the one-based increment has to saturate rather than overflow.
             translate!(
                 "join-error-incompatible-fields",
-                "field1" => one_based(k1),
-                "field2" => one_based(k2)
+                "field1" => k1.saturating_add(1),
+                "field2" => k2.saturating_add(1)
             ),
         )),
         (Some(k), _) | (_, Some(k)) => Ok(k),
