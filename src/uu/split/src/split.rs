@@ -1149,13 +1149,8 @@ fn n_chunks_by_line(
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
         let mut skipped = -1;
-        // Stop at the last chunk. When the input is smaller than `num_chunks`,
-        // `chunk_size_base` is 0 and the trailing chunks are zero-sized, so the
-        // increment below adds nothing and `num_bytes_should_be_written` would
-        // never catch up with `num_bytes_written` - without this bound the loop
-        // spins forever. Keeping `chunk_number` within range also means any
-        // input beyond `num_bytes` lands in the last chunk rather than
-        // indexing past the end of `out_files`.
+        // Cap at the last chunk to avoid an infinite loop when trailing chunks are
+        // zero-sized, and keep excess input from indexing past out_files.
         while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
             num_bytes_should_be_written +=
                 chunk_size_base + (chunk_size_reminder > chunk_number) as u64;

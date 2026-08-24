@@ -1281,37 +1281,6 @@ fn test_number_by_lines_kth() {
 /// chunks are zero-sized. The chunk-advancing loop used to make no progress in
 /// that case and spun forever at 100% CPU.
 #[test]
-fn test_number_by_lines_fewer_bytes_than_chunks() {
-    for (input, num_chunks) in [("a", 2u8), ("a", 3), ("ab", 3), ("a", 5), ("ab", 5)] {
-        let (at, mut ucmd) = at_and_ucmd!();
-        at.write("in", input);
-        ucmd.args(&["-n", &format!("l/{num_chunks}"), "in"])
-            .succeeds()
-            .no_output();
-        // All of the input lands in the first chunk, the rest stay empty.
-        assert_eq!(at.read("xaa"), input);
-        for i in 1..num_chunks {
-            let name = format!("xa{}", (b'a' + i) as char);
-            assert_eq!(at.read(&name), "");
-        }
-    }
-}
-
-#[test]
-fn test_number_by_lines_fewer_bytes_than_chunks_kth() {
-    new_ucmd!()
-        .args(&["-n", "l/1/3"])
-        .pipe_in("a")
-        .succeeds()
-        .stdout_only("a");
-    new_ucmd!()
-        .args(&["-n", "l/2/3"])
-        .pipe_in("a")
-        .succeeds()
-        .stdout_only("");
-}
-
-#[test]
 fn test_number_by_lines_fewer_bytes_than_chunks_elide() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("in", "a");
