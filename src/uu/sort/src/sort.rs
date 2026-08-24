@@ -45,9 +45,10 @@ use std::path::PathBuf;
 use std::str::Utf8Error;
 use std::sync::OnceLock;
 use thiserror::Error;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{FromIo, strip_errno};
-use uucore::error::{UError, UResult, USimpleError, UUsageError, quiet_if_reported};
+use uucore::error::{UError, UResult, USimpleError, UUsageError};
 use uucore::extendedbigdecimal::ExtendedBigDecimal;
 #[cfg(feature = "i18n-collator")]
 use uucore::i18n::collator::{compute_sort_key_utf8, locale_cmp};
@@ -180,6 +181,9 @@ pub enum SortError {
 
     #[error("{}", translate!("sort-no-input-from", "file" => format!("{}", .file.quote())))]
     EmptyInputFile { file: PathBuf },
+
+    #[error("{}", translate!("sort-random-source-end-of-file", "path" => format!("{}", .path.quote())))]
+    RandomSourceEndOfFile { path: PathBuf },
 
     #[error("{}", translate!("sort-invalid-zero-length-filename", "file" => .file.maybe_quote(), "line_num" => .line_num))]
     ZeroLengthFileName { file: PathBuf, line_num: usize },
@@ -2242,10 +2246,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let message = format_error_message(&error, size_str, options::BUF_SIZE);
             error.size_value_error(
                 key_args.as_deref(),
-                size_str,
+                &OptionValue::new(size_str, 'S', options::BUF_SIZE),
                 0,
-                'S',
-                options::BUF_SIZE,
                 &message,
                 USimpleError::new(2, message.clone()),
             )
@@ -2392,10 +2394,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
             let selector = match FieldSelector::parse(value, &settings) {
                 Ok(selector) => selector,
                 Err(error) => {
-                    let reported = key_args
-                        .as_ref()
-                        .is_some_and(|args| diagnostics::render(args, value, &error));
-                    return Err(quiet_if_reported(reported, error));
+                    return Err(uucore::diagnostics::error_after_report(
+                        key_args.as_deref(),
+                        error,
+                        |args, error| diagnostics::render(args, value, error),
+                    ));
                 }
             };
             settings.selectors.push(selector);
@@ -3083,6 +3086,10 @@ const U64_LEN: usize = 8;
 const RANDOM_SOURCE_TAG: &[u8] = b"uutils-sort-random-source"; // Domain separation tag
 
 /// Create a 128-bit salt by hashing up to 1 MiB from the given file.
+///
+/// The file has to hold at least [`SALT_LEN`] bytes. GNU asks for the same 128
+/// bits and reports `end of file` when the source cannot supply them, rather
+/// than shuffling with whatever it managed to read.
 fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
     let mut reader = open_with_open_failed_error(path)?;
     let mut buf = [0u8; BUF_LEN];
@@ -3104,6 +3111,13 @@ fn salt_from_random_source(path: &Path) -> UResult<[u8; SALT_LEN]> {
         if take < n {
             break;
         }
+    }
+
+    if total < SALT_LEN {
+        return Err(SortError::RandomSourceEndOfFile {
+            path: path.to_owned(),
+        }
+        .into());
     }
 
     let first = hasher.finish();

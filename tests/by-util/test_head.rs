@@ -180,7 +180,7 @@ fn test_negative_byte_syntax() {
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -1051,6 +1051,31 @@ fn test_unreadable_file_prints_no_header() {
         .stdout_is("==> readable <==\nhello")
         .stdout_does_not_contain("==> unreadable <==")
         .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
+}
+
+/// Regression for #13887: writing the `==> filename <==` verbose header to a
+/// full/closed stdout must surface the write error instead of panicking inside
+/// `print_verbatim(...).unwrap()`. A filename longer than the stdout buffer
+/// forces the header write to flush mid-write so the failure surfaces inside
+/// the filename write rather than at the next checked one.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_verbose_header_write_error_long_filename() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .arg("-v")
+        .arg(long_path)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
 }
 
 /// Regression for #11972: head must reject directories detected on the
