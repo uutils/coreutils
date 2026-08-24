@@ -654,6 +654,30 @@ fn format_gnu_scientific(v: f64) -> String {
     }
 }
 
+/// Format `value` with `precision` decimals, exactly as `{:.precision$}` would.
+///
+/// Most of what numfmt prints is a whole number — `348M`, `1024` — and the
+/// general float formatter reaches for a big-integer expansion of the value to
+/// get its last digit right. When the value is an integer the answer needs no
+/// expansion, so take the short way and let the rest fall through.
+fn format_float(value: f64, precision: usize) -> String {
+    // Past 2^53 an f64 no longer holds every integer, and the two routes would
+    // not agree on what to print.
+    const EXACT_INTEGERS_UP_TO: f64 = 9_007_199_254_740_992.0;
+
+    if precision == 0 && value.is_finite() && value.abs() < EXACT_INTEGERS_UP_TO {
+        // Both routes round halves to even; they part only on the sign of a
+        // negative value that rounds to zero, which `{:.0}` keeps.
+        let rounded = value.round_ties_even();
+        if rounded == 0.0 && value.is_sign_negative() {
+            return "-0".to_string();
+        }
+        return (rounded as i64).to_string();
+    }
+
+    format!("{value:.precision$}")
+}
+
 fn transform_to(
     s: ParsedNumber,
     opts: &TransformOptions,
@@ -678,22 +702,24 @@ fn transform_to(
         }
     };
     Ok(match s {
-        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format!(
-            "{:.precision$}",
+        None if opts.to == Unit::None && precision <= u16::MAX.into() => localize(format_float(
             round_with_precision(i2, round_method, precision),
+            precision,
         )),
         None if is_precision_specified && precision <= u16::MAX.into() => {
             let i2 = round_with_precision(i2, round_method, 0);
-            localize(format!("{i2:.precision$}"))
+            localize(format_float(i2, precision))
         }
-        None => localize(format!("{i2:.0}")),
+        None => localize(format_float(i2, 0)),
         Some(s) if precision > 0 && precision <= u16::MAX.into() => localize(format!(
             "{i2:.precision$}{unit_separator}{}",
             DisplayableSuffix(s, opts.to),
         )),
-        Some(s) if is_precision_specified => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) if is_precision_specified => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
         Some(s) if i2.abs() < 10.0 => {
             // single digit before the decimal, like 1.5K
             localize(format!(
@@ -701,9 +727,11 @@ fn transform_to(
                 DisplayableSuffix(s, opts.to)
             ))
         }
-        Some(s) => {
-            format!("{i2:.0}{unit_separator}{}", DisplayableSuffix(s, opts.to))
-        }
+        Some(s) => format!(
+            "{}{unit_separator}{}",
+            format_float(i2, 0),
+            DisplayableSuffix(s, opts.to)
+        ),
     })
 }
 
@@ -932,6 +960,41 @@ pub fn write_formatted_with_whitespace<W: std::io::Write + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_format_float_matches_the_general_formatter() {
+        // The short route must be indistinguishable from `{:.precision$}`,
+        // including the halves, the signed zero and the values that leave the
+        // range where an f64 holds every integer.
+        for value in [
+            0.0,
+            -0.0,
+            -0.4,
+            0.5,
+            1.5,
+            2.5,
+            -1.5,
+            -2.5,
+            -0.5,
+            348.123_456,
+            1023.999,
+            9_007_199_254_740_992.0,
+            9_007_199_254_740_994.0,
+            -9_007_199_254_740_994.0,
+            1e300,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+        ] {
+            for precision in [0, 1, 2, 6] {
+                assert_eq!(
+                    format_float(value, precision),
+                    format!("{value:.precision$}"),
+                    "value {value}, precision {precision}"
+                );
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::cognitive_complexity)]

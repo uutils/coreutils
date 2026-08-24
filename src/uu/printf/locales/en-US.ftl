@@ -18,38 +18,22 @@ printf-after-help = basic anonymous string templating:
   The following escape sequences, organized here in alphabetical order,
   will print the corresponding character literal:
 
-  - \" double quote
-
-  - \\ backslash
-
-  - \\a alert (BEL)
-
-  - \\b backspace
-
-  - \\c End-of-Input
-
-  - \\e escape
-
-  - \\f form feed
-
-  - \\n new line
-
-  - \\r carriage return
-
-  - \\t horizontal tab
-
-  - \\v vertical tab
-
-  - \\NNN byte with value expressed in octal value NNN (1 to 3 digits)
-            values greater than 256 will be treated
-
-  - \\xHH byte with value expressed in hexadecimal value NN (1 to 2 digits)
-
-  - \\uHHHH Unicode (IEC 10646) character with value expressed in hexadecimal value HHHH (4 digits)
-
-  - \\uHHHH Unicode character with value expressed in hexadecimal value HHHH (8 digits)
-
-  - %% a single %
+    - \" double quote
+    - \\ backslash
+    - \\a alert (BEL)
+    - \\b backspace
+    - \\c End-of-Input
+    - \\e escape
+    - \\f form feed
+    - \\n new line
+    - \\r carriage return
+    - \\t horizontal tab
+    - \\v vertical tab
+    - \\NNN byte with value expressed in octal value NNN (1 to 3 digits) values greater than 256 will be treated
+    - \\xHH byte with value expressed in hexadecimal value NN (1 to 2 digits)
+    - \\uHHHH Unicode (IEC 10646) character with value expressed in hexadecimal value HHHH (4 digits)
+    - \\uHHHH Unicode character with value expressed in hexadecimal value HHHH (8 digits)
+    - %% a single %
 
   ### SUBSTITUTIONS
 
@@ -57,24 +41,25 @@ printf-after-help = basic anonymous string templating:
 
   Fields
 
-  - %s: string
-  - %b: string parsed for literals second parameter is max length
+    - %s: string
+    - %b: string parsed for literals second parameter is max length
 
-  - %c: char no second parameter
+    - %c: char no second parameter
 
-  - %i or %d: 64-bit integer
-  - %u: 64 bit unsigned integer
-  - %x or %X: 64-bit unsigned integer as hex
-  - %o: 64-bit unsigned integer as octal
+    - %i or %d: 64-bit integer
+    - %u: 64 bit unsigned integer
+    - %x or %X: 64-bit unsigned integer as hex
+    - %o: 64-bit unsigned integer as octal
+
               second parameter is min-width, integer
               output below that width is padded with leading zeroes
 
-  - %q: ARGUMENT is printed in a format that can be reused as shell input, escaping non-printable
-              characters with the proposed POSIX $'' syntax.
 
-  - %f or %F: decimal floating point value
-  - %e or %E: scientific notation floating point value
-  - %g or %G: shorter of specially interpreted decimal or SciNote floating point value.
+    - %q: ARGUMENT is printed in a format that can be reused as shell input, escaping non-printable characters with the proposed POSIX $'' syntax.
+    - %f or %F: decimal floating point value
+    - %e or %E: scientific notation floating point value
+    - %g or %G: shorter of specially interpreted decimal or SciNote floating point value.
+
               second parameter is
                 -max places after decimal point for floating point output
                 -max number of significant digits for scientific notation output
@@ -105,9 +90,9 @@ printf-after-help = basic anonymous string templating:
 
   special prefixes to numeric arguments
 
-  - 0: (e.g. 010) interpret argument as octal (integer output fields only)
-  - 0x: (e.g. 0xABC) interpret argument as hex (numeric output fields only)
-  - \': (e.g. \'a) interpret argument as a character constant
+    - 0: (e.g. 010) interpret argument as octal (integer output fields only)
+    - 0x: (e.g. 0xABC) interpret argument as hex (numeric output fields only)
+    - \': (e.g. \'a) interpret argument as a character constant
 
   #### HOW TO USE SUBSTITUTIONS
 
@@ -130,9 +115,9 @@ printf-after-help = basic anonymous string templating:
 
   will print
 
-  it is 22 F in Portland
-  it is 25 F in Boston
-  it is 27 F in Boston
+      it is 22 F in Portland
+      it is 25 F in Boston
+      it is 27 F in Boston
 
   If a format string is printed but there are less arguments remaining
   than there are substitution fields, substitution fields without
@@ -153,24 +138,24 @@ printf-after-help = basic anonymous string templating:
   - %s: string
 
   - %b: escaped string - the string will be checked for any escaped literals from
-        the escaped literal list above, and translate them to literal characters.
-        e.g. \\n will be transformed into a newline character.
-        One special rule about %b mode is that octal literals are interpreted differently
-        In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
-        instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
-        still be interpreted and not throw a warning, you will have problems if you use this for a
-        literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
+  the escaped literal list above, and translate them to literal characters.
+  e.g. \\n will be transformed into a newline character.
+  One special rule about %b mode is that octal literals are interpreted differently.
+  In arguments passed by %b, pass octal-interpreted literals must be in the form of \\0NNN
+  instead of \\NNN. (Although, for legacy reasons, octal literals in the form of \\NNN will
+  still be interpreted and not throw a warning, you will have problems if you use this for a
+  literal whose code begins with zero, as it will be viewed as in \\0NNN form.)
 
   - %q: escaped string - the string in a format that can be reused as input by most shells.
-        Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
-        and shell meta-characters are quoted appropriately.
-        This is an equivalent format to ls --quoting=shell-escape output.
+  Non-printable characters are escaped with the POSIX proposed ‘$''’ syntax,
+  and shell meta-characters are quoted appropriately.
+  This is an equivalent format to ls --quoting=shell-escape output.
 
   #### CHAR SUBSTITUTIONS
 
   The character field does not have a secondary parameter.
 
-  - %c: a single character
+    - %c: a single character
 
   #### INTEGER SUBSTITUTIONS
 
@@ -178,14 +163,10 @@ printf-after-help = basic anonymous string templating:
   %.4i means an integer which if it is less than 4 digits in length,
   is padded with leading zeros until it is 4 digits in length.
 
-  - %d or %i: 64-bit integer
-
-  - %u: 64-bit unsigned integer
-
-  - %x or %X: 64-bit unsigned integer printed in Hexadecimal (base 16)
-              %X instead of %x means to use uppercase letters for 'a' through 'f'
-
-  - %o: 64-bit unsigned integer printed in octal (base 8)
+    - %d or %i: 64-bit integer
+    - %u: 64-bit unsigned integer
+    - %x or %X: 64-bit unsigned integer printed in Hexadecimal (base 16). %X instead of %x means to use uppercase letters for 'a' through 'f'
+    - %o: 64-bit unsigned integer printed in octal (base 8)
 
   #### FLOATING POINT SUBSTITUTIONS
 
@@ -202,19 +183,20 @@ printf-after-help = basic anonymous string templating:
   18th decimal place of +/- 1
 
   - %f: floating point value presented in decimal, truncated and displayed to 6 decimal places by
-        default. There is not past-double behavior parity with Coreutils printf, values are not
-        estimated or adjusted beyond input values.
+  default. There is not past-double behavior parity with Coreutils printf, values are not
+  estimated or adjusted beyond input values.
 
   - %e or %E: floating point value presented in scientific notation
-              7 significant digits by default
-              %E means use to use uppercase E for the mantissa.
+  7 significant digits by default.
+  %E means use to use uppercase E for the mantissa.
 
   - %g or %G: floating point value presented in the shortest of decimal and scientific notation
-              behaves differently from %f and %E, please see posix printf spec for full details,
-              some examples of different behavior:
-              Sci Note has 6 significant digits by default
-              Trailing zeroes are removed
-              Instead of being truncated, digit after last is rounded
+  behaves differently from %f and %E, please see posix printf spec for full details,
+  some examples of different behavior:
+
+    - Sci Note has 6 significant digits by default
+    - Trailing zeroes are removed
+    - Instead of being truncated, digit after last is rounded
 
   Like other behavior in this utility, the design choices of floating point
   behavior in this utility is selected to reproduce in exact

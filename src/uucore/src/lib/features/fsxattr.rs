@@ -289,7 +289,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
                 .copied()
                 .collect::<Vec<u8>>();
 
-            for entry in acl_entries.chunks_exact(4) {
+            for entry in acl_entries.as_chunks::<4>().0 {
                 // Third byte and fourth byte will be the perm bits
                 perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
             }
