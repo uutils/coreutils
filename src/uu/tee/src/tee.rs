@@ -11,6 +11,7 @@ use std::io::{self, Error, ErrorKind, Write, stderr};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
+use uucore::show_error;
 use uucore::translate;
 
 mod cli;
@@ -124,7 +125,7 @@ fn open(
             name: name.clone(),
         })),
         Err(f) => {
-            let _ = writeln!(stderr(), "{}: {f}", name.maybe_quote());
+            show_error!("{}: {}", name.maybe_quote(), strip_errno(&f));
             match output_error {
                 Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) => Some(Err(f)),
                 _ => None,

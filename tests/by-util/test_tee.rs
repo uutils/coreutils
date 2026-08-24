@@ -697,6 +697,14 @@ mod linux_only {
         assert_eq!(at.read(file_out_b), content);
         assert!(result.stderr_str().contains("No space left on device"));
     }
+
+    #[test]
+    fn test_permission_denied_clean() {
+        new_ucmd!()
+            .arg("/dev/mem")
+            .fails_with_code(1)
+            .stderr_is("tee: /dev/mem: Permission denied\n");
+    }
 }
 
 // Additional cross-platform tee tests to cover GNU compatibility around --output-error
