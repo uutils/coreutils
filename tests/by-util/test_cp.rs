@@ -8508,6 +8508,76 @@ fn test_cp_xattr_enotsup_handling() {
     }
 }
 
+/// A failed --preserve=xattr must not empty the already-copied destination;
+/// only a failure to preserve the SELinux context empties it.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_cp_xattr_failure_keeps_dest_contents() {
+    use std::process::Command;
+    let scene = TestScenario::new(util_name!());
+
+    // tmpfs accepts large user-xattr values while ext4 and friends cap them
+    // near the block size, so copying such a source out of tmpfs makes
+    // --preserve=xattr fail only after the file data has been written.
+    // The fixtures dir may itself be on tmpfs, so put the destination in
+    // target/tmp, which lives on the build filesystem.
+    let big_value = "y".repeat(9_100);
+    let pid = std::process::id();
+    let source = format!("/dev/shm/cp_keep_dest_{pid}");
+    let dest_dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("cp_keep_dest_{pid}"));
+    if std_fs::write(&source, "kept content").is_err() || std_fs::create_dir(&dest_dir).is_err() {
+        return; // skip: no usable /dev/shm or target/tmp
+    }
+    let source_accepts = Command::new("setfattr")
+        .args(["-n", "user.huge", "-v", &big_value, &source])
+        .status()
+        .is_ok_and(|s| s.success());
+    let probe = dest_dir.join("probe");
+    std_fs::write(&probe, "x").unwrap();
+    let dest_rejects = !Command::new("setfattr")
+        .args(["-n", "user.huge", "-v", &big_value])
+        .arg(&probe)
+        .status()
+        .is_ok_and(|s| s.success());
+    if !source_accepts || !dest_rejects {
+        std_fs::remove_file(&source).ok();
+        std_fs::remove_dir_all(&dest_dir).ok();
+        return; // skip: this filesystem combination cannot produce the failure
+    }
+
+    let out = dest_dir.join("out");
+    scene
+        .ucmd()
+        .arg("--preserve=xattr")
+        .arg(&source)
+        .arg(&out)
+        .fails()
+        .stderr_contains("setting attributes");
+    assert_eq!(std_fs::read_to_string(&out).unwrap(), "kept content");
+
+    // A read-only source propagates its mode to the destination; the failure
+    // handling must neither empty the file nor leave the mode altered.
+    set_permissions(&source, std_fs::Permissions::from_mode(0o444)).unwrap();
+    let out_ro = dest_dir.join("out_ro");
+    scene
+        .ucmd()
+        .arg("--preserve=xattr")
+        .arg(&source)
+        .arg(&out_ro)
+        .fails()
+        .stderr_contains("setting attributes");
+    assert_eq!(std_fs::read_to_string(&out_ro).unwrap(), "kept content");
+    assert_eq!(
+        std_fs::metadata(&out_ro).unwrap().mode() & 0o777,
+        0o444,
+        "destination mode should stay read-only"
+    );
+
+    std_fs::remove_file(&source).ok();
+    set_permissions(&out_ro, std_fs::Permissions::from_mode(0o644)).ok();
+    std_fs::remove_dir_all(&dest_dir).ok();
+}
+
 #[test]
 #[cfg(not(windows))]
 fn test_cp_preserve_directory_permissions_by_default() {
