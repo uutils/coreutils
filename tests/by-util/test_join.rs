@@ -255,28 +255,44 @@ fn default_format() {
 
 #[test]
 fn repeated_o_accumulates_fields() {
-    // GNU lets -o repeat; the fields accumulate, so this matches a single -o.
+    // GNU lets -o repeat; the fields accumulate in the order they appear,
+    // here giving the reverse of the default format.
     new_ucmd!()
         .arg("fields_1.txt")
         .arg("fields_2.txt")
         .arg("-o")
-        .arg("1.1")
-        .arg("-o")
         .arg("2.2")
+        .arg("-o")
+        .arg("1.1")
         .succeeds()
-        .stdout_only_fixture("default.expected");
+        .stdout_only("a 1\nb 2\nc 3\ne 5\nh 8\n");
 }
 
 #[test]
 fn repeated_o_ignores_auto_when_mixed() {
-    // When -o is repeated and not every value is `auto`, each `auto` is ignored.
+    // When -o is repeated and not every value is `auto`, each `auto` is
+    // ignored: only the explicit fields are printed, repeats included.
     new_ucmd!()
         .arg("fields_1.txt")
         .arg("fields_2.txt")
         .arg("-o")
         .arg("auto")
         .arg("-o")
-        .arg("1.1 2.2")
+        .arg("2.2 2.2 1.1")
+        .succeeds()
+        .stdout_only("a a 1\nb b 2\nc c 3\ne e 5\nh h 8\n");
+}
+
+#[test]
+fn repeated_o_auto_stays_auto() {
+    // `auto` still applies when every -o value is `auto`.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("auto")
         .succeeds()
         .stdout_only_fixture("default.expected");
 }
