@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/df.rs"
 doctest = false
@@ -33,8 +30,8 @@ uucore = { workspace = true, features = ["benchmark"] }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
-[target.'cfg(unix)'.dev-dependencies]
-rustix = { workspace = true, features = ["stdio"] }
+[lints]
+workspace = true
 
 [[bin]]
 name = "df"

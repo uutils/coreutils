@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) autoformat nocheck
+// spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -339,6 +339,71 @@ fn missing_format_fields() {
 }
 
 #[test]
+fn empty_fields_use_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // A blank line splits into a single empty field, so the join field is
+    // present but zero length rather than missing.
+    at.write("blank", "hello\n\n\n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "blank", "blank"])
+        .succeeds()
+        .stdout_only("hello\nEMPTY\nEMPTY\nEMPTY\nEMPTY\n");
+
+    // The same holds for a line containing only whitespace.
+    at.write("spaces", "   \n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "-o", "0,1.1", "spaces", "spaces"])
+        .succeeds()
+        .stdout_only("EMPTY EMPTY\n");
+
+    // A field between two adjacent separators is also present but empty.
+    at.write("gap", "a,,b\n");
+
+    ts.ucmd()
+        .args(&[
+            "-t",
+            ",",
+            "-e",
+            "EMPTY",
+            "-o",
+            "0,1.1,1.2,1.3",
+            "gap",
+            "gap",
+        ])
+        .succeeds()
+        .stdout_only("a,a,EMPTY,b\n");
+
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "EMPTY", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,EMPTY,b,EMPTY,b\n");
+}
+
+#[test]
+fn empty_fields_kept_without_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("gap", "a,,b\n");
+
+    // Without -e an empty field stays empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+
+    // Passing an empty string to -e is equivalent to not passing it at all.
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+}
+
+#[test]
 fn nocheck_order() {
     new_ucmd!()
         .arg("fields_1.txt")
@@ -596,4 +661,53 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_field_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first field is fine; only the second one is at fault.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+join: invalid field number: 'x'
+   ╭─[ join:1:13 ]
+   │
+ 1 │ join -o 1.2,2.x /dev/null /dev/null
+   │             ───
+   │
+   │ Help: an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o1.2,0.4", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("join:1:12"), "{stderr}");
+        assert!(stderr.contains("invalid field specifier"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("join: invalid field number: 'x'\n");
+    }
 }

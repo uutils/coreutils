@@ -9,6 +9,7 @@ mod blocks;
 mod bufferedoutput;
 mod conversion_tables;
 mod datastructures;
+mod diagnostics;
 mod numbers;
 mod parseargs;
 mod progress;
@@ -167,34 +168,6 @@ impl Num {
     }
 }
 
-/// Read and discard `n` bytes from `reader` using a buffer of size `buf_size`.
-///
-/// This is more efficient than `io::copy` with `BufReader` because it reads
-/// directly in `buf_size`-sized chunks, matching GNU dd's behavior.
-/// Returns the total number of bytes actually read.
-fn read_and_discard<R: Read>(reader: &mut R, n: u64, buf_size: usize) -> io::Result<u64> {
-    // todo: consider splice()ing to /dev/null on Linux
-    let mut buf = Vec::new();
-    buf.try_reserve(buf_size.min(n as usize))?; // try_with_capacity is unstable <https://github.com/rust-lang/rust/issues/91913>
-    let mut total = 0u64;
-    let mut remaining = n;
-    while remaining > 0 {
-        let to_read = cmp::min(remaining, buf_size as u64);
-        buf.clear();
-        match reader.by_ref().take(to_read).read_to_end(&mut buf) {
-            Ok(0) => break, // EOF
-            Ok(bytes_read) => {
-                total += bytes_read as u64;
-                remaining -= bytes_read as u64;
-            }
-            Err(e) if e.kind() == io::ErrorKind::Interrupted => {}
-            Err(e) => return Err(e),
-        }
-    }
-
-    Ok(total)
-}
-
 /// Data sources.
 ///
 /// Use [`Source::stdin_as_file`] if available to enable more
@@ -235,7 +208,7 @@ impl Source {
         match self {
             #[cfg(not(unix))]
             Self::Stdin(stdin) => {
-                let m = read_and_discard(stdin, n, ibs)?;
+                let m = uucore::io::read_and_discard(stdin, n, ibs)?;
                 if m < n {
                     show_error!(
                         "{}",
@@ -274,7 +247,7 @@ impl Source {
                     // ESPIPE means the file descriptor is not seekable (e.g., a pipe),
                     // so fall back to reading and discarding bytes using ibs-sized buffer
                     Some(Err(e)) if e.raw_os_error() == Some(libc::ESPIPE) => {
-                        let m = read_and_discard(f, n, ibs)?;
+                        let m = uucore::io::read_and_discard(f, n, ibs)?;
                         if m < n {
                             show_error!(
                                 "{}",
@@ -295,7 +268,7 @@ impl Source {
             }
             Self::File(f) => f.seek(SeekFrom::Current(n.try_into().unwrap())),
             #[cfg(unix)]
-            Self::Fifo(f) => read_and_discard(f, n, ibs),
+            Self::Fifo(f) => uucore::io::read_and_discard(f, n, ibs),
         }
     }
 
@@ -675,7 +648,7 @@ impl Dest {
             #[cfg(unix)]
             Self::Fifo(f) => {
                 // Seeking in a named pipe means *reading* from the pipe.
-                read_and_discard(f, n, obs)
+                uucore::io::read_and_discard(f, n, obs)
             }
             #[cfg(unix)]
             Self::Sink => Ok(0),
@@ -1219,6 +1192,8 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // blocks to this output. Read/write statistics are updated on
     // each iteration and cumulative statistics are reported to
     // the progress reporting thread.
+    // A failure ends the loop, so the statistics gathered so far still get reported.
+    let mut copy_error = None;
     while below_count_limit(i.settings.count, &rstat) {
         // Read a block from the input then write the block to the output.
         //
@@ -1226,7 +1201,11 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         // best buffer size for reading based on the number of
         // blocks already read and the number of blocks remaining.
         let loop_bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
-        let rstat_update = read_helper(&mut i, &mut buf, loop_bsize)?;
+        let Ok(rstat_update) =
+            read_helper(&mut i, &mut buf, loop_bsize).map_err(|e| copy_error = Some(e))
+        else {
+            break;
+        };
         if rstat_update.is_empty() {
             if input_nocache {
                 i.discard_cache(read_offset, 0);
@@ -1236,7 +1215,9 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
             }
             break;
         }
-        let wstat_update = o.write_blocks(&buf)?;
+        let Ok(wstat_update) = o.write_blocks(&buf).map_err(|e| copy_error = Some(e)) else {
+            break;
+        };
 
         // Discard the system file cache for the read portion of
         // the input file.
@@ -1281,6 +1262,16 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
         };
         let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), tp);
         prog_tx.send(prog_update).unwrap_or(());
+    }
+
+    if let Some(e) = copy_error {
+        // Flushing and syncing are pointless now, but the caller still wants the statistics.
+        let prog_update = ProgUpdate::new(rstat, wstat, start.elapsed(), ProgUpdateType::Final);
+        prog_tx.send(prog_update).unwrap_or(());
+        output_thread
+            .join()
+            .expect("Failed to join with the output thread.");
+        return Err(e);
     }
 
     finalize(o, rstat, wstat, start, &prog_tx, output_thread, truncate)
@@ -1503,12 +1494,15 @@ fn is_fifo(filename: &str) -> bool {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+    // The command line is kept for the caret in operand diagnostics.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
 
-    let settings: Settings = Parser::new().parse(
+    let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
             .get_many::<String>(options::OPERANDS)
             .unwrap_or_default(),
+        diag_args.as_deref(),
     )?;
 
     #[cfg(unix)]

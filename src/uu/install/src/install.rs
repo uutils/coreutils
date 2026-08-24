@@ -9,7 +9,6 @@ mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use file_diff::diff;
-use filetime::{FileTime, set_file_times};
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -189,6 +188,9 @@ static ARG_FILES: &str = "files";
 ///
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let paths: Vec<OsString> = matches
@@ -196,7 +198,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(|v| v.cloned().collect())
         .unwrap_or_default();
 
-    let behavior = behavior(&matches)?;
+    let behavior = behavior(&matches, diag_args.as_deref())?;
 
     match behavior.main_function {
         MainFunction::Directory => directory(&paths, &behavior),
@@ -361,7 +363,7 @@ fn resolve_id(value: &str, lookup: impl Fn(&str) -> std::io::Result<u32>) -> Opt
 ///
 /// In event of failure, returns an integer intended as a program return code.
 ///
-fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
+fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Behavior> {
     let main_function = if matches.get_flag(OPT_DIRECTORY) {
         MainFunction::Directory
     } else {
@@ -373,10 +375,11 @@ fn behavior(matches: &ArgMatches) -> UResult<Behavior> {
     let specified_mode: Option<u32> = if matches.contains_id(OPT_MODE) {
         let x = matches.get_one::<String>(OPT_MODE).ok_or(1)?;
         Some(uucore::mode::parse(x, considering_dir, 0).map_err(|err| {
-            show_error!(
-                "{}",
-                translate!("install-error-invalid-mode", "error" => err)
-            );
+            let message = translate!("install-error-invalid-mode", "error" => err.to_string());
+            // When the diagnostic is rendered it is already on stderr; exit quietly.
+            if !diag_args.is_some_and(|args| err.render_mode_value(args, x, 0, &message)) {
+                show_error!("{message}");
+            }
             1
         })?)
     } else {
@@ -573,6 +576,16 @@ fn is_new_file_path(path: &Path) -> bool {
         && path
             .parent()
             .is_none_or(|p| p.as_os_str().is_empty() || p.is_dir())
+}
+
+/// Test if the path is a valid target for a single-file install.
+///
+/// A valid target is a regular file, a path that can be created as a new file,
+/// or any existing non-directory entry (including device files, FIFOs, sockets
+/// and symlinks). Directories are handled by `copy_files_into_dir`.
+#[inline]
+fn is_valid_target(path: &Path) -> bool {
+    path.is_file() || is_new_file_path(path) || path.symlink_metadata().is_ok_and(|m| !m.is_dir())
 }
 
 /// Test if the path is an existing directory or ends with a trailing separator.
@@ -777,7 +790,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
             return Err(InstallError::SameFile(source.clone(), target.clone()).into());
         }
 
-        if target.is_file() || is_new_file_path(&target) {
+        if is_valid_target(&target) {
             #[cfg(unix)]
             if let (Some(ref parent_fd), Some(ref filename)) = (target_parent_fd, target_filename) {
                 if b.compare && !need_copy(source, &target, b) {
@@ -1070,7 +1083,7 @@ fn strip_file(to: &Path, b: &Behavior) -> UResult<()> {
         Err(e) => {
             // Follow GNU's behavior: if strip fails, removes the target
             let _ = fs::remove_file(to);
-            return Err(InstallError::StripProgramFailed(e.to_string()).into());
+            return Err(InstallError::StripProgramFailed(strip_errno(&e)).into());
         }
     }
     Ok(())
@@ -1112,10 +1125,14 @@ fn set_ownership_and_permissions(to: &Path, b: &Behavior) -> UResult<()> {
 ///
 fn preserve_timestamps(from: &Path, to: &Path) -> UResult<()> {
     let meta = metadata(from).map_err(InstallError::MetadataFailed)?;
-    let modified_time = FileTime::from_last_modification_time(&meta);
-    let accessed_time = FileTime::from_last_access_time(&meta);
+    let modified_time = meta.modified()?;
+    let accessed_time = meta.accessed()?;
 
-    if let Err(e) = set_file_times(to, accessed_time, modified_time) {
+    let times = fs::FileTimes::new()
+        .set_accessed(accessed_time)
+        .set_modified(modified_time);
+    let file = File::options().write(true).open(to)?;
+    if let Err(e) = file.set_times(times) {
         show_error!("{e}");
         // ignore error
     }

@@ -6,13 +6,11 @@
 
 #[cfg(not(target_os = "openbsd"))]
 use filetime::FileTime;
-use std::fs::{self, File};
+use std::env::current_exe;
+use std::fs;
 #[cfg(target_os = "linux")]
 use std::os::unix::ffi::OsStringExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::PathBuf;
-use std::process;
-use std::sync::OnceLock;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 use std::thread::sleep;
 use uucore::error::strip_errno;
@@ -786,27 +784,6 @@ fn test_install_copy_then_compare_file_with_extra_mode() {
 const STRIP_TARGET_FILE: &str = "helloworld_installed";
 const STRIP_PROGRAM: &str = "#!/bin/sh\n: > \"$1\"\n";
 
-fn strip_source_file() -> PathBuf {
-    use std::io::Write as _;
-    static BINARY: OnceLock<PathBuf> = OnceLock::new();
-    BINARY
-        .get_or_init(|| {
-            let dir = std::env::temp_dir();
-            let source = dir.join("hello.rs");
-            let binary = dir.join("hello_bin");
-            let mut file = File::create(&source).unwrap();
-            file.write_all(b"fn main() {}").unwrap();
-            process::Command::new("rustc")
-                .arg("-o")
-                .arg(&binary)
-                .arg(&source)
-                .status()
-                .unwrap();
-            binary
-        })
-        .clone()
-}
-
 #[test]
 fn test_install_and_strip() {
     let scene = TestScenario::new(util_name!());
@@ -835,11 +812,12 @@ fn test_install_and_strip() {
 
 #[test]
 fn test_install_no_strip_with_program() {
+    let source = current_exe().unwrap();
     TestScenario::new(util_name!())
         .ucmd()
         .arg("--strip-program")
         .arg("false")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .succeeds()
         .stderr_only(
@@ -967,13 +945,14 @@ fn test_install_on_invalid_link_at_destination_and_dev_null_at_source() {
 fn test_install_and_strip_with_invalid_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/bin/date")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
         .stderr_contains("strip program failed");
@@ -1003,16 +982,17 @@ fn test_install_and_strip_with_signal_terminated_program() {
 fn test_install_and_strip_with_non_existent_program() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
+    let source = current_exe().unwrap();
 
     scene
         .ucmd()
         .arg("-s")
         .arg("--strip-program")
         .arg("/usr/bin/non_existent_program")
-        .arg(strip_source_file())
+        .arg(source)
         .arg(STRIP_TARGET_FILE)
         .fails()
-        .stderr_contains("No such file or directory");
+        .stderr_only("install: strip program failed: No such file or directory\n");
     assert!(!at.file_exists(STRIP_TARGET_FILE));
 }
 
@@ -2068,7 +2048,7 @@ fn test_install_compare_group_ownership() {
 
     at.write(source, "test content");
 
-    let user_group = process::Command::new("id")
+    let user_group = std::process::Command::new("id")
         .arg("-nrg")
         .output()
         .map_or_else(
@@ -2955,6 +2935,19 @@ fn test_install_proc_self_mem_as_dst() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_install_dev_full_as_dst() {
+    let scene = TestScenario::new(util_name!());
+
+    scene
+        .ucmd()
+        .arg("/dev/null")
+        .arg("/dev/full")
+        .fails()
+        .stderr_contains("cannot remove '/dev/full'");
+}
+
+#[test]
 fn test_install_backup_nil_same_file() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -3076,4 +3069,41 @@ fn test_install_backup_custom_suffix_refuses() {
         .fails()
         .stderr_contains("might destroy source");
     assert_eq!(at.read("a.bak"), "source content");
+}
+
+// The mode is only parsed where a mode means something.
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+    #[test]
+    fn test_snippet_points_at_the_bad_operator() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.contains("invalid operator"), "{stderr}");
+        // The caret lands on `?`: three columns of `-m ` and four of mode.
+        assert_eq!(result.caret_column(), Some(8), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("source");
+
+        // The test harness pipes stderr, so the report must not appear.
+        let result = ucmd
+            .args(&["-m", "u+rw?x", "source", "dest"])
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        assert!(stderr.starts_with("install: "), "{stderr}");
+        assert!(!stderr.contains(":1:"), "{stderr}");
+    }
 }

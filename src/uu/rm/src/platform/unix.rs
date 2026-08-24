@@ -14,7 +14,7 @@ use std::io::{IsTerminal, stdin};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::FromIo;
+use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::show_error;
@@ -22,7 +22,7 @@ use uucore::translate;
 
 use super::super::{
     InteractiveMode, Options, is_dir_empty, is_readable_metadata, prompt_descend, remove_file,
-    show_permission_denied_error, show_removal_error, show_verbose_write_error,
+    report_verbose_write_error, show_permission_denied_error, show_removal_error,
     verbose_removed_directory, verbose_removed_file,
 };
 
@@ -128,13 +128,12 @@ pub fn safe_remove_file(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            Some(show_verbose_write_error(verbose_removed_file(
-                path, options,
-            )))
+            report_verbose_write_error(verbose_removed_file(path, options));
+            Some(false)
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
-                show_error!("cannot remove {}: Permission denied", path.quote());
+                show_error!("cannot remove {}: {}", path.quote(), strip_errno(&e));
             } else {
                 let _ = show_removal_error(e, path);
             }
@@ -160,9 +159,8 @@ pub fn safe_remove_empty_dir(
             if let Some(pb) = progress_bar {
                 pb.inc(1);
             }
-            Some(show_verbose_write_error(verbose_removed_directory(
-                path, options,
-            )))
+            report_verbose_write_error(verbose_removed_directory(path, options));
+            Some(false)
         }
         Err(e) => {
             let e =
@@ -208,7 +206,8 @@ fn handle_permission_denied(
         return true;
     }
     // Successfully removed empty directory
-    show_verbose_write_error(verbose_removed_directory(entry_path, options))
+    report_verbose_write_error(verbose_removed_directory(entry_path, options));
+    false
 }
 
 /// Helper to handle unlink operation with error reporting
@@ -225,12 +224,12 @@ fn handle_unlink(
         show_error!("{e}");
         true
     } else {
-        let result = if is_dir {
+        report_verbose_write_error(if is_dir {
             verbose_removed_directory(entry_path, options)
         } else {
             verbose_removed_file(entry_path, options)
-        };
-        show_verbose_write_error(result)
+        });
+        false
     }
 }
 
@@ -258,7 +257,10 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
             // of the recursion.
             error_occurred
         }
-        Ok(_) => show_verbose_write_error(verbose_removed_directory(path, options)),
+        Ok(_) => {
+            report_verbose_write_error(verbose_removed_directory(path, options));
+            false
+        }
     }
 }
 
@@ -266,11 +268,10 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
 /// own device differs from this is a mount point, which `--preserve-root=all`
 /// refuses to cross.
 fn parent_device(path: &Path) -> Option<u64> {
-    let parent = match path.parent() {
+    let parent = match path.parent()? {
         // A bare name like "b" has an empty parent, meaning the current dir.
-        Some(p) if p.as_os_str().is_empty() => Path::new("."),
-        Some(p) => p,
-        None => return None,
+        p if p.as_os_str().is_empty() => Path::new("."),
+        p => p,
     };
     fs::metadata(parent).ok().map(|m| m.dev())
 }
@@ -321,7 +322,8 @@ pub fn safe_remove_dir_recursive(
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 // Try to remove the directory directly if it's empty
                 if fs::remove_dir(path).is_ok() {
-                    return show_verbose_write_error(verbose_removed_directory(path, options));
+                    report_verbose_write_error(verbose_removed_directory(path, options));
+                    return false;
                 }
                 // If we can't read the directory AND can't remove it,
                 // show permission denied error for GNU compatibility

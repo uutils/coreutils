@@ -18,7 +18,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -52,15 +52,13 @@ macro_rules! has {
 /// Information to uniquely identify a file
 #[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(unix)] rustix::fs::Stat,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
     #[cfg(windows)] winapi_util::file::Information,
-    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] fs::Metadata,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -78,7 +76,7 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -102,20 +100,10 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
-        #[cfg(target_os = "wasi")]
-        {
-            let metadata = if dereference {
-                fs::metadata(path.as_ref())
-            } else {
-                fs::symlink_metadata(path.as_ref())
-            };
-            Ok(Self(metadata?))
-        }
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
@@ -123,10 +111,6 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             self.0.file_size()
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len()
         }
     }
 
@@ -154,6 +138,8 @@ impl FileInformation {
             target_pointer_width = "64"
         ))]
         return self.0.st_nlink;
+        #[cfg(target_os = "wasi")]
+        return self.0.st_nlink;
         #[cfg(all(
             unix,
             any(
@@ -178,12 +164,9 @@ impl FileInformation {
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
         return self.0.number_of_links();
-        // WASI: nlink is not available in std::fs::Metadata, return 1
-        #[cfg(target_os = "wasi")]
-        return 1;
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
@@ -193,19 +176,10 @@ impl FileInformation {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
-    }
-}
-
-// WASI: compare by file type and size as a basic heuristic since
-// device/inode numbers are not available through std::fs::Metadata.
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
     }
 }
 
@@ -221,7 +195,7 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
@@ -230,11 +204,6 @@ impl Hash for FileInformation {
         {
             self.0.volume_serial_number().hash(state);
             self.0.file_index().hash(state);
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len().hash(state);
-            self.0.file_type().is_dir().hash(state);
         }
     }
 }
@@ -349,6 +318,22 @@ impl<'a> From<Component<'a>> for OwningComponent {
     }
 }
 
+/// Confirm that `path` (already known to exist) is a directory, without
+/// requiring permission to list its contents.
+///
+/// `read_dir` alone would raise the right error for a non-directory, but
+/// also requires listing permission on the target, which a plain "is this a
+/// directory" check should not need (e.g. `realpath /root/` succeeds for
+/// non-root users even though they can't list `/root`).
+fn ensure_is_directory(path: &Path) -> IOResult<()> {
+    if fs::metadata(path)?.is_dir() {
+        Ok(())
+    } else {
+        read_dir(path)?;
+        Ok(())
+    }
+}
+
 /// Return the canonical, absolute form of a path.
 ///
 /// This function is a generalization of [`std::fs::canonicalize`] that
@@ -456,13 +441,13 @@ pub fn canonicalize<P: AsRef<Path>>(
     match miss_mode {
         MissingHandling::Existing => {
             if has_to_be_directory {
-                read_dir(&result)?;
+                ensure_is_directory(&result)?;
             }
         }
         MissingHandling::Normal => {
             if result.exists() {
                 if has_to_be_directory {
-                    read_dir(&result)?;
+                    ensure_is_directory(&result)?;
                 }
             } else if let Some(parent) = result.parent() {
                 read_dir(parent)?;
@@ -722,9 +707,12 @@ pub fn are_hardlinks_to_same_file(_source: &Path, _target: &Path) -> bool {
 /// * `bool` - Returns `true` if the paths are hard links to the same file, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::symlink_metadata(source), fs::symlink_metadata(target))
-    else {
+    // The target is usually the one that does not exist, so look it up first
+    // and return early instead of also querying the source for nothing.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::symlink_metadata(source) else {
         return false;
     };
 
@@ -748,9 +736,12 @@ pub fn are_hardlinks_or_one_way_symlink_to_same_file(_source: &Path, _target: &P
 /// * `bool` - Returns `true` if either of above conditions are true, and `false` otherwise.
 #[cfg(unix)]
 pub fn are_hardlinks_or_one_way_symlink_to_same_file(source: &Path, target: &Path) -> bool {
-    let (Ok(source_metadata), Ok(target_metadata)) =
-        (fs::metadata(source), fs::symlink_metadata(target))
-    else {
+    // As above, look up the target first: if it does not exist, there is
+    // nothing to compare the source with.
+    let Ok(target_metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(source_metadata) = fs::metadata(source) else {
         return false;
     };
 

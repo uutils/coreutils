@@ -11,7 +11,7 @@ use rustc_hash::FxHashSet as HashSet;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
-use std::io::{BufRead, BufReader, Write, stdout};
+use std::io::{self, BufRead, BufReader, Write, stdout};
 #[cfg(not(windows))]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
@@ -137,7 +137,7 @@ impl Stat {
         path: &Path,
         dir_entry: Option<&DirEntry>,
         options: &TraversalOptions,
-    ) -> std::io::Result<Self> {
+    ) -> io::Result<Self> {
         // Determine whether to dereference (follow) the symbolic link
         let should_dereference = match &options.dereference {
             Deref::All => true,
@@ -179,7 +179,7 @@ impl Stat {
         dir_fd: &DirFd,
         full_path: &Path,
         time: Option<MetadataTimeField>,
-    ) -> std::io::Result<Self> {
+    ) -> io::Result<Self> {
         // Get metadata for the directory itself using fstat
         let safe_metadata = dir_fd.metadata()?;
 
@@ -223,7 +223,7 @@ fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
 // fails with access denied unless `FILE_FLAG_BACKUP_SEMANTICS` is set), so
 // use that flag explicitly to be able to query directories as well as files.
 #[cfg(windows)]
-fn open_for_query(path: &Path) -> std::io::Result<File> {
+fn open_for_query(path: &Path) -> io::Result<File> {
     fs::OpenOptions::new()
         .read(true)
         .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
@@ -337,7 +337,7 @@ fn safe_du(
     seen_inodes: &mut HashSet<FileInfo>,
     print_tx: &mpsc::Sender<UResult<StatPrintInfo>>,
     parent_fd: Option<&DirFd>,
-    initial_stat: Option<std::io::Result<Stat>>,
+    initial_stat: Option<io::Result<Stat>>,
 ) -> Result<Stat, Box<mpsc::SendError<UResult<StatPrintInfo>>>> {
     // The caller provides an already-computed stat for this entry, which lets us
     // avoid re-stating it here. For subdirectories this saves both a redundant
@@ -642,8 +642,8 @@ fn du_regular(
 
                         // Check symlink depth limit
                         if current_symlink_depth > MAX_SYMLINK_DEPTH {
-                            print_tx.send(Err(std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
+                            print_tx.send(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
                                 "Too many levels of symbolic links",
                             ).map_err_context(
                                 || translate!("du-error-cannot-access", "path" => entry_path.quote()),
@@ -842,32 +842,27 @@ impl StatPrinter {
 
     fn print_stats(&self, rx: &mpsc::Receiver<UResult<StatPrintInfo>>) -> UResult<()> {
         let mut grand_total = 0;
-        loop {
-            let received = rx.recv();
-
+        while let Ok(received) = rx.recv() {
             match received {
-                Ok(message) => match message {
-                    Ok(stat_info) => {
-                        let size = self.choose_size(&stat_info.stat);
+                Ok(stat_info) => {
+                    let size = self.choose_size(&stat_info.stat);
 
-                        if stat_info.depth == 0 {
-                            grand_total += size;
-                        }
-
-                        if !self
-                            .threshold
-                            .is_some_and(|threshold| threshold.should_exclude(size))
-                            && self
-                                .max_depth
-                                .is_none_or(|max_depth| stat_info.depth <= max_depth)
-                            && (!self.summarize || stat_info.depth == 0)
-                        {
-                            self.print_stat(&stat_info.stat, size)?;
-                        }
+                    if stat_info.depth == 0 {
+                        grand_total += size;
                     }
-                    Err(e) => show!(e),
-                },
-                Err(_) => break,
+
+                    if !self
+                        .threshold
+                        .is_some_and(|threshold| threshold.should_exclude(size))
+                        && self
+                            .max_depth
+                            .is_none_or(|max_depth| stat_info.depth <= max_depth)
+                        && (!self.summarize || stat_info.depth == 0)
+                    {
+                        self.print_stat(&stat_info.stat, size)?;
+                    }
+                }
+                Err(e) => show!(e),
             }
         }
 
@@ -930,15 +925,15 @@ impl StatPrinter {
 }
 
 /// Read file paths from the specified file, separated by null characters
-fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
+fn read_files_from(file_name: &OsStr) -> io::Result<Vec<PathBuf>> {
     let reader: Box<dyn BufRead> = if file_name == "-" {
         // Read from standard input
-        Box::new(BufReader::new(std::io::stdin()))
+        Box::new(BufReader::new(io::stdin()))
     } else {
         // First, check if the file_name is a directory
         let path = PathBuf::from(file_name);
         if path.is_dir() {
-            return Err(std::io::Error::other(
+            return Err(io::Error::other(
                 translate!("du-error-read-error-is-directory", "file" => file_name.maybe_quote()),
             ));
         }
@@ -946,8 +941,8 @@ fn read_files_from(file_name: &OsStr) -> Result<Vec<PathBuf>, std::io::Error> {
         // Attempt to open the file and handle the error if it does not exist
         match File::open(file_name) {
             Ok(file) => Box::new(BufReader::new(file)),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(std::io::Error::other(
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {
+                return Err(io::Error::other(
                     translate!("du-error-cannot-open-for-reading", "file" => file_name.quote()),
                 ));
             }
@@ -996,7 +991,7 @@ fn parse_block_size_arg_or_default_fallback(matches: &ArgMatches) -> UResult<Siz
     let block_size_str = matches.get_one::<String>(options::BLOCK_SIZE);
     let block_size = read_block_size(block_size_str.map(AsRef::as_ref))?;
     if block_size == 0 {
-        return Err(std::io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
+        return Err(io::Error::other(translate!("du-error-invalid-block-size-argument", "option" => options::BLOCK_SIZE, "value" => block_size_str.map_or("???BUG", |v| v).quote()))
         .into());
     }
     Ok(SizeFormat::BlockSize(block_size))
@@ -1057,15 +1052,15 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let files = if let Some(file_from) = matches.get_one::<OsString>(options::FILES0_FROM) {
         if file_from == "-" && matches.get_one::<OsString>(options::FILE).is_some() {
-            return Err(std::io::Error::other(
-                translate!("du-error-extra-operand-with-files0-from",
+            return Err(
+                io::Error::other(translate!("du-error-extra-operand-with-files0-from",
                     "file" => matches
                         .get_one::<OsString>(options::FILE)
                         .unwrap()
                         .quote()
-                ),
-            )
-            .into());
+                ))
+                .into(),
+            );
         }
 
         read_files_from(file_from)?

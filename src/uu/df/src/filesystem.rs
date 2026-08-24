@@ -74,23 +74,15 @@ pub(crate) fn find_mount_point<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     let mut current = path.as_ref().canonicalize()?;
     let current_dev = current.metadata()?.dev();
 
-    loop {
-        let parent = match current.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p,
-            _ => return Ok(current),
-        };
-
+    while let Some(parent) = current.parent().filter(|p| !p.as_os_str().is_empty()) {
         let parent_dev = parent.metadata()?.dev();
-        if parent_dev != current_dev {
-            return Ok(current);
-        }
-
-        if parent == current {
+        if parent_dev != current_dev || parent == current {
             return Ok(current);
         }
 
         current = parent.to_path_buf();
     }
+    Ok(current)
 }
 
 /// Find the mount info that best matches a given filesystem path.
@@ -225,6 +217,39 @@ impl Filesystem {
         return result.and_then(|mount_info| Self::from_mount(mount_info, Some(file)));
         #[cfg(not(windows))]
         return result.and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)));
+    }
+
+    /// Fallback using statfs with a mount table available.
+    #[cfg(unix)]
+    pub(crate) fn from_path_direct_with_mounts<P>(
+        mounts: &[MountInfo],
+        path: P,
+    ) -> Result<Self, FsError>
+    where
+        P: AsRef<Path>,
+    {
+        let file = path.as_ref().as_os_str().to_owned();
+
+        let canonical_path = path
+            .as_ref()
+            .canonicalize()
+            .map_err(|_| FsError::InvalidPath)?;
+
+        let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
+
+        // GNU coreutils always appear to return the last match
+        let mut last_match = None;
+        for mount in mounts {
+            if let Ok(stat_result_mount) = statfs(&mount.mount_dir)
+                && stat_result_mount.fsid() == stat_result.fsid()
+            {
+                last_match = Some(mount);
+            }
+        }
+
+        last_match
+            .ok_or(FsError::MountMissing)
+            .and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)))
     }
 
     /// Fallback using statfs when mount table is unavailable.

@@ -41,7 +41,7 @@ use uucore::{show, show_error};
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let settings = parse_args(args)?;
 
-    settings.check_warnings();
+    settings.check_warnings()?;
 
     match settings.verify() {
         args::VerificationResult::CannotFollowStdinByName => {
@@ -102,7 +102,7 @@ fn uu_tail(settings: &Settings) -> UResult<()> {
         the input file is not a FIFO, pipe, or regular file, it is unspecified whether or
         not the -f option shall be ignored.
         */
-        if !settings.has_only_stdin() || settings.pid != 0 {
+        if !settings.has_only_stdin() || settings.pid.is_some_and(|pid| pid != 0) {
             follow::follow(observer, settings)?;
         }
     }
@@ -162,7 +162,7 @@ fn tail_file(
         observer.add_bad_path(path, input.display_name.as_str(), false)?;
     } else {
         #[cfg(unix)]
-        let open_result = open_file(path, settings.pid != 0);
+        let open_result = open_file(path, settings.pid.is_some_and(|pid| pid != 0));
         #[cfg(not(unix))]
         let open_result = File::open(path);
 
@@ -531,20 +531,19 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
             let mut num_skip = *count - 1;
             let mut chunk = chunks::BytesChunk::new();
             loop {
-                if let Some(bytes) = chunk.fill(reader)? {
-                    let bytes: u64 = bytes as u64;
-                    match bytes.cmp(&num_skip) {
-                        Ordering::Less => num_skip -= bytes,
-                        Ordering::Equal => {
-                            break;
-                        }
-                        Ordering::Greater => {
-                            writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
-                            break;
-                        }
-                    }
-                } else {
+                let Some(bytes) = chunk.fill(reader)? else {
                     return Ok(());
+                };
+                let bytes: u64 = bytes as u64;
+                match bytes.cmp(&num_skip) {
+                    Ordering::Less => num_skip -= bytes,
+                    Ordering::Equal => {
+                        break;
+                    }
+                    Ordering::Greater => {
+                        writer.write_all(chunk.get_buffer_with(num_skip as usize))?;
+                        break;
+                    }
                 }
             }
 

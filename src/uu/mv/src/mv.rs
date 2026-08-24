@@ -5,6 +5,7 @@
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
 // spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore renamer fsetxattr
 
 mod error;
 #[cfg(unix)]
@@ -37,7 +38,7 @@ use crate::hardlink::{
 };
 use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
 use uucore::fs::{
@@ -106,6 +107,9 @@ pub struct Options {
 
     /// `-Z, --context`
     pub context: Option<String>,
+
+    /// `--exchange` atomically exchange source and destination
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -122,6 +126,7 @@ impl Default for Options {
             progress_bar: false,
             debug: false,
             context: None,
+            exchange: false,
         }
     }
 }
@@ -152,6 +157,7 @@ static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
 static OPT_CONTEXT: &str = "context";
 static OPT_SELINUX: &str = "selinux";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -220,6 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
         context,
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -333,6 +340,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(translate!("mv-help-exchange"))
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
@@ -373,19 +386,21 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         )
         .into());
     }
-    if source.symlink_metadata().is_err() {
+    let Ok(source_metadata) = source.symlink_metadata() else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {
             MvError::NoSuchFile(source.quote().to_string()).into()
         });
-    }
+    };
 
-    let source_is_dir = source.is_dir() && !source.is_symlink();
-    let target_is_dir = if target.is_symlink() {
-        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
-    } else {
-        target.is_dir()
+    // `symlink_metadata` does not follow symlinks, so this is equivalent to
+    // `source.is_dir() && !source.is_symlink()` without the extra `stat` calls.
+    let source_is_dir = source_metadata.is_dir();
+    let target_is_dir = match target.symlink_metadata() {
+        Ok(metadata) if metadata.is_symlink() => fs::canonicalize(target).is_ok_and(|p| p.is_dir()),
+        Ok(metadata) => metadata.is_dir(),
+        Err(_) => false,
     };
 
     if path_ends_with_terminator(target)
@@ -416,8 +431,20 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.0,
                     hardlink_params.1,
                 )
-                .map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
+                .map_err(|e| -> Box<dyn UError> {
+                    let message = if is_directory_not_empty_error(&e) {
+                        translate!(
+                            "mv-error-cannot-overwrite-non-empty-directory",
+                            "target" => target.quote()
+                        )
+                    } else {
+                        translate!(
+                            "mv-error-cannot-move",
+                            "source" => source.quote(),
+                            "target" => target.quote()
+                        )
+                    };
+                    e.map_err_context(|| message)
                 })
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
@@ -425,7 +452,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source_is_dir {
+    } else if source_is_dir && target.exists() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
@@ -502,14 +529,15 @@ fn assert_not_same_file(
         }
     };
 
-    let same_file = (canonicalized_source.eq(&canonicalized_target)
-        || are_hardlinks_to_same_file(source, target)
-        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::None;
+    let same_file = opts.backup == BackupMode::None
+        && (canonicalized_source.eq(&canonicalized_target)
+            || are_hardlinks_to_same_file(source, target)
+            || are_hardlinks_or_one_way_symlink_to_same_file(source, target));
 
     // get the expected target path to show in errors
     // this is based on the argument and not canonicalized
-    let target_display = match source.file_name() {
+    // only computed when an error is actually reported
+    let target_display = || match source.file_name() {
         Some(file_name) if target_is_dir => {
             // join target_dir/source_file in a platform-independent manner
             let mut path = target
@@ -532,13 +560,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
-        return Err(MvError::SameFile(source.quote().to_string(), target_display).into());
+        return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
         && !source.is_symlink()
     {
         return Err(
-            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display).into(),
+            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display()).into(),
         );
     }
     Ok(())
@@ -563,6 +591,16 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
+    if opts.exchange {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        return exchange_paths(&paths, opts);
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        return Err(USimpleError::new(
+            1,
+            translate!("mv-error-exchange-not-supported"),
+        ));
+    }
+
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
@@ -571,6 +609,63 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
         2 => handle_two_paths(&paths[0], &paths[1], opts),
         _ => handle_multiple_paths(&paths, opts),
     }
+}
+
+/// Atomically exchange two paths with `--exchange` (renameat2 `RENAME_EXCHANGE`).
+///
+/// With more than two operands, the last operand must be a directory, and
+/// each of the other operands is exchanged with the file of the same name
+/// inside that directory (matching GNU `mv --exchange a b c dir/`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+    match paths {
+        [] | [_] => Err(UUsageError::new(
+            1,
+            translate!("mv-error-exchange-two-operands"),
+        )),
+        [from, to] => exchange_two_paths(from, to, opts),
+        [sources @ .., target_dir] => {
+            if !target_dir.is_dir() {
+                return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into());
+            }
+            for source in sources {
+                let name = source
+                    .file_name()
+                    .ok_or_else(|| MvError::NoSuchFile(source.quote().to_string()))?;
+                exchange_two_paths(source, &target_dir.join(name), opts)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Atomically exchange the two given paths (renameat2 `RENAME_EXCHANGE`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_two_paths(from: &Path, to: &Path, opts: &Options) -> UResult<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    let canonicalize_or_absolute = |p: &Path| {
+        canonicalize(absolute(p)?, MissingHandling::Normal, ResolveMode::Logical)
+            .or_else(|_| absolute(p))
+    };
+    if canonicalize_or_absolute(from)?.eq(&canonicalize_or_absolute(to)?)
+        || are_hardlinks_to_same_file(from, to)
+    {
+        return Err(MvError::SameFile(from.quote().to_string(), to.quote().to_string()).into());
+    }
+
+    renameat_with(CWD, from, CWD, to, RenameFlags::EXCHANGE)
+        .map_err(io::Error::from)
+        .map_err_context(
+            || translate!("mv-error-cannot-move", "source" => from.quote(), "target" => to.quote()),
+        )?;
+    if opts.verbose {
+        println!(
+            "{}",
+            translate!("mv-verbose-exchanged", "from" => from.quote(), "to" => to.quote())
+        );
+    }
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -669,21 +764,32 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
-                });
+                let message = if is_directory_not_empty_error(&e) {
+                    translate!(
+                        "mv-error-cannot-overwrite-non-empty-directory",
+                        "target" => targetpath.quote()
+                    )
+                } else {
+                    translate!(
+                        "mv-error-cannot-move",
+                        "source" => sourcepath.quote(),
+                        "target" => targetpath.quote()
+                    )
+                };
+                let e = e.map_err_context(|| message);
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
                 } else {
                     show!(e);
                 }
             }
-            Ok(()) => (),
+            Ok(()) => {
+                moved_destinations.insert(targetpath.clone());
+            }
         }
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
-        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }
@@ -745,13 +851,22 @@ fn rename(
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() && !to.is_symlink() {
+    // `symlink_metadata` does not follow symlinks, so a symlink to a directory
+    // is not reported as a directory, as with the previous
+    // `to.exists() && to.is_dir() && !to.is_symlink()` check
+    if to
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_dir())
+    {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
+                return Err(io::Error::new(
+                    io::ErrorKind::DirectoryNotEmpty,
+                    translate!("mv-error-directory-not-empty"),
+                ));
             }
         }
     }
@@ -793,6 +908,10 @@ fn rename(
         }
     }
     Ok(())
+}
+
+fn is_directory_not_empty_error(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::DirectoryNotEmpty
 }
 
 #[cfg(unix)]
@@ -1048,8 +1167,15 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
+    // Retrieve xattrs through a file descriptor so a concurrent renamer cannot
+    // redirect the list/get calls to a different inode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
+    let xattrs = {
+        use std::fs::File;
+        File::open(from)
+            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
+            .unwrap_or_else(|_| FxHashMap::default())
+    };
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -1064,8 +1190,18 @@ fn rename_dir_fallback(
         display_manager,
     );
 
+    // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
+    // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
+    // for cross-device moves).
+    //
+    // The fd is opened read-only: a directory cannot be opened for writing, and
+    // fsetxattr checks write permission on the inode, not the open mode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::apply_xattrs(to, xattrs)?;
+    {
+        use std::fs::File;
+        let dest = File::open(to)?;
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+    }
 
     result?;
 
@@ -1339,8 +1475,18 @@ fn rename_file_fallback(
 
         // chown before chmod: chown(2) clears setuid/setgid for non-root,
         // so the final mode must be applied last to preserve those bits.
-        let _ = preserve_ownership(from, to);
-        let _ = dst_file.set_permissions(Permissions::from_mode(src_mode));
+        //
+        // If the chown did not take, the destination belongs to whoever ran
+        // `mv`, and re-applying setuid/setgid would hand them a binary running
+        // as themselves that used to run as someone else. GNU strips the bits
+        // in that case and so do we.
+        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+        let dest_mode = if ownership_preserved {
+            src_mode
+        } else {
+            src_mode & !0o6000
+        };
+        let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
     }
 
     #[cfg(not(unix))]
@@ -1357,8 +1503,13 @@ fn rename_file_fallback(
 /// Preserve ownership (uid/gid) from source to destination.
 /// Uses lchown so it works on symlinks without following them.
 /// Errors are silently ignored for non-root users who cannot chown.
+///
+/// Returns whether the destination ended up with the source's uid and gid.
+/// Callers that re-apply the source mode must strip setuid/setgid when this is
+/// false: those bits on a file that changed hands grant the new owner's
+/// identity, not the original one's, which is why GNU drops them.
 #[cfg(unix)]
-fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
     use std::os::unix::fs::MetadataExt;
 
     let source_meta = from.symlink_metadata()?;
@@ -1375,7 +1526,7 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
         // Use follow=false so lchown is used (works on symlinks)
         // Silently ignore errors: non-root users typically cannot chown to
         // arbitrary uid, matching GNU mv behavior which also uses best-effort.
-        let _ = wrap_chown(
+        if wrap_chown(
             to,
             &dest_meta,
             Some(uid),
@@ -1385,10 +1536,14 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
                 groups_only: false,
                 level: VerbosityLevel::Silent,
             },
-        );
+        )
+        .is_err()
+        {
+            return Ok(false);
+        }
     }
 
-    Ok(())
+    Ok(true)
 }
 
 fn is_empty_dir(path: &Path) -> bool {

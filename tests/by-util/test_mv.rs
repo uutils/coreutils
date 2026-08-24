@@ -3,9 +3,9 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable
+// spell-checker:ignore mydir hardlinked tmpfs notty unwriteable myfolder SRCDATA DSTDATA REALDATA
+// spell-checker:ignore dirattr dirvalue setfattr getfattr
 
-use filetime::FileTime;
 use rstest::rstest;
 use std::io::Write;
 #[cfg(not(windows))]
@@ -122,7 +122,7 @@ fn test_mv_move_file_into_file_with_target_arg() {
         .arg(file1)
         .arg(file2)
         .fails()
-        .stderr_is(format!("mv: target directory '{file1}': Not a directory\n"));
+        .stderr_only(format!("mv: target directory '{file1}': Not a directory\n"));
 
     assert!(at.file_exists(file1));
 }
@@ -142,7 +142,7 @@ fn test_mv_move_multiple_files_into_file() {
         .arg(file2)
         .arg(file3)
         .fails()
-        .stderr_is(format!("mv: target '{file3}': Not a directory\n"));
+        .stderr_only(format!("mv: target '{file3}': Not a directory\n"));
 
     assert!(at.file_exists(file1));
     assert!(at.file_exists(file2));
@@ -335,7 +335,7 @@ fn test_mv_interactive_no_clobber_force_last_arg_wins() {
         .ucmd()
         .args(&[file_a, file_b, "-n", "-f", "-i"])
         .fails()
-        .stderr_is(format!("mv: overwrite '{file_b}'? "));
+        .stderr_only(format!("mv: overwrite '{file_b}'? "));
 
     at.write(file_a, "aa");
 
@@ -520,7 +520,7 @@ fn test_mv_same_file() {
     ucmd.arg(file_a)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_a}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -537,7 +537,7 @@ fn test_mv_same_hardlink() {
     ucmd.arg(file_a)
         .arg(file_b)
         .fails()
-        .stderr_is(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_a}' and '{file_b}' are the same file\n"));
 }
 
 #[test]
@@ -568,7 +568,7 @@ fn test_mv_same_symlink() {
     ucmd.arg(file_b)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_b}' and '{file_a}' are the same file\n"));
 
     let (at2, mut ucmd2) = at_and_ucmd!();
     at2.touch(file_a);
@@ -598,7 +598,7 @@ fn test_mv_same_symlink() {
         .arg(file_c)
         .arg(file_a)
         .fails()
-        .stderr_is(format!("mv: '{file_c}' and '{file_a}' are the same file\n"));
+        .stderr_only(format!("mv: '{file_c}' and '{file_a}' are the same file\n"));
 }
 
 #[test]
@@ -611,7 +611,7 @@ fn test_mv_same_broken_symlink() {
     ucmd.arg("broken")
         .arg("broken")
         .fails()
-        .stderr_is("mv: 'broken' and 'broken' are the same file\n");
+        .stderr_only("mv: 'broken' and 'broken' are the same file\n");
 }
 
 #[test]
@@ -787,7 +787,7 @@ fn test_mv_same_file_not_dot_dir() {
     let dir = "test_mv_errors_dir";
 
     at.mkdir(dir);
-    ucmd.arg(dir).arg(dir).fails().stderr_is(format!(
+    ucmd.arg(dir).arg(dir).fails().stderr_only(format!(
         "mv: cannot move '{dir}' to a subdirectory of itself, '{dir}/{dir}'\n",
     ));
 }
@@ -799,7 +799,7 @@ fn test_mv_same_file_dot_dir() {
     ucmd.arg(".")
         .arg(".")
         .fails()
-        .stderr_is("mv: '.' and '.' are the same file\n");
+        .stderr_only("mv: '.' and '.' are the same file\n");
 }
 
 #[test]
@@ -1170,6 +1170,7 @@ fn test_mv_backup_conflicting_options() {
 
 #[test]
 fn test_mv_update_option() {
+    use std::fs::{File, FileTimes};
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
     let file_a = "test_mv_update_option_file_a";
@@ -1178,10 +1179,22 @@ fn test_mv_update_option() {
     at.touch(file_a);
     at.touch(file_b);
     let ts = time::OffsetDateTime::now_utc();
-    let now = FileTime::from_unix_time(ts.unix_timestamp(), ts.nanosecond());
-    let later = FileTime::from_unix_time(ts.unix_timestamp() + 3600, ts.nanosecond());
-    filetime::set_file_times(at.plus_as_string(file_a), now, now).unwrap();
-    filetime::set_file_times(at.plus_as_string(file_b), now, later).unwrap();
+    let now = ts.into();
+    let later = (ts + time::Duration::seconds(3600)).into();
+    let times_now = FileTimes::new().set_accessed(now).set_modified(now);
+    let times_later = FileTimes::new().set_accessed(now).set_modified(later);
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_a))
+        .unwrap()
+        .set_times(times_now)
+        .unwrap();
+    File::options()
+        .write(true)
+        .open(at.plus_as_string(file_b))
+        .unwrap()
+        .set_times(times_later)
+        .unwrap();
 
     scene
         .ucmd()
@@ -1516,15 +1529,34 @@ fn test_mv_overwrite_nonempty_dir() {
     at.mkdir(dir_a);
     at.mkdir(dir_b);
     at.touch(dummy);
-    // Not same error as GNU; the error message is a rust builtin
-    // TODO: test (and implement) correct error message (or at least decide whether to do so)
-    // Current: "mv: couldn't rename path (Directory not empty; from=a; to=b)"
-    // GNU:     "mv: cannot move 'a' to 'b': Directory not empty"
-
     // Verbose output for the move should not be shown on failure
-    let result = ucmd.arg("-vT").arg(dir_a).arg(dir_b).fails();
-    result.no_stdout();
-    assert!(!result.stderr_str().is_empty());
+    ucmd.arg("-vT")
+        .arg(dir_a)
+        .arg(dir_b)
+        .fails()
+        .stderr_contains("cannot overwrite");
+
+    assert!(at.dir_exists(dir_a));
+    assert!(at.dir_exists(dir_b));
+}
+
+#[test]
+fn test_mv_overwrite_nonempty_dir_into_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let dir_a = "test_mv_overwrite_nonempty_dir_into_dir_a";
+    let dir_b = "test_mv_overwrite_nonempty_dir_into_dir_b";
+    let target_dir = format!("{dir_b}/{dir_a}");
+    let dummy = format!("{target_dir}/file");
+
+    at.mkdir(dir_a);
+    at.mkdir(dir_b);
+    at.mkdir(&target_dir);
+    at.touch(&dummy);
+
+    ucmd.arg(dir_a)
+        .arg(dir_b)
+        .fails()
+        .stderr_contains("cannot overwrite");
 
     assert!(at.dir_exists(dir_a));
     assert!(at.dir_exists(dir_b));
@@ -1563,7 +1595,6 @@ fn test_mv_errors() {
     at.touch(file_b);
 
     // $ mv -T -t a b
-    // mv: cannot combine --target-directory (-t) and --no-target-directory (-T)
     scene
         .ucmd()
         .arg("-T")
@@ -1576,29 +1607,26 @@ fn test_mv_errors() {
 
     // $ at.touch file && at.mkdir dir
     // $ mv -T file dir
-    // err == mv: cannot overwrite directory 'dir' with non-directory
     scene
         .ucmd()
         .arg("-T")
         .arg(file_a)
         .arg(dir)
         .fails()
-        .stderr_is(format!(
+        .stderr_only(format!(
             "mv: cannot overwrite directory '{dir}' with non-directory\n"
         ));
 
     // $ at.mkdir dir && at.touch file
     // $ mv dir file
-    // err == mv: cannot overwrite non-directory 'file' with directory 'dir'
-    assert!(
-        !scene
-            .ucmd()
-            .arg(dir)
-            .arg(file_a)
-            .fails()
-            .stderr_str()
-            .is_empty()
-    );
+    scene
+        .ucmd()
+        .arg(dir)
+        .arg(file_a)
+        .fails()
+        .stderr_only(format!(
+            "mv: cannot overwrite non-directory '{file_a}' with directory '{dir}'\n"
+        ));
 }
 
 #[test]
@@ -1685,8 +1713,7 @@ fn test_mv_arg_interactive_skipped() {
         .pipe_in("N\n")
         .ignore_stdin_write_error()
         .fails()
-        .stderr_is("mv: overwrite 'b'? ")
-        .no_stdout();
+        .stderr_only("mv: overwrite 'b'? ");
 }
 
 #[test]
@@ -1985,6 +2012,40 @@ mod inter_partition_copying {
     use uutests::util::TestScenario;
     use uutests::util_name;
 
+    // setuid/setgid must survive a cross-device move when ownership is
+    // preserved. The mover owns the file here, so the chown is a no-op and the
+    // bits are legitimate; only a failed chown justifies stripping them, and
+    // that needs a second uid, so it is exercised out of band rather than here.
+    #[test]
+    pub(crate) fn test_mv_inter_partition_keeps_setuid_when_ownership_preserved() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.write("src", "src contents");
+        set_permissions(at.plus("src"), PermissionsExt::from_mode(0o6755))
+            .expect("Unable to set setuid/setgid on src");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory");
+        let dest = other_fs_tempdir.path().join("dest");
+
+        scene
+            .ucmd()
+            .arg("src")
+            .arg(dest.to_str().unwrap())
+            .succeeds();
+
+        let mode = fs::metadata(&dest)
+            .expect("destination should exist")
+            .permissions()
+            .mode()
+            & 0o7777;
+        assert_eq!(
+            mode, 0o6755,
+            "setuid/setgid must be kept when ownership was preserved, got {mode:o}"
+        );
+    }
+
     // Ensure that the copying code used in an inter-partition move unlinks the destination symlink.
     #[test]
     pub(crate) fn test_mv_unlinks_dest_symlink() {
@@ -2254,7 +2315,7 @@ mod inter_partition_copying {
         );
     }
 
-    // Test the exact GNU test scenario: hardlinks within directories being moved
+    // Test hardlinks within directories being moved
     #[test]
     #[cfg(unix)]
     pub(crate) fn test_mv_preserves_hardlinks_in_directories_across_partitions() {
@@ -2654,7 +2715,7 @@ fn test_special_file_different_filesystem() {
 }
 
 /// Test cross-device move with permission denied error
-/// This test mimics the scenario from the GNU part-fail test where
+/// Test partial failure handling where
 /// a cross-device move fails due to permission errors when removing the target file
 #[test]
 #[cfg(target_os = "linux")]
@@ -3005,6 +3066,64 @@ fn test_mv_xattr_enotsup_silent() {
             .no_stderr();
         std::fs::remove_file("/dev/shm/mv_test").ok();
     }
+}
+
+/// Cross-device mv of a directory must preserve the directory's own xattrs.
+/// The fd-based xattr path has to open the destination read-only: a directory
+/// cannot be opened for writing, so a write-mode open would silently drop them.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_mv_cross_device_dir_xattr_preserved() {
+    use std::process::Command;
+    use tempfile::TempDir;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("src_dir");
+    at.write("src_dir/file.txt", "content");
+
+    if !Command::new("setfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "-v",
+            "dirvalue",
+            &at.plus_as_string("src_dir"),
+        ])
+        .status()
+        .is_ok_and(|s| s.success())
+    {
+        println!("test skipped: setfattr failed");
+        return;
+    }
+
+    let other_fs_tempdir =
+        TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+    let dst_path = other_fs_tempdir.path().join("dst_dir");
+
+    scene
+        .ucmd()
+        .arg(at.plus_as_string("src_dir"))
+        .arg(dst_path.to_str().unwrap())
+        .succeeds()
+        .no_stderr();
+
+    let out = Command::new("getfattr")
+        .args([
+            "-n",
+            "user.dirattr",
+            "--only-values",
+            dst_path.to_str().unwrap(),
+        ])
+        .output()
+        .expect("failed to run getfattr on the moved directory");
+    assert!(
+        out.status.success(),
+        "directory xattr was not preserved across devices: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.stdout, b"dirvalue");
 }
 
 /// Cross-device mv of a symlink onto an existing file must replace the
@@ -3430,4 +3549,153 @@ fn test_mv_backup_numbered_allows_source_named_like_backup() {
 
     ucmd.arg("--backup=numbered").arg("a~").arg("a").succeeds();
     assert_eq!(at.read("a"), "source content");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_file_and_dir() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("leaf", "payload");
+    at.mkdir("branch");
+
+    ucmd.arg("-T")
+        .arg("--exchange")
+        .arg("leaf")
+        .arg("branch")
+        .succeeds()
+        .no_output();
+
+    // After the swap the names trade places.
+    assert!(at.dir_exists("leaf"));
+    assert!(at.file_exists("branch"));
+    assert_eq!(at.read("branch"), "payload");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_verbose() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("first", "1");
+    at.write("second", "2");
+
+    ucmd.arg("--exchange")
+        .arg("-v")
+        .arg("first")
+        .arg("second")
+        .succeeds()
+        .stdout_contains("exchanged");
+
+    assert_eq!(at.read("first"), "2");
+    assert_eq!(at.read("second"), "1");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_wrong_operand_count() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("only", "x");
+
+    // A single operand is rejected (clap itself requires at least 2 <files> values).
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .fails()
+        .code_is(1)
+        .stderr_contains("requires at least 2 values");
+
+    // Three or more operands are rejected when the last one isn't a directory.
+    scene.fixtures.write("two", "y");
+    scene.fixtures.write("three", "z");
+    scene
+        .ucmd()
+        .arg("--exchange")
+        .arg("only")
+        .arg("two")
+        .arg("three")
+        .fails()
+        .code_is(1)
+        .stderr_contains("target directory")
+        .stderr_contains("Not a directory");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_multiple_operands_into_directory() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("a", "src-a");
+    at.write("b", "src-b");
+    at.write("c", "src-c");
+    at.mkdir("myfolder");
+    at.write("myfolder/a", "dst-a");
+    at.write("myfolder/b", "dst-b");
+    at.write("myfolder/c", "dst-c");
+
+    ucmd.arg("--exchange")
+        .arg("-v")
+        .arg("a")
+        .arg("b")
+        .arg("c")
+        .arg("myfolder/")
+        .succeeds()
+        .stdout_contains("exchanged 'a' <-> 'myfolder/a'")
+        .stdout_contains("exchanged 'b' <-> 'myfolder/b'")
+        .stdout_contains("exchanged 'c' <-> 'myfolder/c'");
+
+    assert_eq!(at.read("a"), "dst-a");
+    assert_eq!(at.read("b"), "dst-b");
+    assert_eq!(at.read("c"), "dst-c");
+    assert_eq!(at.read("myfolder/a"), "src-a");
+    assert_eq!(at.read("myfolder/b"), "src-b");
+    assert_eq!(at.read("myfolder/c"), "src-c");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("only", "data");
+
+    ucmd.arg("--exchange")
+        .arg("only")
+        .arg("only")
+        .fails()
+        .code_is(1)
+        .stderr_contains("are the same file");
+
+    assert_eq!(at.read("only"), "data");
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
+#[test]
+fn test_mv_exchange_not_supported() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("left", "L");
+    at.write("right", "R");
+
+    ucmd.arg("--exchange")
+        .arg("left")
+        .arg("right")
+        .fails()
+        .code_is(1)
+        .stderr_contains("not supported");
+
+    assert_eq!(at.read("left"), "L");
+    assert_eq!(at.read("right"), "R");
+}
+
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[test]
+fn test_mv_exchange_missing_target() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("present", "data");
+
+    ucmd.arg("--exchange")
+        .arg("present")
+        .arg("absent")
+        .fails()
+        .code_is(1)
+        .stderr_contains("cannot move")
+        .stderr_contains("present")
+        .stderr_contains("absent");
 }

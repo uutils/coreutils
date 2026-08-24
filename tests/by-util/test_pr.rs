@@ -448,6 +448,102 @@ fn test_offset_too_large() {
         ));
 }
 
+#[test]
+fn test_start_line_number_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", "-N", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-N NUMBER' invalid starting line number: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_page_length_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["-l", arg, "-3"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-l PAGE_LENGTH' invalid number of lines: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_number_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-n", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-n' extra characters or invalid number in the argument: '{arg}': Value too large for defined data type\nTry 'pr --help' for more information.\n"
+        ));
+}
+
+#[test]
+fn test_page_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-W", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-W PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_width_too_large() {
+    let arg = "18446744073709551615";
+    new_ucmd!()
+        .args(&["-w", arg, "-2"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: '-w PAGE_WIDTH' invalid number of characters: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_column_count_too_large() {
+    let arg = "9999999999999999999";
+    new_ucmd!()
+        .args(&["--column", arg])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+
+    // The legacy -COLUMN operand form behaves the same.
+    new_ucmd!()
+        .args(&[format!("-{arg}")])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
+        ));
+}
+
+#[test]
+fn test_large_number_width_does_not_panic() {
+    // Widths above u16::MAX used to panic with "Formatting argument out
+    // of range"; GNU pads the number out to the full width instead.
+    // With -t (no page headers/footers) GNU emits no page padding, so the
+    // output is exactly the numbered line.
+    new_ucmd!()
+        .args(&["-t", "-n", "70000"])
+        .pipe_in("x\n")
+        .succeeds()
+        .stdout_is(format!("{}1\tx\n", " ".repeat(69999)));
+}
+
+#[test]
+fn test_large_page_width_does_not_panic() {
+    // A page width above u16::MAX used to panic in the header layout.
+    new_ucmd!()
+        .args(&["-W", "200000"])
+        .pipe_in("x\n")
+        .succeeds();
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn test_offset_large_value_does_not_abort_under_memory_limit() {
@@ -594,7 +690,7 @@ fn test_header_formatting_with_custom_date_format() {
 
     let test_file_path = "test_one_page.log";
 
-    // Set a specific date format like in the GNU test
+    // Set a specific date format for consistent output
     let output = new_ucmd!()
         .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
         .succeeds()
@@ -850,6 +946,34 @@ fn test_simple_expand_tab() {
 }
 
 #[test]
+fn test_expand_tab_at_end_of_short_flag_cluster() {
+    // `-e` closing a cluster of value-less short flags carries no attached argument, so it has
+    // to fall back to the defaults rather than report a missing value.
+    for (arg, expected) in [
+        ("-tre", "oi\n"),
+        ("-tre8", "oi\n"),
+        ("-tfre", "oi\n\x0c"),
+        ("-tfre8", "oi\n\x0c"),
+    ] {
+        new_ucmd!()
+            .arg(arg)
+            .pipe_in("oi\n")
+            .succeeds()
+            .stdout_only(expected);
+    }
+}
+
+#[test]
+fn test_expand_tab_does_not_consume_following_operand() {
+    // A bare `-e` must leave the file operand alone.
+    new_ucmd!()
+        .args(&["-t", "-e"])
+        .pipe_in("a\tb\n")
+        .succeeds()
+        .stdout_only("a       b\n");
+}
+
+#[test]
 fn test_simple_expand_tab_with_digit_argument() {
     let whitespace = " ".repeat(50);
     let datetime_pattern = r"\d\d\d\d-\d\d-\d\d \d\d:\d\d";
@@ -1046,6 +1170,34 @@ fn test_zero_page_width() {
         .args(&["-W", "0"])
         .fails_with_code(1)
         .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_page_length_ten_implies_omit_header() {
+    // `pr --help` states it twice: a page length of 10 or less implies `-t`.
+    // At exactly 10 the header and trailer were kept and then subtracted from
+    // the page, which left no room for content: `-h` printed empty pages and
+    // `-t` printed nothing at all.
+    new_ucmd!()
+        .args(&["-l", "10", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+
+    new_ucmd!()
+        .args(&["-l", "10", "-t"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_page_length_eleven_keeps_header() {
+    new_ucmd!()
+        .args(&["-l", "11", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_contains("hdr");
 }
 
 #[test]

@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED
+// spell-checker:ignore fname, tname, fpath, specfile, testfile, unspec, ifile, ofile, outfile, fullblock, urand, fileio, atoe, atoibm, availible, behaviour, bmax, bremain, btotal, cflags, creat, ctable, ctty, datastructures, doesnt, etoa, fileout, fname, gnudd, iconvflags, iseek, nocache, noctty, noerror, nofollow, nolinks, nonblock, oconvflags, oseek, outfile, parseargs, rlen, rmax, rposition, rremain, rsofar, rstat, sigusr, sigval, wlen, wstat abcdefghijklm abcdefghi nabcde nabcdefg abcdefg fifoname FADV DONTNEED FSIZE SIGXFSZ sighandler
 
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
@@ -107,7 +107,13 @@ fn version() {
 
 #[test]
 fn help() {
-    new_ucmd!().args(&["--help"]).succeeds();
+    new_ucmd!()
+        .arg("--help")
+        .succeeds()
+        .stdout_contains("\nOperands:\n")
+        .stdout_contains("\nConversion options:\n")
+        .stdout_does_not_contain("###")
+        .stdout_does_not_contain("```");
 }
 
 #[test]
@@ -1495,7 +1501,10 @@ fn test_sync_delayed_reader() {
             .unwrap();
         for _ in 0..8 {
             fifo.write_all(&[0xF; 8]).unwrap();
-            sleep(Duration::from_millis(10));
+            // Each write must be read as its own short record, so leave dd
+            // enough time to drain the pipe: if two writes pile up, it reads a
+            // full 16-byte block, pads nothing and the output no longer matches.
+            sleep(Duration::from_millis(100));
         }
     }
     // Expected output is 0xFFFFFFFF00000000FFFFFFFF00000000...
@@ -2208,4 +2217,159 @@ fn test_count_bytes_with_expanding_block_conv() {
     let output = at.read_bytes("output.bin");
     assert_eq!(bytecount::count(&output, b'a'), 1000);
     assert!(!output.contains(&b'Z'));
+}
+
+// A failed copy still has to report what it transferred, including complete
+// and partial records.
+#[test]
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_stats_are_reported_when_a_write_fails() {
+    use rlimit::Resource;
+
+    // Restores the previous SIGXFSZ disposition even if an assertion panics.
+    struct SigxfszGuard(libc::sighandler_t);
+    impl Drop for SigxfszGuard {
+        fn drop(&mut self) {
+            // SAFETY: restoring the disposition saved below.
+            unsafe { libc::signal(libc::SIGXFSZ, self.0) };
+        }
+    }
+
+    const CAP: u64 = 768 * 1024;
+
+    // The child inherits the ignored SIGXFSZ, so exceeding RLIMIT_FSIZE shows
+    // up as a short write() instead of killing the process.
+    // SAFETY: signal() with SIG_IGN is async-signal-safe and the guard puts
+    // the old handler back.
+    let _sigxfsz = SigxfszGuard(unsafe { libc::signal(libc::SIGXFSZ, libc::SIG_IGN) });
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    let result = ucmd
+        .args(&["if=/dev/zero", "of=capped.bin", "bs=512K", "count=3"])
+        .limit(Resource::FSIZE, CAP, CAP)
+        .fails();
+
+    // Under a 768 KiB cap, the first 512 KiB block is written in full, the
+    // second one is cut short at 256 KiB, and the third write fails.
+    result.stderr_contains("1+1 records out");
+    result.stderr_contains("786432 bytes");
+    assert_eq!(at.metadata("capped.bin").len(), CAP);
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unrecognized_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+
+        // The caret takes the key alone: the value is fine, it is the operand
+        // name that dd does not know.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+dd: Unrecognized operand 'bsx=1'
+   ╭─[ dd:1:4 ]
+   │
+ 1 │ dd bsx=1
+   │    ───
+   │
+   │ Help: an operand is KEY=VALUE, as in if=file bs=4k count=10
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Only the second flag is wrong, and the caret says so.
+        assert!(stderr.contains("dd:1:15"), "{stderr}");
+        assert!(stderr.contains("1 │ dd conv=ucase,zap"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_flag_and_not_the_one_it_starts() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=notrunc,not"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // `not` also opens the `notrunc` in front of it, and the caret belongs
+        // on the flag that failed rather than on the one that parsed.
+        assert!(stderr.contains("dd:1:17"), "{stderr}");
+        assert!(
+            stderr.contains("1 \u{2502} dd conv=notrunc,not"),
+            "{stderr}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_value_of_a_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["count=8x"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        assert!(stderr.contains("a number may be followed by"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_keeps_the_try_help_hint_of_a_flag_message() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("dd:1:10"), "{stderr}");
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr
+                .trim_end()
+                .ends_with("dd --help' for more information."),
+            "{stderr}"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_keeps_the_try_help_hint_of_a_flag_message() {
+        new_ucmd!()
+            .args(&["iflag=nope"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: invalid input flag: \u{2018}nope\u{2019}")
+            .stderr_contains("--help' for more information.");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_is("dd: Unrecognized operand 'bsx=1'\n");
+    }
 }

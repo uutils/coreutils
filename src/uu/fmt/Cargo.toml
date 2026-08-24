@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/fmt.rs"
 doctest = false
@@ -23,6 +20,9 @@ clap = { workspace = true }
 uucore = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "fmt"

@@ -45,6 +45,7 @@ pub use crate::features::char_width;
 pub use crate::features::checksum;
 #[cfg(feature = "colors")]
 pub use crate::features::colors;
+pub use crate::features::diagnostics;
 #[cfg(feature = "encoding")]
 pub use crate::features::encoding;
 #[cfg(feature = "extendedbigdecimal")]
@@ -426,10 +427,7 @@ pub fn args_os_filtered() -> impl Iterator<Item = OsString> {
 /// Read a line from stdin and check whether the first character is `'y'` or `'Y'`
 pub fn read_yes() -> bool {
     let mut s = String::new();
-    match std::io::stdin().read_line(&mut s) {
-        Ok(_) => matches!(s.chars().next(), Some('y' | 'Y')),
-        _ => false,
-    }
+    std::io::stdin().read_line(&mut s).is_ok() && matches!(s.chars().next(), Some('y' | 'Y'))
 }
 
 #[derive(Debug)]
