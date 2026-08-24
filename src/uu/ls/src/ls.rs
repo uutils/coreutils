@@ -109,7 +109,7 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            Self::IOError(_) | Self::WriteError(_) | Self::IOErrorContext(_, _, false) => 1,
+            Self::IOError(_) | Self::IOErrorContext(_, _, false) => 1,
             _ => 2,
         }
     }
