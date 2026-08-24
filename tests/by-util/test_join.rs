@@ -713,10 +713,10 @@ fn test_incompatible_fields_reports_exact_field_number() {
     // one-based increment. Field numbers past 2^53 also used to be rounded on
     // their way through the localization layer.
     //
-    // `parse_field_number` uses `usize` (matching GNU join's `size_t`), so a
-    // value at or above `usize::MAX` saturates to it. The saturation ceiling is
-    // therefore pointer-width dependent, and the expected text is built from
-    // `usize::MAX` rather than a hard-coded 64-bit literal.
+    // `parse_field_number` uses `usize`, so a value at or above `usize::MAX`
+    // saturates to it. The saturation ceiling is therefore pointer-width
+    // dependent, and the expected text is built from `usize::MAX` rather than a
+    // hard-coded 64-bit literal.
     let max_field = usize::MAX.to_string();
 
     // A small field number takes the i64 number path through the localization
@@ -734,7 +734,7 @@ fn test_incompatible_fields_reports_exact_field_number() {
         new_ucmd!()
             .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
             .fails()
-            .stderr_contains(&format!("incompatible join fields {max_field}, 5"));
+            .stderr_contains(format!("incompatible join fields {max_field}, 5"));
     }
 
     // A value above f64 precision (2^53) but below `usize::MAX` is reported
@@ -745,9 +745,16 @@ fn test_incompatible_fields_reports_exact_field_number() {
     #[cfg(not(target_pointer_width = "64"))]
     let expected_above: String = max_field.clone();
     new_ucmd!()
-        .args(&["-j", "9007199254740993", "-1", "5", "/dev/null", "/dev/null"])
+        .args(&[
+            "-j",
+            "9007199254740993",
+            "-1",
+            "5",
+            "/dev/null",
+            "/dev/null",
+        ])
         .fails()
-        .stderr_contains(&format!("incompatible join fields {expected_above}, 5"));
+        .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
 }
 
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
