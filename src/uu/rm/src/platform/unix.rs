@@ -348,7 +348,14 @@ pub fn safe_remove_dir_recursive(
     match dir_fd.metadata() {
         Ok(m) if m.dev() == root_dev && m.ino() == root_ino => {}
         Ok(_) => {
-            return show_removal_error(std::io::Error::from_raw_os_error(libc::ELOOP), path);
+            // Not necessarily a symlink: a directory swapped for another
+            // directory, or an automount that only lstat failed to trigger,
+            // lands here too, so don't claim ELOOP.
+            show_error!(
+                "{}",
+                translate!("rm-error-cannot-remove-changed", "file" => path.quote())
+            );
+            return true;
         }
         Err(e) => {
             return show_removal_error(e, path);
