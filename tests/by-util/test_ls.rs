@@ -7712,3 +7712,21 @@ fn test_no_extra_stat_without_recursion() {
     };
     assert_eq!(count, 1, "expected a single stat of the directory operand");
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.fixtures.touch("dummy_file.txt");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .set_stdout(dev_full)
+        .fails_with_code(2)
+        .stderr_is("ls: write error: No space left on device\n");
+}
