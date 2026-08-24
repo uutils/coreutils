@@ -23,7 +23,7 @@ fn test_dev_null_silent() {
         .args(&["-s"])
         .set_stdin(File::open("/dev/null").unwrap())
         .fails_with_code(1)
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]

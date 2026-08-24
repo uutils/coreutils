@@ -1215,6 +1215,16 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .stdout_only("okk\när\nmba\nøys\n");
 }
 
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error() {
+    new_ucmd!()
+        .args(&["-c1", "/proc/self/mem"])
+        .fails_with_code(1)
+        .stderr_is("cut: Input/output error\n");
+}
+
 #[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {

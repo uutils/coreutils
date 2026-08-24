@@ -1536,7 +1536,7 @@ fn test_large_width_format() {
             .args(&[format, arg])
             .fails_with_code(1)
             .stderr_contains("write error")
-            .stdout_is("");
+            .no_stdout();
     }
 }
 
