@@ -670,8 +670,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
@@ -681,8 +680,7 @@ fn test_skip_to_match_context_underflow() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["numbers50.txt", "%5%-10", "-k"])
         .fails()
-        .stdout_is("")
-        .stderr_is("csplit: '%5%-10': line number out of range\n");
+        .stderr_only("csplit: '%5%-10': line number out of range\n");
 
     let count = glob(&at.plus_as_string("xx*"))
         .expect("counting splits")
