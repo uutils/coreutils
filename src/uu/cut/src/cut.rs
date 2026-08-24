@@ -274,17 +274,13 @@ fn cut_bytes<R: Read, W: Write>(
     let out_delim = opts.out_delimiter.unwrap_or(b"\t");
     let explicit_delim = opts.out_delimiter.is_some();
 
-    let result = buf_in.for_byte_record(newline_char, |line| {
-        write_line_bytes(line, out, ranges, out_delim, explicit_delim)?;
-        out.write_all(&[newline_char])?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, strip_errno(&e)));
-    }
-
-    Ok(())
+    buf_in
+        .for_byte_record(newline_char, |line| {
+            write_line_bytes(line, out, ranges, out_delim, explicit_delim)?;
+            out.write_all(&[newline_char])?;
+            Ok(true)
+        })
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
 }
 
 /// Offset of the first byte above `0x7F` in `bytes`, or `bytes.len()` if there
@@ -467,17 +463,13 @@ fn cut_chars<R: Read, W: Write>(
         encoding,
     };
 
-    let result = buf_in.for_byte_record(newline_char, |line| {
-        cut.write_line(line, out)?;
-        out.write_all(&[newline_char])?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, strip_errno(&e)));
-    }
-
-    Ok(())
+    buf_in
+        .for_byte_record(newline_char, |line| {
+            cut.write_line(line, out)?;
+            out.write_all(&[newline_char])?;
+            Ok(true)
+        })
+        .map_err(|e| USimpleError::new(1, strip_errno(&e)))
 }
 
 /// Write the fields of `line` selected by `ranges`, separated by `out_delim`.
@@ -566,24 +558,20 @@ fn cut_fields_explicit_out_delim<R: Read, W: Write, M: Matcher>(
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
 
-    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
-        write_fields_line(
-            line,
-            out,
-            matcher,
-            ranges,
-            only_delimited,
-            newline_char,
-            out_delim,
-        )?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
-    }
-
-    Ok(())
+    buf_in
+        .for_byte_record_with_terminator(newline_char, |line| {
+            write_fields_line(
+                line,
+                out,
+                matcher,
+                ranges,
+                only_delimited,
+                newline_char,
+                out_delim,
+            )?;
+            Ok(true)
+        })
+        .map_err(|e| USimpleError::new(1, e.to_string()))
 }
 
 /// Output delimiter is the same as input delimiter
@@ -597,61 +585,57 @@ fn cut_fields_implicit_out_delim<R: Read, W: Write, M: Matcher>(
 ) -> UResult<()> {
     let mut buf_in = BufReader::new(reader);
 
-    let result = buf_in.for_byte_record_with_terminator(newline_char, |line| {
-        let mut fields_pos = 1;
-        let mut low_idx = 0;
-        let mut delim_search = Searcher::new(matcher, line).peekable();
-        let mut print_delim = false;
+    buf_in
+        .for_byte_record_with_terminator(newline_char, |line| {
+            let mut fields_pos = 1;
+            let mut low_idx = 0;
+            let mut delim_search = Searcher::new(matcher, line).peekable();
+            let mut print_delim = false;
 
-        if delim_search.peek().is_none() {
-            if !only_delimited {
-                // Always write the entire line, even if it doesn't end with `newline_char`
-                out.write_all(line)?;
-                if line.is_empty() || line[line.len() - 1] != newline_char {
-                    out.write_all(&[newline_char])?;
+            if delim_search.peek().is_none() {
+                if !only_delimited {
+                    // Always write the entire line, even if it doesn't end with `newline_char`
+                    out.write_all(line)?;
+                    if line.is_empty() || line[line.len() - 1] != newline_char {
+                        out.write_all(&[newline_char])?;
+                    }
                 }
+
+                return Ok(true);
             }
 
-            return Ok(true);
-        }
+            for &Range { low, high } in ranges {
+                if low - fields_pos > 0 {
+                    if let Some((first, last)) = delim_search.nth(low - fields_pos - 1) {
+                        low_idx = if print_delim { first } else { last }
+                    } else {
+                        break;
+                    }
+                }
 
-        for &Range { low, high } in ranges {
-            if low - fields_pos > 0 {
-                if let Some((first, last)) = delim_search.nth(low - fields_pos - 1) {
-                    low_idx = if print_delim { first } else { last }
+                if let Some((first, _)) = delim_search.nth(high - low) {
+                    let segment = &line[low_idx..first];
+
+                    out.write_all(segment)?;
+
+                    print_delim = true;
+                    low_idx = first;
+                    fields_pos = high + 1;
                 } else {
+                    let segment = &line[low_idx..line.len()];
+
+                    out.write_all(segment)?;
+
+                    if line[line.len() - 1] == newline_char {
+                        return Ok(true);
+                    }
                     break;
                 }
             }
-
-            if let Some((first, _)) = delim_search.nth(high - low) {
-                let segment = &line[low_idx..first];
-
-                out.write_all(segment)?;
-
-                print_delim = true;
-                low_idx = first;
-                fields_pos = high + 1;
-            } else {
-                let segment = &line[low_idx..line.len()];
-
-                out.write_all(segment)?;
-
-                if line[line.len() - 1] == newline_char {
-                    return Ok(true);
-                }
-                break;
-            }
-        }
-        out.write_all(&[newline_char])?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
-    }
-
-    Ok(())
+            out.write_all(&[newline_char])?;
+            Ok(true)
+        })
+        .map_err(|e| USimpleError::new(1, e.to_string()))
 }
 
 /// Streams and filters fields where the record terminator and
@@ -801,30 +785,26 @@ fn cut_fields_whitespace_trimmed<R: Read, W: Write>(
 
     // Trimming is the only difference from the plain whitespace path: once the
     // outer blanks are gone, the remaining blank runs are ordinary delimiters.
-    let result = buf_in.for_byte_record(newline_char, |line| {
-        let start = line.iter().position(|b| !is_blank(b)).unwrap_or(line.len());
-        let end = line
-            .iter()
-            .rposition(|b| !is_blank(b))
-            .map_or(start, |p| p + 1);
+    buf_in
+        .for_byte_record(newline_char, |line| {
+            let start = line.iter().position(|b| !is_blank(b)).unwrap_or(line.len());
+            let end = line
+                .iter()
+                .rposition(|b| !is_blank(b))
+                .map_or(start, |p| p + 1);
 
-        write_fields_line(
-            &line[start..end],
-            out,
-            &matcher,
-            ranges,
-            only_delimited,
-            newline_char,
-            out_delim,
-        )?;
-        Ok(true)
-    });
-
-    if let Err(e) = result {
-        return Err(USimpleError::new(1, e.to_string()));
-    }
-
-    Ok(())
+            write_fields_line(
+                &line[start..end],
+                out,
+                &matcher,
+                ranges,
+                only_delimited,
+                newline_char,
+                out_delim,
+            )?;
+            Ok(true)
+        })
+        .map_err(|e| USimpleError::new(1, e.to_string()))
 }
 
 /// Run field cutting with the given matcher, choosing the explicit- or
@@ -1096,17 +1076,20 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // The list is the value of the option that selected the mode, so the
         // caret can be put under the one range that is at fault.
         let (short, long) = mode_arg_names(mode_arg);
-        let reported = diag_args.as_ref().is_some_and(|args| {
-            e.render_option_value(
-                args,
-                list,
-                Some(short),
-                long,
-                &translate!("cut-diag-label-zero-bound"),
-                &translate!("cut-diag-help-list-syntax"),
-            )
-        });
-        uucore::error::quiet_if_reported(reported, UUsageError::new(1, e.message))
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            UUsageError::new(1, e.message.clone()),
+            |args, _| {
+                e.render_option_value(
+                    args,
+                    list,
+                    Some(short),
+                    long,
+                    &translate!("cut-diag-label-zero-bound"),
+                    &translate!("cut-diag-help-list-syntax"),
+                )
+            },
+        )
     })?;
 
     let mode = match mode_arg {
