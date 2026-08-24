@@ -59,27 +59,22 @@ pub fn splice(source: &impl AsFd, target: &impl AsFd, len: usize) -> rustix::io:
 #[inline]
 pub fn drain_pipe(pipe: &PipeReader, dest: &impl AsFd, len: usize) -> PipeRes {
     debug_assert!(len <= MAX_ROOTLESS_PIPE_SIZE, "unexpected RAM usage");
-    let mut remaining = len;
+    // 1st error is used to detect missing support for splice
+    let mut remaining = if let Ok(s) = splice(pipe, dest, len) {
+        len - s
+    } else {
+        // read/write fallback
+        // use read_to_end to make pipe empty for the case write failed
+        let mut drain = Vec::with_capacity(len);
+        pipe.take(len as u64).read_to_end(&mut drain)?;
+        RawWriter(&dest).write_all(&drain)?;
+        return Ok(Err(()));
+    };
+    // GNU cat catches all strace injections for 2nd+ splice
     while remaining > 0 {
-        if let Ok(s) = splice(pipe, dest, remaining) {
-            remaining -= s;
-        } else {
-            // read/write fallback
-            // use read_to_end to make pipe empty for the case write failed
-            let mut drain = Vec::with_capacity(remaining);
-            pipe.take(remaining as u64).read_to_end(&mut drain)?;
-            RawWriter(&dest).write_all(&drain)?;
-            return Ok(Err(()));
-        }
+        remaining -= splice(pipe, dest, remaining)?;
     }
     Ok(Ok(()))
-}
-
-/// check that source is FUSE
-/// we fallback to read() at FUSE <https://github.com/uutils/coreutils/issues/9609>
-#[inline]
-pub fn might_fuse(source: &impl AsFd) -> bool {
-    rustix::fs::fstatfs(source).map_or(true, |stats| stats.f_type == 0x6573_5546) // FUSE magic number, too many platform specific clippy warning with const
 }
 
 /// force-splice source to dest even both of them are not pipe via broker pipe
@@ -99,17 +94,23 @@ pub fn splice_unbounded_auto(source: &impl AsFd, dest: &mut impl AsFd) -> PipeRe
     let _ = fcntl_setpipe_size(&mut *dest, MAX_ROOTLESS_PIPE_SIZE);
     // pre-generate page caches for splice
     let _ = rustix::fs::fadvise(source, 0, None, rustix::fs::Advice::Sequential);
-    loop {
-        match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
-            Ok(0) => return Ok(Ok(())),
-            Ok(n) => {
-                if drain_pipe(pipe_rd, dest, n)?.is_err() {
-                    return Ok(Err(()));
-                }
+    // 1st error is used to detect missing support for splice
+    match splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE) {
+        Ok(0) => return Ok(Ok(())),
+        Ok(n) => {
+            if drain_pipe(pipe_rd, dest, n)?.is_err() {
+                return Ok(Err(()));
             }
-            Err(_) => return Ok(Err(())),
+        }
+        Err(_) => return Ok(Err(())),
+    }
+    // GNU cat catches all strace injections for 2nd+ splice
+    while let mut n @ 1.. = splice(&source, &pipe_wr, MAX_ROOTLESS_PIPE_SIZE)? {
+        while n > 0 {
+            n -= splice(pipe_rd, dest, n)?;
         }
     }
+    Ok(Ok(()))
 }
 
 /// splice `n` bytes with read/write fallback
@@ -123,62 +124,63 @@ pub fn send_n_bytes(input: impl AsFd, target: impl AsFd, n: u64) -> std::io::Res
     if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
         let _ = fcntl_setpipe_size(&target, pipe_size);
     }
+    let Some((broker_r, broker_w)) = PIPE_CACHE.get_or_init(|| {
+        // use std::io::pipe to avoid unnecessary fcntl
+        let pair = std::io::pipe().ok()?;
+        if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
+            let _ = fcntl_setpipe_size(&pair.0, pipe_size);
+        }
+        Some(pair)
+    }) else {
+        return std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target));
+    };
     let mut n = n;
     let mut bytes_written: u64 = 0;
-    let succeed_or_fuse = loop {
-        if n == 0 {
-            // avoid unnecessary syscall
-            return Ok(bytes_written);
-        }
-        match splice(&input, &target, n as usize) {
-            Ok(0) => break true,
+    while n > 0 {
+        match splice(&input, &broker_w, n as usize) {
+            Ok(0) => return Ok(bytes_written),
             Ok(s) => {
                 n -= s as u64;
                 bytes_written += s as u64;
+                if drain_pipe(broker_r, &target, s)?.is_err() {
+                    break;
+                }
             }
-            _ => break false, // input or output is not pipe
+            Err(_) => break,
         }
-    };
-    let succeed_or_fuse = succeed_or_fuse
-        || if let Some((broker_r, broker_w)) = PIPE_CACHE
-            .get_or_init(|| {
-                // use std::io::pipe to avoid unnecessary fcntl
-                let pair = std::io::pipe().ok()?;
-                if pipe_size > KERNEL_DEFAULT_PIPE_SIZE {
-                    let _ = fcntl_setpipe_size(&pair.0, pipe_size);
-                }
-                Some(pair)
-            })
-            .as_ref()
-        {
-            // todo: create fn splice_bounded_broker
-            loop {
-                if n == 0 {
-                    return Ok(bytes_written);
-                }
-                match splice(&input, &broker_w, n as usize) {
-                    Ok(0) => break true,
-                    Ok(s) => {
-                        n -= s as u64;
-                        bytes_written += s as u64;
-                        if drain_pipe(broker_r, &target, s)?.is_err() {
-                            break false;
-                        }
-                    }
-                    _ => break false,
-                }
-            }
-        } else {
-            false
-        };
-    // do not always fallback to write for fuse, or 2 Ctrl+D is required to exit on tty
-    // todo: move fuse patch to callers
-    if !succeed_or_fuse || might_fuse(&input) {
-        // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
-        bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+    }
+    // remove buffering from this fallback by RawReader, or order of output would be wrong with multiple input
+    bytes_written += std::io::copy(&mut RawReader(input).take(n), &mut RawWriter(target))?;
+    Ok(bytes_written)
+}
+
+/// discard `n` bytes by splice
+/// return actually discarded bytes
+/// Err(b) means we discarded b bytes, but we should try to discarding remaining bytes by read
+#[inline]
+pub fn discard_n_bytes(fd: impl AsFd, n: usize) -> Result<usize, usize> {
+    let mut discarded = 0;
+    let dev_null = dev_null().ok_or(0_usize)?;
+    while discarded < n
+        && let Ok(s) = splice(&fd, &dev_null, n - discarded)
+    {
+        if s == 0 {
+            return Ok(discarded);
+        }
+        discarded += s;
+    }
+    // else, input is not a pipe
+    let (pipe_read, pipe_write) = pipe::<false>().map_err(|_| discarded)?;
+    while discarded < n
+        && let Ok(s @ 1..) = splice(&fd, &pipe_write, n - discarded)
+    {
+        discarded += s;
+        // pipe to null is not blocked. So this returns the same length at most cases
+        // next splice does not hang if we discarded 1+ pages
+        splice(&pipe_read, &dev_null, s).map_err(|_| discarded)?;
     }
 
-    Ok(bytes_written)
+    Ok(discarded)
 }
 
 /// Return verified /dev/null

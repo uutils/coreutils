@@ -20,10 +20,6 @@ use std::ffi::OsString;
 use std::fs;
 use thiserror::Error;
 
-#[cfg(any(unix, target_os = "redox"))]
-use std::os::unix::fs::symlink;
-#[cfg(windows)]
-use std::os::windows::fs::{symlink_dir, symlink_file};
 use std::path::{Path, PathBuf};
 use uucore::backup_control::{self, BackupMode};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
@@ -515,6 +511,7 @@ fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
 
 #[cfg(windows)]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
+    use std::os::windows::fs::{symlink_dir, symlink_file};
     if src.as_ref().is_dir() {
         symlink_dir(src, dst)
     } else {
@@ -522,7 +519,7 @@ pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result
     }
 }
 
-#[cfg(target_os = "wasi")]
+#[cfg(any(unix, target_os = "wasi"))]
 pub fn symlink<P1: AsRef<Path>, P2: AsRef<Path>>(src: P1, dst: P2) -> io::Result<()> {
     rustix::fs::symlink(src.as_ref(), dst.as_ref()).map_err(io::Error::from)
 }

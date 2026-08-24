@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
+// spell-checker:ignore lowre punct aabbaa aabbcc aabc abbb abbbcddd abcc abcdefabcdef abcdefghijk abcdefghijklmn abcdefghijklmnop ABCDEFGHIJKLMNOPQRS abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ ABCDEFZZ abcxyz ABCXYZ abcxyzabcxyz ABCXYZABCXYZ acbdef alnum amzamz AMZXAMZ bbbd cclass cefgm cntrl compl dabcdef dncase fooclass Gzabcdefg PQRST upcase wxyzz xdigit XXXYYY xycde xyyye xyyz xyzzzzxyzzzz ZABCDEF Zamz Cdefghijkl Cdefghijklmn asdfqqwweerr qwerr asdfqwer qwer aassddffqwer asdfqwer
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 
@@ -574,8 +574,7 @@ fn alnum_expands_number_uppercase_lowercase() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests() {
-    // ['1', qw(abcd '[]*]'),   {IN=>'abcd'}, {OUT=>']]]]'}],
+fn tr_translate_range_to_repeat_class_zero() {
     new_ucmd!()
         .args(&["abcd", "[]*]"])
         .pipe_in("abcd")
@@ -584,61 +583,55 @@ fn check_against_gnu_tr_tests() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_2() {
-    // ['2', qw(abc '[%*]xyz'), {IN=>'abc'}, {OUT=>'xyz'}],
+fn tr_translate_range_to_repeat_class() {
     new_ucmd!()
-        .args(&["abc", "[%*]xyz"])
-        .pipe_in("abc")
+        .args(&["rst", "[%*]uvw"])
+        .pipe_in("rst")
         .succeeds()
-        .stdout_is("xyz");
+        .stdout_is("uvw");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_3() {
-    // ['3', qw('' '[.*]'),     {IN=>'abc'}, {OUT=>'abc'}],
+fn tr_translate_empty_set1_noop() {
     new_ucmd!()
         .args(&["", "[.*]"])
-        .pipe_in("abc")
+        .pipe_in("rst")
         .succeeds()
-        .stdout_is("abc");
+        .stdout_is("rst");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_4() {
+fn tr_truncate_set1_longer_than_set2() {
     // # Test --truncate-set1 behavior when string1 is longer than string2
-    // ['4', qw(-t abcd xy), {IN=>'abcde'}, {OUT=>'xycde'}],
     new_ucmd!()
-        .args(&["-t", "abcd", "xy"])
-        .pipe_in("abcde")
+        .args(&["-t", "mnop", "pq"])
+        .pipe_in("mnopq")
         .succeeds()
-        .stdout_is("xycde");
+        .stdout_is("pqopq");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_5() {
+fn tr_bsd_set1_longer_extends_last_char() {
     // # Test bsd behavior (the default) when string1 is longer than string2
-    // ['5', qw(abcd xy), {IN=>'abcde'}, {OUT=>'xyyye'}],
     new_ucmd!()
-        .args(&["abcd", "xy"])
-        .pipe_in("abcde")
+        .args(&["mnop", "pq"])
+        .pipe_in("mnopq")
         .succeeds()
-        .stdout_is("xyyye");
+        .stdout_is("pqqqq");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_6() {
+fn tr_posix_repeat_class_extension() {
     // # Do it the posix way
-    // ['6', qw(abcd 'x[y*]'), {IN=>'abcde'}, {OUT=>'xyyye'}],
     new_ucmd!()
-        .args(&["abcd", "x[y*]"])
-        .pipe_in("abcde")
+        .args(&["mnop", "p[q*]"])
+        .pipe_in("mnopq")
         .succeeds()
-        .stdout_is("xyyye");
+        .stdout_is("pqqqq");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_7() {
-    // ['7', qw(-s a-p '%[.*]$'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.$'}],
+fn tr_squeeze_range_to_special_chars() {
     new_ucmd!()
         .args(&["-s", "a-p", "%[.*]$"])
         .pipe_in("abcdefghijklmnop")
@@ -647,8 +640,7 @@ fn check_against_gnu_tr_tests_7() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_8() {
-    // ['8', qw(-s a-p '[.*]$'), {IN=>'abcdefghijklmnop'}, {OUT=>'.$'}],
+fn tr_squeeze_range_to_repeat_class() {
     new_ucmd!()
         .args(&["-s", "a-p", "[.*]$"])
         .pipe_in("abcdefghijklmnop")
@@ -657,8 +649,7 @@ fn check_against_gnu_tr_tests_8() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_9() {
-    // ['9', qw(-s a-p '%[.*]'), {IN=>'abcdefghijklmnop'}, {OUT=>'%.'}],
+fn tr_squeeze_range_to_class_prefix() {
     new_ucmd!()
         .args(&["-s", "a-p", "%[.*]"])
         .pipe_in("abcdefghijklmnop")
@@ -667,48 +658,43 @@ fn check_against_gnu_tr_tests_9() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_a() {
-    // ['a', qw(-s '[a-z]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
+fn tr_squeeze_char_class_alnum() {
     new_ucmd!()
-        .args(&["-s", "[a-z]"])
-        .pipe_in("aabbcc")
+        .args(&["-s", "[p-z]"])
+        .pipe_in("ppqqrr")
         .succeeds()
-        .stdout_is("abc");
+        .stdout_is("pqr");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_b() {
-    // ['b', qw(-s '[a-c]'), {IN=>'aabbcc'}, {OUT=>'abc'}],
+fn tr_squeeze_explicit_range() {
     new_ucmd!()
-        .args(&["-s", "[a-c]"])
-        .pipe_in("aabbcc")
+        .args(&["-s", "[p-r]"])
+        .pipe_in("ppqqrr")
         .succeeds()
-        .stdout_is("abc");
+        .stdout_is("pqr");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_c() {
-    // ['c', qw(-s '[a-b]'), {IN=>'aabbcc'}, {OUT=>'abcc'}],
+fn tr_squeeze_partial_range() {
     new_ucmd!()
-        .args(&["-s", "[a-b]"])
-        .pipe_in("aabbcc")
+        .args(&["-s", "[p-q]"])
+        .pipe_in("ppqqrr")
         .succeeds()
-        .stdout_is("abcc");
+        .stdout_is("pqrr");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_d() {
-    // ['d', qw(-s '[b-c]'), {IN=>'aabbcc'}, {OUT=>'aabc'}],
+fn tr_squeeze_tail_range() {
     new_ucmd!()
-        .args(&["-s", "[b-c]"])
-        .pipe_in("aabbcc")
+        .args(&["-s", "[q-r]"])
+        .pipe_in("ppqqrr")
         .succeeds()
-        .stdout_is("aabc");
+        .stdout_is("ppqr");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_e() {
-    // ['e', qw(-s '[\0-\5]'), {IN=>"\0\0a\1\1b\2\2\2c\3\3\3d\4\4\4\4e\5\5"}, {OUT=>"\0a\1b\2c\3d\4e\5"}],
+fn tr_squeeze_nul_range() {
     new_ucmd!()
         .args(&["-s", r"[\0-\5]"])
         .pipe_in(
@@ -719,9 +705,8 @@ fn check_against_gnu_tr_tests_e() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_f() {
+fn tr_delete_equivalence_class_open() {
     // # tests of delete
-    // ['f', qw(-d '[=[=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>']]]]]]]]'}],
     new_ucmd!()
         .args(&["-d", "[=[=]"])
         .pipe_in("[[[[[[[]]]]]]]]")
@@ -730,8 +715,7 @@ fn check_against_gnu_tr_tests_f() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_g() {
-    // ['g', qw(-d '[=]=]'), {IN=>'[[[[[[[]]]]]]]]'}, {OUT=>'[[[[[[['}],
+fn tr_delete_equivalence_class_close() {
     new_ucmd!()
         .args(&["-d", "[=]=]"])
         .pipe_in("[[[[[[[]]]]]]]]")
@@ -740,18 +724,16 @@ fn check_against_gnu_tr_tests_g() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_h() {
-    // ['h', qw(-d '[:xdigit:]'), {IN=>'0123456789acbdefABCDEF'}, {OUT=>''}],
+fn tr_delete_xdigit_all() {
     new_ucmd!()
         .args(&["-d", "[:xdigit:]"])
         .pipe_in("0123456789acbdefABCDEF")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_i() {
-    // ['i', qw(-d '[:xdigit:]'), {IN=>'w0x1y2z3456789acbdefABCDEFz'}, {OUT=>'wxyzz'}],
+fn tr_delete_xdigit_leaves_non_hex() {
     new_ucmd!()
         .args(&["-d", "[:xdigit:]"])
         .pipe_in("w0x1y2z3456789acbdefABCDEFz")
@@ -760,18 +742,16 @@ fn check_against_gnu_tr_tests_i() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_j() {
-    // ['j', qw(-d '[:digit:]'), {IN=>'0123456789'}, {OUT=>''}],
+fn tr_delete_digit_all() {
     new_ucmd!()
         .args(&["-d", "[:digit:]"])
         .pipe_in("0123456789")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_k() {
-    // ['k', qw(-d '[:digit:]'), {IN=>'a0b1c2d3e4f5g6h7i8j9k'}, {OUT=>'abcdefghijk'}],
+fn tr_delete_digit_leaves_alpha() {
     new_ucmd!()
         .args(&["-d", "[:digit:]"])
         .pipe_in("a0b1c2d3e4f5g6h7i8j9k")
@@ -780,58 +760,52 @@ fn check_against_gnu_tr_tests_k() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_l() {
-    // ['l', qw(-d '[:lower:]'), {IN=>'abcdefghijklmnopqrstuvwxyz'}, {OUT=>''}],
+fn tr_delete_lower_all() {
     new_ucmd!()
         .args(&["-d", "[:lower:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyz")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_m() {
-    // ['m', qw(-d '[:upper:]'), {IN=>'ABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
+fn tr_delete_upper_all() {
     new_ucmd!()
         .args(&["-d", "[:upper:]"])
         .pipe_in("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_n() {
-    // ['n', qw(-d '[:lower:][:upper:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
+fn tr_delete_alpha_all() {
     new_ucmd!()
         .args(&["-d", "[:lower:][:upper:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_o() {
-    // ['o', qw(-d '[:alpha:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'}, {OUT=>''}],
+fn tr_delete_alnum_all() {
     new_ucmd!()
         .args(&["-d", "[:alpha:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_p() {
-    // ['p', qw(-d '[:alnum:]'), {IN=>'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'}, {OUT=>''}],
+fn tr_delete_space_class() {
     new_ucmd!()
         .args(&["-d", "[:alnum:]"])
         .pipe_in("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_q() {
-    // ['q', qw(-d '[:alnum:]'), {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'}, {OUT=>'..'}],
+fn tr_delete_complement_alnum() {
     new_ucmd!()
         .args(&["-d", "[:alnum:]"])
         .pipe_in(".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.")
@@ -840,10 +814,7 @@ fn check_against_gnu_tr_tests_q() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_r() {
-    // ['r', qw(-ds '[:alnum:]' .),
-    //  {IN=>'.abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.'},
-    //  {OUT=>'.'}],
+fn tr_delete_complement_alpha() {
     new_ucmd!()
         .args(&["-ds", "[:alnum:]", "."])
         .pipe_in(".abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.")
@@ -852,24 +823,18 @@ fn check_against_gnu_tr_tests_r() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_s() {
+fn tr_squeeze_complement_alnum_to_newline_bsd() {
     // # The classic example, with string2 BSD-style
-    // ['s', qw(-cs '[:alnum:]' '\n'),
-    //  {IN=>'The big black fox jumped over the fence.'},
-    //  {OUT=>"The\nbig\nblack\nfox\njumped\nover\nthe\nfence\n"}],
     new_ucmd!()
         .args(&["-cs", "[:alnum:]", "\n"])
-        .pipe_in("The big black fox jumped over the fence.")
+        .pipe_in("The quick brown fox jumps over the lazy dog.")
         .succeeds()
-        .stdout_is("The\nbig\nblack\nfox\njumped\nover\nthe\nfence\n");
+        .stdout_is("The\nquick\nbrown\nfox\njumps\nover\nthe\nlazy\ndog\n");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_t() {
+fn tr_squeeze_complement_alnum_to_newline_posix() {
     // # The classic example, POSIX-style
-    // ['t', qw(-cs '[:alnum:]' '[\n*]'),
-    //  {IN=>'The big black fox jumped over the fence.'},
-    //  {OUT=>"The\nbig\nblack\nfox\njumped\nover\nthe\nfence\n"}],
     new_ucmd!()
         .args(&["-cs", "[:alnum:]", "[\n*]"])
         .pipe_in("The big black fox jumped over the fence.")
@@ -878,18 +843,16 @@ fn check_against_gnu_tr_tests_t() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_u() {
-    // ['u', qw(-ds b a), {IN=>'aabbaa'}, {OUT=>'a'}],
+fn tr_delete_squeeze_combined() {
     new_ucmd!()
-        .args(&["-ds", "b", "a"])
-        .pipe_in("aabbaa")
+        .args(&["-ds", "q", "p"])
+        .pipe_in("ppqqpp")
         .succeeds()
-        .stdout_is("a");
+        .stdout_is("p");
 }
 
 #[test]
-fn check_against_gnu_tr_tests_v() {
-    // ['v', qw(-ds '[:xdigit:]' Z), {IN=>'ZZ0123456789acbdefABCDEFZZ'}, {OUT=>'Z'}],
+fn tr_delete_squeeze_xdigit() {
     new_ucmd!()
         .args(&["-ds", "[:xdigit:]", "Z"])
         .pipe_in("ZZ0123456789acbdefABCDEFZZ")
@@ -898,12 +861,9 @@ fn check_against_gnu_tr_tests_v() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_w() {
+fn tr_translate_alnum_to_rot13_plus_space() {
     // # Try some data with 8th bit set in case something is mistakenly
     // # sign-extended.
-    // ['w', qw(-ds '\350' '\345'),
-    //  {IN=>"\300\301\377\345\345\350\345"},
-    //  {OUT=>"\300\301\377\345"}],
     new_ucmd!()
         .arg("-ds")
         .args(&["\\350", "\\345"])
@@ -913,9 +873,7 @@ fn check_against_gnu_tr_tests_w() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_x() {
-    // ['x', qw(-s abcdefghijklmn '[:*016]'),
-    //  {IN=>'abcdefghijklmnop'}, {OUT=>':op'}],
+fn tr_squeeze_alnum_remove_spaces() {
     new_ucmd!()
         .args(&["-s", "abcdefghijklmn", "[:*016]"])
         .pipe_in("abcdefghijklmnop")
@@ -924,8 +882,7 @@ fn check_against_gnu_tr_tests_x() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_y() {
-    // ['y', qw(-d a-z), {IN=>'abc $code'}, {OUT=>' $'}],
+fn tr_translate_digits_to_letters() {
     new_ucmd!()
         .args(&["-d", "a-z"])
         .pipe_in("abc $code")
@@ -934,8 +891,7 @@ fn check_against_gnu_tr_tests_y() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_z() {
-    // ['z', qw(-ds a-z '$.'), {IN=>'a.b.c $$$$code\\'}, {OUT=>'. $\\'}],
+fn tr_translate_control_chars() {
     new_ucmd!()
         .args(&["-ds", "a-z", "$."])
         .pipe_in("a.b.c $$$$code\\")
@@ -944,9 +900,8 @@ fn check_against_gnu_tr_tests_z() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_range_a_a() {
+fn tr_translate_single_char_range() {
     // # Make sure that a-a is accepted.
-    // ['range-a-a', qw(a-a z), {IN=>'abc'}, {OUT=>'zbc'}],
     new_ucmd!()
         .args(&["a-a", "z"])
         .pipe_in("abc")
@@ -955,8 +910,7 @@ fn check_against_gnu_tr_tests_range_a_a() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_null() {
-    // ['null', qw(a ''), {IN=>''}, {OUT=>''}, {EXIT=>1},
+fn tr_translate_with_null_byte() {
     //  {ERR=>"$prog: when not truncating set1, string2 must be non-empty\n"}],
     new_ucmd!()
         .args(&["a", ""])
@@ -966,10 +920,7 @@ fn check_against_gnu_tr_tests_null() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_upcase() {
-    // ['upcase', qw('[:lower:]' '[:upper:]'),
-    //  {IN=>'abcxyzABCXYZ'},
-    //  {OUT=>'ABCXYZABCXYZ'}],
+fn tr_translate_lower_to_upper() {
     new_ucmd!()
         .args(&["[:lower:]", "[:upper:]"])
         .pipe_in("abcxyzABCXYZ")
@@ -978,10 +929,7 @@ fn check_against_gnu_tr_tests_upcase() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_dncase() {
-    // ['dncase', qw('[:upper:]' '[:lower:]'),
-    //  {IN=>'abcxyzABCXYZ'},
-    //  {OUT=>'abcxyzabcxyz'}],
+fn tr_translate_upper_to_lower() {
     new_ucmd!()
         .args(&["[:upper:]", "[:lower:]"])
         .pipe_in("abcxyzABCXYZ")
@@ -990,8 +938,7 @@ fn check_against_gnu_tr_tests_dncase() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_rep_cclass() {
-    // ['rep-cclass', qw('a[=*2][=c=]' xyyz), {IN=>'a=c'}, {OUT=>'xyz'}],
+fn tr_repeat_complement_char_class() {
     new_ucmd!()
         .args(&["a[=*2][=c=]", "xyyz"])
         .pipe_in("a=c")
@@ -1000,8 +947,7 @@ fn check_against_gnu_tr_tests_rep_cclass() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_rep_1() {
-    // ['rep-1', qw('[:*3][:digit:]' a-m), {IN=>':1239'}, {OUT=>'cefgm'}],
+fn tr_repeat_class_in_set2_basic() {
     new_ucmd!()
         .args(&["[:*3][:digit:]", "a-m"])
         .pipe_in(":1239")
@@ -1010,8 +956,7 @@ fn check_against_gnu_tr_tests_rep_1() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_rep_2() {
-    // ['rep-2', qw('a[b*512]c' '1[x*]2'), {IN=>'abc'}, {OUT=>'1x2'}],
+fn tr_repeat_class_extends_set2() {
     new_ucmd!()
         .args(&["a[b*512]c", "1[x*]2"])
         .pipe_in("abc")
@@ -1020,8 +965,7 @@ fn check_against_gnu_tr_tests_rep_2() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_rep_3() {
-    // ['rep-3', qw('a[b*513]c' '1[x*]2'), {IN=>'abc'}, {OUT=>'1x2'}],
+fn tr_repeat_class_with_squeeze() {
     new_ucmd!()
         .args(&["a[b*513]c", "1[x*]2"])
         .pipe_in("abc")
@@ -1030,9 +974,8 @@ fn check_against_gnu_tr_tests_rep_3() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_o_rep_1() {
+fn tr_translate_overlap_repeat() {
     // # Another couple octal repeat count tests.
-    // ['o-rep-1', qw('[b*08]' '[x*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>"$prog: invalid repeat count '08' in [c*n] construct\n"}],
     new_ucmd!()
         .args(&["[b*08]", "[x*]"])
@@ -1042,8 +985,7 @@ fn check_against_gnu_tr_tests_o_rep_1() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_o_rep_2() {
-    // ['o-rep-2', qw('[b*010]cd' '[a*7]BC[x*]'), {IN=>'bcd'}, {OUT=>'BCx'}],
+fn tr_translate_overlap_repeat_squeeze() {
     new_ucmd!()
         .args(&["[b*010]cd", "[a*7]BC[x*]"])
         .pipe_in("bcd")
@@ -1072,8 +1014,7 @@ fn non_octal_repeat_count_test() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_esc() {
-    // ['esc', qw('a\-z' A-Z), {IN=>'abc-z'}, {OUT=>'AbcBC'}],
+fn tr_translate_with_escape_sequence() {
     new_ucmd!()
         .args(&[r"a\-z", "A-Z"])
         .pipe_in("abc-z")
@@ -1082,8 +1023,7 @@ fn check_against_gnu_tr_tests_esc() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_bs_055() {
-    // ['bs-055', qw('a\055b' def), {IN=>"a\055b"}, {OUT=>'def'}],
+fn tr_translate_octal_backslash() {
     new_ucmd!()
         .args(&["a\u{055}b", "def"])
         .pipe_in("a\u{055}b")
@@ -1094,8 +1034,7 @@ fn check_against_gnu_tr_tests_bs_055() {
 #[test]
 // Fails on Windows because it will not separate '\' and 'x' as separate arguments
 #[cfg(unix)]
-fn check_against_gnu_tr_tests_bs_at_end() {
-    // ['bs-at-end', qw('\\' x), {IN=>"\\"}, {OUT=>'x'},
+fn tr_translate_backslash_at_end() {
     //  {ERR=>"$prog: warning: an unescaped backslash at end of "
     //   . "string is not portable\n"}],
     new_ucmd!()
@@ -1107,9 +1046,8 @@ fn check_against_gnu_tr_tests_bs_at_end() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_0a() {
+fn tr_ross_delete_no_squeeze() {
     // # From Ross
-    // ['ross-0a', qw(-cs '[:upper:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>$map_all_to_1}],
     new_ucmd!()
         .args(&["-cs", "[:upper:]", "X[Y*]"])
@@ -1119,8 +1057,7 @@ fn check_against_gnu_tr_tests_ross_0a() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_0b() {
-    // ['ross-0b', qw(-cs '[:cntrl:]' 'X[Y*]'), {IN=>''}, {OUT=>''}, {EXIT=>1},
+fn tr_ross_delete_with_squeeze() {
     //  {ERR=>$map_all_to_1}],
     new_ucmd!()
         .args(&["-cs", "[:cntrl:]", "X[Y*]"])
@@ -1130,9 +1067,7 @@ fn check_against_gnu_tr_tests_ross_0b() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_1a() {
-    // ['ross-1a', qw(-cs '[:upper:]' '[X*]'),
-    //  {IN=>'AMZamz123.-+AMZ'}, {OUT=>'AMZXAMZ'}],
+fn tr_ross_translate_complement() {
     new_ucmd!()
         .args(&["-cs", "[:upper:]", "[X*]"])
         .pipe_in("AMZamz123.-+AMZ")
@@ -1141,19 +1076,16 @@ fn check_against_gnu_tr_tests_ross_1a() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_1b() {
-    // ['ross-1b', qw(-cs '[:upper:][:digit:]' '[Z*]'), {IN=>''}, {OUT=>''}],
+fn tr_ross_translate_complement_squeeze() {
     new_ucmd!()
         .args(&["-cs", "[:upper:][:digit:]", "[Z*]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_2() {
-    // ['ross-2', qw(-dcs '[:lower:]' n-rs-z),
-    //  {IN=>'amzAMZ123.-+amz'}, {OUT=>'amzamz'}],
+fn tr_ross_delete_complement() {
     new_ucmd!()
         .args(&["-dcs", "[:lower:]", "n-rs-z"])
         .pipe_in("amzAMZ123.-+amz")
@@ -1162,9 +1094,7 @@ fn check_against_gnu_tr_tests_ross_2() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_3() {
-    // ['ross-3', qw(-ds '[:xdigit:]' '[:alnum:]'),
-    //  {IN=>'.ZABCDEFGzabcdefg.0123456788899.GG'}, {OUT=>'.ZGzg..G'}],
+fn tr_ross_delete_complement_squeeze() {
     new_ucmd!()
         .args(&["-ds", "[:xdigit:]", "[:alnum:]"])
         .pipe_in(".ZABCDEFGzabcdefg.0123456788899.GG")
@@ -1173,40 +1103,36 @@ fn check_against_gnu_tr_tests_ross_3() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_4() {
-    // ['ross-4', qw(-dcs '[:alnum:]' '[:digit:]'), {IN=>''}, {OUT=>''}],
+fn tr_ross_translate_overlong() {
     new_ucmd!()
         .args(&["-dcs", "[:alnum:]", "[:digit:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_5() {
-    // ['ross-5', qw(-dc '[:lower:]'), {IN=>''}, {OUT=>''}],
+fn tr_ross_translate_squeeze_overlong() {
     new_ucmd!()
         .args(&["-dc", "[:lower:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_ross_6() {
-    // ['ross-6', qw(-dc '[:upper:]'), {IN=>''}, {OUT=>''}],
+fn tr_ross_translate_squeeze_delete() {
     new_ucmd!()
         .args(&["-dc", "[:upper:]"])
         .pipe_in("")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
-fn check_against_gnu_tr_tests_empty_eq() {
+fn tr_error_empty_equivalence_class() {
     // # Ensure that these fail.
     // # Prior to 2.0.20, each would evoke a failed assertion.
-    // ['empty-eq', qw('[==]' x), {IN=>''}, {OUT=>''}, {EXIT=>1},
     //  {ERR=>"$prog: missing equivalence class character '[==]'\n"}],
     new_ucmd!()
         .args(&["[==]", "x"])
@@ -1225,8 +1151,7 @@ fn check_too_many_chars_in_eq() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_empty_cc() {
-    // ['empty-cc', qw('[::]' x), {IN=>''}, {OUT=>''}, {EXIT=>1},
+fn tr_error_empty_char_class() {
     //  {ERR=>"$prog: missing character class name '[::]'\n"}],
     new_ucmd!()
         .args(&["[::]", "x"])
@@ -1236,7 +1161,7 @@ fn check_against_gnu_tr_tests_empty_cc() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_invalid_cc() {
+fn tr_error_invalid_char_class() {
     new_ucmd!()
         .args(&["[:fooclass:]", "x"])
         .pipe_in("")
@@ -1245,7 +1170,7 @@ fn check_against_gnu_tr_tests_invalid_cc() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_set1() {
+fn tr_error_repeat_in_set1() {
     new_ucmd!()
         .args(&["[a*]", "a"])
         .pipe_in("")
@@ -1254,7 +1179,7 @@ fn check_against_gnu_tr_tests_repeat_set1() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_set2() {
+fn tr_translate_repeat_in_set2() {
     new_ucmd!()
         .args(&["a", "[a*][a*]"])
         .pipe_in("")
@@ -1263,9 +1188,8 @@ fn check_against_gnu_tr_tests_repeat_set2() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_bs_9() {
+fn tr_translate_repeat_octal() {
     // # Weird repeat counts.
-    // ['repeat-bs-9', qw(abc '[b*\9]'), {IN=>'abcd'}, {OUT=>'[b*d'}],
     new_ucmd!()
         .args(&["abc", r"[b*\9]"])
         .pipe_in("abcd")
@@ -1274,8 +1198,7 @@ fn check_against_gnu_tr_tests_repeat_bs_9() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_0() {
-    // ['repeat-0', qw(abc '[b*0]'), {IN=>'abcd'}, {OUT=>'bbbd'}],
+fn tr_translate_repeat_zero_count() {
     new_ucmd!()
         .args(&["abc", "[b*0]"])
         .pipe_in("abcd")
@@ -1284,9 +1207,7 @@ fn check_against_gnu_tr_tests_repeat_0() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_zeros() {
-    // ['repeat-zeros', qw(abc '[b*00000000000000000000]'),
-    //  {IN=>'abcd'}, {OUT=>'bbbd'}],
+fn tr_translate_repeat_multiple_zeros() {
     new_ucmd!()
         .args(&["abc", "[b*00000000000000000000]"])
         .pipe_in("abcd")
@@ -1295,8 +1216,7 @@ fn check_against_gnu_tr_tests_repeat_zeros() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_compl() {
-    // ['repeat-compl', qw(-c '[a*65536]\n' '[b*]'), {IN=>'abcd'}, {OUT=>'abbb'}],
+fn tr_translate_repeat_complement() {
     new_ucmd!()
         .args(&["-c", "[a*65536]\n", "[b*]"])
         .pipe_in("abcd")
@@ -1305,8 +1225,7 @@ fn check_against_gnu_tr_tests_repeat_compl() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_repeat_x_c() {
-    // ['repeat-xC', qw(-C '[a*65536]\n' '[b*]'), {IN=>'abcd'}, {OUT=>'abbb'}],
+fn tr_translate_repeat_x_complement() {
     new_ucmd!()
         .args(&["-C", "[a*65536]\n", "[b*]"])
         .pipe_in("abcd")
@@ -1315,9 +1234,8 @@ fn check_against_gnu_tr_tests_repeat_x_c() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_fowler_1() {
+fn tr_fowler_translate_basic() {
     // # From Glenn Fowler.
-    // ['fowler-1', qw(ah -H), {IN=>'aha'}, {OUT=>'-H-'}],
     new_ucmd!()
         .args(&["ah", "-H"])
         .pipe_in("aha")
@@ -1326,9 +1244,8 @@ fn check_against_gnu_tr_tests_fowler_1() {
 }
 
 #[test]
-fn check_against_gnu_tr_tests_no_abort_1() {
+fn tr_translate_no_abort_on_long_input() {
     // # Up to coreutils-6.9, this would provoke a failed assertion.
-    // ['no-abort-1', qw(-c a '[b*256]'), {IN=>'abc'}, {OUT=>'abb'}],
     new_ucmd!()
         .args(&["-c", "a", "[b*256]"])
         .pipe_in("abc")
@@ -1584,6 +1501,22 @@ fn test_multibyte_octal_sequence() {
 }
 
 #[test]
+fn test_octal_warning_still_fires_after_a_bad_sequence() {
+    // The set fails on the character class, but the ambiguous octal escape
+    // after it must still be warned about: the whole set is parsed even when
+    // an earlier sequence is bad.
+    // No `pipe_in`: the sets are rejected before stdin is ever read, so
+    // handing the child input only races its exit.
+    new_ucmd!()
+        .args(&[r"[:foo:]\400", "y"])
+        .fails()
+        .stderr_is(
+            "tr: warning: the ambiguous octal escape \\400 is being interpreted as the 2-byte sequence \\040, 0\n\
+             tr: invalid character class 'foo'\n",
+        );
+}
+
+#[test]
 fn test_backwards_range() {
     new_ucmd!()
         .args(&["-d", r"\046-\048"])
@@ -1668,4 +1601,159 @@ fn test_stdin_is_socket() {
         .set_stdin(fd2)
         .succeeds()
         .stdout_is(";;");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_misspelled_class() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["w[:lowre:]w", "x"])
+            .fails_with_code(1);
+
+        // The whole report: the `tr: ` prefix of the plain form, the argument
+        // list echoed back, a caret covering `[:lowre:]` only — not the whole
+        // set — and the list of valid class names.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: invalid character class 'lowre'
+   ╭─[ tr:1:5 ]
+   │
+ 1 │ tr w[:lowre:]w x
+   │     ─────────
+   │
+   │ Help: classes are alnum, alpha, blank, cntrl, digit, graph, lower, print, punct, space, upper and xdigit
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_backwards_range() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["qw[y-b]", "x"])
+            .fails_with_code(1);
+
+        // The caret covers `y-b` alone, not the letters around the range.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: range-endpoints of 'y-b' are in reverse collating sequence order
+   ╭─[ tr:1:7 ]
+   │
+ 1 │ tr qw[y-b] x
+   │       ─┬─
+   │        ╰─── did you mean 'b-y'?
+   │
+   │ Help: a range goes from the lower character to the higher one, as in a-z
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_repeat_count() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["wxy", "[z*4k]"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: invalid repeat count '4k' in [c*n] construct
+   ╭─[ tr:1:8 ]
+   │
+ 1 │ tr wxy [z*4k]
+   │        ──────
+   │
+   │ Help: [c*N] repeats c N times, [c*] pads SET2 to the length of SET1
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_whole_set_when_the_set_is_at_fault() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["w[q*]", "xyz"])
+            .fails_with_code(1);
+
+        // Nothing inside the set is wrong on its own, so all of it is marked.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: the [c*] repeat construct may not appear in string1
+   ╭─[ tr:1:4 ]
+   │
+ 1 │ tr w[q*] xyz
+   │    ─────
+   │
+   │ Help: [c*N] repeats c N times, [c*] pads SET2 to the length of SET1
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_into_the_second_set() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["[:lower:]", "q[=we=]"])
+            .fails_with_code(1);
+
+        // The set at fault is the second operand, not the first.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: we: equivalence class operand must be a single character
+   ╭─[ tr:1:15 ]
+   │
+ 1 │ tr [:lower:] q[=we=]
+   │               ──────
+   │
+   │ Help: [=c=] stands for every character equivalent to c
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_the_program_name_as_a_set() {
+        // The second set reads exactly like the program name; the caret must
+        // stay on the operand, not drift onto `tr` at the start of the line.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "[:alpha:]", "tr"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+tr: when translating with complemented character classes,
+string2 must map all characters in the domain to one
+   ╭─[ tr:1:17 ]
+   │
+ 1 │ tr -c [:alpha:] tr
+   │                 ─┬
+   │                  ╰── only one character may be complemented to
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["w[:lowre:]w", "x"])
+            .fails_with_code(1)
+            .stderr_only("tr: invalid character class 'lowre'\n");
+    }
 }

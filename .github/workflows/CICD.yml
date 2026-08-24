@@ -5,7 +5,7 @@ name: CICD
 # spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
-# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo
+# spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo oniguruma sysroot
 
 env:
   PROJECT_NAME: coreutils
@@ -543,6 +543,15 @@ jobs:
             sudo apt-get -y update
             sudo apt-get -y install fuse3 libfuse-dev
           ;;
+          wasm32-wasi*)
+            # expr depends on oniguruma, a C library, so cross-compiling needs a WASI sysroot
+            WASI_SDK=wasi-sdk-25.0-x86_64-linux
+            curl -sSfL "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/${WASI_SDK}.tar.gz" | tar -xz -C "$HOME"
+            for abi in wasip1 wasip2; do
+              echo "CC_wasm32_${abi}=$HOME/${WASI_SDK}/bin/clang" >> $GITHUB_ENV
+              echo "AR_wasm32_${abi}=$HOME/${WASI_SDK}/bin/llvm-ar" >> $GITHUB_ENV
+            done
+          ;;
         esac
         case '${{ matrix.job.os }}' in
           macos-latest) brew install coreutils ;; # needed for testing
@@ -847,8 +856,7 @@ jobs:
           # macOS: vendored only — system libcrypto needs OPENSSL_DIR
           # pointing at Homebrew, which isn't worth wiring up for a smoke test.
           - { os: macos-latest, features: feat_os_unix, dynamic: false }
-          # Windows is omitted: the `openssl` dep is `cfg(unix)`, so the
-          # feature is a no-op there and there's nothing to exercise.
+          # todo: check Windows (MinGW's system openssl)
     steps:
     - uses: actions/checkout@v7
       with:
@@ -901,6 +909,50 @@ jobs:
         cargo nextest run --hide-progress-bar --profile ci \
           --features "${{ matrix.job.features }},openssl" \
           -E 'test(/^test_(md5sum|sha1sum|sha224sum|sha256sum|sha384sum|sha512sum|cksum)::/)'
+
+  test_no_diagnostics:
+    name: Build/No-diagnostics
+    needs: [ min_version, deps ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: taiki-e/install-action@nextest
+    - uses: Swatinem/rust-cache@v2
+    - name: Run sccache-cache
+      id: sccache-setup
+      uses: mozilla-actions/sccache-action@v0.0.11
+      continue-on-error: true
+    - name: Export sccache
+      if: steps.sccache-setup.outcome == 'success'
+      run: |
+        echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+        echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+    # The caret diagnostics (`feat_diagnostics`) are on by default; packagers
+    # who want the smaller dependency tree build with them off, so that build
+    # must stay green. The caret snapshot tests are gated on the feature and
+    # compile out; everything else runs as usual against the plain messages.
+    - name: Test without the diagnostics feature
+      shell: bash
+      env:
+        RUST_BACKTRACE: "1"
+      run: |
+        cargo nextest run --hide-progress-bar --profile ci \
+          --no-default-features --features feat_os_unix
+    # Confirm the feature actually compiles the renderer out. If ariadne is
+    # still in the tree, some crate re-grew a hard dependency on it.
+    # (`cargo tree -i` exits non-zero when the crate is absent from the graph.)
+    - name: Verify ariadne is compiled out
+      shell: bash
+      run: |
+        if cargo tree -p coreutils --no-default-features --features feat_os_unix -e normal -i ariadne 2>/dev/null; then
+          echo "ERROR: ariadne is still in the dependency tree without feat_diagnostics"
+          exit 1
+        fi
+        echo "OK: ariadne is not in the dependency tree"
 
   test_selinux:
     name: Build/SELinux

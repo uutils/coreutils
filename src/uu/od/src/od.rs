@@ -4,15 +4,13 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (clap) dont
-// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset mockstream nrofbytes partialreader odfunc multifile exitcode
+// spell-checker:ignore (ToDO) formatteriteminfo inputdecoder inputoffset nrofbytes partialreader odfunc multifile exitcode
 // spell-checker:ignore Anone bfloat
 
 mod byteorder_io;
 mod formatter_item_info;
 mod input_decoder;
 mod input_offset;
-#[cfg(test)]
-mod mockstream;
 mod multifile_reader;
 mod output_info;
 mod parse_formats;
@@ -42,6 +40,8 @@ use crate::peek_reader::{PeekRead, PeekReader};
 use crate::prn_char::format_ascii_dump;
 use clap::ArgAction;
 use clap::{Arg, ArgMatches, Command, parser::ValueSource};
+use std::ffi::OsString;
+use uucore::diagnostics::OptionValue;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::translate;
@@ -83,23 +83,32 @@ struct OdOptions {
 fn parse_bytes_option(
     matches: &ArgMatches,
     args: &[String],
-    option_name: &str,
+    diag_args: Option<&[OsString]>,
+    option_name: &'static str,
     short: Option<char>,
 ) -> UResult<Option<u64>> {
     match matches.get_one::<String>(option_name) {
         None => Ok(None),
         Some(s) => match parse_number_of_bytes(s) {
             Ok(n) => Ok(Some(n)),
-            Err(e) => Err(USimpleError::new(
-                1,
-                format_error_message(&e, s, &option_display_name(args, option_name, short)),
-            )),
+            Err(e) => {
+                let message =
+                    format_error_message(&e, s, &option_display_name(args, option_name, short));
+                let option = OptionValue::with_names(s.clone(), short, Some(option_name));
+                Err(e.size_value_error(
+                    diag_args,
+                    &option,
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                ))
+            }
         },
     }
 }
 
 impl OdOptions {
-    fn new(matches: &ArgMatches, args: &[String]) -> UResult<Self> {
+    fn new(matches: &ArgMatches, args: &[String], diag_args: Option<&[OsString]>) -> UResult<Self> {
         let byte_order = if let Some(s) = matches.get_one::<String>(options::ENDIAN) {
             match s.as_str() {
                 "little" => ByteOrder::Little,
@@ -116,7 +125,8 @@ impl OdOptions {
         };
 
         let mut skip_bytes =
-            parse_bytes_option(matches, args, options::SKIP_BYTES, Some('j'))?.unwrap_or(0);
+            parse_bytes_option(matches, args, diag_args, options::SKIP_BYTES, Some('j'))?
+                .unwrap_or(0);
 
         let mut label: Option<u64> = None;
 
@@ -137,8 +147,16 @@ impl OdOptions {
             matches.value_source(options::WIDTH),
         ) {
             let width_display = option_display_name(args, options::WIDTH, Some('w'));
-            let parsed = parse_number_of_bytes(s)
-                .map_err(|e| USimpleError::new(1, format_error_message(&e, s, &width_display)))?;
+            let parsed = parse_number_of_bytes(s).map_err(|e| {
+                let message = format_error_message(&e, s, &width_display);
+                e.size_value_error(
+                    diag_args,
+                    &OptionValue::new(s, 'w', options::WIDTH),
+                    0,
+                    &message,
+                    USimpleError::new(1, message.clone()),
+                )
+            })?;
             if parsed == 0 {
                 return Err(USimpleError::new(
                     1,
@@ -176,9 +194,11 @@ impl OdOptions {
 
         let output_duplicates = matches.get_flag(options::OUTPUT_DUPLICATES);
 
-        let read_bytes = parse_bytes_option(matches, args, options::READ_BYTES, Some('N'))?;
+        let read_bytes =
+            parse_bytes_option(matches, args, diag_args, options::READ_BYTES, Some('N'))?;
 
-        let string_min_length = match parse_bytes_option(matches, args, options::STRINGS, Some('S'))? {
+        let strings = parse_bytes_option(matches, args, diag_args, options::STRINGS, Some('S'))?;
+        let string_min_length = match strings {
             None => None,
             Some(n) => Some(usize::try_from(n).map_err(|_| {
                 USimpleError::new(
@@ -237,12 +257,15 @@ impl OdOptions {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args = args.collect_ignore();
+    let raw_args: Vec<OsString> = args.iter().map(OsString::from).collect();
 
     let clap_opts = uu_app();
 
     let clap_matches = uucore::clap_localization::handle_clap_result(clap_opts, &args)?;
 
-    let od_options = OdOptions::new(&clap_matches, &args)?;
+    // Kept for the caret in SIZE diagnostics, which echoes the command line.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let od_options = OdOptions::new(&clap_matches, &args, diag_args.as_deref())?;
     let mut out = std::io::stdout().lock();
 
     // Check if we're in strings mode
@@ -720,13 +743,9 @@ fn write_bytes(
             let missing_spacing = output_info
                 .print_width_line
                 .saturating_sub(output_text.chars().count());
-            write!(
-                output_text,
-                "{:>missing_spacing$}  {}",
-                "",
-                format_ascii_dump(input_decoder.get_buffer(0)),
-            )
-            .unwrap();
+            output_text.extend(std::iter::repeat_n(' ', missing_spacing));
+            output_text.push_str("  ");
+            output_text.push_str(&format_ascii_dump(input_decoder.get_buffer(0)));
         }
 
         if first {

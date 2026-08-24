@@ -14,7 +14,7 @@ use std::io::{IsTerminal, stdin};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use uucore::display::Quotable;
-use uucore::error::FromIo;
+use uucore::error::{FromIo, strip_errno};
 use uucore::prompt_yes;
 use uucore::safe_traversal::{DirFd, SymlinkBehavior};
 use uucore::show_error;
@@ -133,7 +133,7 @@ pub fn safe_remove_file(
         }
         Err(e) => {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
-                show_error!("cannot remove {}: Permission denied", path.quote());
+                show_error!("cannot remove {}: {}", path.quote(), strip_errno(&e));
             } else {
                 let _ = show_removal_error(e, path);
             }
@@ -268,11 +268,10 @@ pub fn remove_dir_with_special_cases(path: &Path, options: &Options, error_occur
 /// own device differs from this is a mount point, which `--preserve-root=all`
 /// refuses to cross.
 fn parent_device(path: &Path) -> Option<u64> {
-    let parent = match path.parent() {
+    let parent = match path.parent()? {
         // A bare name like "b" has an empty parent, meaning the current dir.
-        Some(p) if p.as_os_str().is_empty() => Path::new("."),
-        Some(p) => p,
-        None => return None,
+        p if p.as_os_str().is_empty() => Path::new("."),
+        p => p,
     };
     fs::metadata(parent).ok().map(|m| m.dev())
 }

@@ -480,7 +480,7 @@ impl SplitWriter<'_> {
             // but do not rewind it either since no match should be done within.
             // The consequence is that the buffer may already be full with lines from a previous
             // split, which is taken care of when calling `shrink_buffer_to_size`.
-            let offset_usize = -offset as usize;
+            let offset_usize = offset.unsigned_abs() as usize;
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
                 let line = line?;

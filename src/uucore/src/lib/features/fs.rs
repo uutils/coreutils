@@ -18,7 +18,7 @@ use std::fs::read_dir;
 use std::hash::Hash;
 use std::io::Stdin;
 use std::io::{Error, ErrorKind, Result as IOResult};
-#[cfg(any(unix, all(target_os = "wasi", target_env = "p2")))]
+#[cfg(any(unix, target_os = "wasi"))]
 use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
@@ -27,12 +27,12 @@ use std::os::windows::ffi::{OsStrExt, OsStringExt};
 #[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 use std::path::{Component, MAIN_SEPARATOR, Path, PathBuf};
-#[cfg(target_os = "windows")]
-use winapi_util::AsHandleRef;
 #[cfg(windows)]
 use windows_sys::Win32::Foundation::MAX_PATH;
 #[cfg(windows)]
-use windows_sys::Win32::Storage::FileSystem::{GetDiskFreeSpaceW, GetVolumePathNameW};
+use windows_sys::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, GetDiskFreeSpaceW, GetFileInformationByHandle, GetVolumePathNameW,
+};
 #[cfg(windows)]
 use windows_sys::Win32::System::IO::DeviceIoControl;
 #[cfg(windows)]
@@ -52,15 +52,13 @@ macro_rules! has {
 /// Information to uniquely identify a file
 #[derive(Clone)]
 pub struct FileInformation(
-    #[cfg(unix)] rustix::fs::Stat,
-    #[cfg(windows)] winapi_util::file::Information,
-    // WASI does not have nix::sys::stat, so we store std::fs::Metadata instead.
-    #[cfg(target_os = "wasi")] fs::Metadata,
+    #[cfg(any(unix, target_os = "wasi"))] rustix::fs::Stat,
+    #[cfg(windows)] BY_HANDLE_FILE_INFORMATION,
 );
 
 impl FileInformation {
     /// Get information from a currently open file
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn from_file(file: &impl AsFd) -> IOResult<Self> {
         let stat = rustix::fs::fstat(file)?;
         Ok(Self(stat))
@@ -68,8 +66,12 @@ impl FileInformation {
 
     /// Get information from a currently open file
     #[cfg(target_os = "windows")]
-    pub fn from_file(file: &impl AsHandleRef) -> IOResult<Self> {
-        let info = winapi_util::file::information(file.as_handle_ref())?;
+    pub fn from_file(file: &impl AsRawHandle) -> IOResult<Self> {
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: `info` is a valid pointer to be populated by GetFileInformationByHandle.
+        if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &raw mut info) } == 0 {
+            return Err(Error::last_os_error());
+        }
         Ok(Self(info))
     }
 
@@ -78,7 +80,7 @@ impl FileInformation {
     /// If `path` points to a symlink and `dereference` is true, information about
     /// the link's target will be returned.
     pub fn from_path(path: impl AsRef<Path>, dereference: bool) -> IOResult<Self> {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             let stat = if dereference {
                 rustix::fs::stat(path.as_ref())
@@ -90,7 +92,7 @@ impl FileInformation {
         #[cfg(target_os = "windows")]
         {
             use std::fs::OpenOptions;
-            use std::os::windows::prelude::*;
+            use std::os::windows::fs::OpenOptionsExt;
             let mut open_options = OpenOptions::new();
             let mut custom_flags = 0;
             if !dereference {
@@ -102,37 +104,23 @@ impl FileInformation {
             let file = open_options.read(true).open(path.as_ref())?;
             Self::from_file(&file)
         }
-        // WASI: use std::fs::metadata / symlink_metadata since nix is not available
-        #[cfg(target_os = "wasi")]
-        {
-            let metadata = if dereference {
-                fs::metadata(path.as_ref())
-            } else {
-                fs::symlink_metadata(path.as_ref())
-            };
-            Ok(Self(metadata?))
-        }
     }
 
     pub fn file_size(&self) -> u64 {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             assert!(self.0.st_size >= 0, "File size is negative");
             self.0.st_size.try_into().unwrap()
         }
         #[cfg(target_os = "windows")]
         {
-            self.0.file_size()
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len()
+            ((self.0.nFileSizeHigh as u64) << 32) | (self.0.nFileSizeLow as u64)
         }
     }
 
     #[cfg(windows)]
     pub fn file_index(&self) -> u64 {
-        self.0.file_index()
+        ((self.0.nFileIndexHigh as u64) << 32) | (self.0.nFileIndexLow as u64)
     }
 
     pub fn number_of_links(&self) -> u64 {
@@ -153,6 +141,8 @@ impl FileInformation {
             not(target_arch = "sparc64"),
             target_pointer_width = "64"
         ))]
+        return self.0.st_nlink;
+        #[cfg(target_os = "wasi")]
         return self.0.st_nlink;
         #[cfg(all(
             unix,
@@ -177,13 +167,10 @@ impl FileInformation {
         #[cfg(target_os = "aix")]
         return self.0.st_nlink.try_into().unwrap();
         #[cfg(windows)]
-        return self.0.number_of_links();
-        // WASI: nlink is not available in std::fs::Metadata, return 1
-        #[cfg(target_os = "wasi")]
-        return 1;
+        return self.0.nNumberOfLinks as u64;
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, target_os = "wasi"))]
     pub fn inode(&self) -> u64 {
         #[cfg(all(not(any(target_os = "netbsd")), target_pointer_width = "64"))]
         return self.0.st_ino;
@@ -193,27 +180,18 @@ impl FileInformation {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
         self.0.st_dev == other.0.st_dev && self.0.st_ino == other.0.st_ino
     }
 }
 
-// WASI: compare by file type and size as a basic heuristic since
-// device/inode numbers are not available through std::fs::Metadata.
-#[cfg(target_os = "wasi")]
-impl PartialEq for FileInformation {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.file_type() == other.0.file_type() && self.0.len() == other.0.len()
-    }
-}
-
 #[cfg(target_os = "windows")]
 impl PartialEq for FileInformation {
     fn eq(&self, other: &Self) -> bool {
-        self.0.volume_serial_number() == other.0.volume_serial_number()
-            && self.0.file_index() == other.0.file_index()
+        self.0.dwVolumeSerialNumber == other.0.dwVolumeSerialNumber
+            && self.file_index() == other.file_index()
     }
 }
 
@@ -221,20 +199,15 @@ impl Eq for FileInformation {}
 
 impl Hash for FileInformation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_os = "wasi"))]
         {
             self.0.st_dev.hash(state);
             self.0.st_ino.hash(state);
         }
         #[cfg(target_os = "windows")]
         {
-            self.0.volume_serial_number().hash(state);
-            self.0.file_index().hash(state);
-        }
-        #[cfg(target_os = "wasi")]
-        {
-            self.0.len().hash(state);
-            self.0.file_type().is_dir().hash(state);
+            self.0.dwVolumeSerialNumber.hash(state);
+            self.file_index().hash(state);
         }
     }
 }
@@ -662,6 +635,89 @@ pub fn infos_refer_to_same_file(
     info2: IOResult<FileInformation>,
 ) -> bool {
     info1.is_ok() && info1.ok() == info2.ok()
+}
+
+/// Check if two files are identical by comparing their contents.
+///
+/// Returns `Ok(true)` if both files exist, are regular files, and have identical contents.
+/// Returns `Ok(false)` if the files differ in size, aren't both regular files, or have different contents.
+/// Returns `Err` if an I/O error occurs while opening or reading either file.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Write;
+/// use tempfile::NamedTempFile;
+/// use uucore::fs::are_files_identical;
+///
+/// let mut file1 = NamedTempFile::new().unwrap();
+/// let mut file2 = NamedTempFile::new().unwrap();
+/// file1.write_all(b"hello world").unwrap();
+/// file2.write_all(b"hello world").unwrap();
+///
+/// assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+/// ```
+pub fn are_files_identical(path1: impl AsRef<Path>, path2: impl AsRef<Path>) -> IOResult<bool> {
+    use std::fs::{File, metadata};
+    use std::io::{BufReader, ErrorKind, Read};
+
+    let path1 = path1.as_ref();
+    let path2 = path2.as_ref();
+
+    // First compare file sizes
+    let metadata1 = metadata(path1)?;
+    let metadata2 = metadata(path2)?;
+
+    if metadata1.len() != metadata2.len() {
+        return Ok(false);
+    }
+
+    // only proceed if both are regular files
+    if !metadata1.is_file() || !metadata2.is_file() {
+        return Ok(false);
+    }
+
+    let file1 = File::open(path1)?;
+    let file2 = File::open(path2)?;
+
+    let mut reader1 = BufReader::new(file1);
+    let mut reader2 = BufReader::new(file2);
+
+    let mut buffer1 = [0; 8192];
+    let mut buffer2 = [0; 8192];
+
+    loop {
+        // Read from first file with EINTR retry handling
+        // This loop retries the read operation if it's interrupted by signals (e.g., SIGUSR1)
+        // instead of failing, which is the POSIX-compliant way to handle interrupted I/O
+        let bytes1 = loop {
+            match reader1.read(&mut buffer1) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        // Read from second file with EINTR retry handling
+        // Same retry logic as above for the second file to ensure consistent behavior
+        let bytes2 = loop {
+            match reader2.read(&mut buffer2) {
+                Err(e) if e.kind() == ErrorKind::Interrupted => {}
+                result => break result?,
+            }
+        };
+
+        if bytes1 != bytes2 {
+            return Ok(false);
+        }
+
+        if bytes1 == 0 {
+            return Ok(true);
+        }
+
+        if buffer1[..bytes1] != buffer2[..bytes2] {
+            return Ok(false);
+        }
+    }
 }
 
 /// Converts absolute `path` to be relative to absolute `to` path.
@@ -1365,5 +1421,33 @@ mod tests {
         set_file_sparse(file.as_file()).unwrap();
         let attributes = file.as_file().metadata().unwrap().file_attributes();
         assert_ne!(attributes & FILE_ATTRIBUTE_SPARSE_FILE, 0);
+    }
+
+    #[test]
+    fn test_are_files_identical() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut file1 = NamedTempFile::new().unwrap();
+        let mut file2 = NamedTempFile::new().unwrap();
+        let mut file3 = NamedTempFile::new().unwrap();
+
+        file1.write_all(b"hello world").unwrap();
+        file2.write_all(b"hello world").unwrap();
+        file3.write_all(b"hello rust!").unwrap();
+
+        // Identical contents
+        assert!(are_files_identical(file1.path(), file2.path()).unwrap());
+
+        // Same size, different contents
+        assert!(!are_files_identical(file1.path(), file3.path()).unwrap());
+
+        // Different size
+        let mut file4 = NamedTempFile::new().unwrap();
+        file4.write_all(b"hello").unwrap();
+        assert!(!are_files_identical(file1.path(), file4.path()).unwrap());
+
+        // Non-existent file
+        assert!(are_files_identical(file1.path(), "non_existent_file_path").is_err());
     }
 }

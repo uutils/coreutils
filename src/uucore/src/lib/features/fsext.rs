@@ -221,13 +221,7 @@ impl MountInfo {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::ffi::OsStringExt;
 
-        let dev_name;
-        let fs_type;
-        let mount_root;
-        let mount_dir;
-        let mount_option;
-
-        match file_name {
+        let (dev_name, fs_type, mount_root, mount_dir, mount_option) = match file_name {
             // spell-checker:ignore (word) noatime
             // Format: 36 35 98:0 /mnt1 /mnt2 rw,noatime master:1 - ext3 /dev/root rw,errors=continue
             // "man proc" for more details
@@ -239,21 +233,23 @@ impl MountInfo {
                     .unwrap()
                     + FIELDS_OFFSET
                     + 1;
-                dev_name = String::from_utf8_lossy(raw[after_fields + 1]).to_string();
-                fs_type = String::from_utf8_lossy(raw[after_fields]).to_string();
-                mount_root = OsStr::from_bytes(raw[3]).to_owned();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[4]));
-                mount_option = String::from_utf8_lossy(raw[5]).to_string();
+                (
+                    String::from_utf8_lossy(raw[after_fields + 1]).to_string(),
+                    String::from_utf8_lossy(raw[after_fields]).to_string(),
+                    OsStr::from_bytes(raw[3]).to_owned(),
+                    OsString::from_vec(replace_special_chars(raw[4])),
+                    String::from_utf8_lossy(raw[5]).to_string(),
+                )
             }
-            LINUX_MTAB => {
-                dev_name = String::from_utf8_lossy(raw[0]).to_string();
-                fs_type = String::from_utf8_lossy(raw[2]).to_string();
-                mount_root = OsString::new();
-                mount_dir = OsString::from_vec(replace_special_chars(raw[1]));
-                mount_option = String::from_utf8_lossy(raw[3]).to_string();
-            }
+            LINUX_MTAB => (
+                String::from_utf8_lossy(raw[0]).to_string(),
+                String::from_utf8_lossy(raw[2]).to_string(),
+                OsString::new(),
+                OsString::from_vec(replace_special_chars(raw[1])),
+                String::from_utf8_lossy(raw[3]).to_string(),
+            ),
             _ => return None,
-        }
+        };
 
         let dev_id = mount_dev_id(&mount_dir);
         let dummy = is_dummy_filesystem(&fs_type, &mount_option);
@@ -430,7 +426,6 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
     }
 }
 
-#[cfg(not(target_os = "wasi"))]
 use crate::error::UResult;
 #[cfg(any(
     target_os = "freebsd",
@@ -461,7 +456,7 @@ use std::ptr;
 use std::slice;
 
 /// Read file system list.
-#[cfg(not(target_os = "wasi"))]
+#[cfg_attr(target_os = "wasi", allow(clippy::unnecessary_wraps))]
 pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
     {
@@ -542,18 +537,12 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
         target_os = "redox",
         target_os = "illumos",
         target_os = "solaris",
+        target_os = "wasi"
     ))]
     {
         // No method to read mounts on these platforms
         Ok(Vec::new())
     }
-}
-
-/// Read file system list.
-#[cfg(target_os = "wasi")]
-pub fn read_fs_list() -> Vec<MountInfo> {
-    // No method to read mounts on WASI
-    Vec::new()
 }
 
 #[derive(Debug, Clone)]

@@ -32,28 +32,33 @@ fn test_version() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_simple() {
     run(NO_ARGS, b"y\ny\ny\ny\n");
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_args() {
     run(&["a", "bar", "c"], b"a bar c\na bar c\na ba");
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_long_output() {
     run(NO_ARGS, "y\n".repeat(512 * 1024).as_bytes());
 }
 
 /// Test with an output that seems likely to get mangled in case of incomplete writes.
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_long_odd_output() {
     run(&["abcdef"], "abcdef\n".repeat(1024 * 1024).as_bytes());
 }
 
 /// Test with an input that doesn't fit in the standard buffer.
 #[test]
+#[cfg_attr(wasi_runner, ignore)]
 fn test_long_input() {
     #[cfg(not(windows))]
     const TIMES: usize = 14000;

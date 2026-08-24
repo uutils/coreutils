@@ -109,7 +109,7 @@ enum LsError {
 impl UError for LsError {
     fn code(&self) -> i32 {
         match self {
-            Self::IOError(_) | Self::WriteError(_) | Self::IOErrorContext(_, _, false) => 1,
+            Self::IOError(_) | Self::IOErrorContext(_, _, false) => 1,
             _ => 2,
         }
     }
@@ -118,6 +118,8 @@ impl UError for LsError {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+
+    uucore::i18n::collator::init_locale_collation();
 
     let config = Config::from(&matches)?;
 
@@ -1234,11 +1236,15 @@ pub fn list_with_output<O: LsOutput>(
             output.write_dir_header(path_data, config, is_first)?;
         }
 
+        // Only recursion can revisit a directory, so only then is it worth a
+        // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        listed_ancestors.insert(FileInformation::from_path(
-            path_data.path(),
-            path_data.must_dereference,
-        )?);
+        if config.recursive {
+            listed_ancestors.insert(FileInformation::from_path(
+                path_data.path(),
+                path_data.must_dereference,
+            )?);
+        }
         enter_directory(
             path_data,
             read_dir,
@@ -1482,7 +1488,18 @@ fn sort_entries(entries: &mut [PathData], config: &Config) {
             });
         }
         // The default sort in GNU ls is case insensitive
-        Sort::Name => entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name())),
+        Sort::Name => {
+            if uucore::i18n::collator::should_use_locale_collation() {
+                entries.sort_unstable_by(|a, b| {
+                    uucore::i18n::collator::locale_cmp(
+                        os_str_as_bytes_lossy(a.display_name()).as_ref(),
+                        os_str_as_bytes_lossy(b.display_name()).as_ref(),
+                    )
+                });
+            } else {
+                entries.sort_unstable_by(|a, b| a.display_name().cmp(b.display_name()));
+            }
+        }
         Sort::Version => entries.sort_unstable_by(|a, b| {
             version_cmp(
                 os_str_as_bytes_lossy(a.file_name()).as_ref(),

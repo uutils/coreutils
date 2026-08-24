@@ -6,8 +6,9 @@
 use clap::{Arg, ArgAction, Command, value_parser};
 use rustix::fs::Mode;
 use rustix::process::umask;
+use std::ffi::OsString;
 use uucore::display::Quotable;
-use uucore::error::{UResult, USimpleError, strip_errno};
+use uucore::error::{ExitCode, UResult, USimpleError, strip_errno};
 use uucore::translate;
 
 use uucore::{format_usage, show};
@@ -21,10 +22,22 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let mode = calculate_mode(matches.get_one::<String>(options::MODE))
-        .map_err(|e| USimpleError::new(1, translate!("mkfifo-error-invalid-mode", "error" => e)))?;
+    let mode = calculate_mode(matches.get_one::<String>(options::MODE)).map_err(|err| {
+        let message = translate!("mkfifo-error-invalid-mode", "error" => err.to_string());
+        if let Some(args) = &diag_args
+            && let Some(mode) = matches.get_one::<String>(options::MODE)
+            && err.render_mode_value(args, mode, 0, &message)
+        {
+            // The diagnostic is already on stderr; exit quietly.
+            return ExitCode::new(1);
+        }
+        USimpleError::new(1, message)
+    })?;
 
     // Check if mode contains special bits
     let non_file_permission_bits = 0o7000; // setuid, setgid, sticky bits
@@ -141,13 +154,13 @@ pub fn uu_app() -> Command {
 // libc's path-based `mkfifo` there. Both rely on the caller having cleared
 // the umask so the requested mode is applied atomically (see issue #10020).
 #[cfg(not(target_vendor = "apple"))]
-fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
-    use rustix::fs::{CWD, mkfifoat};
-    mkfifoat(CWD, path, Mode::from_bits_truncate(mode)).map_err(std::io::Error::from)
+fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
+    use rustix::fs;
+    fs::mkfifoat(fs::CWD, path, Mode::from_bits_truncate(mode)).map_err(Into::into)
 }
 
 #[cfg(target_vendor = "apple")]
-fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
+fn create_fifo(path: &str, mode: u32) -> std::io::Result<()> {
     use std::ffi::CString;
     let c_path =
         CString::new(path).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
@@ -161,7 +174,7 @@ fn create_fifo(path: &str, mode: u32) -> Result<(), std::io::Error> {
     }
 }
 
-fn calculate_mode(mode_option: Option<&String>) -> Result<u32, String> {
+fn calculate_mode(mode_option: Option<&String>) -> Result<u32, uucore::mode::ModeError> {
     let umask = uucore::mode::get_umask();
     let mode = 0o666; // Default mode for FIFOs
 

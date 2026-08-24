@@ -29,6 +29,7 @@ help-flag-version = Afficher les informations de version
 error-io = Erreur E/S
 error-permission-denied = Permission refusée
 error-file-not-found = Aucun fichier ou répertoire de ce type
+error-no-such-process = Aucun processus de ce type
 error-invalid-argument = Argument invalide
 error-is-a-directory = { $file }: Est un répertoire
 
@@ -61,7 +62,6 @@ safe-traversal-directory = <répertoire>
 # Messages relatifs au module checksum
 checksum-no-properly-formatted = { $checksum_file }: aucune ligne correctement formattée n'a été trouvée
 checksum-no-file-verified = { $checksum_file }: aucun fichier n'a été vérifié
-checksum-error-failed-to-read-input = échec de la lecture de l'entrée
 checksum-bad-format = { $count ->
     [1] { $count } ligne invalide
    *[other] { $count } lignes invalides
@@ -74,7 +74,6 @@ checksum-failed-open-file = { $count ->
     [1] { $count } fichier passé n'a pas pu être lu
    *[other] { $count } fichiers passés n'ont pas pu être lu
 }
-checksum-error-algo-bad-format = { $file }: { $line }: ligne invalide pour { $algo }
 
 # Messages uudoc pour les exemples tldr
 uudoc-tldr-attribution = Les exemples sont fournis par le [projet tldr-pages](https://tldr.sh) sous la [licence CC BY 4.0](https://github.com/tldr-pages/tldr/blob/main/LICENSE.md).
@@ -83,3 +82,8 @@ uudoc-tldr-disclaimer = Veuillez noter que, uutils étant en cours de développe
 # Messages d'analyse des modes symboliques
 mode-error-unexpected-end = fin de mode inattendue
 mode-error-invalid-operator = opérateur invalide (+, - ou = attendu, mais { $operator } trouvé)
+
+# Étiquettes de diagnostic : ce que le caret désigne dans un mode
+mode-diag-label-missing-operator = cette clause indique qui, mais pas quoi changer
+mode-diag-label-invalid-number = n'est pas un mode octal
+mode-diag-help-syntax = un mode est soit octal, comme 644, soit des clauses comme u+rwx,go-w

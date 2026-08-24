@@ -266,7 +266,7 @@ fn test_tf_explicit_float_still_uses_4_bytes() {
         .arg("-tfF")
         .run_piped_stdin(&input[..])
         .success()
-        .stdout_only("       1.0000000       2.0000000\n");
+        .stdout_only("               1               2\n");
 }
 
 #[test]
@@ -363,7 +363,7 @@ fn test_f32() {
     ]; // 0x807f0000 -1.1663108E-38
     let expected_output = unindent(
         "
-            0000000      -1.2345679        12345678  -9.8765427e+37              -0
+            0000000      -1.2345679        12345678   -9.876543e+37              -0
             0000020             NaN           1e-40  -1.1663108e-38
             0000034
             ",
@@ -392,7 +392,7 @@ fn test_f64() {
         "
             0000000        12345678912345678                        0
             0000020 -2.2250738585072014e-308                   5e-324
-            0000040      -2.0000000000000000
+            0000040                       -2
             0000050
             ",
     );
@@ -541,6 +541,20 @@ fn test_very_wide_hex_byte_output() {
 }
 
 #[test]
+fn test_very_wide_hex_byte_ascii_dump() {
+    const WIDTH: usize = 100_000;
+    let expected = format!(" 41{}  >A<\n", " ".repeat(WIDTH * 3 - 3));
+
+    new_ucmd!()
+        .arg("-An")
+        .arg(format!("-w{WIDTH}"))
+        .arg("-tx1z")
+        .pipe_in("A")
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_suppress_duplicates() {
     let input: [u8; 41] = [
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -577,8 +591,8 @@ fn test_big_endian() {
 
     let expected_output = unindent(
         "
-        0000000             -2.0000000000000000
-                     -2.0000000               0
+        0000000                              -2
+                             -2               0
                        c0000000        00000000
                    c000    0000    0000    0000
         0000010
@@ -637,7 +651,7 @@ fn test_alignment_Fx() {
 
     let expected_output = unindent(
         "
-        0000000      -2.0000000000000000
+        0000000                       -2
                   0000  0000  0000  c000
         0000010
         ",
@@ -1418,4 +1432,69 @@ fn test_od_strings_with_n_flag() {
         .run_piped_stdin(&input[..])
         .success()
         .stdout_only("0000000 foo\n0000004 bar\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_read_bytes() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not. The headline keeps the
+        // option spelled the way it was typed.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+od: invalid suffix in -N argument '3zz'
+   ╭─[ od:1:8 ]
+   │
+ 1 │ od -N 3zz /dev/null
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_width_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--width=4qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("od:1:13"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_hexadecimal_offset_that_does_not_parse() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-j", "0x1zz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined.
+        assert!(stderr.contains("od:1:7"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-N", "3zz", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("od: invalid suffix in -N argument '3zz'\n");
+    }
 }

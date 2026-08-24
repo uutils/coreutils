@@ -9,6 +9,8 @@ use uutests::new_ucmd;
 #[test]
 fn test_invalid_arg() {
     new_ucmd!().arg("--definitely-invalid").fails_with_code(1);
+    new_ucmd!().arg("-g").arg("0").fails_with_code(1); // clap provided message
+    new_ucmd!().arg("-w").arg("0").fails_with_code(1); // clap provided message
 }
 #[test]
 fn test_reference_format_for_stdin() {
@@ -459,4 +461,27 @@ fn test_missing_file_error_contains_filename() {
         .arg("zxc")
         .fails()
         .stderr_is("ptx: 'zxc': No such file or directory\n");
+}
+
+#[test]
+fn test_sentence_regex_trailing_backslash() {
+    // GNU treats a trailing lone backslash as a literal one instead of erroring.
+    new_ucmd!()
+        .args(&["-S", "paris\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["-S", "london\\\\\\"])
+        .pipe_in("")
+        .succeeds()
+        .no_output();
+}
+
+#[test]
+fn test_invalid_utf8_input_is_not_an_error() {
+    new_ucmd!()
+        .pipe_in(b"ab\xFFcd\n".to_vec())
+        .succeeds()
+        .no_stderr();
 }

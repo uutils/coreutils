@@ -5,12 +5,19 @@
 
 // spell-checker:ignore (vars) egid euid FiletestOp StrlenOp
 
+mod diagnostics;
 pub(crate) mod error;
 mod parser;
+#[cfg(any(windows, target_os = "wasi"))]
+mod platform;
 
 use clap::Command;
-use error::{ParseError, ParseResult};
+use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
+#[cfg(windows)]
+use platform::fd_is_terminal;
+#[cfg(target_os = "wasi")]
+use platform::path;
 use std::cmp::Ordering;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -19,7 +26,7 @@ use std::os::unix::fs::MetadataExt;
 use uucore::display::Quotable;
 use uucore::error::{UResult, USimpleError};
 use uucore::format_usage;
-#[cfg(not(windows))]
+#[cfg(not(any(windows, target_os = "wasi")))]
 use uucore::process::{getegid, geteuid};
 
 use uucore::translate;
@@ -70,9 +77,19 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
         // Show actual name with error
         let _ = uu_app().name("test");
     }
-    let result = parse(args).map(|mut stack| eval(&mut stack))??;
+    // `parse` consumes the arguments, so keep a copy for the diagnostic — but
+    // only when one could actually be rendered.
+    let expression = uucore::diagnostics::capture(&args);
 
-    if result { Ok(()) } else { Err(1.into()) }
+    match parse(args).and_then(|mut stack| eval(&mut stack)) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(1.into()),
+        Err(e) => Err(uucore::diagnostics::error_after_report(
+            expression.as_deref(),
+            e,
+            diagnostics::render,
+        )),
+    }
 }
 
 /// Evaluate a stack of Symbols, returning the result of the evaluation or
@@ -121,7 +138,12 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
                 Some(Symbol::Literal(s)) => s,
                 Some(Symbol::None) => OsString::from(""),
                 None => return Ok(true),
-                _ => return Err(ParseError::MissingArgument(op.quote().to_string())),
+                _ => {
+                    return Err(ParseError::at_value(
+                        ParseErrorKind::MissingArgument(op.quote().to_string()),
+                        &op,
+                    ));
+                }
             };
 
             Ok((op == "-z") == s.is_empty())
@@ -158,7 +180,10 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
         Some(Symbol::None) | None => Ok(false),
         Some(Symbol::BoolOp(op)) => {
             if (op == "-a" || op == "-o") && stack.len() < 2 {
-                return Err(ParseError::UnaryOperatorExpected(op.quote().to_string()));
+                return Err(ParseError::at_value(
+                    ParseErrorKind::UnaryOperatorExpected(op.quote().to_string()),
+                    &op,
+                ));
             }
 
             let b = eval(stack)?;
@@ -166,7 +191,7 @@ fn eval(stack: &mut Vec<Symbol>) -> ParseResult<bool> {
 
             Ok(if op == "-a" { a && b } else { a || b })
         }
-        _ => Err(ParseError::ExpectedValue),
+        _ => Err(ParseErrorKind::ExpectedValue.into()),
     }
 }
 
@@ -245,10 +270,12 @@ impl PartialOrd for Integer<'_> {
 /// `op` the operation (ex: -eq, -lt, etc)
 fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     // Parse the two inputs
-    let left =
-        Integer::parse(a).ok_or_else(|| ParseError::InvalidInteger(a.quote().to_string()))?;
-    let right =
-        Integer::parse(b).ok_or_else(|| ParseError::InvalidInteger(b.quote().to_string()))?;
+    let left = Integer::parse(a).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(a.quote().to_string()), a)
+    })?;
+    let right = Integer::parse(b).ok_or_else(|| {
+        ParseError::at_value(ParseErrorKind::InvalidInteger(b.quote().to_string()), b)
+    })?;
 
     // Do the maths
     let order = left.cmp(&right);
@@ -260,7 +287,12 @@ fn integers(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
         Some("-ge") => order.is_ge(),
         Some("-lt") => order.is_lt(),
         Some("-le") => order.is_le(),
-        _ => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        _ => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     })
 }
 
@@ -275,14 +307,19 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     let result = match (op.to_str(), f_a, f_b) {
         #[cfg(unix)]
         (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
-        #[cfg(not(unix))]
-        (Some("-ef"), Ok(_), Ok(_)) => unimplemented!(),
+        #[cfg(any(windows, target_os = "wasi"))]
+        (Some("-ef"), Ok(_), Ok(_)) => platform::same_file(a, b),
         (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),
         (Some("-nt"), Ok(_), _) => true,
         (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
         (Some("-ot"), _, Ok(_)) => true,
         (Some("-ef" | "-nt" | "-ot"), _, _) => false,
-        (_, _, _) => return Err(ParseError::UnknownOperator(op.quote().to_string())),
+        (_, _, _) => {
+            return Err(ParseError::at_value(
+                ParseErrorKind::UnknownOperator(op.quote().to_string()),
+                op,
+            ));
+        }
     };
 
     Ok(result)
@@ -291,13 +328,24 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .map(str::trim)
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| ParseError::InvalidInteger(fd.quote().to_string()))
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+        .and_then(|s| s.parse::<i32>().ok())
+        .ok_or_else(|| {
+            ParseError::at_value(
+                ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
+                fd,
+            )
+        })
+        .map(fd_is_terminal)
+}
+
+#[cfg(not(windows))]
+fn fd_is_terminal(fd: i32) -> bool {
+    // SAFETY: isatty only inspects the descriptor number it is given.
+    unsafe { libc::isatty(fd) == 1 }
 }
 
 #[derive(Eq, PartialEq)]
-enum PathCondition {
+pub(crate) enum PathCondition {
     BlockSpecial,
     CharacterSpecial,
     Directory,
@@ -318,7 +366,17 @@ enum PathCondition {
     Executable,
 }
 
-#[cfg(not(windows))]
+/// Whether the file was modified more recently than it was last read, the
+/// condition behind `-N`. A timestamp the platform cannot report counts as
+/// "not modified since read" rather than aborting.
+pub(crate) fn modified_since_read(metadata: &fs::Metadata) -> bool {
+    matches!(
+        (metadata.accessed(), metadata.modified()),
+        (Ok(read), Ok(modified)) if read < modified
+    )
+}
+
+#[cfg(not(any(windows, target_os = "wasi")))]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
     use std::fs::Metadata;
     use std::os::unix::fs::FileTypeExt;
@@ -360,9 +418,7 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
         PathCondition::CharacterSpecial => file_type.is_char_device(),
         PathCondition::Directory => file_type.is_dir(),
         PathCondition::Exists => true,
-        PathCondition::ExistsModifiedLastRead => {
-            metadata.accessed().unwrap() < metadata.modified().unwrap()
-        }
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::Regular => file_type.is_file(),
         PathCondition::GroupIdFlag => metadata.mode() & S_ISGID != 0,
         PathCondition::GroupOwns => metadata.gid() == getegid(),
@@ -381,37 +437,43 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use std::fs::metadata;
+    use crate::platform::{is_executable, is_readable, is_writable, owned_by_current_token};
 
-    let Ok(stat) = metadata(path) else {
+    let metadata = if condition == &PathCondition::SymLink {
+        fs::symlink_metadata(path)
+    } else {
+        fs::metadata(path)
+    };
+
+    let Ok(metadata) = metadata else {
         return false;
     };
 
     match condition {
-        PathCondition::Directory => stat.is_dir(),
-        PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead
-        | PathCondition::GroupOwns
-        | PathCondition::UserOwns => unimplemented!(),
-        PathCondition::Regular => stat.is_file(),
-        PathCondition::NonEmpty => stat.len() > 0,
-        PathCondition::Writable => !stat.permissions().readonly(),
-        PathCondition::Executable => std::path::Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
+        PathCondition::Directory => metadata.is_dir(),
+        PathCondition::Exists => true,
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
+        PathCondition::GroupOwns => owned_by_current_token(path, true),
+        PathCondition::UserOwns => owned_by_current_token(path, false),
+        PathCondition::Regular => metadata.is_file(),
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::NonEmpty => metadata.len() > 0,
+        PathCondition::Readable => is_readable(path),
+        PathCondition::Writable => is_writable(path, &metadata),
+        PathCondition::Executable => is_executable(path, &metadata),
         PathCondition::BlockSpecial
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo
         | PathCondition::GroupIdFlag
         | PathCondition::Socket
         | PathCondition::Sticky
-        | PathCondition::SymLink
         | PathCondition::UserIdFlag => false,
     }
 }
 
-#[cfg(test)]
+// Every test here needs a temporary file, and a WASI guest only sees the
+// directories it was granted, so there is no temporary directory to use.
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
     use std::{ffi::OsStr, time::UNIX_EPOCH};
@@ -429,7 +491,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_files_with_ef_op() {
         let a = NamedTempFile::new().unwrap();
         let b = NamedTempFile::new().unwrap();
