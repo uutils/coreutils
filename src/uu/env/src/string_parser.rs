@@ -93,24 +93,23 @@ impl<'a> StringParser<'a> {
 
     fn get_chunk_with_length_at(&self, pointer: usize) -> Result<(Chunk<'a>, usize), Error> {
         let (_before, after) = self.input.split_at(pointer);
-        if after.is_empty() {
+        let Some(&after_0) = after.first() else {
             return Err(self.make_err(ErrorType::EndOfInput));
+        };
+
+        if let Some(c_ni) = get_char_from_native_int(after_0) {
+            return Ok((Chunk::ValidSingleIntChar(c_ni), 1));
+        }
+        let mut i = 1;
+        while after
+            .get(i)
+            .is_some_and(|&a| get_char_from_native_int(a).is_none())
+        {
+            i += 1;
         }
 
-        if let Some(c_ni) = get_char_from_native_int(after[0]) {
-            Ok((Chunk::ValidSingleIntChar(c_ni), 1))
-        } else {
-            let mut i = 1;
-            while i < after.len() {
-                if let Some(_c) = get_char_from_native_int(after[i]) {
-                    break;
-                }
-                i += 1;
-            }
-
-            let chunk = &after[0..i];
-            Ok((Chunk::InvalidEncoding(chunk), chunk.len()))
-        }
+        let chunk = &after[0..i];
+        Ok((Chunk::InvalidEncoding(chunk), chunk.len()))
     }
 
     pub fn peek_chunk(&self) -> Option<Chunk<'a>> {
