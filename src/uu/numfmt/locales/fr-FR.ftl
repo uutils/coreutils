@@ -3,6 +3,7 @@ numfmt-usage = numfmt [OPTION]... [NOMBRE]...
 numfmt-after-help = Options d'UNITÉ :
 
   - none : aucune mise à l'échelle automatique n'est effectuée ; les suffixes déclencheront une erreur
+
   - auto : accepter un suffixe optionnel d'une/deux lettres :
 
       1K = 1000, 1Ki = 1024, 1M = 1000000, 1Mi = 1048576,
@@ -83,9 +84,20 @@ numfmt-debug-grouping-no-effect = le groupement n'a aucun effet dans cette local
 numfmt-debug-failed-to-convert = échec de conversion d'une partie des nombres en entrée
 numfmt-debug-header-ignored = --header ignoré avec une entrée en ligne de commande
 
-# Étiquettes de diagnostic : ce que le caret désigne dans une chaîne --format
+# Étiquettes de diagnostic et aides : ce que le caret désigne, et le conseil en dessous
 numfmt-diag-label-number-overflow = ce nombre est trop grand
 numfmt-diag-label-stray-percent = un % littéral doit s'écrire %%
+numfmt-diag-label-bad-conversion = f est la seule conversion de numfmt ; %d, %e, %g et les autres conversions C ne sont pas acceptées
 numfmt-diag-help-format-syntax = un format s'écrit [PRÉFIXE]%[0]['][-][LARGEUR][.PRÉCISION]f[SUFFIXE], comme "%'-10.2f"
+numfmt-diag-label-auto-from-only = auto devine l'unité de l'entrée, seul --from le prend donc
+numfmt-diag-help-unit = --from et --to prennent none, si, iec ou iec-i, et --from prend aussi auto
+numfmt-diag-label-zero-unit-size = une taille d'unité doit valoir au moins 1
+numfmt-diag-help-unit-size = une taille d'unité est un nombre, un multiplicateur K, M, G, T, P ou E, ou les deux, comme 512, K ou 2Ki
+numfmt-diag-label-zero-padding = un remplissage est une largeur en caractères, 0 ne demande donc rien
+numfmt-diag-help-padding = --padding prend un entier non nul ; un entier négatif aligne à gauche, comme --padding=-10
+numfmt-diag-label-zero-header = omettez --header pour convertir toutes les lignes
+numfmt-diag-help-header = --header prend le nombre de lignes de tête à laisser telles quelles, au moins 1
+numfmt-diag-help-input-no-from = sans --from un nombre doit être simple ; --from=auto lit un suffixe K, M ou Gi
+numfmt-diag-help-input-suffixes = les suffixes sont K, M, G, T, P, E, Z, Y, R et Q, avec un i optionnel sous --from=auto ou iec-i
 numfmt-diag-label-zero-field = les champs sont numérotés à partir de 1
 numfmt-diag-help-field-syntax = --field prend N, N-M, N- ou -M, séparés par des virgules, comme --field=1,3-5
