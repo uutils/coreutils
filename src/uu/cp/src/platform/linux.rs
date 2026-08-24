@@ -5,6 +5,7 @@
 // spell-checker:ignore reflink ftruncate pwrite fiemap lseek nofollow
 
 use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
+use std::fs::File;
 use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
 use std::os::unix::fs::FileTypeExt;
@@ -44,18 +45,22 @@ where
 }
 
 /// The fallback behavior for [`clone`] on failed system call.
+///
+/// Every fallback reuses the descriptors already opened for the clone
+/// attempt; re-opening the dest by path can fail with EACCES when the
+/// umask stripped the write bits from its freshly created mode.
 #[derive(Clone, Copy)]
 enum CloneFallback {
     /// Raise an error.
     Error,
 
-    /// Use [`std::fs::copy`].
+    /// Copy the bytes with [`buf_copy::copy_fast`].
     FSCopy,
 
-    /// Use [`sparse_copy`]
+    /// Use [`sparse_copy_fd`]
     SparseCopy,
 
-    /// Use [`sparse_copy_without_hole`]
+    /// Use [`sparse_copy_without_hole_fd`]
     SparseCopyWithoutHole,
 }
 
@@ -85,24 +90,36 @@ fn clone<P>(
 where
     P: AsRef<Path>,
 {
-    let src_file =
+    // Only needed to decide whether a failed --reflink=always clone should
+    // clean up the dest, so skip the lstat for the other fallbacks.
+    let dest_existed =
+        matches!(fallback, CloneFallback::Error) && dest.as_ref().symlink_metadata().is_ok();
+    let mut src_file =
         open_source(&source, nofollow).map_err(|e| CpError::IoErrContext(e, context.to_owned()))?;
-    let dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
+    let mut dst_file = create_dest_restrictive(&dest, false).map_err(|e| {
         CpError::IoErrContext(
             e,
             translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
         )
     })?;
-    if ioctl_ficlone(dst_file, src_file).is_err() {
+    if let Err(err) = ioctl_ficlone(&dst_file, &src_file) {
+        // Reuse the already-open descriptors: the dest was just created with
+        // a restrictive mode that the umask may have stripped of write bits,
+        // so re-opening it by path can fail with EACCES (LP: #2164777).
         return match fallback {
-            CloneFallback::Error => Err(CpError::IoErrContext(
-                io::Error::last_os_error(),
-                context.to_owned(),
-            )),
-            CloneFallback::FSCopy => fs_copy(source, dest, nofollow, context),
-            CloneFallback::SparseCopy => sparse_copy(source, dest, nofollow, context),
+            CloneFallback::Error => {
+                // GNU cp removes a dest it created itself, but keeps a
+                // pre-existing (now truncated) one.
+                if !dest_existed {
+                    let _ = std::fs::remove_file(&dest);
+                }
+                Err(CpError::IoErrContext(err.into(), context.to_owned()))
+            }
+            CloneFallback::FSCopy => buf_copy::copy_fast(&mut src_file, &mut dst_file)
+                .map_err(|e| CpError::IoErrContext(e, context.to_owned())),
+            CloneFallback::SparseCopy => sparse_copy_fd(&mut src_file, &dst_file, context),
             CloneFallback::SparseCopyWithoutHole => {
-                sparse_copy_without_hole(source, dest, nofollow, context)
+                sparse_copy_without_hole_fd(&src_file, &dst_file, context)
             }
         };
     }
@@ -154,26 +171,33 @@ where
             translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
         )
     })?;
+    sparse_copy_without_hole_fd(&src_file, &dst_file, context)
+}
 
+fn sparse_copy_without_hole_fd(src_file: &File, dst_file: &File, context: &str) -> CopyResult<()> {
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
     let size = src_file.metadata().map_err(&ctx_err)?.size();
-    ftruncate(&dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+    ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
     let mut current_offset = 0;
     // Maximize the data read at once to 16 MiB to avoid memory hogging with large files
     // 16 MiB chunks should saturate an SSD
-    let step = std::cmp::min(size, 16 * 1024 * 1024) as usize;
+    // At least 1 byte, so that a source that was empty at fstat time but
+    // gained data before the SEEK_DATA loop cannot make `step_by` panic.
+    let step = size.clamp(1, 16 * 1024 * 1024) as usize;
     let mut buf: Vec<u8> = vec![0x0; step];
-    while let Ok(data) = seek(&src_file, SeekFrom::Data(current_offset)) {
+    while let Ok(data) = seek(src_file, SeekFrom::Data(current_offset)) {
         current_offset = data;
-        let Ok(hole) = seek(&src_file, SeekFrom::Hole(current_offset)) else {
+        let Ok(hole) = seek(src_file, SeekFrom::Hole(current_offset)) else {
             break;
         };
         let len = hole - current_offset;
         // Read and write data in chunks of `step` while reusing the same buffer
         for i in (0..len).step_by(step) {
-            // Ensure we don't read past the end of the file or the start of the next hole
-            let read_len = std::cmp::min((len - i) as usize, step);
+            // Ensure we don't read past the end of the file or the start of
+            // the next hole. Take the min in u64: casting `len - i` first
+            // would truncate extents of 4 GiB and more on 32-bit targets.
+            let read_len = std::cmp::min(len - i, step as u64) as usize;
             let buf = &mut buf[..read_len];
             src_file
                 .read_exact_at(buf, current_offset + i)
@@ -200,34 +224,41 @@ where
             translate!("cp-error-cannot-create-regular-file", "path" => dest.as_ref().quote()),
         )
     })?;
+    sparse_copy_fd(&mut src_file, &dst_file, context)
+}
 
+fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyResult<()> {
     let ctx_err = |e: io::Error| CpError::IoErrContext(e, context.to_owned());
 
-    let size: usize = src_file
-        .metadata()
-        .map_err(&ctx_err)?
-        .size()
-        .try_into()
-        .unwrap();
-    ftruncate(&dst_file, size.try_into().unwrap())
-        .map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+    // Keep the size as u64: on 32-bit targets a usize conversion would
+    // panic for sources of 4 GiB and more.
+    let size = src_file.metadata().map_err(&ctx_err)?.size();
+    ftruncate(dst_file, size).map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
 
     let blksize = dst_file.metadata().map_err(&ctx_err)?.blksize();
-    let mut buf: Vec<u8> = vec![0; blksize.try_into().unwrap()];
-    let mut current_offset: usize = 0;
+    let mut buf: Vec<u8> = vec![0; blksize as usize];
+    let mut current_offset: u64 = 0;
 
     // TODO Perhaps we can employ the "fiemap ioctl" API to get the
     // file extent mappings:
     // https://www.kernel.org/doc/html/latest/filesystems/fiemap.html
     while current_offset < size {
         let this_read = src_file.read(&mut buf).map_err(&ctx_err)?;
+        if this_read == 0 {
+            // EOF before the size seen at fstat time (source truncated
+            // concurrently): shrink the dest to the bytes actually copied
+            // instead of leaving a zero-filled tail up to the stale size.
+            ftruncate(dst_file, current_offset)
+                .map_err(|e| CpError::IoErrContext(e.into(), context.to_owned()))?;
+            break;
+        }
         let buf = &buf[..this_read];
         if buf.iter().any(|&x| x != 0) {
             dst_file
-                .write_all_at(buf, current_offset.try_into().unwrap())
+                .write_all_at(buf, current_offset)
                 .map_err(&ctx_err)?;
         }
-        current_offset += this_read;
+        current_offset += this_read as u64;
     }
     Ok(())
 }

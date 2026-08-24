@@ -976,6 +976,85 @@ fn test_cp_remove_destination_symlink_applies_mode() {
     assert_eq!(at.metadata("dst").permissions().mode() & 0o777, 0o644);
 }
 
+// A umask that strips the owner write bit (0o333 here) makes the freshly
+// created destination read-only. The copy must keep using the fd from the
+// creating open instead of re-opening the path for writing, which fails
+// with EACCES and leaves an empty file behind (LP: #2164777).
+#[test]
+#[cfg(unix)]
+fn test_cp_umask_stripping_owner_write_bit() {
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("input.txt", "copied through the first fd\n");
+    at.set_mode("input.txt", 0o664);
+
+    ucmd.umask(0o333)
+        .arg("input.txt")
+        .arg("output.txt")
+        .succeeds()
+        .no_output();
+
+    assert_eq!(at.read("output.txt"), "copied through the first fd\n");
+    assert_eq!(
+        at.metadata("output.txt").permissions().mode() & 0o777,
+        0o444
+    );
+}
+
+// Same umask scenario without a clone attempt: on reflink-capable
+// filesystems the test above succeeds via FICLONE and never reaches the
+// fallback, so pin the plain and sparse copy paths explicitly.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_umask_stripping_owner_write_bit_reflink_never() {
+    for sparse in ["--sparse=auto", "--sparse=always"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+
+        at.write("input.txt", "written while still writable\n");
+        at.set_mode("input.txt", 0o664);
+
+        ucmd.umask(0o333)
+            .args(&["--reflink=never", sparse, "input.txt", "output.txt"])
+            .succeeds()
+            .no_output();
+
+        assert_eq!(at.read("output.txt"), "written while still writable\n");
+        assert_eq!(
+            at.metadata("output.txt").permissions().mode() & 0o777,
+            0o444
+        );
+    }
+}
+
+// When --reflink=always fails, GNU cp removes a destination it created
+// itself but keeps a pre-existing (truncated) one. Only observable on
+// filesystems without clone support; when the clone succeeds there is
+// nothing to clean up.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_cp_reflink_always_failure_dest_cleanup() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.write("payload.txt", "reflink me\n");
+    let fresh = scene
+        .ucmd()
+        .args(&["--reflink=always", "payload.txt", "fresh.txt"])
+        .run();
+    if fresh.succeeded() {
+        return; // clone worked, the failure path is unreachable here
+    }
+    assert!(!at.file_exists("fresh.txt"));
+
+    at.write("kept.txt", "previous contents\n");
+    scene
+        .ucmd()
+        .args(&["--reflink=always", "payload.txt", "kept.txt"])
+        .fails();
+    assert!(at.file_exists("kept.txt"));
+    assert_eq!(at.read("kept.txt"), "");
+}
+
 #[test]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
