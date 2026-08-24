@@ -37,12 +37,9 @@ fn test_enter_chroot_fails() {
 
     at.mkdir("jail");
 
-    let result = ucmd.arg("jail").fails_with_code(125);
-    assert!(
-        result
-            .stderr_str()
-            .starts_with("chroot: cannot chroot to 'jail': Operation not permitted (os error 1)")
-    );
+    ucmd.arg("jail")
+        .fails_with_code(125)
+        .stderr_only("chroot: cannot chroot to 'jail': Operation not permitted\n");
 }
 
 #[test]
