@@ -529,8 +529,10 @@ echo "Checking for dangerous path resolution patterns..."
 echo "Checking path resolution frequency..."
 for log in strace_*.log; do
     if [ -f "$log" ]; then
-        path_resolutions=$(grep -c "test_" "$log" 2>/dev/null || echo "0")
-        if [ "$path_resolutions" -gt 20 ]; then
+        # grep -c already prints 0 when nothing matches, so a `|| echo 0`
+        # here would make the variable "0\n0" and break the comparison.
+        path_resolutions=$(grep -c "test_" "$log" 2>/dev/null || true)
+        if [ "${path_resolutions:-0}" -gt 20 ]; then
             echo "⚠ $log: High path resolution count ($path_resolutions) - potential TOCTOU risk"
         fi
     fi
