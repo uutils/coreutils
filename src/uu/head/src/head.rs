@@ -504,7 +504,7 @@ fn uu_head(options: &HeadOptions) -> UResult<()> {
                         writeln!(stdout)?;
                     }
                     write!(stdout, "==> ")?;
-                    print_verbatim(file).unwrap();
+                    print_verbatim(file)?;
                     writeln!(stdout, " <==")?;
                     first = false;
                 }
