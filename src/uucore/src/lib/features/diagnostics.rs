@@ -19,7 +19,8 @@
 //!
 //! Rendering only happens when stderr is a terminal, so anything reading our
 //! output — a script, a pipe, a test suite — still sees the plain one-line
-//! message it always did.
+//! message it always did. `UUTILS_DIAG=always` or `never` overrides that
+//! check.
 //!
 //! ```text
 //! tr: range-endpoints of 'y-b' are in reverse collating sequence order
@@ -41,11 +42,44 @@ use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use ariadne::{CharSet, Color, Config, IndexType, Label, Report, ReportKind, Source};
 
 use crate::display::Quotable;
 use crate::translate;
+
+/// The variable that overrides the terminal check.
+const MODE_VAR: &str = "UUTILS_DIAG";
+
+/// When to render an error against its argument list.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Mode {
+    /// Let stderr decide.
+    Auto,
+    Always,
+    Never,
+}
+
+impl Mode {
+    /// What [`MODE_VAR`] asks for.
+    ///
+    /// Anything but `always` and `never` is [`Mode::Auto`] rather than an
+    /// error — this gets exported from shell profiles, and no spelling of it
+    /// should make a utility fail.
+    fn from_env(value: Option<&OsStr>) -> Self {
+        let Some(value) = value.and_then(OsStr::to_str) else {
+            return Self::Auto;
+        };
+        if value.eq_ignore_ascii_case("always") {
+            Self::Always
+        } else if value.eq_ignore_ascii_case("never") {
+            Self::Never
+        } else {
+            Self::Auto
+        }
+    }
+}
 
 /// Whether errors should be rendered against their argument list.
 ///
@@ -54,11 +88,18 @@ use crate::translate;
 ///
 /// # Returns
 ///
-/// `true` when stderr is a terminal — a person is watching, and gets the rich
-/// form. `false` in a script or a pipe, where whatever reads stderr gets the
-/// plain message it can grep for.
+/// What `UUTILS_DIAG` asks for, when it asks. Otherwise `true` when stderr is
+/// a terminal — a person is watching, and gets the rich form — and `false` in
+/// a script or a pipe, where whatever reads stderr gets the plain message it
+/// can grep for.
 pub fn enabled() -> bool {
-    std::io::stderr().is_terminal()
+    // Read once: this runs before the argument capture of every caret.
+    static MODE: OnceLock<Mode> = OnceLock::new();
+    match MODE.get_or_init(|| Mode::from_env(env::var_os(MODE_VAR).as_deref())) {
+        Mode::Always => true,
+        Mode::Never => false,
+        Mode::Auto => std::io::stderr().is_terminal(),
+    }
 }
 
 /// Keep the arguments a diagnostic would point at, as they were typed.
@@ -728,6 +769,23 @@ mod tests {
 
     fn snapshot(args: &[&str]) -> Snapshot {
         Snapshot::new(args)
+    }
+
+    /// Everything but `always` and `never` leaves the terminal check in
+    /// charge, rather than failing.
+    #[test]
+    fn the_mode_variable_decides_only_when_it_is_spelled_out() {
+        let mode = |value| Mode::from_env(Some(OsStr::new(value)));
+
+        assert_eq!(mode("always"), Mode::Always);
+        assert_eq!(mode("ALWAYS"), Mode::Always);
+        assert_eq!(mode("never"), Mode::Never);
+        assert_eq!(mode("Never"), Mode::Never);
+
+        for undecided in ["auto", "", "yes", "1", "sometimes"] {
+            assert_eq!(mode(undecided), Mode::Auto, "{undecided:?}");
+        }
+        assert_eq!(Mode::from_env(None), Mode::Auto);
     }
 
     /// `localize_help` and `is_label_row` both address ariadne's output by row

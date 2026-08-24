@@ -343,9 +343,10 @@ dd: invalid number: &#x27;99999999999999999999999&#x27;: Value too large for def
 This is strictly an interactive nicety; nothing that reads our output can tell
 the difference:
 
-- Reports are only rendered when **stderr is a terminal**. In a script, a
-  pipe, or a test harness, the utility keeps printing its plain one-line
-  message, so existing scripts that match on stderr keep working.
+- Reports are only rendered when **stderr is a terminal**, unless `UUTILS_DIAG`
+  says otherwise (see below). In a script, a pipe, or a test harness, the
+  utility keeps printing its plain one-line message, so existing scripts that
+  match on stderr keep working.
 - Exit codes are unchanged.
 - Colors follow the usual conventions: they are used only on a terminal, and
   [`NO_COLOR`](https://no-color.org/) disables them.
@@ -356,6 +357,44 @@ the difference:
   `--no-default-features` (plus a `feat_os_*` selection) drops the renderer
   and its `ariadne` dependency, and every utility keeps its plain one-line
   messages.
+
+## Turning it on and off
+
+The default keys off stderr being a terminal, and nothing else - which is
+usually what you want, but not always. `UUTILS_DIAG` overrides it:
+
+| Value | Effect |
+| ----- | ------ |
+| `always` | Draw the report even when stderr is a file or a pipe. |
+| `never` | Keep the plain one-line message even at a terminal. |
+| `auto`, unset, anything else | Decide from stderr, as above. |
+
+An unrecognized value is deliberately not an error - this is the kind of
+variable that gets exported from a shell profile once and forgotten, and no
+spelling of it should be able to make a utility fail.
+
+`always` is the one to reach for when the error has to leave the terminal
+it happened in - a CI log, or a report to paste into a bug:
+
+```
+$ UUTILS_DIAG=always sort -k2.3x notes.txt 2> parse.log
+```
+
+Colors are a separate question, and one the terminal still answers: a report
+forced into a file is written without them, so nothing has to strip escape
+sequences back out. [`NO_COLOR`](https://no-color.org/) is the middle setting
+at a terminal - the report is still drawn, just in plain text.
+
+Without the variable, both directions are still one command away. To get the
+plain line while sitting at a terminal, send stderr somewhere that is not one:
+
+```
+$ sort -k2.3x notes.txt 2>&1 | cat
+sort: stray character in field spec: invalid field specification '2.3x'
+```
+
+And to get a report out of a command that has to run under a real terminal,
+give it a pty with `script -qec "..." /dev/null`, or `unbuffer` from expect.
 
 ## Supported utilities
 
