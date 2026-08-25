@@ -123,7 +123,7 @@ pub fn standalone_checksum_app_with_length(about: String, usage: String) -> Comm
         .with_check_and_opts()
         .with_length()
         .with_tag(false)
-        .with_text(true)
+        .with_text()
         .with_zero()
 }
 
@@ -134,7 +134,7 @@ pub fn standalone_checksum_app(about: String, usage: String) -> Command {
         .with_binary()
         .with_check_and_opts()
         .with_tag(false)
-        .with_text(true)
+        .with_text()
         .with_zero()
 }
 
