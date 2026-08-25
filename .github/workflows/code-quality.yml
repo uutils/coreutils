@@ -205,6 +205,18 @@ jobs:
         S=$(cspell ${CSPELL_CFG_OPTION} --no-summary --no-progress .) && printf "%s\n" "$S" || { printf "%s\n" "$S" ; printf "%s" "$S" | sed -E -n "s/^(.*):([0-9]+):([0-9]+) - Unknown word \(([^)]+)\).*$/::${fault_type} file=\1,line=\2,col=\3::${fault_type^^}: \`cspell\`: Unknown word '\4' (file:'\1', line:\2)/p" ; fault=true ; true ; }
         if [ -n "${{ steps.vars.outputs.FAIL_ON_FAULT }}" ] && [ -n "$fault" ]; then exit 1 ; fi
 
+  style_empty_assertions:
+    name: Style/Empty assertions check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if empty stdout/stderr assertions are found
+        shell: bash
+        run: |
+          if grep -rnE '(stdout_is|stderr_is)\(""\)' tests/; then
+            echo "::error::Found empty stdout/stderr assertions (use specific checks instead of \"\") in tests/"
+            exit 1
+          fi
+
   python:
     name: Style/Python
     runs-on: ubuntu-latest
