@@ -186,6 +186,26 @@ fn test_header_error_if_negative() {
 }
 
 #[test]
+fn test_reject_leading_plus_and_scientific_notation() {
+    // GNU numfmt rejects a leading '+' as an invalid number and rejects scientific
+    // notation as an invalid suffix; Rust's parsers accept both, so guard against it.
+    for input in ["+5", "+5K", "+1e-3"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid number: '{input}'\n"));
+    }
+    for input in ["1e-3", "1e+3", "5e-5", "1.0e-2", "-1e-5"] {
+        new_ucmd!()
+            .arg("--from=auto")
+            .pipe_in(format!("{input}\n"))
+            .fails_with_code(2)
+            .stderr_is(format!("numfmt: invalid suffix in input: '{input}'\n"));
+    }
+}
+
+#[test]
 fn test_negative() {
     new_ucmd!()
         .args(&["--from=si"])
@@ -1437,9 +1457,9 @@ fn test_null_byte_input_multiline() {
 // GNU rejects `-9923868` as an invalid short option (leading `-9`) and
 // requires `--` separator; uutils accepts it as a negative positional number.
 #[test]
-fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
+fn test_numfmt_negative_treated_as_option() {
     new_ucmd!()
-        .args(&["--to=iec", "-9923868"])
+        .args(&["--to=iec", "-8765432"])
         .fails_with_code(1)
         .stderr_contains("unexpected argument");
 }
@@ -1448,11 +1468,11 @@ fn test_negative_number_without_double_dash_gnu_compat_issue_11653() {
 // GNU rejects `-9923868` as an invalid short option (leading `-9`) and
 // requires `--` separator; uutils accepts it as a negative positional number.
 #[test]
-fn test_negative_number_with_double_dash_gnu_compat_issue_11653() {
+fn test_numfmt_negative_after_double_dash_ok() {
     new_ucmd!()
-        .args(&["--to=iec", "--", "-9923868"])
+        .args(&["--to=iec", "--", "-8765432"])
         .succeeds()
-        .stdout_is("-9.5M\n");
+        .stdout_is("-8.4M\n");
 }
 
 // https://github.com/uutils/coreutils/issues/11654
@@ -1469,9 +1489,9 @@ fn test_large_integer_precision_loss_issue_11654() {
 // uutils accepts scientific notation (`1e9`, `5e-3`, ...); GNU rejects it
 // as "invalid suffix in input".
 #[test]
-fn test_scientific_notation_rejected_by_gnu_issue_11655() {
+fn test_numfmt_scientific_notation_rejected() {
     new_ucmd!()
-        .arg("1e9")
+        .arg("2e8")
         .fails_with_code(2)
         .stderr_contains("invalid suffix in input");
 }

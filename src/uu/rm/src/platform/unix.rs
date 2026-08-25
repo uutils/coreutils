@@ -293,13 +293,17 @@ pub fn safe_remove_dir_recursive(
 ) -> bool {
     // Base case 1: this is a file or a symbolic link.
     // Use lstat to avoid race condition between check and use
-    let (initial_mode, root_dev) = match fs::symlink_metadata(path) {
+    let (initial_mode, root_dev, root_ino) = match fs::symlink_metadata(path) {
         Ok(metadata) if !metadata.is_dir() => {
             return remove_file(path, options, progress_bar);
         }
         // root_dev is the tree-root device, captured once and compared against
         // every subdirectory for --one-file-system (not recomputed per level).
-        Ok(metadata) => (metadata.permissions().mode(), metadata.dev()),
+        Ok(metadata) => (
+            metadata.permissions().mode(),
+            metadata.dev(),
+            metadata.ino(),
+        ),
         Err(e) => {
             return show_removal_error(e, path);
         }
@@ -313,8 +317,13 @@ pub fn safe_remove_dir_recursive(
         return true;
     }
 
-    // Try to open the directory using DirFd for secure traversal
-    let dir_fd = match DirFd::open(path, SymlinkBehavior::Follow) {
+    // Open the directory with DirFd for secure traversal. The lstat above
+    // already established that the operand is a real directory, so a symlink
+    // here can only have been swapped in since, and following it would land on
+    // a tree we never named. GNU refuses the same way, opening directories
+    // O_NOFOLLOW under FTS_PHYSICAL. The descent was already hardened this way;
+    // this is the entry point.
+    let dir_fd = match DirFd::open(path, SymlinkBehavior::NoFollow) {
         Ok(fd) => fd,
         Err(e) => {
             // If we can't open the directory for safe traversal,
@@ -332,6 +341,26 @@ pub fn safe_remove_dir_recursive(
             return show_removal_error(e, path);
         }
     };
+
+    // O_NOFOLLOW only rejects a symlink as the *final* component, and a trailing
+    // slash ("dir/") makes the link stop being final, so it still resolves. Pin
+    // the result down by confirming the fd we hold is the inode we checked.
+    match dir_fd.metadata() {
+        Ok(m) if m.dev() == root_dev && m.ino() == root_ino => {}
+        Ok(_) => {
+            // Not necessarily a symlink: a directory swapped for another
+            // directory, or an automount that only lstat failed to trigger,
+            // lands here too, so don't claim ELOOP.
+            show_error!(
+                "{}",
+                translate!("rm-error-cannot-remove-changed", "file" => path.quote())
+            );
+            return true;
+        }
+        Err(e) => {
+            return show_removal_error(e, path);
+        }
+    }
 
     // Entries of the root directory have the root itself as their parent.
     let error = safe_remove_dir_recursive_impl(path, &dir_fd, options, root_dev, root_dev);

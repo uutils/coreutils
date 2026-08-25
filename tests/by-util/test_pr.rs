@@ -82,6 +82,18 @@ fn test_number_lines_empty_value_is_rejected() {
 }
 
 #[test]
+fn test_number_lines_without_value_numbers_lines() {
+    // A bare -n/--number-lines numbers lines with the default 5-wide, tab format.
+    for arg in ["-n", "--number-lines"] {
+        new_ucmd!()
+            .args(&["-t", arg])
+            .pipe_in("a\nb\n")
+            .succeeds()
+            .stdout_is("    1\ta\n    2\tb\n");
+    }
+}
+
+#[test]
 fn test_without_any_options() {
     let test_file_path = "test_one_page.log";
     let expected_test_file_path = "test_one_page.log.expected";
@@ -197,8 +209,7 @@ fn test_with_valid_page_ranges() {
     scenario
         .args(&["--pages=20:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '20:5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '20:5'\n");
     new_ucmd!()
         .args(&["--pages=1:5", test_file_path])
         .succeeds();
@@ -206,18 +217,15 @@ fn test_with_valid_page_ranges() {
     new_ucmd!()
         .args(&["--pages=-1:5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '-1:5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '-1:5'\n");
     new_ucmd!()
         .args(&["--pages=1:-5", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '1:-5'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '1:-5'\n");
     new_ucmd!()
         .args(&["--pages=5:1", test_file_path])
         .fails()
-        .stderr_is("pr: invalid --pages argument '5:1'\n")
-        .stdout_is("");
+        .stderr_only("pr: invalid --pages argument '5:1'\n");
 }
 
 #[test]
@@ -225,8 +233,7 @@ fn test_start_page_exceeds_page_count() {
     new_ucmd!()
         .args(&["--pages=2", "hosts.log"])
         .succeeds()
-        .stderr_is("pr: starting page number 2 exceeds page count 1\n")
-        .stdout_is("");
+        .stderr_only("pr: starting page number 2 exceeds page count 1\n");
 }
 
 #[test]
@@ -293,8 +300,7 @@ fn test_with_suppress_error_option() {
     scenario
         .args(&["--pages=20:5", "-r", test_file_path])
         .fails()
-        .stderr_is("")
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -313,10 +319,10 @@ fn test_with_stdin() {
 }
 
 #[test]
-fn test_with_column() {
+fn test_with_columns() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column.log.expected";
-    for arg in ["-3", "--column=3"] {
+    for arg in ["-3", "--columns=3"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -330,19 +336,19 @@ fn test_with_column() {
 }
 
 #[test]
-fn test_with_column_across_option() {
+fn test_with_columns_and_across_option() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column_across.log.expected";
     let mut scenario = new_ucmd!();
     let value = file_last_modified_time(&scenario, test_file_path);
     scenario
-        .args(&["--pages=3:5", "--column=3", "-a", "-n", test_file_path])
+        .args(&["--pages=3:5", "--columns=3", "-a", "-n", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
 }
 
 #[test]
-fn test_with_column_across_option_and_column_separator() {
+fn test_with_columns_across_option_and_column_separator() {
     let test_file_path = "column.log";
     for (arg, expected) in [
         ("-s|", "column_across_sep.log.expected"),
@@ -351,7 +357,14 @@ fn test_with_column_across_option_and_column_separator() {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
-            .args(&["--pages=3:5", "--column=3", arg, "-a", "-n", test_file_path])
+            .args(&[
+                "--pages=3:5",
+                "--columns=3",
+                arg,
+                "-a",
+                "-n",
+                test_file_path,
+            ])
             .succeeds()
             .stdout_is_templated_fixture(expected, &[("{last_modified_time}", &value)]);
     }
@@ -402,19 +415,17 @@ fn test_with_mpr() {
 }
 
 #[test]
-fn test_with_mpr_and_column_options() {
+fn test_with_mpr_and_columns_options() {
     let test_file_path = "column.log";
     new_ucmd!()
-        .args(&["--column=2", "-m", "-n", test_file_path])
+        .args(&["--columns=2", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify number of columns when printing in parallel\n")
-        .stdout_is("");
+        .stderr_only("pr: cannot specify number of columns when printing in parallel\n");
 
     new_ucmd!()
         .args(&["-a", "-m", "-n", test_file_path])
         .fails()
-        .stderr_is("pr: cannot specify both printing across and printing in parallel\n")
-        .stdout_is("");
+        .stderr_only("pr: cannot specify both printing across and printing in parallel\n");
 }
 
 #[test]
@@ -428,7 +439,7 @@ fn test_with_offset_space_option() {
             "-o",
             "5",
             "--pages=3:5",
-            "--column=3",
+            "--columns=3",
             "-a",
             "-n",
             test_file_path,
@@ -507,7 +518,7 @@ fn test_column_width_too_large() {
 fn test_column_count_too_large() {
     let arg = "9999999999999999999";
     new_ucmd!()
-        .args(&["--column", arg])
+        .args(&["--columns", arg])
         .fails_with_code(1)
         .stderr_is(format!(
             "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
@@ -656,15 +667,17 @@ fn test_with_join_lines_option() {
     let test_file_1 = "hosts.log";
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
-    let mut scenario = new_ucmd!();
     let start = Timestamp::now();
-    scenario
-        .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
-        .succeeds()
-        .stdout_is_templated_fixture_any(
-            expected_file_path,
-            &valid_last_modified_template_vars(start),
-        );
+
+    for join_lines_arg in ["-J", "--join-lines"] {
+        new_ucmd!()
+            .args(&["+1:2", join_lines_arg, "-m", test_file_1, test_file_2])
+            .succeeds()
+            .stdout_is_templated_fixture_any(
+                expected_file_path,
+                &valid_last_modified_template_vars(start),
+            );
+    }
 }
 
 #[test]
@@ -690,7 +703,7 @@ fn test_header_formatting_with_custom_date_format() {
 
     let test_file_path = "test_one_page.log";
 
-    // Set a specific date format like in the GNU test
+    // Set a specific date format for consistent output
     let output = new_ucmd!()
         .args(&["-D", "+%Y-%m-%d %H:%M:%S %z (%Z)", test_file_path])
         .succeeds()
@@ -861,6 +874,71 @@ fn test_columns() {
         .pipe_in("a\nb\n")
         .succeeds()
         .stdout_matches(&regex);
+}
+
+#[test]
+fn test_columns_partly_filled_page() {
+    // Three lines do not divide evenly into two columns. GNU pr puts the
+    // ceiling of 3 / 2 in the first column and what is left in the second, so
+    // "c" has to show up next to "a".
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tc        \nb        \n");
+}
+
+#[test]
+fn test_columns_partly_filled_page_across() {
+    // Same input read across instead of down.
+    //
+    // Command line: `printf "a\nb\nc\n" | pr -t -a -2 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-a", "-2", "-w", "20"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_is("a        \tb        \nc        \n");
+}
+
+#[test]
+fn test_columns_fewer_lines_than_columns() {
+    // Fewer lines than columns still has to print those lines.
+    //
+    // Command line: `printf "a\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\n")
+        .succeeds()
+        .stdout_is("a     \n");
+
+    // Command line: `printf "a\nb\n" | pr -t -3 -w 20`.
+    new_ucmd!()
+        .args(&["-t", "-3", "-w", "20"])
+        .pipe_in("a\nb\n")
+        .succeeds()
+        .stdout_is("a     \tb     \n");
+}
+
+#[test]
+fn test_columns_last_page() {
+    // Nine lines over pages that hold four each leave the ninth alone on page
+    // three, which must not come out as an empty page.
+    //
+    // Command line: `seq 9 | pr -2 -l 12 -w 20 -D DATE`.
+    let header = "\n\nDATE          Page ";
+    let expected = format!(
+        "{header}1\n\n\n1        \t3        \n2        \t4        \n{blank}\
+         {header}2\n\n\n5        \t7        \n6        \t8        \n{blank}\
+         {header}3\n\n\n9        \n\n\n\n\n\n\n",
+        blank = "\n".repeat(5),
+    );
+    new_ucmd!()
+        .args(&["-2", "-l", "12", "-w", "20", "-D", "DATE"])
+        .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n")
+        .succeeds()
+        .stdout_is(expected);
 }
 
 #[test]
@@ -1078,9 +1156,9 @@ fn test_expand_tab_does_not_consume_next_argument() {
 #[test]
 fn test_zero_columns() {
     new_ucmd!()
-        .arg("--column=0")
+        .arg("--columns=0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --column argument '0'");
+        .stderr_contains("pr: invalid --columns argument '0'");
 }
 
 #[test]
@@ -1088,7 +1166,7 @@ fn test_zero_columns_shortcut() {
     new_ucmd!()
         .arg("-0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --column argument '0'");
+        .stderr_contains("pr: invalid --columns argument '0'");
 }
 
 #[test]
@@ -1170,6 +1248,34 @@ fn test_zero_page_width() {
         .args(&["-W", "0"])
         .fails_with_code(1)
         .stderr_is("pr: invalid --page-width argument '0'\n");
+}
+
+#[test]
+fn test_page_length_ten_implies_omit_header() {
+    // `pr --help` states it twice: a page length of 10 or less implies `-t`.
+    // At exactly 10 the header and trailer were kept and then subtracted from
+    // the page, which left no room for content: `-h` printed empty pages and
+    // `-t` printed nothing at all.
+    new_ucmd!()
+        .args(&["-l", "10", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+
+    new_ucmd!()
+        .args(&["-l", "10", "-t"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_only("a\nb\nc\n");
+}
+
+#[test]
+fn test_page_length_eleven_keeps_header() {
+    new_ucmd!()
+        .args(&["-l", "11", "-h", "hdr"])
+        .pipe_in("a\nb\nc\n")
+        .succeeds()
+        .stdout_contains("hdr");
 }
 
 #[test]

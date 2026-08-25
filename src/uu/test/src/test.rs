@@ -14,6 +14,8 @@ mod platform;
 use clap::Command;
 use error::{ParseError, ParseErrorKind, ParseResult};
 use parser::{Operator, Symbol, UnaryOperator, parse};
+#[cfg(windows)]
+use platform::fd_is_terminal;
 #[cfg(target_os = "wasi")]
 use platform::path;
 use std::cmp::Ordering;
@@ -82,12 +84,11 @@ pub fn uumain(mut args: impl uucore::Args) -> UResult<()> {
     match parse(args).and_then(|mut stack| eval(&mut stack)) {
         Ok(true) => Ok(()),
         Ok(false) => Err(1.into()),
-        Err(e) => {
-            let reported = expression
-                .as_ref()
-                .is_some_and(|expression| diagnostics::render(expression, &e));
-            Err(uucore::error::quiet_if_reported(reported, e))
-        }
+        Err(e) => Err(uucore::diagnostics::error_after_report(
+            expression.as_deref(),
+            e,
+            diagnostics::render,
+        )),
     }
 }
 
@@ -306,10 +307,8 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
     let result = match (op.to_str(), f_a, f_b) {
         #[cfg(unix)]
         (Some("-ef"), Ok(f_a), Ok(f_b)) => f_a.ino() == f_b.ino() && f_a.dev() == f_b.dev(),
-        #[cfg(target_os = "wasi")]
+        #[cfg(any(windows, target_os = "wasi"))]
         (Some("-ef"), Ok(_), Ok(_)) => platform::same_file(a, b),
-        #[cfg(not(any(unix, target_os = "wasi")))]
-        (Some("-ef"), Ok(_), Ok(_)) => unimplemented!(),
         (Some("-nt"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() > f_b.modified().unwrap(),
         (Some("-nt"), Ok(_), _) => true,
         (Some("-ot"), Ok(f_a), Ok(f_b)) => f_a.modified().unwrap() < f_b.modified().unwrap(),
@@ -329,14 +328,20 @@ fn files(a: &OsStr, b: &OsStr, op: &OsStr) -> ParseResult<bool> {
 fn isatty(fd: &OsStr) -> ParseResult<bool> {
     fd.to_str()
         .map(str::trim)
-        .and_then(|s| s.parse().ok())
+        .and_then(|s| s.parse::<i32>().ok())
         .ok_or_else(|| {
             ParseError::at_value(
                 ParseErrorKind::InvalidFileDescriptor(fd.quote().to_string()),
                 fd,
             )
         })
-        .map(|i| unsafe { libc::isatty(i) == 1 })
+        .map(fd_is_terminal)
+}
+
+#[cfg(not(windows))]
+fn fd_is_terminal(fd: i32) -> bool {
+    // SAFETY: isatty only inspects the descriptor number it is given.
+    unsafe { libc::isatty(fd) == 1 }
 }
 
 #[derive(Eq, PartialEq)]
@@ -432,33 +437,36 @@ fn path(path: &OsStr, condition: &PathCondition) -> bool {
 
 #[cfg(windows)]
 fn path(path: &OsStr, condition: &PathCondition) -> bool {
-    use crate::platform::owned_by_current_token;
-    use std::fs::metadata;
+    use crate::platform::{is_executable, is_readable, is_writable, owned_by_current_token};
 
-    let Ok(stat) = metadata(path) else {
+    let metadata = if condition == &PathCondition::SymLink {
+        fs::symlink_metadata(path)
+    } else {
+        fs::metadata(path)
+    };
+
+    let Ok(metadata) = metadata else {
         return false;
     };
 
     match condition {
-        PathCondition::Directory => stat.is_dir(),
-        PathCondition::Exists | PathCondition::Readable => true,
-        PathCondition::ExistsModifiedLastRead => modified_since_read(&stat),
+        PathCondition::Directory => metadata.is_dir(),
+        PathCondition::Exists => true,
+        PathCondition::ExistsModifiedLastRead => modified_since_read(&metadata),
         PathCondition::GroupOwns => owned_by_current_token(path, true),
         PathCondition::UserOwns => owned_by_current_token(path, false),
-        PathCondition::Regular => stat.is_file(),
-        PathCondition::NonEmpty => stat.len() > 0,
-        PathCondition::Writable => !stat.permissions().readonly(),
-        PathCondition::Executable => std::path::Path::new(path)
-            .extension()
-            .and_then(|e| e.to_str())
-            .is_some_and(|e| matches!(e, "exe" | "bat" | "cmd" | "com")),
+        PathCondition::Regular => metadata.is_file(),
+        PathCondition::SymLink => metadata.file_type().is_symlink(),
+        PathCondition::NonEmpty => metadata.len() > 0,
+        PathCondition::Readable => is_readable(path),
+        PathCondition::Writable => is_writable(path, &metadata),
+        PathCondition::Executable => is_executable(path, &metadata),
         PathCondition::BlockSpecial
         | PathCondition::CharacterSpecial
         | PathCondition::Fifo
         | PathCondition::GroupIdFlag
         | PathCondition::Socket
         | PathCondition::Sticky
-        | PathCondition::SymLink
         | PathCondition::UserIdFlag => false,
     }
 }
@@ -483,7 +491,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_files_with_ef_op() {
         let a = NamedTempFile::new().unwrap();
         let b = NamedTempFile::new().unwrap();

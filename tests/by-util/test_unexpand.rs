@@ -398,7 +398,7 @@ fn unexpand_wide_multibyte_char_width() {
 
 #[test]
 fn test_blanks_ext1() {
-    // Test case from GNU test suite: blanks-ext1
+    // Test unexpand with extended blank handling (blanks-ext1)
     // ['blanks-ext1', '-t', '3,+6', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,+6"])
@@ -409,7 +409,7 @@ fn test_blanks_ext1() {
 
 #[test]
 fn test_blanks_ext2() {
-    // Test case from GNU test suite: blanks-ext2
+    // Test unexpand with extended blank handling (blanks-ext2)
     // ['blanks-ext2', '-t', '3,/9', {IN=> "\t      "}, {OUT=> "\t\t"}],
     new_ucmd!()
         .args(&["-t", "3,/9"])
