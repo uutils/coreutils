@@ -1284,6 +1284,19 @@ fn test_oversized_num() {
         .stdout_is(DATA);
 }
 
+// `tail -c +N` on a seekable file larger than the block size seeks to byte
+// `N-1`. An offset past the largest seekable position must not abort the
+// process; it should behave like a start beyond the end of the file.
+#[test]
+fn test_positive_bytes_file_offset_past_seek_limit() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    // Larger than tail's `sane_blksize` (~4 KiB) so the seek path is taken.
+    at.write("big", &"a".repeat(8192));
+    ucmd.args(&["-c", "+18446744073709551615", "big"])
+        .succeeds()
+        .no_stdout();
+}
+
 #[test]
 fn test_num_with_undocumented_sign_bytes() {
     // tail: '-' is not documented (8.32 man pages)
