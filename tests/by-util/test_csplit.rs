@@ -1630,3 +1630,17 @@ fn test_create_error_reports_filename() {
         .fails()
         .stderr_is("csplit: xx00: Permission denied\n");
 }
+
+#[test]
+#[cfg(all(target_os = "linux", not(wasi_runner)))]
+fn test_csplit_dev_full_stdout() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .args(&["/etc/hosts", "1"])
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("csplit: No space left on device\n");
+}
