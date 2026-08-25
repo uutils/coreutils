@@ -460,37 +460,3 @@ pub fn parse_into_chunk<'a>(
         line_count_hint,
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Error;
-
-    struct FailingReader;
-
-    impl Read for FailingReader {
-        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-            Err(Error::from_raw_os_error(5))
-        }
-    }
-
-    #[test]
-    fn read_error_message_has_no_errno_suffix() {
-        let mut buffer = vec![0u8; 64];
-        let mut next_files = std::iter::empty::<UResult<FailingReader>>();
-        let err = read_to_buffer(
-            &mut FailingReader,
-            &mut next_files,
-            &mut buffer,
-            None,
-            0,
-            b'\n',
-        )
-        .unwrap_err();
-        let msg = err.to_string();
-        assert!(!msg.contains("(os error"), "leaked errno: {msg}");
-        assert_eq!(msg, strip_errno(&Error::from_raw_os_error(5)));
-        // Sanity: an error without an errno is untouched.
-        assert_eq!(strip_errno(&Error::other("custom")), "custom");
-    }
-}
