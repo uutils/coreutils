@@ -1158,6 +1158,20 @@ fn test_multiple_files() {
         .stdout_only_fixture("multiple_files.expected");
 }
 
+/// A file that does not end with a separator must not be fused onto the next file.
+#[test]
+fn test_unterminated_file_not_fused_across_chunk_boundary() {
+    // "a\nb\nc" is 5 bytes, so `-S 5b` puts the chunk boundary exactly at its EOF.
+    for buffer_size in ["1b", "2b", "3b", "4b", "5b", "6b", "7b", "8b", "16b"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("first.txt", "a\nb\nc");
+        at.write("second.txt", "z\n");
+        ucmd.args(&["-S", buffer_size, "first.txt", "second.txt"])
+            .succeeds()
+            .stdout_only("a\nb\nc\nz\n");
+    }
+}
+
 #[test]
 fn test_merge_interleaved() {
     new_ucmd!()
