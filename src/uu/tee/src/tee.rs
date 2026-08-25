@@ -7,12 +7,11 @@
 
 use std::ffi::OsString;
 use std::fs::OpenOptions;
-use std::io::{self, Error, ErrorKind, Write, stderr};
+use std::io::{self, Error, ErrorKind, Write};
 use std::path::PathBuf;
 use uucore::display::Quotable;
 use uucore::error::{UResult, strip_errno};
-use uucore::show_error;
-use uucore::translate;
+use uucore::{show_error, translate};
 
 mod cli;
 pub use crate::cli::uu_app;
@@ -215,9 +214,8 @@ impl MultiWriter {
                 Ok(slice) => self.write_flush(slice)?,
                 Err(e) if e.kind() == ErrorKind::Interrupted => {}
                 Err(e) => {
-                    let _ = writeln!(
-                        stderr(),
-                        "tee: {}",
+                    show_error!(
+                        "{}",
                         translate!("tee-error-stdin", "error" => strip_errno(&e))
                     );
                     return Err(());
@@ -271,7 +269,7 @@ fn process_error(
     if ignore_pipe && e.kind() == ErrorKind::BrokenPipe {
         return Ok(());
     }
-    let _ = writeln!(stderr(), "{}: {e}", writer.name.maybe_quote());
+    show_error!("{}: {}", writer.name.maybe_quote(), strip_errno(&e));
     if let Some(OutputErrorMode::Exit | OutputErrorMode::ExitNoPipe) = mode {
         Err(())
     } else {
