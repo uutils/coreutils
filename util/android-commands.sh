@@ -326,19 +326,17 @@ init() {
     api_level="$2"
     termux="$3"
 
-    snapshot_name="${AVD_CACHE_KEY}"
+    echo "Downloading and installing Termux..."
+    curl -sLO "https://github.com/termux/termux-app/releases/download/${termux}/termux-app_${termux}+github-debug_${arch}.apk"
+    adb install -g "termux-app_${termux}+github-debug_${arch}.apk"
 
-    # shellcheck disable=SC2015
-    curl -sLO "https://github.com/termux/termux-app/releases/download/${termux}/termux-app_${termux}+github-debug_${arch}.apk" &&
-        snapshot "termux-app_${termux}+github-debug_${arch}.apk" &&
-        hash_rustc &&
-        exit_termux &&
-        adb -s emulator-5554 emu avd snapshot save "$snapshot_name" &&
-        echo "Emulator image created. Name: $snapshot_name" || {
-        pkill -9 qemu-system-x86_64
-        return 1
-    }
-    pkill -9 qemu-system-x86_64 || true
+    echo "Initializing SSH connection..."
+    reinit_ssh_connection || return 1
+
+    echo "Installing minimal runtime tools (tar, mount-utils)..."
+    install_packages_via_ssh_using_apt "tar mount-utils"
+
+    echo "Termux initialized successfully."
 }
 
 reinit_ssh_connection() {
@@ -587,6 +585,21 @@ ls -la ${cache_dest}"
     echo "Finished sync image -> host: ${repo}"
 }
 
+sync_tests() {
+    archive="$1"
+    nextest_bin="$2"
+
+    reinit_ssh_connection || return 1
+
+    echo "Running sync tests -> device: archive=${archive}, nextest=${nextest_bin}"
+    run_command_via_ssh "mkdir -p ~/coreutils/target"
+    copy_file_or_dir_to_device_via_ssh "$archive" "$dev_home_dir/coreutils/test-archive.tar.zst"
+    copy_file_or_dir_to_device_via_ssh "$nextest_bin" "$dev_home_dir/coreutils/cargo-nextest"
+    run_command_via_ssh "chmod +x ~/coreutils/cargo-nextest"
+
+    echo "Finished sync tests -> device"
+}
+
 build() {
     echo "Running build"
 
@@ -668,6 +681,17 @@ elif [ $# -eq 2 ]; then
             ;;
         sync_image)
             sync_image "$2"
+            exit_code=$?
+            ;;
+        *)
+            help
+            exit 1
+            ;;
+    esac
+elif [ $# -eq 3 ]; then
+    case "$1" in
+        sync_tests)
+            sync_tests "$2" "$3"
             exit_code=$?
             ;;
         *)
