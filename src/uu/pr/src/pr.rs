@@ -280,7 +280,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::FORM_FEED)
                 .short('F')
-                .short_alias('f')
+                .visible_short_alias('f')
                 .long(options::FORM_FEED)
                 .help(translate!("pr-help-form-feed"))
                 .action(ArgAction::SetTrue),
