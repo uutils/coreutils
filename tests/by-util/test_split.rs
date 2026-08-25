@@ -931,7 +931,12 @@ fn test_suffix_length_zero() {
 #[test]
 fn test_numeric_suffix_start_overflow() {
     new_ucmd!()
-        .args(&["-n", "5", "--numeric-suffixes=18446744073709551615", "/dev/null"])
+        .args(&[
+            "-n",
+            "5",
+            "--numeric-suffixes=18446744073709551615",
+            "/dev/null",
+        ])
         .fails()
         .stderr_contains("suffix length needs to be at least");
 }
