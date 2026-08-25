@@ -325,7 +325,7 @@ impl SplitWriter<'_> {
             if self.options.elide_empty_files && self.size == 0 {
                 self.counter -= 1;
             } else if !self.options.quiet {
-                println!("{}", self.size);
+                writeln!(io::stdout(), "{}", self.size).map_err(CsplitError::IoError)?;
             }
         }
         Ok(())
