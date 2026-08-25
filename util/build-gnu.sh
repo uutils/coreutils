@@ -163,29 +163,34 @@ else
     touch gnu-built
 fi
 
+# Keep Makefile.in newer than the local.mk files we just modified,
+# and Makefile newer than Makefile.in, so make won't re-run
+# automake or config.status and undo our edits.
+touch Makefile.in Makefile
+
 # The GNU shell and Perl tests call getlimits_, so getlimits has to be a real
 # program on PATH, also when reusing an existing GNU build directory. An earlier
 # version of this script left an empty, non-executable stub behind under
 # SELINUX_ENABLED, hence the test for an executable rather than for a file.
 # Build only that program, plus the generated sources that the "all" target
 # would otherwise pull in, so the SELinux job still skips the rest of the tree.
+# This has to come after the touch above: stripping the factor tests leaves
+# tests/local.mk with a trailing backslash that automake rejects, so a make that
+# still sees it as newer than Makefile.in dies in the remake rule.
 if ! test -x src/getlimits; then
     rm -f src/getlimits
     printf 'built-sources: $(BUILT_SOURCES)\n' |
         make -f Makefile -f - -j "$("${NPROC}")" built-sources || true
     make -j "$("${NPROC}")" src/getlimits || true
 fi
-# Remove the destination first: cp keeps the permissions of an existing file, so
-# a leftover stub there would stay non-executable.
 if test -x src/getlimits; then
+    # Remove the destination first: cp keeps the permissions of an existing
+    # file, so a leftover stub there would stay non-executable.
     rm -f "${UU_BUILD_DIR}/getlimits"
     cp -f src/getlimits "${UU_BUILD_DIR}"
+else
+    echo "WARNING: could not build getlimits; tests calling getlimits_ will fail" >&2
 fi
-
-# Keep Makefile.in newer than the local.mk files we just modified,
-# and Makefile newer than Makefile.in, so make won't re-run
-# automake or config.status and undo our edits.
-touch Makefile.in Makefile
 
 # Patch the Makefile PATH to point to uutils build dir instead of GNU src/
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
