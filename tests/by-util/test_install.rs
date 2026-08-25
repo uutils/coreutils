@@ -44,7 +44,7 @@ fn test_install_basic_try_reflink() {
     ucmd.arg(file1).arg(file2).arg(dir).succeeds().no_stderr();
     // mkfs.btrfs needs root. use strace instead.
     #[cfg(target_os = "linux")]
-    if process::Command::new("strace")
+    if std::process::Command::new("strace")
         .args(["-qqq", "-o", "strace.out", "-e", "trace=ioctl"])
         .arg(uutests::util::get_tests_binary())
         .args(["install", file1, file2, dir])
