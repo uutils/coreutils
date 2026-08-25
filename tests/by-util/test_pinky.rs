@@ -81,49 +81,43 @@ fn test_short_format_i() {
     assert_eq!(v_actual, v_expect);
 }
 
+/// Drop the clock-dependent tokens from a `pinky` output split on whitespace.
+///
+/// The idle column holds a live `HH:MM` duration, so it can tick over between the
+/// run of our binary and the run of the reference one, which made these tests flaky.
+/// Remove the `Idle` header and every `HH:MM`-looking token so only the stable
+/// fields are compared.
+#[cfg(unix)]
+#[cfg(not(target_os = "openbsd"))]
+fn strip_volatile_fields(fields: &[&str]) -> Vec<String> {
+    fn is_clock_value(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        bytes.len() == 5
+            && bytes[2] == b':'
+            && bytes[..2].iter().chain(&bytes[3..]).all(u8::is_ascii_digit)
+    }
+
+    fields
+        .iter()
+        .filter(|s| **s != "Idle" && !is_clock_value(s))
+        .map(|s| (*s).to_string())
+        .collect()
+}
+
 #[cfg(unix)]
 #[test]
 #[cfg(not(target_os = "openbsd"))]
 fn test_lookup() {
-    // The "Idle" field (index 3 in header) contains a dynamic time value that can change
-    // between when the two commands run (e.g., "00:09" vs "00:10"), causing flaky tests.
-    // We filter out values matching the idle time pattern (HH:MM format) to avoid race conditions.
-    // Header: ["Login", "Name", "TTY", "Idle", "When", "Where"]
-    fn filter_idle_times(v: &[&str]) -> Vec<String> {
-        v.iter()
-            .enumerate()
-            .filter(|(i, s)| {
-                // Skip the "Idle" header at index 3
-                if *i == 3 {
-                    return false;
-                }
-                // Skip any value that looks like an idle time (HH:MM format like "00:09")
-                // These appear after the header in user data rows
-                if *i >= 6 && s.len() == 5 && s.chars().nth(2) == Some(':') {
-                    let chars: Vec<char> = s.chars().collect();
-                    if chars[0].is_ascii_digit()
-                        && chars[1].is_ascii_digit()
-                        && chars[3].is_ascii_digit()
-                        && chars[4].is_ascii_digit()
-                    {
-                        return false;
-                    }
-                }
-                true
-            })
-            .map(|(_, s)| (*s).to_string())
-            .collect()
-    }
-
     let args = ["--lookup"];
     let ts = TestScenario::new(util_name!());
     let actual = ts.ucmd().args(&args).succeeds().stdout_move_str();
     let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
-    let v_actual_filtered = filter_idle_times(&v_actual);
-    let v_expect_filtered = filter_idle_times(&v_expect);
-    assert_eq!(v_actual_filtered, v_expect_filtered);
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
 }
 
 #[cfg(unix)]
@@ -138,7 +132,10 @@ fn test_short_format_q() {
     let expect = unwrap_or_return!(expected_result(&ts, &args)).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
-    assert_eq!(v_actual, v_expect);
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
 }
 
 #[cfg(unix)]
@@ -150,5 +147,8 @@ fn test_no_flag() {
     let expect = unwrap_or_return!(expected_result(&ts, &[])).stdout_move_str();
     let v_actual: Vec<&str> = actual.split_whitespace().collect();
     let v_expect: Vec<&str> = expect.split_whitespace().collect();
-    assert_eq!(v_actual, v_expect);
+    assert_eq!(
+        strip_volatile_fields(&v_actual),
+        strip_volatile_fields(&v_expect)
+    );
 }
