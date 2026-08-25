@@ -885,6 +885,43 @@ fn substitute_extended_year(format_string: &str, year: u32) -> Result<String, St
         .ok_or_else(|| "default date format does not contain %Y".to_string())
 }
 
+/// Expand `%x`, `%X`, `%r`, `%p`, and `%P` into locale-aware format
+/// strings before jiff sees them. `%%` is protected so `%%x` is not expanded.
+fn expand_locale_specifiers<'a>(format: &'a str, date: &Zoned) -> Cow<'a, str> {
+    const PLACEHOLDER: &str = "\x00PCT\x00";
+
+    if !format.contains("%x")
+        && !format.contains("%X")
+        && !format.contains("%r")
+        && !format.contains("%p")
+        && !format.contains("%P")
+    {
+        return Cow::Borrowed(format);
+    }
+
+    let mut s = format.replace("%%", PLACEHOLDER);
+
+    if s.contains("%x")
+        && let Some(date_fmt) = locale::get_locale_date_format()
+    {
+        s = s.replace("%x", &date_fmt);
+    }
+    if s.contains("%X")
+        && let Some(time_fmt) = locale::get_locale_time_format()
+    {
+        s = s.replace("%X", &time_fmt);
+    }
+    if s.contains("%r") {
+        let ampm = locale::get_locale_time_ampm_format();
+        s = s.replace("%r", &ampm);
+    }
+    if s.contains("%p") || s.contains("%P") {
+        s = locale::localize_ampm_markers(&s, date.hour() >= 12);
+    }
+
+    Cow::Owned(s.replace(PLACEHOLDER, "%%"))
+}
+
 fn format_date_with_locale_aware_months(
     date: &Zoned,
     format_string: &str,
@@ -892,6 +929,12 @@ fn format_date_with_locale_aware_months(
     #[cfg(feature = "i18n-datetime")] skip_localization: bool,
     #[cfg(not(feature = "i18n-datetime"))] _skip_localization: bool,
 ) -> Result<String, String> {
+    // Expand %x/%X/%r into the locale's D_FMT/T_FMT/T_FMT_AMPM and resolve
+    // locale AM/PM markers before any other localization, so the composite
+    // specifiers get the same %b/%A treatment as if the user had spelled them out.
+    let format_string = expand_locale_specifiers(format_string, date);
+    let format_string = &*format_string;
+
     // Apply locale-aware name substitution (month/day names) before modifier
     // processing, so that formats like "%-e" don't bypass localization of "%b"/"%A".
     // The owned String is kept in `localized` so `fmt` can borrow from it for the
