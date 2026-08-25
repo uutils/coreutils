@@ -669,7 +669,7 @@ mod linux_only {
             .pipe_in(&content[..])
             .fails()
             .stdout_contains(&content)
-            .stderr_contains("No space left on device");
+            .stderr_is("tee: /dev/full: No space left on device\n");
 
         assert_eq!(at.read(file_out), content);
     }
