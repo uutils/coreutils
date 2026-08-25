@@ -319,10 +319,10 @@ fn test_with_stdin() {
 }
 
 #[test]
-fn test_with_column() {
+fn test_with_columns() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column.log.expected";
-    for arg in ["-3", "--column=3"] {
+    for arg in ["-3", "--columns=3"] {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
@@ -336,19 +336,19 @@ fn test_with_column() {
 }
 
 #[test]
-fn test_with_column_across_option() {
+fn test_with_columns_and_across_option() {
     let test_file_path = "column.log";
     let expected_test_file_path = "column_across.log.expected";
     let mut scenario = new_ucmd!();
     let value = file_last_modified_time(&scenario, test_file_path);
     scenario
-        .args(&["--pages=3:5", "--column=3", "-a", "-n", test_file_path])
+        .args(&["--pages=3:5", "--columns=3", "-a", "-n", test_file_path])
         .succeeds()
         .stdout_is_templated_fixture(expected_test_file_path, &[("{last_modified_time}", &value)]);
 }
 
 #[test]
-fn test_with_column_across_option_and_column_separator() {
+fn test_with_columns_across_option_and_column_separator() {
     let test_file_path = "column.log";
     for (arg, expected) in [
         ("-s|", "column_across_sep.log.expected"),
@@ -357,7 +357,14 @@ fn test_with_column_across_option_and_column_separator() {
         let mut scenario = new_ucmd!();
         let value = file_last_modified_time(&scenario, test_file_path);
         scenario
-            .args(&["--pages=3:5", "--column=3", arg, "-a", "-n", test_file_path])
+            .args(&[
+                "--pages=3:5",
+                "--columns=3",
+                arg,
+                "-a",
+                "-n",
+                test_file_path,
+            ])
             .succeeds()
             .stdout_is_templated_fixture(expected, &[("{last_modified_time}", &value)]);
     }
@@ -408,10 +415,10 @@ fn test_with_mpr() {
 }
 
 #[test]
-fn test_with_mpr_and_column_options() {
+fn test_with_mpr_and_columns_options() {
     let test_file_path = "column.log";
     new_ucmd!()
-        .args(&["--column=2", "-m", "-n", test_file_path])
+        .args(&["--columns=2", "-m", "-n", test_file_path])
         .fails()
         .stderr_only("pr: cannot specify number of columns when printing in parallel\n");
 
@@ -432,7 +439,7 @@ fn test_with_offset_space_option() {
             "-o",
             "5",
             "--pages=3:5",
-            "--column=3",
+            "--columns=3",
             "-a",
             "-n",
             test_file_path,
@@ -511,7 +518,7 @@ fn test_column_width_too_large() {
 fn test_column_count_too_large() {
     let arg = "9999999999999999999";
     new_ucmd!()
-        .args(&["--column", arg])
+        .args(&["--columns", arg])
         .fails_with_code(1)
         .stderr_is(format!(
             "pr: invalid number of columns: '{arg}': Value too large for defined data type\n"
@@ -1147,9 +1154,9 @@ fn test_expand_tab_does_not_consume_next_argument() {
 #[test]
 fn test_zero_columns() {
     new_ucmd!()
-        .arg("--column=0")
+        .arg("--columns=0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --column argument '0'");
+        .stderr_contains("pr: invalid --columns argument '0'");
 }
 
 #[test]
@@ -1157,7 +1164,7 @@ fn test_zero_columns_shortcut() {
     new_ucmd!()
         .arg("-0")
         .fails_with_code(1)
-        .stderr_contains("pr: invalid --column argument '0'");
+        .stderr_contains("pr: invalid --columns argument '0'");
 }
 
 #[test]
