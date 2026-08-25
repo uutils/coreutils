@@ -118,6 +118,8 @@ fn tail_file(
     observer: &mut Observer,
     offset: u64,
 ) -> UResult<()> {
+    // some platform has different read error message
+    #[cfg(not(unix))]
     if path
         .metadata()
         .is_err_and(|e| e.kind() == ErrorKind::NotFound)
