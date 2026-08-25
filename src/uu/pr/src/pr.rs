@@ -54,7 +54,7 @@ mod options {
     pub const PAGE_WIDTH: &str = "page-width";
     pub const ACROSS: &str = "across";
     pub const COLUMN_DOWN: &str = "column-down";
-    pub const COLUMN: &str = "column";
+    pub const COLUMNS: &str = "columns";
     pub const COLUMN_CHAR_SEPARATOR: &str = "separator";
     pub const COLUMN_STRING_SEPARATOR: &str = "sep-string";
     pub const MERGE: &str = "merge";
@@ -314,10 +314,10 @@ pub fn uu_app() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new(options::COLUMN)
-                .long(options::COLUMN)
-                .help(translate!("pr-help-column"))
-                .value_name("column"),
+            Arg::new(options::COLUMNS)
+                .long(options::COLUMNS)
+                .help(translate!("pr-help-columns"))
+                .value_name("columns"),
         )
         .arg(
             Arg::new(options::COLUMN_CHAR_SEPARATOR)
@@ -588,7 +588,7 @@ fn build_options(
 
     let is_merge_mode = matches.get_flag(options::MERGE);
 
-    if is_merge_mode && matches.contains_id(options::COLUMN) {
+    if is_merge_mode && matches.contains_id(options::COLUMNS) {
         return Err(PrError::EncounteredErrors {
             msg: translate!("pr-error-column-merge-conflict"),
         });
@@ -959,20 +959,20 @@ fn build_options(
     let start_column_option = match res {
         Some(Ok(0)) => {
             return Err(PrError::EncounteredErrors {
-                msg: "invalid --column argument '0'".to_string(),
+                msg: "invalid --columns argument '0'".to_string(),
             });
         }
         Some(res) => Some(res?),
         None => None,
     };
 
-    // --column has more priority than -column
+    // --columns has more priority than -column
 
     let column_option_value =
-        match parse_usize(matches, options::COLUMN, "invalid number of columns") {
+        match parse_usize(matches, options::COLUMNS, "invalid number of columns") {
             Some(Ok(0)) => {
                 return Err(PrError::EncounteredErrors {
-                    msg: "invalid --column argument '0'".to_string(),
+                    msg: "invalid --columns argument '0'".to_string(),
                 });
             }
             Some(res) => Some(res?),
