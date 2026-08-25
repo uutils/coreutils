@@ -667,15 +667,17 @@ fn test_with_join_lines_option() {
     let test_file_1 = "hosts.log";
     let test_file_2 = "test.log";
     let expected_file_path = "joined.log.expected";
-    let mut scenario = new_ucmd!();
     let start = Timestamp::now();
-    scenario
-        .args(&["+1:2", "-J", "-m", test_file_1, test_file_2])
-        .succeeds()
-        .stdout_is_templated_fixture_any(
-            expected_file_path,
-            &valid_last_modified_template_vars(start),
-        );
+
+    for join_lines_arg in ["-J", "--join-lines"] {
+        new_ucmd!()
+            .args(&["+1:2", join_lines_arg, "-m", test_file_1, test_file_2])
+            .succeeds()
+            .stdout_is_templated_fixture_any(
+                expected_file_path,
+                &valid_last_modified_template_vars(start),
+            );
+    }
 }
 
 #[test]

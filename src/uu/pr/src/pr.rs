@@ -354,6 +354,7 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::JOIN_LINES)
                 .short('J')
+                .long(options::JOIN_LINES)
                 .help(translate!("pr-help-join-lines"))
                 .action(ArgAction::SetTrue),
         )
