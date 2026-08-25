@@ -114,6 +114,9 @@ done
 # This ensures the correct path is used even if the repository was moved or rebuilt in a different location
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
 
+# Use GNU nproc for *BSD and macOS
+NPROC="$(command -v nproc||command -v gnproc)"
+
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
@@ -132,12 +135,11 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
-    # Skip make if possible
-    # Use GNU nproc for *BSD and macOS
-    NPROC="$(command -v nproc||command -v gnproc)"
-    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
-    test -f src/getlimits || make -j "$("${NPROC}")"
-    cp -f src/getlimits "${UU_BUILD_DIR}"
+    # Skip make if possible. The SELinux job does not build the GNU tree at all;
+    # the block after this "if" builds the one program its tests need.
+    if [ "${SELINUX_ENABLED}" != 1 ]; then
+        test -x src/getlimits || make -j "$("${NPROC}")"
+    fi
 
     # Handle generated factor tests
     t_first=00
@@ -161,9 +163,24 @@ else
     touch gnu-built
 fi
 
-# Keep getlimits available on PATH for GNU shell and Perl tests even when
-# reusing an existing GNU build directory.
-test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
+# The GNU shell and Perl tests call getlimits_, so getlimits has to be a real
+# program on PATH, also when reusing an existing GNU build directory. An earlier
+# version of this script left an empty, non-executable stub behind under
+# SELINUX_ENABLED, hence the test for an executable rather than for a file.
+# Build only that program, plus the generated sources that the "all" target
+# would otherwise pull in, so the SELinux job still skips the rest of the tree.
+if ! test -x src/getlimits; then
+    rm -f src/getlimits
+    printf 'built-sources: $(BUILT_SOURCES)\n' |
+        make -f Makefile -f - -j "$("${NPROC}")" built-sources || true
+    make -j "$("${NPROC}")" src/getlimits || true
+fi
+# Remove the destination first: cp keeps the permissions of an existing file, so
+# a leftover stub there would stay non-executable.
+if test -x src/getlimits; then
+    rm -f "${UU_BUILD_DIR}/getlimits"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
+fi
 
 # Keep Makefile.in newer than the local.mk files we just modified,
 # and Makefile newer than Makefile.in, so make won't re-run

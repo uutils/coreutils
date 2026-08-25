@@ -7325,6 +7325,50 @@ fn test_cp_selinux() {
     feature = "feat_selinux",
     any(target_os = "linux", target_os = "android")
 ))]
+fn test_cp_selinux_default_context_relative_dest() {
+    // -Z labels the destination with the context the policy has for its path,
+    // and the policy only lists absolute paths: a relative destination used to
+    // match nothing and silently keep the context it already carried.
+    use std::path::Path;
+    use uucore::selinux::set_selinux_security_context;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.touch(TEST_HELLO_WORLD_SOURCE);
+
+    // A type the policy will not hand out for a path under the test directory,
+    // so that the comparison below still sees a difference when -Z leaves the
+    // relative destination alone. Usable even when mcstransd is not running.
+    let ctx = "root:object_r:etc_t:s0".to_string();
+    for dest in ["relative", "absolute"] {
+        at.touch(dest);
+        if set_selinux_security_context(Path::new(&at.plus_as_string(dest)), Some(&ctx)).is_err() {
+            return;
+        }
+    }
+
+    let absolute = at.plus_as_string("absolute");
+    ts.ucmd()
+        .args(&["-Z", TEST_HELLO_WORLD_SOURCE, &absolute])
+        .succeeds();
+    ts.ucmd()
+        .args(&["-Z", TEST_HELLO_WORLD_SOURCE, "relative"])
+        .succeeds();
+
+    // Compare the type only, the one field -Z is about.
+    let selinux_type = |context: &str| context.split(':').nth(2).unwrap_or("").to_string();
+    assert_eq!(
+        selinux_type(&get_getfattr_output(&at.plus_as_string("relative"))),
+        selinux_type(&get_getfattr_output(&absolute)),
+        "-Z gave a relative and an absolute destination different contexts"
+    );
+}
+
+#[test]
+#[cfg(all(
+    feature = "feat_selinux",
+    any(target_os = "linux", target_os = "android")
+))]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
