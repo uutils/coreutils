@@ -153,6 +153,18 @@ fn test_huge_block_size_is_rejected_without_panicking() {
 }
 
 #[test]
+fn test_count_past_u64_is_rejected() {
+    // A number past u64 used to saturate, so count= silently copied the whole
+    // input and exited 0 where GNU rejects the operand.
+    for arg in ["count=99999999999999999999", "skip=18446744073709551616"] {
+        new_ucmd!()
+            .args(&["if=/dev/null", arg])
+            .fails_with_code(1)
+            .stderr_contains("Value too large for defined data type");
+    }
+}
+
+#[test]
 fn test_huge_obs_reports_memory_error_instead_of_aborting() {
     // Regression test for #12847: a valid but huge `obs` used to abort
     // ("memory allocation of N bytes failed"); it must fail gracefully instead.
@@ -1357,29 +1369,28 @@ fn test_invalid_number_arg_gnu_compatibility() {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .stderr_is("dd: invalid number: ‘’\n");
+            .stderr_is("dd: invalid number: ''\n");
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .stderr_is("dd: invalid number: ‘29d’\n");
+            .stderr_is("dd: invalid number: '29d'\n");
     }
 }
 
 #[test]
 fn test_invalid_flag_arg_gnu_compatibility() {
-    let commands = vec!["iflag", "oflag"];
-
-    for command in commands {
+    // GNU names the direction the flag was given in.
+    for (command, direction) in [("iflag", "input"), ("oflag", "output")] {
         new_ucmd!()
             .args(&[format!("{command}=")])
             .fails()
-            .usage_error("invalid input flag: ‘’");
+            .usage_error(format!("invalid {direction} flag: ''"));
 
         new_ucmd!()
             .args(&[format!("{command}=29d")])
             .fails()
-            .usage_error("invalid input flag: ‘29d’");
+            .usage_error(format!("invalid {direction} flag: '29d'"));
     }
 }
 
@@ -1625,7 +1636,7 @@ fn test_empty_count_number() {
     new_ucmd!()
         .args(&["count=B"])
         .fails_with_code(1)
-        .stderr_only("dd: invalid number: ‘B’\n");
+        .stderr_only("dd: invalid number: 'B'\n");
 }
 
 /// Test for discarding system file cache.
@@ -1984,7 +1995,7 @@ fn test_skip_overflow() {
         .args(&["bs=1", "skip=9223372036854775808", "count=0"])
         .fails()
         .stderr_contains(
-            "dd: invalid number: ‘9223372036854775808’: Value too large for defined data type",
+            "dd: invalid number: '9223372036854775808': Value too large for defined data type",
         );
 }
 
@@ -2193,7 +2204,7 @@ fn test_bs_not_positive() {
                 .fails()
                 .no_stdout()
                 .code_is(1)
-                .stderr_is(format!("dd: invalid number: ‘{bs}’\n"));
+                .stderr_is(format!("dd: invalid number: '{bs}'\n"));
         }
     }
 }
@@ -2269,11 +2280,14 @@ mod diagnostics {
             .fails_with_code(1);
 
         // The caret takes the key alone: the value is fine, it is the operand
-        // name that dd does not know.
+        // name that dd does not know. The usage hint that follows names the
+        // binary as it was invoked, so it is checked apart from the report.
+        let stderr = result.stderr_as_displayed();
+        let (report, hint) = stderr.trim_end().rsplit_once('\n').unwrap();
         assert_eq!(
-            result.stderr_as_displayed(),
+            report,
             "\
-dd: Unrecognized operand 'bsx=1'
+dd: unrecognized operand 'bsx=1'
    ╭─[ dd:1:4 ]
    │
  1 │ dd bsx=1
@@ -2281,6 +2295,10 @@ dd: Unrecognized operand 'bsx=1'
    │
    │ Help: an operand is KEY=VALUE, as in if=file bs=4k count=10
 ───╯"
+        );
+        assert!(
+            hint.ends_with("dd --help' for more information."),
+            "{stderr}"
         );
     }
 
@@ -2297,6 +2315,22 @@ dd: Unrecognized operand 'bsx=1'
         // Only the second flag is wrong, and the caret says so.
         assert!(stderr.contains("dd:1:15"), "{stderr}");
         assert!(stderr.contains("1 │ dd conv=ucase,zap"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_names_the_flags_rather_than_the_commas() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["conv=ucase,zap"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // The list syntax parsed: it is the flag that is unknown, so the
+        // report names the conversions instead of explaining commas.
+        assert!(stderr.contains("not a known conversion"), "{stderr}");
+        assert!(stderr.contains("conv= is one of ascii"), "{stderr}");
     }
 
     #[cfg(unix)]
@@ -2359,7 +2393,7 @@ dd: Unrecognized operand 'bsx=1'
             .args(&["iflag=nope"])
             .pipe_in("")
             .fails_with_code(1)
-            .stderr_contains("dd: invalid input flag: \u{2018}nope\u{2019}")
+            .stderr_contains("dd: invalid input flag: 'nope'")
             .stderr_contains("--help' for more information.");
     }
 
@@ -2369,6 +2403,8 @@ dd: Unrecognized operand 'bsx=1'
             .args(&["bsx=1"])
             .pipe_in("")
             .fails_with_code(1)
-            .stderr_is("dd: Unrecognized operand 'bsx=1'\n");
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
+            .stderr_contains("--help' for more information.")
+            .stderr_does_not_contain("╭─");
     }
 }
