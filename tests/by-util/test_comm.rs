@@ -744,5 +744,5 @@ fn test_comm_write_error_dev_full() {
         .args(&["a", "a"])
         .set_stdout(dev_full)
         .fails()
-        .stderr_contains("No space left on device");
+        .stderr_is("comm: write error: No space left on device\n");
 }
