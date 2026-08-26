@@ -10,6 +10,10 @@
 mod error;
 #[cfg(unix)]
 mod hardlink;
+#[cfg(target_os = "redox")]
+mod platform;
+#[cfg(target_os = "redox")]
+use platform::{copy_special_file, rename_special_fallback, replace_symlink};
 
 use clap::builder::ValueParser;
 use clap::error::ErrorKind;
@@ -29,8 +33,10 @@ use std::os::fd::AsRawFd;
 use std::os::unix;
 #[cfg(all(unix, not(target_os = "redox")))]
 use std::os::unix::ffi::OsStrExt;
+#[cfg(all(unix, not(target_os = "redox")))]
+use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
-use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, PermissionsExt};
 #[cfg(windows)]
 use std::os::windows;
 use std::path::{Path, PathBuf, absolute};
@@ -1096,32 +1102,6 @@ fn copy_special_file(_from: &Path, metadata: &fs::Metadata, to: &Path) -> io::Re
     copy_special_file_at(metadata, &dir_fd, &basename)
 }
 
-/// Redox does not expose the safe directory-fd traversal layer, so retain the
-/// existing path-based special-file recreation for that target.
-#[cfg(target_os = "redox")]
-fn copy_special_file(from: &Path, metadata: &fs::Metadata, to: &Path) -> io::Result<()> {
-    use nix::sys::stat::{Mode, SFlag, mknod};
-    use std::fs::Permissions;
-
-    let file_type = metadata.file_type();
-    let mode = Mode::from_bits_truncate(metadata.mode() as _);
-    if file_type.is_fifo() {
-        nix::unistd::mkfifo(to, mode)?;
-    } else {
-        let kind = if file_type.is_socket() {
-            SFlag::S_IFSOCK
-        } else if file_type.is_block_device() {
-            SFlag::S_IFBLK
-        } else {
-            SFlag::S_IFCHR
-        };
-        mknod(to, kind, mode, metadata.rdev() as _)?;
-    }
-    let _ = preserve_ownership(from, to);
-    let _ = fs::set_permissions(to, Permissions::from_mode(metadata.mode() & 0o7777));
-    Ok(())
-}
-
 /// Replace the destination with a new special file (fifo, socket, or device
 /// node) with the same name as the source. The node is created under a
 /// temporary name and then renamed over the destination, so that failing to
@@ -1173,39 +1153,6 @@ fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> i
     ))
 }
 
-#[cfg(target_os = "redox")]
-fn rename_special_fallback(from: &Path, to: &Path, metadata: &fs::Metadata) -> io::Result<()> {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
-
-    let parent = to
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let mut urandom = fs::File::open("/dev/urandom")?;
-
-    for _ in 0..32 {
-        let tmp_bytes = random_temp_name(&mut urandom)?;
-        let tmp = parent.join(OsStr::from_bytes(&tmp_bytes));
-
-        match copy_special_file(from, metadata, &tmp) {
-            Ok(()) => {
-                if let Err(error) = fs::rename(&tmp, to) {
-                    let _ = fs::remove_file(&tmp);
-                    return Err(error);
-                }
-                return fs::remove_file(from);
-            }
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-            Err(error) => return Err(error),
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::AlreadyExists,
-        "could not allocate a unique temp name in destination directory",
-    ))
-}
-
 #[cfg(not(unix))]
 #[expect(
     clippy::unnecessary_wraps,
@@ -1226,13 +1173,7 @@ fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     match unix::fs::symlink(&path_symlink_points_to, to) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
-            #[cfg(not(target_os = "redox"))]
-            create_symlink_replace(&path_symlink_points_to, to)?;
-            #[cfg(target_os = "redox")]
-            {
-                fs::remove_file(to)?;
-                unix::fs::symlink(&path_symlink_points_to, to)?;
-            }
+            replace_symlink(&path_symlink_points_to, to)?;
         }
         Err(e) => return Err(e),
     }
@@ -1273,7 +1214,7 @@ fn random_temp_name(urandom: &mut impl io::Read) -> io::Result<[u8; 8]> {
 /// from `/dev/urandom` so it is unguessable to other users in that
 /// directory.
 #[cfg(all(unix, not(target_os = "redox")))]
-fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
+fn replace_symlink(target: &Path, to: &Path) -> io::Result<()> {
     use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, symlinkat, unlinkat};
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
