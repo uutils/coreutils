@@ -35,9 +35,6 @@ jobs:
         shell: bash
         run: sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev libsystemd-dev libacl1-dev libattr1-dev libcap-dev
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Download tldr
         run: curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip
 
