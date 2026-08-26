@@ -8,6 +8,7 @@ use std::fs::{self, File, OpenOptions};
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
+use std::time::SystemTime;
 
 use uucore::buf_copy;
 use uucore::display::Quotable;
@@ -96,6 +97,18 @@ pub(crate) fn copy_on_write(
                     error = pfn(src.as_ptr(), dst.as_ptr(), 0);
                 }
             }
+        }
+    }
+
+    if attempt_clone && error == 0 {
+        // clonefile(2) copies the source's metadata, mtime included, where a plain copy leaves the
+        // destination with its own. Unconditional is safe: -p restores the source's afterwards in
+        // copy_attributes.
+        let now = SystemTime::now();
+        let times = fs::FileTimes::new().set_accessed(now).set_modified(now);
+
+        if let Err(e) = File::open(dest).and_then(|f| f.set_times(times)) {
+            return Err(CpError::IoErrContext(e, context.to_owned()));
         }
     }
 

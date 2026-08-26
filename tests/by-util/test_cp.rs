@@ -2818,6 +2818,70 @@ fn test_cp_reflink_never_does_not_clonefile() {
     );
 }
 
+// The sibling of the test above, for the default path. `--reflink=auto` still calls clonefile(2),
+// which copies the source's metadata including mtime — where a copy gets its own mtime on every
+// other platform, and where GNU cp on macOS clones the very same file (`--debug` reports
+// `reflink: yes`) and still stamps the destination. So a default copy must not inherit the
+// source's old mtime either.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_cp_default_does_not_inherit_mtime_from_clone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "default clone contents");
+    // Stamp the source well into the past; a clonefile copies it verbatim.
+    let past = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000); // 2001-09-09
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("src"))
+        .unwrap();
+    file.set_times(
+        std::fs::FileTimes::new()
+            .set_accessed(past)
+            .set_modified(past),
+    )
+    .unwrap();
+
+    ucmd.arg("src").arg("dst").succeeds();
+
+    assert_eq!(at.read("dst"), "default clone contents");
+    let src_mtime = at.metadata("src").modified().unwrap();
+    let dst_mtime = at.metadata("dst").modified().unwrap();
+    assert_ne!(
+        dst_mtime, src_mtime,
+        "a default copy must not inherit the source's mtime, even when clonefile(2) is used"
+    );
+}
+
+// The other direction, and the reason the fix above can stamp unconditionally: `-p` asks for the
+// source's timestamps, and copy_attributes restores them after the clone. Without this, a fix that
+// freshened every clone would silently break preservation.
+#[test]
+#[cfg(target_os = "macos")]
+fn test_cp_preserve_timestamps_survives_clone() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("src", "preserved clone contents");
+    let past = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(1_000_000_000); // 2001-09-09
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("src"))
+        .unwrap();
+    file.set_times(
+        std::fs::FileTimes::new()
+            .set_accessed(past)
+            .set_modified(past),
+    )
+    .unwrap();
+
+    ucmd.arg("-p").arg("src").arg("dst").succeeds();
+
+    let src_mtime = at.metadata("src").modified().unwrap();
+    let dst_mtime = at.metadata("dst").modified().unwrap();
+    assert_eq!(
+        dst_mtime, src_mtime,
+        "-p must still preserve the source's mtime across a clonefile(2) copy"
+    );
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
 fn test_cp_reflink_bad() {
