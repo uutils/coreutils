@@ -690,6 +690,7 @@ jobs:
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
@@ -704,6 +705,7 @@ jobs:
           commit: ${{ github.sha }}
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
