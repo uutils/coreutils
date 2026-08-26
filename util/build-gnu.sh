@@ -268,6 +268,10 @@ sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
 # making it too restrictive for us
 sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to-xpart.sh init.cfg
 
+# usage_vs_refs.sh checks that all options appear in GNU's texi docs.
+# we have some extra options
+sed -i '1s/^/Exit 77\n/' tests/misc/usage_vs_refs.sh
+
 # usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh

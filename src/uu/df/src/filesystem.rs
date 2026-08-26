@@ -8,18 +8,11 @@
 //! filesystem mounted at a particular directory. It also includes
 //! information on amount of space available and amount of space used.
 // spell-checker:ignore canonicalized
-#[cfg(unix)]
-use std::io;
-#[cfg(unix)]
-use std::path::PathBuf;
 use std::{ffi::OsString, path::Path};
 
-#[cfg(unix)]
-use std::os::unix::fs::MetadataExt;
-
-#[cfg(unix)]
-use uucore::fsext::{FsMeta, pretty_fstype, statfs};
 use uucore::fsext::{FsUsage, MountInfo};
+
+use crate::platform;
 
 /// Summary representation of a filesystem.
 ///
@@ -50,39 +43,6 @@ pub(crate) enum FsError {
     OverMounted,
     InvalidPath,
     MountMissing,
-}
-
-/// Check whether `mount` has been over-mounted.
-///
-/// `mount` is considered over-mounted if it there is an element in
-/// `mounts` after mount that has the same `mount_dir`.
-#[cfg(not(windows))]
-fn is_over_mounted(mounts: &[MountInfo], mount: &MountInfo) -> bool {
-    let last_mount_for_dir = mounts.iter().rfind(|m| m.mount_dir == mount.mount_dir);
-
-    if let Some(lmi) = last_mount_for_dir {
-        lmi.dev_name != mount.dev_name
-    } else {
-        // Should be unreachable if `mount` is in `mounts`
-        false
-    }
-}
-
-/// Find mount point by walking up the directory tree until device ID changes.
-#[cfg(unix)]
-pub(crate) fn find_mount_point<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
-    let mut current = path.as_ref().canonicalize()?;
-    let current_dev = current.metadata()?.dev();
-
-    while let Some(parent) = current.parent().filter(|p| !p.as_os_str().is_empty()) {
-        let parent_dev = parent.metadata()?.dev();
-        if parent_dev != current_dev || parent == current {
-            return Ok(current);
-        }
-
-        current = parent.to_path_buf();
-    }
-    Ok(current)
 }
 
 /// Find the mount info that best matches a given filesystem path.
@@ -144,49 +104,12 @@ where
 impl Filesystem {
     // TODO: resolve uuid in `mount_info.dev_name` if exists
     pub(crate) fn new(mount_info: MountInfo, file: Option<OsString>) -> Option<Self> {
-        let stat_path = if mount_info.mount_dir.is_empty() {
-            #[cfg(unix)]
-            {
-                mount_info.dev_name.as_ref()
-            }
-            #[cfg(windows)]
-            {
-                // On windows, we expect the volume id
-                mount_info.dev_id.as_ref()
-            }
-        } else {
-            mount_info.mount_dir.as_os_str()
-        };
-        #[cfg(unix)]
-        let usage = FsUsage::new(statfs(stat_path).ok()?);
-        #[cfg(windows)]
-        let usage = FsUsage::new(Path::new(stat_path)).ok()?;
+        let usage = platform::fs_usage(&mount_info)?;
         Some(Self {
             file,
             mount_info,
             usage,
         })
-    }
-
-    /// Find and create the filesystem from the given mount
-    /// after checking that the it hasn't been over-mounted
-    #[cfg(not(windows))]
-    pub(crate) fn from_mount(
-        mounts: &[MountInfo],
-        mount: &MountInfo,
-        file: Option<OsString>,
-    ) -> Result<Self, FsError> {
-        if is_over_mounted(mounts, mount) {
-            Err(FsError::OverMounted)
-        } else {
-            Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
-        }
-    }
-
-    /// Find and create the filesystem from the given mount.
-    #[cfg(windows)]
-    pub(crate) fn from_mount(mount: &MountInfo, file: Option<OsString>) -> Result<Self, FsError> {
-        Self::new(mount.clone(), file).ok_or(FsError::MountMissing)
     }
 
     /// Find and create the filesystem that best matches a given path.
@@ -213,45 +136,8 @@ impl Filesystem {
         let canonicalize = true;
 
         let result = mount_info_from_path(mounts, path, canonicalize);
-        #[cfg(windows)]
-        return result.and_then(|mount_info| Self::from_mount(mount_info, Some(file)));
-        #[cfg(not(windows))]
-        return result.and_then(|mount_info| Self::from_mount(mounts, mount_info, Some(file)));
-    }
-
-    /// Fallback using statfs when mount table is unavailable.
-    #[cfg(unix)]
-    pub(crate) fn from_path_direct<P>(path: P) -> Result<Self, FsError>
-    where
-        P: AsRef<Path>,
-    {
-        let path = path.as_ref();
-        let file = path.as_os_str().to_owned();
-
-        let canonical_path = path.canonicalize().map_err(|_| FsError::InvalidPath)?;
-
-        let stat_result = statfs(canonical_path.as_os_str()).map_err(|_| FsError::MountMissing)?;
-        let mount_dir = find_mount_point(&canonical_path).map_err(|_| FsError::MountMissing)?;
-        let fs_type = pretty_fstype(stat_result.fs_type()).into_owned();
-
-        let mount_info = MountInfo {
-            dev_id: String::new(),
-            dev_name: "-".to_string(),
-            fs_type,
-            mount_dir: mount_dir.into_os_string(),
-            mount_option: String::new(),
-            mount_root: OsString::new(),
-            remote: false,
-            dummy: false,
-        };
-
-        let usage = FsUsage::new(stat_result);
-
-        Ok(Self {
-            file: Some(file),
-            mount_info,
-            usage,
-        })
+        result
+            .and_then(|mount_info| platform::filesystem_from_mount(mounts, mount_info, Some(file)))
     }
 }
 
@@ -361,56 +247,6 @@ mod tests {
             let mounts = [mount_info];
             let actual = mount_info_from_path(&mounts, dev_name, false).unwrap();
             assert!(mount_info_eq(actual, &mounts[0]));
-        }
-    }
-
-    #[cfg(not(windows))]
-    mod over_mount {
-        use std::ffi::OsString;
-
-        use crate::filesystem::{Filesystem, FsError, is_over_mounted};
-        use uucore::fsext::MountInfo;
-
-        fn mount_info_with_dev_name(mount_dir: &str, dev_name: Option<&str>) -> MountInfo {
-            MountInfo {
-                dev_id: String::default(),
-                dev_name: dev_name.map(String::from).unwrap_or_default(),
-                fs_type: String::default(),
-                mount_dir: OsString::from(mount_dir),
-                mount_option: String::default(),
-                mount_root: OsString::default(),
-                remote: Default::default(),
-                dummy: Default::default(),
-            }
-        }
-
-        #[test]
-        fn test_over_mount() {
-            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
-            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
-            let mounts = [mount_info1, mount_info2];
-            assert!(is_over_mounted(&mounts, &mounts[0]));
-        }
-
-        #[test]
-        fn test_over_mount_not_over_mounted() {
-            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
-            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
-            let mounts = [mount_info1, mount_info2];
-            assert!(!is_over_mounted(&mounts, &mounts[1]));
-        }
-
-        #[test]
-        fn test_from_mount_over_mounted() {
-            let mount_info1 = mount_info_with_dev_name("/foo", Some("dev_name_1"));
-            let mount_info2 = mount_info_with_dev_name("/foo", Some("dev_name_2"));
-
-            let mounts = [mount_info1, mount_info2];
-
-            assert_eq!(
-                Filesystem::from_mount(&mounts, &mounts[0], None).unwrap_err(),
-                FsError::OverMounted
-            );
         }
     }
 }

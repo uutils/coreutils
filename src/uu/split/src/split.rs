@@ -32,15 +32,27 @@ use uucore::translate;
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let (args, obs_lines) = handle_obsolete(args);
+    let raw_args: Vec<OsString> = args.collect();
+    // Capture before the obsolete `-22` spelling is rewritten to `-l 22`.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let (args, obs_lines) = handle_obsolete(raw_args.into_iter());
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let settings = Settings::from(&matches, obs_lines.as_deref()).map_err(|e| {
+        let message = format!("{e}");
         if e.requires_usage() {
-            UUsageError::new(1, format!("{e}"))
-        } else {
-            USimpleError::new(1, format!("{e}"))
+            return UUsageError::new(1, message);
         }
+        uucore::diagnostics::error_after_report(
+            diag_args.as_deref(),
+            USimpleError::new(1, message.clone()),
+            |args, _| match &e {
+                SettingsError::Strategy(error) => error.render(args, &message),
+                // The rest is about how the options combine rather than about
+                // one of them, so there is nothing to point a caret at.
+                _ => false,
+            },
+        )
     })?;
 
     // When using --filter, we write to a child process's stdin which may
@@ -1137,7 +1149,9 @@ fn n_chunks_by_line(
         let num_line_bytes = bytes.len() as u64;
         num_bytes_written += num_line_bytes;
         let mut skipped = -1;
-        while num_bytes_should_be_written <= num_bytes_written {
+        // Cap at the last chunk to avoid an infinite loop when trailing chunks are
+        // zero-sized, and keep excess input from indexing past out_files.
+        while chunk_number < num_chunks && num_bytes_should_be_written <= num_bytes_written {
             num_bytes_should_be_written +=
                 chunk_size_base + (chunk_size_reminder > chunk_number) as u64;
             chunk_number += 1;

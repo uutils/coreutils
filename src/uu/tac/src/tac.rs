@@ -398,15 +398,11 @@ fn tac(filenames: &[OsString], before: bool, regex: bool, separator: &OsStr) -> 
 
         // Select the appropriate `tac` algorithm based on whether the
         // separator is given as a regular expression or a fixed string.
-        let result = match maybe_pattern {
+        match maybe_pattern {
             Some(ref pattern) => buffer_tac_regex(data, pattern, before),
             None => buffer_tac(data, before, separator),
-        };
-
-        // If there is any error in writing the output, terminate immediately.
-        if let Err(e) = result {
-            return Err(TacError::WriteError(e).into());
         }
+        .map_err(TacError::WriteError)?;
     }
     Ok(())
 }

@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (words) egid euid pseudofloat
+// spell-checker:ignore (words) egid euid icacls pseudofloat
 
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
@@ -402,6 +402,7 @@ fn test_float_inequality_is_error() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_utf8_integer_compare() {
     use std::ffi::OsStr;
     use std::os::unix::ffi::OsStrExt;
@@ -441,11 +442,34 @@ fn test_isatty_whitespace_stripping() {
 }
 
 #[test]
-#[cfg(unix)]
+fn test_isatty_invalid_fd_is_false() {
+    // Asking the CRT about an unopened descriptor aborted the process.
+    new_ucmd!().args(&["-t", "99"]).fails_with_code(1);
+    new_ucmd!().args(&["-t", "-1"]).fails_with_code(1);
+}
+
+#[test]
+#[cfg(windows)]
+fn test_isatty_unknown_fd_windows() {
+    // Only the standard streams are known on Windows.
+    new_ucmd!().args(&["-t", "3"]).fails_with_code(1);
+}
+
+#[test]
 fn test_file_is_itself() {
     new_ucmd!()
         .args(&["regular_file", "-ef", "regular_file"])
         .succeeds();
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
+// Disabled for android, since the temp dir doesn't allow creating hard links
+#[cfg(not(target_os = "android"))]
+fn test_hard_link_is_same_file() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.hard_link("regular_file", "hard_link");
+    ucmd.args(&["regular_file", "-ef", "hard_link"]).succeeds();
 }
 
 #[test]
@@ -484,14 +508,12 @@ fn test_file_is_newer_than_non_existing_file() {
 }
 
 #[test]
-#[cfg(unix)]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_same_device_inode() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
-    scenario.cmd("touch").arg("regular_file").succeeds();
-    scenario.cmd("touch").arg("regular_file_second").succeeds();
-
+    at.touch("regular_file_second");
     at.symlink_file("regular_file", "symlink");
 
     scenario
@@ -565,7 +587,8 @@ fn test_file_is_readable() {
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
+#[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_not_readable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -578,12 +601,13 @@ fn test_file_is_not_readable() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_writable() {
     new_ucmd!().args(&["-w", "regular_file"]).succeeds();
 }
 
 #[test]
-#[cfg(not(windows))] // FIXME: implement on Windows
+#[cfg(not(windows))]
 fn test_file_is_not_writable() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -622,6 +646,7 @@ fn test_file_is_not_executable() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_executable() {
     let scenario = TestScenario::new(util_name!());
     let mut chmod = scenario.cmd("chmod");
@@ -646,10 +671,89 @@ fn test_file_is_not_writable_windows() {
 
 #[test]
 #[cfg(windows)]
+fn test_readonly_directory_is_writable_windows() {
+    // NTFS ignores the read-only attribute on directories.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("readonly_dir");
+    at.set_readonly("readonly_dir");
+    ucmd.args(&["-w", "readonly_dir"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
 fn test_file_is_executable_windows() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.touch("program.exe");
-    ucmd.args(&["-x", "program.exe"]).succeeds();
+    at.touch("PROGRAM.EXE");
+    ucmd.args(&["-x", "PROGRAM.EXE"]).succeeds();
+}
+
+#[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
+fn test_directory_is_executable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkdir("dir");
+    ucmd.args(&["-x", "dir"]).succeeds();
+}
+
+// Denies a single right so cleanup still works: it needs DELETE and directory
+// listing.
+#[cfg(windows)]
+fn deny_everyone(scenario: &TestScenario, name: &str, rights: &str) {
+    let ace = format!("*S-1-1-0:({rights})");
+    scenario
+        .cmd("icacls")
+        .args(&[name, "/deny", ace.as_str()])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_readable_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.touch("crypto_file");
+    deny_everyone(&scenario, "crypto_file", "RD");
+
+    scenario.ucmd().args(&["!", "-r", "crypto_file"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_writable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    let at = &scenario.fixtures;
+    at.touch("immutable_file");
+    at.mkdir("immutable_dir");
+    deny_everyone(&scenario, "immutable_file", "WD");
+    deny_everyone(&scenario, "immutable_dir", "WD");
+
+    scenario
+        .ucmd()
+        .args(&["!", "-w", "immutable_file"])
+        .succeeds();
+    scenario
+        .ucmd()
+        .args(&["!", "-w", "immutable_dir"])
+        .succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_file_is_not_executable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.touch("program.exe");
+    deny_everyone(&scenario, "program.exe", "X");
+
+    scenario.ucmd().args(&["!", "-x", "program.exe"]).succeeds();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_directory_is_not_executable_by_acl_windows() {
+    let scenario = TestScenario::new(util_name!());
+    scenario.fixtures.mkdir("locked_dir");
+    deny_everyone(&scenario, "locked_dir", "X");
+
+    scenario.ucmd().args(&["!", "-x", "locked_dir"]).succeeds();
 }
 
 #[test]
@@ -670,14 +774,12 @@ fn test_not_is_not_empty() {
 }
 
 #[test]
-#[cfg(not(windows))]
 fn test_symlink_is_symlink() {
     let scenario = TestScenario::new(util_name!());
     let at = &scenario.fixtures;
 
     at.symlink_file("regular_file", "symlink");
 
-    // FIXME: implement on Windows
     scenario.ucmd().args(&["-h", "symlink"]).succeeds();
     scenario.ucmd().args(&["-L", "symlink"]).succeeds();
 }
@@ -714,6 +816,7 @@ fn test_nonexistent_file_is_not_symlink() {
 // Only the superuser is allowed to set the sticky bit on files on FreeBSD/OpenBSD.
 // Windows has no concept of sticky bit
 #[cfg(not(any(windows, target_os = "freebsd", target_os = "openbsd")))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no permission bits")]
 fn test_file_is_sticky() {
     let scenario = TestScenario::new(util_name!());
     let mut ucmd = scenario.ucmd();
@@ -809,6 +912,7 @@ fn test_parenthesized_right_parenthesis_as_literal() {
 }
 
 #[test]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_euid() {
     new_ucmd!().args(&["-O", "regular_file"]).succeeds();
 }
@@ -822,6 +926,7 @@ fn test_nonexistent_file_not_owned_by_euid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_euid() {
     new_ucmd!()
         .args(&["-f", "/bin/sh", "-a", "!", "-O", "/bin/sh"])
@@ -830,6 +935,7 @@ fn test_file_not_owned_by_euid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_owned_by_egid() {
     // On some platforms (mostly the BSDs) the test fixture files copied to the
     // /tmp directory will have a different gid than the current egid (due to
@@ -861,6 +967,7 @@ fn test_nonexistent_file_not_owned_by_egid() {
 
 #[test]
 #[cfg(not(windows))]
+#[cfg_attr(wasi_runner, ignore = "WASI: no uid/gid")]
 fn test_file_not_owned_by_egid() {
     let target_file = if cfg!(target_os = "freebsd") {
         // The coreutils test runner user has a primary group id of "wheel",

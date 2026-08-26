@@ -721,12 +721,15 @@ fn test_whitespace_delimited_long_and_trimmed() {
         .pipe_in("   alpha beta\n")
         .succeeds()
         .stdout_only("\talpha\n");
-    // =trimmed strips leading/trailing blanks before splitting.
-    new_ucmd!()
-        .args(&["--whitespace-delimited=trimmed", "-f1,2"])
-        .pipe_in("  hello world  \n")
-        .succeeds()
-        .stdout_only("hello\tworld\n");
+    // =trimmed (or it's shortcuts) strips leading/trailing blanks before splitting.
+    for trimmed in ["trimmed", "tri", ""] {
+        new_ucmd!()
+            .arg(format!("--whitespace-delimited={trimmed}"))
+            .arg("-f1,2")
+            .pipe_in("  hello world  \n")
+            .succeeds()
+            .stdout_only("hello\tworld\n");
+    }
     // With -s a single (undelimited) field is suppressed.
     new_ucmd!()
         .args(&["-s", "--whitespace-delimited=trimmed", "-f1"])
@@ -1202,6 +1205,16 @@ fn test_cut_chars_utf8_mixed_ascii_lines() {
         .stdout_only("okk\när\nmba\nøys\n");
 }
 
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error() {
+    new_ucmd!()
+        .args(&["-c1", "/proc/self/mem"])
+        .fails_with_code(1)
+        .stderr_is("cut: Input/output error\n");
+}
+
 #[cfg(unix)]
 #[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
 mod diagnostics {
@@ -1215,9 +1228,10 @@ mod diagnostics {
             .fails_with_code(1);
 
         // One item of the list is at fault, not the whole of it.
-        assert_eq!(
-            result.stderr_as_displayed(),
-            "\
+        let stderr = result.stderr_as_displayed();
+        assert!(
+            stderr.starts_with(
+                "\
 cut: invalid decreasing range
    ╭─[ cut:1:10 ]
    │
@@ -1227,6 +1241,14 @@ cut: invalid decreasing range
    │
    │ Help: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
 ───╯"
+            ),
+            "{stderr}"
+        );
+        // The caret replaces the message, not the usage hint: a pipe and a
+        // terminal must not disagree on whether one was printed.
+        assert!(
+            stderr.ends_with("cut --help' for more information."),
+            "{stderr}"
         );
     }
 

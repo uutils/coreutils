@@ -8,7 +8,6 @@
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use file_diff::diff;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use selinux::SecurityContext;
 use std::ffi::OsString;
@@ -24,7 +23,7 @@ use uucore::buf_copy::copy_fast;
 use uucore::display::Quotable;
 use uucore::entries::{grp2gid, usr2uid};
 use uucore::error::{FromIo, UError, UResult, UUsageError, strip_errno};
-use uucore::fs::dir_strip_dot_for_creation;
+use uucore::fs::{are_files_identical, dir_strip_dot_for_creation};
 use uucore::perms::{Verbosity, VerbosityLevel, wrap_chown};
 use uucore::process::{getegid, geteuid};
 #[cfg(unix)]
@@ -432,26 +431,16 @@ fn behavior(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Beh
         }
     }
 
-    let owner = matches
-        .get_one::<String>(OPT_OWNER)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let owner_id = if owner.is_empty() {
-        None
+    let owner_id = if let Some(owner) = matches.get_one::<String>(OPT_OWNER) {
+        Some(resolve_id(owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
     } else {
-        Some(resolve_id(&owner, usr2uid).ok_or_else(|| InstallError::InvalidUser(owner.clone()))?)
+        None
     };
 
-    let group = matches
-        .get_one::<String>(OPT_GROUP)
-        .map_or("", |s| s.as_str())
-        .to_string();
-
-    let group_id = if group.is_empty() {
-        None
+    let group_id = if let Some(group) = matches.get_one::<String>(OPT_GROUP) {
+        Some(resolve_id(group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
     } else {
-        Some(resolve_id(&group, grp2gid).ok_or_else(|| InstallError::InvalidGroup(group.clone()))?)
+        None
     };
 
     let context = matches.get_one::<String>(OPT_CONTEXT).cloned();
@@ -600,8 +589,10 @@ fn is_potential_directory_path(path: &Path) -> bool {
 
 #[cfg(not(unix))]
 fn is_potential_directory_path(path: &Path) -> bool {
-    let path_str = path.to_string_lossy();
-    path_str.ends_with(MAIN_SEPARATOR) || path_str.ends_with('/') || path.is_dir()
+    matches!(
+        path.as_os_str().as_encoded_bytes().last(),
+        Some(b'/') | Some(b'\\')
+    ) || path.is_dir()
 }
 
 /// Perform an install, given a list of paths and behavior.
@@ -1344,7 +1335,7 @@ fn need_copy(from: &Path, to: &Path, b: &Behavior) -> bool {
     }
 
     // Check if the contents of the source and destination files differ.
-    if !diff(&from.to_string_lossy(), &to.to_string_lossy()) {
+    if !are_files_identical(from, to).unwrap_or(false) {
         return true;
     }
 

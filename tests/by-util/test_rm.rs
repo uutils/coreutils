@@ -1281,7 +1281,7 @@ fn test_rm_recursive_long_path_safe_traversal() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_executable() {
-    // Test from GNU rm/rm2.sh
+    // Test removing files with specific permission scenarios
     // Exercise code paths when directories have no execute permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1321,7 +1321,7 @@ fn test_rm_directory_not_executable() {
 #[cfg(all(not(windows), feature = "chmod"))]
 #[test]
 fn test_rm_directory_not_writable() {
-    // Test from GNU rm/rm1.sh
+    // Test basic recursive removal
     // Exercise code paths when directories have no write permission
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;

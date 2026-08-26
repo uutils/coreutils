@@ -6,6 +6,7 @@
 mod blocks;
 mod columns;
 mod filesystem;
+mod platform;
 mod table;
 
 use blocks::HumanReadable;
@@ -316,10 +317,7 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
 
-    #[cfg(not(windows))]
-    let maybe_mount = |m| Filesystem::from_mount(&mounts, m, None).ok();
-    #[cfg(windows)]
-    let maybe_mount = |m| Filesystem::from_mount(m, None).ok();
+    let maybe_mount = |m| platform::filesystem_from_mount(&mounts, m, None).ok();
 
     Ok(mounts
         .iter()
@@ -336,7 +334,6 @@ where
     // The list of all mounted filesystems.
     let mounts_result = read_fs_list();
 
-    #[allow(unused_variables)]
     let (mounts, use_fallback) = match mounts_result {
         Ok(m) => (m, false),
         Err(e) => {
@@ -356,14 +353,7 @@ where
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
-        #[cfg(unix)]
-        let fs_result = if use_fallback {
-            Filesystem::from_path_direct(path)
-        } else {
-            Filesystem::from_path(&mounts, path)
-        };
-        #[cfg(not(unix))]
-        let fs_result = Filesystem::from_path(&mounts, path);
+        let fs_result = platform::filesystem_for_path(&mounts, use_fallback, path);
 
         match fs_result {
             Ok(fs) => {
@@ -424,8 +414,7 @@ impl UError for DfError {
 pub fn filesystems(paths: Option<&[&Path]>, opt: &Options) -> UResult<Vec<Filesystem>> {
     // Run a sync call before any operation if so instructed.
     if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        rustix::fs::sync();
+        platform::sync();
     }
 
     let unreadable_mount_table = |e: Box<dyn UError>| {
@@ -484,15 +473,8 @@ pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    #[cfg(windows)]
-    {
-        if matches.get_flag(OPT_INODES) {
-            println!(
-                "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => "df")
-            );
-            return Ok(());
-        }
+    if let Some(result) = platform::maybe_unsupported_options(&matches) {
+        return result;
     }
 
     let opt = Options::from_matches(&matches)?;
