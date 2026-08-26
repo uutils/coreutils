@@ -674,6 +674,16 @@ fn stop_after_additional_escape() {
 }
 
 #[test]
+fn stop_after_additional_escape_in_b_string() {
+    // A `\c` inside a %b argument must stop the entire invocation, not just
+    // that argument's own expansion.
+    new_ucmd!()
+        .args(&["A%bB\\n", "x\\cy"])
+        .succeeds()
+        .stdout_only("Ax");
+}
+
+#[test]
 fn sub_float_leading_zeroes() {
     new_ucmd!()
         .args(&["%010f", "1"])
