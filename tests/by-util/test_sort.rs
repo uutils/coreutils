@@ -1799,6 +1799,37 @@ fn test_separator_null() {
 }
 
 #[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator (clap strips a leading
+    // `=` from attached short-option values), matching GNU sort. #14120
+    new_ucmd!()
+        .args(&["-t=", "-k", "2"])
+        .pipe_in("a=b=c\nb=a=d\n")
+        .succeeds()
+        .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_attached_equals_double() {
+    // `-t==` selects the two-character separator `==`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t==", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=='");
+}
+
+#[test]
+fn test_separator_attached_equals_multi_char() {
+    // `-t=a` selects the two-character separator `=a`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t=a", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=a'");
+}
+
+#[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
     let (at, mut ucmd) = at_and_ucmd!();
