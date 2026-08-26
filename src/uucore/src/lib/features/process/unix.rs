@@ -101,6 +101,29 @@ fn signal_from_value(signal: usize) -> io::Result<Signal> {
         .ok_or_else(|| io::Error::from_raw_os_error(libc::EINVAL))
 }
 
+/// Discard any pending instance of `sig` for this process.
+///
+/// Only ever reaps a signal that is both blocked and pending, so `sigwait` returns
+/// at once instead of blocking.
+fn discard_pending(sig: i32) {
+    // SAFETY: `pending` and `set` are initialized before use, and `sigwait` is only
+    // reached once `sigpending` reports `sig` as pending (hence blocked), so it
+    // returns immediately.
+    unsafe {
+        let mut pending: libc::sigset_t = std::mem::zeroed();
+        if libc::sigpending(&raw mut pending) == -1
+            || libc::sigismember(&raw const pending, sig) != 1
+        {
+            return;
+        }
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&raw mut set);
+        libc::sigaddset(&raw mut set, sig);
+        let mut caught = 0;
+        libc::sigwait(&raw const set, &raw mut caught);
+    }
+}
+
 impl ChildExt for Child {
     fn send_signal(&mut self, signal: usize) -> io::Result<()> {
         let pid = Pid::from_raw(self.id() as pid_t)
@@ -141,6 +164,12 @@ impl ChildExt for Child {
             return Err(io::Error::last_os_error());
         }
         let res = kill_current_process_group(sig);
+        // SIG_IGN alone is not enough when the caller blocks the signal to consume it
+        // with `sigwait` (as `timeout` does): the kernel only discards an ignored
+        // signal that is *not* blocked, so a blocked one stays queued and the caller
+        // would read back the very signal it just sent to its own group. Drop that
+        // self-delivered instance.
+        discard_pending(sig_raw);
         // Restore the previous disposition.
         unsafe { libc::sigaction(sig_raw, &raw const old, std::ptr::null_mut()) };
         res.map_err(io::Error::from)
