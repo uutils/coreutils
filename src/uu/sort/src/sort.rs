@@ -2113,6 +2113,23 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let args: Vec<OsString> = args.collect();
     let key_args = uucore::diagnostics::capture(&args);
 
+    // GNU `sort` supports `-t=` to set the field separator to `=`.
+    // Clap strips the first `=` after a short option (see
+    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
+    // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
+    // argument to its long form, which preserves the separator verbatim.
+    let args = args.into_iter().map(|x| {
+        // Non-UTF-8 separators are rejected later anyway, so lossy conversion
+        // here only affects arguments that cannot become a valid separator.
+        let as_str = x.to_string_lossy();
+        if as_str.starts_with("-t") && as_str.chars().count() > 2 {
+            OsString::from(format!("--{}={}", options::SEPARATOR, &as_str[2..]))
+        } else {
+            x
+        }
+    });
+    let args: Vec<OsString> = args.collect();
+
     let (processed_args, mut legacy_warnings) = preprocess_legacy_args(args);
     if !legacy_warnings.is_empty() {
         index_legacy_warnings(&processed_args, &mut legacy_warnings);

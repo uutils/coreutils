@@ -365,10 +365,14 @@ jobs:
         ## Without this, the artifact action occasionally settles on a run that
         ## is weeks old, and every test fixed since then is reported as a "fix"
         ## of the current PR (and every test broken since then as a regression).
+        ## note: the server-side 'status' filter is served from a search index
+        ## that can lag weeks behind (observed returning nothing newer than a
+        ## month old while the unfiltered listing was current), so filter on
+        ## 'status' client-side instead.
         RUN_ID=''
         RUN_DATE=''
-        runs=$(gh api "repos/${{ github.repository }}/actions/workflows/GnuTests.yml/runs?branch=${{ env.DEFAULT_BRANCH }}&status=completed&per_page=20" \
-                 --jq '.workflow_runs[] | "\(.id) \(.created_at)"' || true)
+        runs=$(gh api "repos/${{ github.repository }}/actions/workflows/GnuTests.yml/runs?branch=${{ env.DEFAULT_BRANCH }}&per_page=30" \
+                 --jq '.workflow_runs[] | select(.status == "completed") | "\(.id) \(.created_at)"' || true)
         while read -r id run_date; do
           [[ -n "$id" ]] || continue
           has_artifact=$(gh api "repos/${{ github.repository }}/actions/runs/${id}/artifacts?per_page=100" \

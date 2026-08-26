@@ -1275,6 +1275,21 @@ fn test_number_by_lines_kth() {
         .stdout_only("20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n");
 }
 
+/// Chunks smaller than one byte must not loop forever.
+///
+/// When the input is shorter than the requested number of chunks, the trailing
+/// chunks are zero-sized. The chunk-advancing loop used to make no progress in
+/// that case and spun forever at 100% CPU.
+#[test]
+fn test_number_by_lines_fewer_bytes_than_chunks_elide() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a");
+    ucmd.args(&["-e", "-n", "l/3", "in"]).succeeds().no_output();
+    assert_eq!(at.read("xaa"), "a");
+    assert!(!at.plus("xab").exists());
+    assert!(!at.plus("xac").exists());
+}
+
 #[test]
 #[cfg(unix)]
 fn test_number_by_lines_kth_dev_null() {
