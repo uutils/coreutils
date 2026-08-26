@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) ttyname filedesc
 
+#![cfg(not(target_os = "fuchsia"))]
+
 use clap::{Arg, ArgAction, Command};
 use std::io::{IsTerminal, Write};
 use uucore::error::{UResult, set_exit_code};

@@ -58,7 +58,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // When using --filter, we write to a child process's stdin which may
     // close early. Disable SIGPIPE so we get EPIPE errors instead of
     // being terminated, allowing graceful handling of broken pipes.
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if settings.filter.is_some() {
         let _ = uucore::signals::disable_pipe_errors();
     }
