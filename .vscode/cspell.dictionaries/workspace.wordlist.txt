@@ -374,6 +374,7 @@ setpipe
 
 # * other
 auxv
+btrfs
 getlimits
 weblate
 algs
@@ -407,3 +408,4 @@ merror
 merreur
 verbo
 inattendu
+adir
