@@ -8,7 +8,7 @@
 use clap::{Arg, ArgAction, Command};
 use std::ffi::OsString;
 use std::fs;
-use std::io::{ErrorKind, Write};
+use std::io::ErrorKind;
 use uucore::display::Quotable;
 use uucore::error::strip_errno;
 use uucore::error::{UResult, UUsageError, set_exit_code};
@@ -146,26 +146,20 @@ fn check_basic(path: &[String]) -> bool {
     let total_len = joined_path.len();
     // path length
     if total_len > POSIX_PATH_MAX {
-        writeln!(
-            std::io::stderr(),
+        show_error!(
             "{}",
             translate!("pathchk-error-posix-path-length-exceeded", "limit" => POSIX_PATH_MAX, "length" => total_len, "path" => joined_path)
         );
         return false;
     } else if total_len == 0 {
-        writeln!(
-            std::io::stderr(),
-            "{}",
-            translate!("pathchk-error-empty-file-name")
-        );
+        show_error!("{}", translate!("pathchk-error-empty-file-name"));
         return false;
     }
     // components: character portability and length
     for p in path {
         let component_len = p.len();
         if component_len > POSIX_NAME_MAX {
-            writeln!(
-                std::io::stderr(),
+            show_error!(
                 "{}",
                 translate!("pathchk-error-posix-name-length-exceeded", "limit" => POSIX_NAME_MAX, "length" => component_len, "component" => p.quote())
             );
@@ -184,8 +178,7 @@ fn check_extra(path: &[String]) -> bool {
     // components: leading hyphens
     for p in path {
         if p.starts_with('-') {
-            writeln!(
-                std::io::stderr(),
+            show_error!(
                 "{}",
                 translate!("pathchk-error-leading-hyphen", "component" => p.quote())
             );
@@ -194,11 +187,7 @@ fn check_extra(path: &[String]) -> bool {
     }
     // path length
     if path.join("/").is_empty() {
-        writeln!(
-            std::io::stderr(),
-            "{}",
-            translate!("pathchk-error-empty-file-name")
-        );
+        show_error!("{}", translate!("pathchk-error-empty-file-name"));
         return false;
     }
     true
@@ -210,8 +199,7 @@ fn check_default(path: &[String]) -> bool {
     let total_len = joined_path.len();
     // path length
     if total_len > PATH_MAX {
-        writeln!(
-            std::io::stderr(),
+        show_error!(
             "{}",
             translate!("pathchk-error-path-length-exceeded", "limit" => PATH_MAX, "length" => total_len, "path" => joined_path.quote())
         );
@@ -223,11 +211,7 @@ fn check_default(path: &[String]) -> bool {
         // but some non-POSIX hosts do (as an alias for "."),
         // so allow "" if `symlink_metadata` (corresponds to `lstat`) does.
         if fs::symlink_metadata(&joined_path).is_err() {
-            writeln!(
-                std::io::stderr(),
-                "{}",
-                translate!("pathchk-error-empty-path-not-found")
-            );
+            show_error!("{}", translate!("pathchk-error-empty-path-not-found"));
             return false;
         }
     }
@@ -236,8 +220,7 @@ fn check_default(path: &[String]) -> bool {
     for p in path {
         let component_len = p.len();
         if component_len > FILENAME_MAX {
-            writeln!(
-                std::io::stderr(),
+            show_error!(
                 "{}",
                 translate!("pathchk-error-name-length-exceeded", "limit" => FILENAME_MAX, "length" => component_len, "component" => p.quote())
             );
@@ -253,13 +236,10 @@ fn check_searchable(path: &str) -> bool {
     // we use lstat, just like the original implementation
     match fs::symlink_metadata(path) {
         Ok(_) => true,
+        Err(e) if e.kind() == ErrorKind::NotFound => true,
         Err(e) => {
-            if e.kind() == ErrorKind::NotFound {
-                true
-            } else {
-                show_error!("{}: {}", path, strip_errno(&e));
-                false
-            }
+            show_error!("{}: {}", path, strip_errno(&e));
+            false
         }
     }
 }
@@ -270,8 +250,7 @@ fn check_portable_chars(path_segment: &str) -> bool {
     for (i, ch) in path_segment.as_bytes().iter().enumerate() {
         if !VALID_CHARS.contains(ch) {
             let invalid = path_segment[i..].chars().next().unwrap();
-            writeln!(
-                std::io::stderr(),
+            show_error!(
                 "{}",
                 translate!("pathchk-error-nonportable-character", "character" => invalid, "component" => path_segment.quote())
             );
