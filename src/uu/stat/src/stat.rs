@@ -40,8 +40,6 @@ use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_
 enum StatError {
     #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style.clone()))]
     InvalidQuotingStyle { style: String },
-    #[error("{}", translate!("stat-error-missing-operand"))]
-    MissingOperand,
     #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive.clone()))]
     InvalidDirective { directive: String },
     #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error.clone()))]
@@ -1045,13 +1043,11 @@ impl Stater {
     }
 
     fn new(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Self> {
+        #[expect(clippy::unwrap_used, reason = "set as required by clap")]
         let files: Vec<OsString> = matches
             .get_many::<OsString>(options::FILES)
             .map(|v| v.map(OsString::from).collect())
-            .unwrap_or_default();
-        if files.is_empty() {
-            return Err(Box::new(StatError::MissingOperand) as Box<dyn UError>);
-        }
+            .unwrap();
         let format_str = if matches.contains_id(options::PRINTF) {
             matches
                 .get_one::<String>(options::PRINTF)
@@ -1554,6 +1550,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::FILES)
                 .action(ArgAction::Append)
                 .value_parser(ValueParser::os_string())
+                .required(true)
                 .value_hint(clap::ValueHint::FilePath),
         )
 }
