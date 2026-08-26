@@ -24,7 +24,7 @@ use bigdecimal::BigDecimal;
 use chunks::LineData;
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
-use custom_str_cmp::custom_str_cmp;
+use custom_str_cmp::{custom_str_cmp, is_blank};
 use ext_sort::ext_sort;
 use foldhash::fast::FoldHasher;
 use foldhash::{HashMap, SharedSeed};
@@ -887,7 +887,7 @@ fn tokenize_default(
     // pretend that there was whitespace in front of the line
     let mut previous_was_whitespace = true;
     for (idx, char) in line.iter().enumerate() {
-        let is_whitespace = char.is_ascii_whitespace();
+        let is_whitespace = is_blank(*char);
         let treat_as_separator = if is_whitespace {
             if blank_thousands_sep && *char == b' ' {
                 !is_blank_thousands_sep(line, idx, allow_unit_after_blank)

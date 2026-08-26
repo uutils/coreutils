@@ -3569,3 +3569,37 @@ sort: invalid suffix in --buffer-size argument '8zz'
 }
 
 /* spell-checker: enable */
+
+#[test]
+fn test_dictionary_order_ignores_carriage_return() {
+    // GNU sort -d keeps only blanks (space/tab) and alphanumerics; `\r` is
+    // neither, so it is ignored for comparison. #14119
+    new_ucmd!()
+        .args(&["-d"])
+        .pipe_in("a\rb\naab\n")
+        .succeeds()
+        .stdout_only("aab\na\rb\n");
+}
+
+#[test]
+fn test_numeric_skips_carriage_return() {
+    // GNU sort -n skips leading blanks (space/tab) before the number; `\r`
+    // is skipped as well because it is not part of the number's key match.
+    // Reported against uutils where `\r4` failed to parse as numeric. #14119
+    new_ucmd!()
+        .args(&["-n"])
+        .pipe_in("\r4\na\n")
+        .succeeds()
+        .stdout_only("\r4\na\n");
+}
+
+#[test]
+fn test_field_split_ignores_carriage_return() {
+    // Default field tokenization splits on blanks (space/tab) only, so a
+    // trailing `\r` does not start a new field. #14119
+    new_ucmd!()
+        .args(&["-k2,3"])
+        .pipe_in("aa\n0aa\r\n")
+        .succeeds()
+        .stdout_only("0aa\r\naa\n");
+}

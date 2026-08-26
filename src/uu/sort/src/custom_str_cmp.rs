@@ -9,8 +9,16 @@
 
 use std::cmp::Ordering;
 
+/// A blank character, i.e. space or tab, matching GNU sort's locale-independent
+/// blank set. Note that this is narrower than Rust's `u8::is_ascii_whitespace`,
+/// which also covers `\r`, `\n` and `\v` -- GNU treats those as ordinary
+/// characters for dictionary order, field tokenization and numeric parsing.
+pub(crate) fn is_blank(c: u8) -> bool {
+    c == b' ' || c == b'\t'
+}
+
 fn filter_char(c: u8, ignore_non_printing: bool, ignore_non_dictionary: bool) -> bool {
-    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || c.is_ascii_whitespace()) {
+    if ignore_non_dictionary && !(c.is_ascii_alphanumeric() || is_blank(c)) {
         return false;
     }
     !(ignore_non_printing && (c.is_ascii_control() || !c.is_ascii()))

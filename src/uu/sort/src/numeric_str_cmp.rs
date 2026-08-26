@@ -14,6 +14,8 @@
 
 use std::{cmp::Ordering, ops::Range};
 
+use crate::custom_str_cmp::is_blank;
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 enum Sign {
     Negative,
@@ -61,7 +63,7 @@ impl NumInfo {
         let mut first_char = true;
 
         for (idx, &char) in num.iter().enumerate() {
-            if first_char && char.is_ascii_whitespace() {
+            if first_char && is_blank(char) {
                 continue;
             }
 
