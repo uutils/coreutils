@@ -1231,6 +1231,12 @@ fn dd_copy(mut i: Input, o: Output) -> io::Result<()> {
     // Aligned read scratch sized to the block size (the max size needed).
     // 4 KiB alignment satisfies block devices that enforce a strict
     // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
+    //
+    // A `count=` smaller than the block size caps how much will ever be
+    // read, so allocate only that much: `ibs=16384 obs=16383 count=1`
+    // would otherwise reserve the least common multiple of the two block
+    // sizes (256 MiB) to copy 16 KiB.
+    let bsize = calc_loop_bsize(i.settings.count, &rstat, i.settings.ibs, bsize);
     let mut buf = AlignedBuf::new(bsize)?;
     // Separate scratch for `conv=block` / `conv=unblock`, which can change
     // the byte count and so cannot be done in-place in `buf`.
@@ -1486,8 +1492,10 @@ fn calc_loop_bsize(count: Option<Num>, rstat: &ReadStat, ibs: usize, ideal_bsize
     match count {
         Some(Num::Blocks(rmax)) => {
             let rsofar = rstat.reads_complete + rstat.reads_partial;
-            let rremain = rmax - rsofar;
-            cmp::min(ideal_bsize as u64, rremain * ibs as u64) as usize
+            // `count=` is a user-supplied u64, so `count * ibs` can exceed
+            // u64: saturate rather than wrap to a bogus (tiny) buffer size.
+            let rremain = rmax.saturating_sub(rsofar);
+            cmp::min(ideal_bsize as u64, rremain.saturating_mul(ibs as u64)) as usize
         }
         Some(Num::Bytes(bmax)) => {
             // `iflag=count_bytes` limits input, so use bytes read.

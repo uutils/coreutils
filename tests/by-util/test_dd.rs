@@ -133,6 +133,27 @@ fn test_out_of_memory_skip() {
         .stderr_contains("memory");
 }
 
+// `count=` caps how much can ever be read, so the copy buffer must be sized
+// to it rather than to the least common multiple of `ibs` and `obs` (256 MiB
+// here, for a 16 KiB copy).
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "address-space limits are not supported by the WASI runner"
+)]
+#[test]
+fn test_count_limits_internal_buffer_allocation() {
+    use rlimit::Resource;
+
+    const AS_LIMIT: u64 = 200 * 1024 * 1024;
+
+    new_ucmd!()
+        .limit(Resource::AS, AS_LIMIT, AS_LIMIT)
+        .args(&["if=/dev/zero", "of=/dev/null"])
+        .args(&["ibs=16384", "obs=16383", "count=1", "status=none"])
+        .succeeds();
+}
+
 #[test]
 fn test_huge_block_size_is_rejected_without_panicking() {
     // Regression test for #12844: a block size >= i64::MAX used to panic
