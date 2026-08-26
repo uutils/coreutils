@@ -1820,11 +1820,42 @@ fn test_separator_attached_equals_double() {
 }
 
 #[test]
+fn test_separator_clustered_attached() {
+    // `-nt=5`: -n is a flag, -t takes the rest of the argument (`=5`)
+    // verbatim, which GNU rejects as multi-character.
+    new_ucmd!()
+        .args(&["-nt=5"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("'=5'");
+}
+
+#[test]
+fn test_separator_clustered_attached_b() {
+    new_ucmd!()
+        .args(&["-bt=x"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("'=x'");
+}
+
+#[test]
+fn test_separator_clustered_still_sorts() {
+    // The rewrite must not disturb value-taking shorts inside clusters'
+    // siblings: -n plus a working attached separator. #14120
+    // Uses numeric field values so -n actually sorts.
+    new_ucmd!()
+        .args(&["-nt=", "-k", "2"])
+        .pipe_in("3=b\n1=a\n2=c\n")
+        .succeeds()
+        .stdout_only("1=a\n2=c\n3=b\n");
+}
+
+#[test]
 fn test_separator_attached_equals_multi_char() {
     // `-t=a` selects the two-character separator `=a`, which GNU rejects.
     new_ucmd!()
         .args(&["-t=a", "-k", "2"])
-        .pipe_in("a=b=c\n")
         .fails()
         .stderr_contains("separator must be exactly one character long: '=a'");
 }

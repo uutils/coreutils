@@ -2118,15 +2118,38 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242,
     // and the same rewrite in `cut`), so rewrite every attached `-t<chars>`
     // argument to its long form, which preserves the separator verbatim.
-    let args = args.into_iter().map(|x| {
+    let args = args.into_iter().flat_map(|x| {
         // Non-UTF-8 separators are rejected later anyway, so lossy conversion
         // here only affects arguments that cannot become a valid separator.
         let as_str = x.to_string_lossy();
+        // Attached form -t<chars>: route through long option to preserve verbatim.
         if as_str.starts_with("-t") && as_str.chars().count() > 2 {
-            OsString::from(format!("--{}={}", options::SEPARATOR, &as_str[2..]))
-        } else {
-            x
+            return vec![OsString::from(format!(
+                "--{}={}",
+                options::SEPARATOR,
+                &as_str[2..]
+            ))];
         }
+        // Clustered form, e.g. -nt=5: split into -<flags>t + rest so clap
+        // passes the value through unstripped. Only for valueless flag clusters.
+        let valueless_shorts = "bCcdfghimMnRrsuz";
+        let bytes = as_str.as_bytes();
+        if bytes.len() > 3
+            && bytes[0] == b'-'
+            && bytes[1] != b'-'
+            && let Some(t_idx) = (1..bytes.len() - 1).find(|&i| bytes[i] == b't')
+        {
+            let flags_before = &as_str[1..t_idx];
+            if !flags_before.is_empty()
+                && flags_before.chars().all(|c| valueless_shorts.contains(c))
+            {
+                return vec![
+                    OsString::from(format!("-{flags_before}t")),
+                    OsString::from(&as_str[t_idx + 1..]),
+                ];
+            }
+        }
+        vec![x]
     });
     let args: Vec<OsString> = args.collect();
 
