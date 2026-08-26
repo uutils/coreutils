@@ -48,8 +48,6 @@ const NAME_CHARSET: &[u8] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN
 
 const PATTERN_LENGTH: usize = 3;
 const PATTERN_BUFFER_SIZE: usize = BLOCK_SIZE + PATTERN_LENGTH - 1;
-/// Sector size used when applying the "flip first bit of every sector" variants.
-const SECTOR_SIZE: usize = 512;
 
 /// Optimal block size for the filesystem. This constant is used for data size alignment, similar
 /// to the behavior of GNU shred. Usually, optimal block size is a 4K block (2^12), which is why
@@ -93,7 +91,7 @@ enum Pattern {
 }
 
 impl Pattern {
-    /// Lower 12 bits: 3-byte pattern. Bit 0x1000: sector-phase flip.
+    /// Decode a 12-bit fillpattern. Bit 0x1000 marks a sector-phase variant.
     fn from_code(code: i32) -> Self {
         let mut bits = (code & 0xfff) as u32;
         bits |= bits << 12;
@@ -123,7 +121,7 @@ impl Pattern {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone)]
 enum PassType {
     Pattern(Pattern),
     Random,
@@ -212,9 +210,6 @@ enum BytesWriter {
     Pattern {
         offset: usize,
         buffer: [u8; PATTERN_BUFFER_SIZE],
-        /// When true, keep `offset` at 0 so sector-phase flips stay aligned
-        /// to the start of each write (matches the sector-relative design).
-        lock_offset: bool,
     },
 }
 
@@ -240,26 +235,20 @@ impl BytesWriter {
                 }
             },
             PassType::Pattern(pattern) => {
-                let (mut buffer, flip_sector) = match pattern {
-                    Pattern::Single(byte) => ([*byte; PATTERN_BUFFER_SIZE], false),
+                // Copy the pattern in chunks rather than simply one byte at a time
+                // We prefill the pattern so that the buffer can be reused at each
+                // iteration as a small optimization.
+                let buffer = match pattern {
+                    Pattern::Single(byte) => [*byte; PATTERN_BUFFER_SIZE],
                     Pattern::Multi(bytes) | Pattern::Sector(bytes) => {
                         let mut buf = [0; PATTERN_BUFFER_SIZE];
                         for chunk in buf.chunks_exact_mut(PATTERN_LENGTH) {
                             chunk.copy_from_slice(bytes);
                         }
-                        (buf, matches!(pattern, Pattern::Sector(_)))
+                        buf
                     }
                 };
-                if flip_sector {
-                    for i in (0..PATTERN_BUFFER_SIZE).step_by(SECTOR_SIZE) {
-                        buffer[i] ^= 0x80;
-                    }
-                }
-                Ok(Self::Pattern {
-                    offset: 0,
-                    buffer,
-                    lock_offset: flip_sector,
-                })
+                Ok(Self::Pattern { offset: 0, buffer })
             }
         }
     }
@@ -276,15 +265,9 @@ impl BytesWriter {
                 rng_file.read_exact(bytes)?;
                 Ok(bytes)
             }
-            Self::Pattern {
-                offset,
-                buffer,
-                lock_offset,
-            } => {
+            Self::Pattern { offset, buffer } => {
                 let bytes = &buffer[*offset..size + *offset];
-                if !*lock_offset {
-                    *offset = (*offset + size) % PATTERN_LENGTH;
-                }
+                *offset = (*offset + size) % PATTERN_LENGTH;
                 Ok(bytes)
             }
         }
@@ -475,7 +458,6 @@ fn pass_name(pass_type: &PassType) -> String {
     }
 }
 
-/// Convert a pattern code to [`Pattern`] (fillpattern + optional sector-phase bit).
 fn pattern_value_to_pattern(pattern: i32) -> Pattern {
     Pattern::from_code(pattern)
 }
@@ -894,13 +876,10 @@ fn do_remove(path: &Path, verbose: bool, remove_method: RemoveMethod) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        BLOCK_SIZE, BytesWriter, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, SECTOR_SIZE, pass_name,
-        split_on_blocks,
-    };
+    use super::{BLOCK_SIZE, OPTIMAL_IO_BLOCK_SIZE, PassType, Pattern, pass_name, split_on_blocks};
 
     #[test]
-    fn test_pattern_from_code_flip() {
+    fn test_pattern_from_code() {
         let p = Pattern::from_code(0x1000);
         assert_eq!(p, Pattern::Sector([0, 0, 0]));
         assert_eq!(p.display_bytes(), [0x80, 0, 0]);
@@ -915,29 +894,10 @@ mod tests {
         assert_eq!(p, Pattern::Single(0));
         assert_eq!(p.display_bytes(), [0, 0, 0]);
         assert_eq!(pass_name(&PassType::Pattern(p)), "000000");
-    }
 
-    #[test]
-    fn test_sector_phase_writer_flips_each_sector() {
-        let pass = PassType::Pattern(Pattern::from_code(0x1000));
-        let mut writer = BytesWriter::from_pass_type(&pass, None).unwrap();
-        let bytes = writer.bytes_for_pass(BLOCK_SIZE).unwrap();
-        // First byte of every 512-byte sector is XOR'd with 0x80.
-        for i in (0..BLOCK_SIZE).step_by(SECTOR_SIZE) {
-            assert_eq!(bytes[i], 0x80, "sector start at {i}");
-            if i + 1 < BLOCK_SIZE {
-                assert_eq!(bytes[i + 1], 0x00);
-            }
-        }
-        // Offset stays locked so the next block also starts at a sector boundary.
-        let bytes2 = writer.bytes_for_pass(SECTOR_SIZE).unwrap();
-        assert_eq!(bytes2[0], 0x80);
-
-        let plain = PassType::Pattern(Pattern::from_code(0x111));
-        let mut writer = BytesWriter::from_pass_type(&plain, None).unwrap();
-        let bytes = writer.bytes_for_pass(BLOCK_SIZE).unwrap();
-        assert_eq!(bytes[0], 0x11);
-        assert_eq!(bytes[SECTOR_SIZE], 0x11);
+        let p = Pattern::from_code(0x249);
+        assert_eq!(p, Pattern::Multi([0x24, 0x92, 0x49]));
+        assert_eq!(pass_name(&PassType::Pattern(p)), "249249");
     }
 
     #[test]
