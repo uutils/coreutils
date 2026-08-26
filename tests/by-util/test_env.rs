@@ -1966,6 +1966,65 @@ fn test_env_language_c_overrides_lc_all() {
 }
 
 #[test]
+fn test_env_language_skips_locale_without_catalog() {
+    // gettext walks the whole LANGUAGE priority list: an entry we ship no
+    // translation for must not swallow the next one.
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LC_ALL", "fr_FR")
+        .env("LANGUAGE", "de_DE:fr_FR")
+        .fails()
+        .stderr_contains("argument inattendu");
+}
+
+#[test]
+fn test_env_language_without_territory() {
+    // A language-only entry (common on Debian/GNOME) must still find the
+    // fr-FR catalog.
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LC_ALL", "fr_FR")
+        .env("LANGUAGE", "fr")
+        .fails()
+        .stderr_contains("argument inattendu");
+}
+
+#[test]
+fn test_env_language_other_territory() {
+    // Same for a territory we don't ship: fr_CA falls back to the fr catalog.
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LC_ALL", "fr_FR")
+        .env("LANGUAGE", "fr_CA")
+        .fails()
+        .stderr_contains("argument inattendu");
+}
+
+#[test]
+fn test_env_language_english_territory_does_not_swallow_the_list() {
+    // en_GB has no catalog of its own, and the always-present en-US one is
+    // not a substitute for it: the next entry still gets its turn.
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LC_ALL", "fr_FR")
+        .env("LANGUAGE", "en_GB:fr_FR")
+        .fails()
+        .stderr_contains("argument inattendu");
+}
+
+#[test]
+fn test_env_language_c_entry_stops_the_list() {
+    // A C entry means "no translation from here on": the later French entry
+    // is never consulted.
+    new_ucmd!()
+        .arg("--verbo")
+        .env("LC_ALL", "fr_FR")
+        .env("LANGUAGE", "C:fr_FR")
+        .fails()
+        .stderr_contains("error: unexpected argument");
+}
+
+#[test]
 fn test_shebang_error() {
     new_ucmd!()
         .arg("\'-v \'")

@@ -9,7 +9,8 @@ use crate::error::UError;
 use fluent::{FluentArgs, FluentBundle, FluentResource};
 use fluent_syntax::parser::ParserError;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -287,14 +288,78 @@ fn create_bundle(
     }
 }
 
+/// Every catalog shipped for `util_name`, sorted so a lookup picks the same
+/// one on every run (directory order is not stable). Listed at most once per
+/// process: a `LANGUAGE` list asks for it once per entry.
+fn shipped_catalogs(util_name: &str) -> Vec<LanguageIdentifier> {
+    fn list(util_name: &str) -> Vec<LanguageIdentifier> {
+        let Some(entries) = get_locales_dir(util_name)
+            .ok()
+            .and_then(|dir| fs::read_dir(dir).ok())
+        else {
+            return Vec::new();
+        };
+        let mut catalogs: Vec<LanguageIdentifier> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let path = entry.path();
+                if path.extension().and_then(OsStr::to_str) != Some("ftl") {
+                    return None;
+                }
+                LanguageIdentifier::from_str(path.file_stem().and_then(OsStr::to_str)?).ok()
+            })
+            .collect();
+        catalogs.sort_by_key(ToString::to_string);
+        catalogs
+    }
+
+    thread_local! {
+        static CATALOGS: RefCell<Option<(String, Vec<LanguageIdentifier>)>> =
+            const { RefCell::new(None) };
+    }
+    CATALOGS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        match cache.as_ref() {
+            Some((name, catalogs)) if name == util_name => catalogs.clone(),
+            _ => {
+                let catalogs = list(util_name);
+                *cache = Some((util_name.to_string(), catalogs.clone()));
+                catalogs
+            }
+        }
+    })
+}
+
+/// Catalogs of the same language as `locale` but a different (or no)
+/// territory, e.g. `fr-FR.ftl` for a language-only `LANGUAGE=fr`, mirroring
+/// gettext's territory stripping. Only consulted when there is no exact
+/// catalog.
+///
+/// [`DEFAULT_LOCALE`] is never returned: `en-US.ftl` always exists, so
+/// otherwise any English entry in a `LANGUAGE` list (`en_GB:fr_FR`, a stock
+/// desktop setting) would match here and swallow the rest of the list.
+/// English is already the terminator of the candidate list, so dropping it
+/// here only delays it until the later entries have had their turn.
+fn same_language_catalogs(locale: &LanguageIdentifier, util_name: &str) -> Vec<LanguageIdentifier> {
+    let default_locale = default_locale_id();
+    shipped_catalogs(util_name)
+        .into_iter()
+        .filter(|catalog| {
+            catalog.language == locale.language && *catalog != *locale && *catalog != default_locale
+        })
+        .collect()
+}
+
 /// Initialize localization with common strings in addition to utility-specific strings
+///
+/// `locales` is a priority list (see [`detect_system_locales`]): the first one
+/// with an actual translation catalog wins, and English is used when none has.
 fn init_localization(
-    locale: &LanguageIdentifier,
+    locales: &[LanguageIdentifier],
     locales_dir: &Path,
     util_name: &str,
 ) -> Result<(), LocalizationError> {
-    let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-        .expect("Default locale should always be valid");
+    let default_locale = default_locale_id();
 
     // Try to create a bundle that combines common and utility-specific strings
     let english_bundle: FluentBundle<&'static FluentResource> =
@@ -303,18 +368,22 @@ fn init_localization(
             create_english_bundle_from_embedded(&default_locale, util_name)
         })?;
 
-    let loc = if locale == &default_locale {
-        // If requesting English, just use English as primary (no fallback needed)
-        Localizer::new(english_bundle)
-    } else {
-        // Try to load the requested locale with common strings
-        if let Ok(primary_bundle) = create_bundle(locale, locales_dir, util_name) {
-            // Successfully loaded requested locale, load English as fallback
-            Localizer::new(primary_bundle).with_fallback(english_bundle)
-        } else {
-            // Failed to load requested locale, just use English as primary
-            Localizer::new(english_bundle)
-        }
+    let primary_bundle = locales
+        .iter()
+        .take_while(|locale| **locale != default_locale)
+        .find_map(|locale| {
+            create_bundle(locale, locales_dir, util_name)
+                .ok()
+                .or_else(|| {
+                    same_language_catalogs(locale, util_name)
+                        .iter()
+                        .find_map(|catalog| create_bundle(catalog, locales_dir, util_name).ok())
+                })
+        });
+
+    let loc = match primary_bundle {
+        Some(primary) => Localizer::new(primary).with_fallback(english_bundle),
+        None => Localizer::new(english_bundle),
     };
 
     LOCALIZER.with(|lock| {
@@ -540,77 +609,92 @@ pub fn is_integer_literal(s: &str) -> bool {
     !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit())
 }
 
-/// Resolve the locale string from an environment lookup, applying the
-/// POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` > `LANG`.
+/// Resolve the message-locale candidates from an environment lookup, applying
+/// the POSIX precedence `LC_ALL` > `LC_MESSAGES` > `LANG`.
 ///
 /// The first of those variables that is set AND non-empty wins; a
 /// set-but-empty value is treated as unset. If none qualify, falls back to
 /// [`DEFAULT_LOCALE`]. The winning value is stripped of any `.<encoding>`
-/// suffix (e.g. `fr_FR.UTF-8` -> `fr_FR`), matching the previous `LANG`-only
-/// behavior exactly (no additional normalization is applied).
+/// suffix (e.g. `fr_FR.UTF-8` -> `fr_FR`).
 ///
 /// On top of that, `LANGUAGE` is honored with gettext semantics: it is a
-/// colon-separated priority list of languages that overrides the resolved
+/// colon-separated priority list of languages that replaces the resolved
 /// locale for message translation, but only when the locale resolved from
 /// `LC_ALL`/`LC_MESSAGES`/`LANG` is not `C`/`POSIX` (gettext ignores
 /// `LANGUAGE` in the C locale). `LANGUAGE` is likewise disabled when none of
 /// `LC_ALL`/`LC_MESSAGES`/`LANG` is set, since an unset locale is the C
-/// locale. A resolved locale of `C`/`POSIX`, and an entry of `C` or `POSIX`
-/// in the list, both mean "no translation" and resolve to
-/// [`DEFAULT_LOCALE`] (English) explicitly. Each `LANGUAGE` entry is trimmed
-/// and stripped of any `.<encoding>` suffix before validation. Only the
-/// first usable entry is taken; there is no per-entry translation-catalog
-/// fallback like gettext's full walk. Deliberate divergence: when every
-/// `LANGUAGE` entry is unusable, we fall back to the resolved locale,
-/// whereas gettext would emit untranslated msgids instead.
+/// locale.
+///
+/// The result is a priority list: the caller tries each candidate in turn and
+/// uses the first one it has a translation catalog for, like gettext walking
+/// its `LANGUAGE` list. A `C`/`POSIX` entry means "stop here, no translation",
+/// and an exhausted list means English, so [`DEFAULT_LOCALE`] always
+/// terminates the list. Note that when `LANGUAGE` is set the resolved locale
+/// is *not* a fallback, matching gettext.
 ///
 /// `lookup` is injected so the precedence logic is unit-testable without
 /// mutating process-global env vars (which races under parallel test threads).
-fn resolve_locale_string(lookup: impl Fn(&str) -> Option<String>) -> String {
+fn resolve_locale_candidates(lookup: impl Fn(&str) -> Option<String>) -> Vec<String> {
+    let default = || vec![DEFAULT_LOCALE.to_string()];
     let Some(resolved) = ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
         .find_map(|key| lookup(key).filter(|value| !value.is_empty()))
     else {
-        return DEFAULT_LOCALE.to_string();
+        return default();
     };
     let resolved = resolved.split('.').next().unwrap_or(DEFAULT_LOCALE);
 
     // gettext semantics: a C/POSIX locale means "no translation" (English
     // here) and disables LANGUAGE entirely.
     if resolved == "C" || resolved == "POSIX" {
-        return DEFAULT_LOCALE.to_string();
+        return default();
     }
 
-    // init_localization resolves a single locale, so take the first usable
-    // LANGUAGE entry rather than walking the list per-catalog like gettext.
     if let Some(language) = lookup("LANGUAGE").filter(|value| !value.is_empty()) {
+        let mut candidates = Vec::new();
         for entry in language.split(':') {
             let entry = entry.trim().split('.').next().unwrap_or_default();
             if entry.is_empty() {
                 continue;
             }
             if entry == "C" || entry == "POSIX" {
-                // gettext: "no translation" requested, use English.
-                return DEFAULT_LOCALE.to_string();
+                // gettext: "no translation" requested, and the rest of the
+                // list is not consulted.
+                candidates.push(DEFAULT_LOCALE.to_string());
+                return candidates;
             }
-            if LanguageIdentifier::from_str(entry).is_ok() {
-                return entry.to_string();
-            }
+            candidates.push(entry.to_string());
+        }
+        if !candidates.is_empty() {
+            candidates.push(DEFAULT_LOCALE.to_string());
+            return candidates;
         }
     }
 
-    resolved.to_string()
+    vec![resolved.to_string(), DEFAULT_LOCALE.to_string()]
 }
 
-/// Function to detect system locale from environment variables.
+/// Function to detect the system message locales from environment variables.
 ///
 /// Honors the POSIX message-locale precedence `LC_ALL` > `LC_MESSAGES` >
-/// `LANG` (see [`resolve_locale_string`]).
-fn detect_system_locale() -> Result<LanguageIdentifier, LocalizationError> {
-    let locale_str = resolve_locale_string(|key| std::env::var(key).ok());
-    LanguageIdentifier::from_str(&locale_str).map_err(|_| {
-        LocalizationError::ParseLocale(format!("Failed to parse locale: {locale_str}"))
-    })
+/// `LANG` plus the `LANGUAGE` priority list (see
+/// [`resolve_locale_candidates`]). Unparsable candidates are dropped; the
+/// returned list is never empty.
+fn detect_system_locales() -> Vec<LanguageIdentifier> {
+    let mut locales: Vec<LanguageIdentifier> =
+        resolve_locale_candidates(|key| std::env::var(key).ok())
+            .iter()
+            .filter_map(|candidate| LanguageIdentifier::from_str(candidate).ok())
+            .collect();
+    locales.dedup();
+    if locales.is_empty() {
+        locales.push(default_locale_id());
+    }
+    locales
+}
+
+fn default_locale_id() -> LanguageIdentifier {
+    LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
 }
 
 /// Sets up localization using the system locale with English fallback.
@@ -667,28 +751,26 @@ pub fn setup_localization(p: &str) -> Result<(), LocalizationError> {
         return Ok(());
     }
 
-    let locale = detect_system_locale().unwrap_or_else(|_| {
-        LanguageIdentifier::from_str(DEFAULT_LOCALE).expect("Default locale should always be valid")
-    });
+    let locales = detect_system_locales();
 
     // Load common strings along with utility-specific strings
     if let Ok(locales_dir) = get_locales_dir(p) {
         // Load both utility-specific and common strings
-        init_localization(&locale, &locales_dir, p)?;
+        init_localization(&locales, &locales_dir, p)?;
     } else {
         // No locales directory found, use embedded locales
-        let default_locale = LanguageIdentifier::from_str(DEFAULT_LOCALE)
-            .expect("Default locale should always be valid");
+        let default_locale = default_locale_id();
 
         #[cfg(target_os = "wasi")]
         let localizer = {
             let english_bundle = create_wasi_bundle_from_embedded(&default_locale, p)?;
-            if locale == default_locale {
-                Localizer::new(english_bundle)
-            } else if let Ok(localized) = create_wasi_bundle_from_embedded(&locale, p) {
-                Localizer::new(localized).with_fallback(english_bundle)
-            } else {
-                Localizer::new(english_bundle)
+            let localized = locales
+                .iter()
+                .take_while(|locale| **locale != default_locale)
+                .find_map(|locale| create_wasi_bundle_from_embedded(locale, p).ok());
+            match localized {
+                Some(bundle) => Localizer::new(bundle).with_fallback(english_bundle),
+                None => Localizer::new(english_bundle),
             }
         };
 
@@ -1701,66 +1783,68 @@ invalid-syntax = This is { $missing
     #[test]
     fn test_resolve_locale_lc_all_wins_over_unset() {
         // Issue #8922 repro: LC_ALL set, LC_MESSAGES/LANG unset.
-        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8")]));
-        assert_eq!(resolved, "fr_FR");
+        let resolved = resolve_locale_candidates(env_lookup(&[("LC_ALL", "fr_FR.UTF-8")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_lc_messages_when_lc_all_unset() {
-        let resolved = resolve_locale_string(env_lookup(&[("LC_MESSAGES", "de_DE.UTF-8")]));
-        assert_eq!(resolved, "de_DE");
+        let resolved = resolve_locale_candidates(env_lookup(&[("LC_MESSAGES", "de_DE.UTF-8")]));
+        assert_eq!(resolved, ["de_DE", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_lang_still_works() {
         // Regression: LANG alone must keep working.
-        let resolved = resolve_locale_string(env_lookup(&[("LANG", "es_ES.UTF-8")]));
-        assert_eq!(resolved, "es_ES");
+        let resolved = resolve_locale_candidates(env_lookup(&[("LANG", "es_ES.UTF-8")]));
+        assert_eq!(resolved, ["es_ES", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_empty_treated_as_unset() {
         // Set-but-empty LC_ALL is skipped in favor of a non-empty LANG.
-        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", ""), ("LANG", "fr_FR")]));
-        assert_eq!(resolved, "fr_FR");
+        let resolved = resolve_locale_candidates(env_lookup(&[("LC_ALL", ""), ("LANG", "fr_FR")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_lc_all_precedence_over_lang() {
-        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LANG", "es_ES")]));
-        assert_eq!(resolved, "fr_FR");
+        let resolved =
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "fr_FR"), ("LANG", "es_ES")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_lc_all_precedence_over_lc_messages() {
         let resolved =
-            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR"), ("LC_MESSAGES", "de_DE")]));
-        assert_eq!(resolved, "fr_FR");
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "fr_FR"), ("LC_MESSAGES", "de_DE")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_nothing_set_falls_back_to_default() {
-        let resolved = resolve_locale_string(|_| None);
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        let resolved = resolve_locale_candidates(|_| None);
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_wins_over_lc_all() {
         // gettext: LANGUAGE has priority over LC_ALL for messages when the
         // resolved locale is not C/POSIX.
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "fr_FR.UTF-8"),
             ("LANGUAGE", "de_DE"),
         ]));
-        assert_eq!(resolved, "de_DE");
+        assert_eq!(resolved, ["de_DE", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_ignored_when_locale_is_c() {
         // gettext: the C locale disables LANGUAGE entirely AND means "no
         // translation", so it resolves to English (DEFAULT_LOCALE) explicitly.
-        let resolved = resolve_locale_string(env_lookup(&[("LC_ALL", "C"), ("LANGUAGE", "fr_FR")]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        let resolved =
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "C"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
@@ -1770,21 +1854,32 @@ invalid-syntax = This is { $missing
         // locale is fr_FR (not C), so LANGUAGE applies, and a LANGUAGE entry
         // of C means "no translation": DEFAULT_LOCALE (English) is returned
         // explicitly, matching GNU.
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LANGUAGE", "C"),
             ("LANG", "C"),
             ("LC_ALL", "fr_FR.UTF-8"),
         ]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
+    }
+
+    #[test]
+    fn test_resolve_locale_language_c_entry_stops_the_list() {
+        // gettext stops walking the list at a C entry, so a later French entry
+        // is never consulted: `LANGUAGE=C:fr_FR` prints English.
+        let resolved = resolve_locale_candidates(env_lookup(&[
+            ("LC_ALL", "fr_FR.UTF-8"),
+            ("LANGUAGE", "C:fr_FR"),
+        ]));
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_entry_codeset_stripped() {
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "es_ES.UTF-8"),
             ("LANGUAGE", "fr_FR.UTF-8:de_DE"),
         ]));
-        assert_eq!(resolved, "fr_FR");
+        assert_eq!(resolved, ["fr_FR", "de_DE", DEFAULT_LOCALE]);
     }
 
     #[test]
@@ -1792,8 +1887,8 @@ invalid-syntax = This is { $missing
         // Like C, a POSIX locale disables LANGUAGE and resolves to English
         // (DEFAULT_LOCALE) explicitly.
         let resolved =
-            resolve_locale_string(env_lookup(&[("LC_ALL", "POSIX"), ("LANGUAGE", "fr_FR")]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "POSIX"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
@@ -1802,91 +1897,121 @@ invalid-syntax = This is { $missing
         // (the default on Debian and most containers) also disables LANGUAGE,
         // matching gettext's "C.<encoding>" rule.
         let resolved =
-            resolve_locale_string(env_lookup(&[("LC_ALL", "C.UTF-8"), ("LANGUAGE", "fr_FR")]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "C.UTF-8"), ("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
-    fn test_resolve_locale_language_invalid_entry_falls_through() {
-        // An unparsable entry must not clobber a later valid one.
-        let resolved = resolve_locale_string(env_lookup(&[
+    fn test_resolve_locale_language_keeps_every_entry() {
+        // Entries are candidates, not winners: an entry we have no catalog for
+        // must let the next one be tried (gettext walks the whole list).
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "es_ES"),
             ("LANGUAGE", "not!valid:fr_FR"),
         ]));
-        assert_eq!(resolved, "fr_FR");
+        assert_eq!(resolved, ["not!valid", "fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_only_empty_entries_ignored() {
         let resolved =
-            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "::")]));
-        assert_eq!(resolved, "fr_FR");
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "::")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_posix_entry_forces_english() {
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "fr_FR.UTF-8"),
             ("LANGUAGE", "POSIX"),
         ]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_entry_whitespace_trimmed() {
         // " C " must be recognized as C after trimming, not fall through to
         // the French locale as an unparsable entry.
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "fr_FR.UTF-8"),
             ("LANGUAGE", " C "),
         ]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_c_with_codeset_forces_english() {
         // The codeset suffix is stripped before the C/POSIX comparison.
-        let resolved = resolve_locale_string(env_lookup(&[
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "fr_FR.UTF-8"),
             ("LANGUAGE", "C.UTF-8"),
         ]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
     }
 
     #[test]
-    fn test_resolve_locale_language_all_invalid_falls_back_to_locale() {
-        // Deliberate divergence from gettext: an entirely unusable LANGUAGE
-        // list falls back to the resolved locale (gettext would emit
-        // untranslated msgids instead).
-        let resolved = resolve_locale_string(env_lookup(&[
+    fn test_resolve_locale_language_does_not_fall_back_to_locale() {
+        // gettext does not consult LC_ALL/LANG once LANGUAGE is set: a list
+        // with no usable catalog ends up untranslated (English), not French.
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "fr_FR.UTF-8"),
             ("LANGUAGE", "not!valid"),
         ]));
-        assert_eq!(resolved, "fr_FR");
+        assert_eq!(resolved, ["not!valid", DEFAULT_LOCALE]);
     }
 
     #[test]
-    fn test_resolve_locale_language_list_takes_first_nonempty_entry() {
-        let resolved = resolve_locale_string(env_lookup(&[
+    fn test_resolve_locale_language_list_order_is_preserved() {
+        let resolved = resolve_locale_candidates(env_lookup(&[
             ("LC_ALL", "es_ES.UTF-8"),
             ("LANGUAGE", ":fr_FR:de_DE"),
         ]));
-        assert_eq!(resolved, "fr_FR");
+        assert_eq!(resolved, ["fr_FR", "de_DE", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_empty_language_ignored() {
         let resolved =
-            resolve_locale_string(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "")]));
-        assert_eq!(resolved, "fr_FR");
+            resolve_locale_candidates(env_lookup(&[("LC_ALL", "fr_FR.UTF-8"), ("LANGUAGE", "")]));
+        assert_eq!(resolved, ["fr_FR", DEFAULT_LOCALE]);
     }
 
     #[test]
     fn test_resolve_locale_language_ignored_when_no_locale_env_set() {
         // gettext consults LANGUAGE only when a locale is actually set via
         // LC_ALL/LC_MESSAGES/LANG (an unset locale is C, which disables it).
-        let resolved = resolve_locale_string(env_lookup(&[("LANGUAGE", "fr_FR")]));
-        assert_eq!(resolved, DEFAULT_LOCALE);
+        let resolved = resolve_locale_candidates(env_lookup(&[("LANGUAGE", "fr_FR")]));
+        assert_eq!(resolved, [DEFAULT_LOCALE]);
+    }
+
+    #[test]
+    fn test_same_language_catalogs_matches_language_only() {
+        // fr has no fr.ftl of its own, so the fr-FR catalog must be offered.
+        let fr = LanguageIdentifier::from_str("fr").unwrap();
+        let fr_fr = LanguageIdentifier::from_str("fr-FR").unwrap();
+        assert!(same_language_catalogs(&fr, "uucore").contains(&fr_fr));
+    }
+
+    #[test]
+    fn test_same_language_catalogs_excludes_exact_locale() {
+        let fr_fr = LanguageIdentifier::from_str("fr-FR").unwrap();
+        assert!(!same_language_catalogs(&fr_fr, "uucore").contains(&fr_fr));
+    }
+
+    #[test]
+    fn test_same_language_catalogs_never_offers_english() {
+        // en-US.ftl always exists; offering it here would let an English
+        // entry in a LANGUAGE list win over the entries that follow it.
+        let en_gb = LanguageIdentifier::from_str("en-GB").unwrap();
+        assert!(same_language_catalogs(&en_gb, "uucore").is_empty());
+        let en = LanguageIdentifier::from_str("en").unwrap();
+        assert!(same_language_catalogs(&en, "uucore").is_empty());
+    }
+
+    #[test]
+    fn test_same_language_catalogs_unknown_language() {
+        let zu = LanguageIdentifier::from_str("zu").unwrap();
+        assert!(same_language_catalogs(&zu, "uucore").is_empty());
     }
 
     #[test]
@@ -1920,9 +2045,8 @@ invalid-syntax = This is { $missing
             env::remove_var("LANG");
         }
 
-        let result = detect_system_locale();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().to_string(), "en-US");
+        let result = detect_system_locales();
+        assert_eq!(result.last().unwrap().to_string(), "en-US");
 
         // Restore original LANG value
         if let Some(val) = original_lang {
