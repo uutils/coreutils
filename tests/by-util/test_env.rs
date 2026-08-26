@@ -375,6 +375,31 @@ fn test_empty_name() {
         .stderr_only("env: warning: no name specified for value 'xyz'\n");
 }
 
+// An empty name is dropped with a warning (GNU injects it via putenv, we
+// can't with set_var); the other assignments must still go through.
+#[test]
+fn test_empty_name_does_not_affect_other_assignments() {
+    let result = new_ucmd!()
+        .args(&["-i", "MOTOR=idle", "=zap", "GEARBOX=locked"])
+        .succeeds();
+    result.stderr_is("env: warning: no name specified for value 'zap'\n");
+
+    // Windows sorts the environment block, so don't depend on the order.
+    let mut vars: Vec<_> = result.stdout_str().lines().collect();
+    vars.sort_unstable();
+    assert_eq!(vars, ["GEARBOX=locked", "MOTOR=idle"]);
+}
+
+// "=" alone is name and value both empty; still just a warning, exit 0.
+#[test]
+fn test_empty_name_and_empty_value() {
+    new_ucmd!()
+        .args(&["-i", "="])
+        .succeeds()
+        .no_stdout()
+        .stderr_is("env: warning: no name specified for value ''\n");
+}
+
 #[test]
 fn test_null_delimiter() {
     let out = new_ucmd!()
