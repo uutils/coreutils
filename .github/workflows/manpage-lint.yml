@@ -46,9 +46,6 @@ jobs:
           sudo apt-get install -y mandoc locales-all
           sudo apt-get install -y libselinux1-dev libsystemd-dev libacl1-dev libattr1-dev libcap-dev
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
       - name: Build manpages (${{ matrix.locale }})
         run: |
           # Create temporary directory for manpages
