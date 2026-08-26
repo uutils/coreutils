@@ -1274,6 +1274,25 @@ fn dotdot_path(parent: &Path) -> PathBuf {
     dotdot
 }
 
+fn is_still_linked(path_data: &PathData) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Some(self_metadata) = path_data.metadata() else {
+        return false;
+    };
+
+    let parent = dotdot_path(path_data.path());
+    let Ok(parent_entries) = fs::read_dir(&parent) else {
+        return false;
+    };
+
+    parent_entries.flatten().any(|entry| {
+        entry
+            .metadata()
+            .is_ok_and(|md| md.ino() == self_metadata.ino() && md.dev() == self_metadata.dev())
+    })
+}
+
 fn collect_directory_entries<O: LsOutput>(
     entries: &mut Vec<PathData>,
     path_data: &PathData,
@@ -1283,7 +1302,7 @@ fn collect_directory_entries<O: LsOutput>(
 ) -> UResult<()> {
     entries.clear();
 
-    if config.files == Files::All {
+    if config.files == Files::All && is_still_linked(path_data) {
         entries.push(PathData::new(
             path_data.path().to_path_buf().into(),
             None,
