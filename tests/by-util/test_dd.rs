@@ -2313,10 +2313,10 @@ fn test_stats_are_reported_when_a_write_fails() {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn test_read_error_names_the_input() {
     let (at, mut ucmd) = at_and_ucmd!();
-    at.mkdir("adir");
-    ucmd.args(&["if=adir", "of=/dev/null"])
+    at.mkdir("subdir");
+    ucmd.args(&["if=subdir", "of=/dev/null"])
         .fails()
-        .stderr_contains("error reading 'adir'")
+        .stderr_contains("error reading 'subdir'")
         .stderr_contains("0+0 records in");
 }
 

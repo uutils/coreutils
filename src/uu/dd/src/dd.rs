@@ -1246,7 +1246,7 @@ fn dd_copy(mut i: Input, o: Output) -> UResult<()> {
     // Aligned read scratch sized to the block size (the max size needed).
     // 4 KiB alignment satisfies block devices that enforce a strict
     // `dma_alignment` for `iflag=direct` reads — see `AlignedBuf`.
-    let mut buf = AlignedBuf::new(bsize)?;
+    let mut buf = AlignedBuf::new(bsize).map_err_context(|| translate!("dd-error-io-error"))?;
     // Separate scratch for `conv=block` / `conv=unblock`, which can change
     // the byte count and so cannot be done in-place in `buf`.
     let mut conv_buf: Vec<u8> = Vec::new();
