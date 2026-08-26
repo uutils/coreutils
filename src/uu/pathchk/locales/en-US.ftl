@@ -7,7 +7,6 @@ pathchk-help-posix-special = check for empty names and leading "-"
 pathchk-help-portability = check for all POSIX systems (equivalent to -p -P)
 
 # Error messages
-pathchk-error-missing-operand = missing operand
 pathchk-error-empty-file-name = empty file name
 pathchk-error-posix-path-length-exceeded = { $path }: limit { $limit } exceeded by length { $length } of file name
 pathchk-error-posix-name-length-exceeded = { $component }: limit { $limit } exceeded by length { $length } of file name component

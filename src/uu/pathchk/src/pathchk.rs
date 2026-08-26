@@ -11,7 +11,7 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use uucore::display::Quotable;
 use uucore::error::strip_errno;
-use uucore::error::{UResult, UUsageError, set_exit_code};
+use uucore::error::{UResult, set_exit_code};
 use uucore::format_usage;
 use uucore::show_error;
 use uucore::translate;
@@ -70,12 +70,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     // take necessary actions
     let paths = matches.get_many::<OsString>(options::PATH);
-    if paths.is_none() {
-        return Err(UUsageError::new(
-            1,
-            translate!("pathchk-error-missing-operand"),
-        ));
-    }
 
     // free strings are path operands
     // FIXME: TCS, seems inefficient and overly verbose (?)
@@ -126,6 +120,7 @@ pub fn uu_app() -> Command {
                 .hide(true)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::AnyPath)
+                .required(true)
                 .value_parser(clap::value_parser!(OsString)),
         )
 }
