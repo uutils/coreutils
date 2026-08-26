@@ -1053,25 +1053,24 @@ fn copy_special_file_at(
     let name_cstr = CString::new(to.as_bytes())
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "invalid file name"))?;
     let mode = metadata.mode() & 0o7777;
+    let file_type = metadata.file_type();
+    let kind = if file_type.is_fifo() {
+        libc::S_IFIFO
+    } else if file_type.is_socket() {
+        libc::S_IFSOCK
+    } else if file_type.is_block_device() {
+        libc::S_IFBLK
+    } else {
+        libc::S_IFCHR
+    } as libc::mode_t;
+    // `mknodat` is available on Android where `mkfifoat` is not.
     let result = unsafe {
-        if metadata.file_type().is_fifo() {
-            libc::mkfifoat(dir_fd.as_raw_fd(), name_cstr.as_ptr(), mode as libc::mode_t)
-        } else {
-            let file_type = metadata.file_type();
-            let kind = if file_type.is_socket() {
-                libc::S_IFSOCK
-            } else if file_type.is_block_device() {
-                libc::S_IFBLK
-            } else {
-                libc::S_IFCHR
-            } as libc::mode_t;
-            libc::mknodat(
-                dir_fd.as_raw_fd(),
-                name_cstr.as_ptr(),
-                kind | mode as libc::mode_t,
-                metadata.rdev() as libc::dev_t,
-            )
-        }
+        libc::mknodat(
+            dir_fd.as_raw_fd(),
+            name_cstr.as_ptr(),
+            kind | mode as libc::mode_t,
+            metadata.rdev() as libc::dev_t,
+        )
     };
     if result != 0 {
         return Err(io::Error::last_os_error());
