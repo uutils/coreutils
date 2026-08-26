@@ -1158,6 +1158,20 @@ fn test_multiple_files() {
         .stdout_only_fixture("multiple_files.expected");
 }
 
+/// A file that does not end with a separator must not be fused onto the next file.
+#[test]
+fn test_unterminated_file_not_fused_across_chunk_boundary() {
+    // "a\nb\nc" is 5 bytes, so `-S 5b` puts the chunk boundary exactly at its EOF.
+    for buffer_size in ["1b", "2b", "3b", "4b", "5b", "6b", "7b", "8b", "16b"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("first.txt", "a\nb\nc");
+        at.write("second.txt", "z\n");
+        ucmd.args(&["-S", buffer_size, "first.txt", "second.txt"])
+            .succeeds()
+            .stdout_only("a\nb\nc\nz\n");
+    }
+}
+
 #[test]
 fn test_merge_interleaved() {
     new_ucmd!()
@@ -1230,6 +1244,19 @@ fn test_merge_write_error_does_not_panic() {
             .stderr_contains("No space left on device")
             .stderr_does_not_contain("panicked");
     }
+}
+
+// A read error must be reported with context and without the raw io::Error suffix.
+// It used to print `sort: Input/output error (os error 5)`.
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error_message() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(2)
+        .stderr_only("sort: read failed: Input/output error\n");
 }
 
 #[test]
@@ -1769,6 +1796,37 @@ fn test_separator_null() {
         .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
         .succeeds()
         .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
+
+#[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator (clap strips a leading
+    // `=` from attached short-option values), matching GNU sort. #14120
+    new_ucmd!()
+        .args(&["-t=", "-k", "2"])
+        .pipe_in("a=b=c\nb=a=d\n")
+        .succeeds()
+        .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_attached_equals_double() {
+    // `-t==` selects the two-character separator `==`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t==", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=='");
+}
+
+#[test]
+fn test_separator_attached_equals_multi_char() {
+    // `-t=a` selects the two-character separator `=a`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t=a", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=a'");
 }
 
 #[test]

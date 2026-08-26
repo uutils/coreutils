@@ -32,6 +32,8 @@ pub enum ParseError {
     MultipleExclNoCreate,
     #[error("{}", translate!("dd-error-invalid-flag", "flag" => .0.clone()))]
     FlagNoMatch(String),
+    #[error("{}", translate!("dd-error-invalid-output-flag", "flag" => .0.clone()))]
+    OutputFlagNoMatch(String),
     #[error("{}", translate!("dd-error-conv-flag-no-match", "flag" => .0.clone()))]
     ConvFlagNoMatch(String),
     #[error("{}", translate!("dd-error-multiplier-parse-failure", "input" => .0.clone()))]
@@ -48,7 +50,7 @@ pub enum ParseError {
     BsOutOfRange(String),
     #[error("{}", translate!("dd-error-invalid-number", "input" => .0.clone()))]
     InvalidNumber(String),
-    #[error("invalid number: ‘{0}’: {1}")]
+    #[error("invalid number: '{0}': {1}")]
     InvalidNumberWithErrMsg(String, String),
 }
 
@@ -425,7 +427,7 @@ impl Parser {
                 "seek_bytes" => o.seek_bytes = true,
                 // GNU silently ignores iflags given as oflag.
                 "fullblock" | "count_bytes" | "skip_bytes" => {}
-                _ => return Err(ParseError::FlagNoMatch(f.to_string())),
+                _ => return Err(ParseError::OutputFlagNoMatch(f.to_string())),
             }
         }
         Ok(())
@@ -472,11 +474,18 @@ impl UError for ParseError {
         1
     }
 
-    /// The one message that ends on a hint about the syntax it rejected. The
-    /// hint is left to this, rather than written into the message, so that it
-    /// survives a caret report replacing the message.
+    /// The messages that end on a hint about the syntax they rejected, as
+    /// GNU does. The hint is left to this, rather than written into the
+    /// message, so that it survives a caret report replacing the message.
     fn usage(&self) -> bool {
-        matches!(self, Self::FlagNoMatch(_))
+        matches!(
+            self,
+            Self::UnrecognizedOperand(_)
+                | Self::FlagNoMatch(_)
+                | Self::OutputFlagNoMatch(_)
+                | Self::ConvFlagNoMatch(_)
+                | Self::StatusLevelNotRecognized(_)
+        )
     }
 }
 
@@ -505,8 +514,6 @@ fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
 /// 512. You can also use standard block size suffixes like `'k'` for
 /// 1024.
 ///
-/// If the number would be too large, return [`u64::MAX`] instead.
-///
 /// # Errors
 ///
 /// If a number cannot be parsed or if the multiplication would cause
@@ -530,7 +537,12 @@ fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
         (None, None, None) => match parser.parse_u64(s) {
             Ok(n) => (n, 1),
-            Err(ParseSizeError::SizeTooBig(_)) => (u64::MAX, 1),
+            Err(ParseSizeError::SizeTooBig(_)) => {
+                return Err(ParseError::InvalidNumberWithErrMsg(
+                    full.to_string(),
+                    "Value too large for defined data type".to_string(),
+                ));
+            }
             Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
         },
         (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
@@ -663,7 +675,7 @@ mod tests {
         assert_eq!(parse_bytes_with_opt_multiplier("123w").unwrap(), 123 * 2);
         assert_eq!(parse_bytes_with_opt_multiplier("123b").unwrap(), 123 * 512);
         assert_eq!(parse_bytes_with_opt_multiplier("123k").unwrap(), 123 * 1024);
-        assert_eq!(parse_bytes_with_opt_multiplier(BIG).unwrap(), u64::MAX);
+        assert!(parse_bytes_with_opt_multiplier(BIG).is_err());
     }
 
     #[test]

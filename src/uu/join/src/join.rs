@@ -784,28 +784,36 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
     if let Some(value_os) = matches.get_one::<OsString>("t") {
         settings.separator = parse_separator(value_os)?;
     }
-    if let Some(format) = matches.get_one::<String>("o") {
-        if format == "auto" {
+    if let Some(formats) = matches.get_many::<String>("o") {
+        let formats: Vec<&String> = formats.collect();
+        // GNU lets `-o` repeat and accumulates the fields. Auto mode applies only
+        // when every value is exactly `auto`; otherwise each `auto` is ignored.
+        if formats.iter().all(|f| *f == "auto") {
             settings.autoformat = true;
         } else {
             let mut specs = vec![];
-            // `-o` has no long form.
-            let option = OptionValue::with_names(format.clone(), Some('o'), None);
-            // Each field carries its place in the value, so that the caret can
-            // take the one that is at fault out of a long list.
-            for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
-                specs.push(Spec::parse(part).map_err(|error| {
-                    let message = error.to_string();
-                    uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
-                        uucore::diagnostics::Snapshot::with_program(args).render_option(
-                            &option,
-                            span,
-                            &message,
-                            None,
-                            Some(&translate!("join-diag-help-format")),
-                        )
-                    })
-                })?);
+            for format in formats {
+                if format == "auto" {
+                    continue;
+                }
+                // `-o` has no long form.
+                let option = OptionValue::with_names(format.clone(), Some('o'), None);
+                // Each field carries its place in the value, so that the caret can
+                // take the one that is at fault out of a long list.
+                for (part, span) in uucore::diagnostics::list_items(format, &[' ', ',', '\t']) {
+                    specs.push(Spec::parse(part).map_err(|error| {
+                        let message = error.to_string();
+                        uucore::diagnostics::error_after_report(diag_args, error, |args, _| {
+                            uucore::diagnostics::Snapshot::with_program(args).render_option(
+                                &option,
+                                span,
+                                &message,
+                                None,
+                                Some(&translate!("join-diag-help-format")),
+                            )
+                        })
+                    })?);
+                }
             }
             settings.format = specs;
         }
@@ -919,6 +927,8 @@ pub fn uu_app() -> Command {
             Arg::new("o")
                 .short('o')
                 .value_name("FORMAT")
+                .action(ArgAction::Append)
+                .num_args(1)
                 .help(translate!("join-help-o")),
         )
         .arg(
@@ -1118,7 +1128,13 @@ fn get_field_number(keys: Option<usize>, key: Option<usize>) -> UResult<usize> {
         // Show zero-based field numbers as one-based.
         (Some(k1), Some(k2)) if k1 != k2 => Err(USimpleError::new(
             1,
-            translate!("join-error-incompatible-fields", "field1" => (k1 + 1), "field2" => (k2 + 1)),
+            // `parse_field_number` clamps an out-of-range field to `usize::MAX`,
+            // so the one-based increment has to saturate rather than overflow.
+            translate!(
+                "join-error-incompatible-fields",
+                "field1" => k1.saturating_add(1),
+                "field2" => k2.saturating_add(1)
+            ),
         )),
         (Some(k), _) | (_, Some(k)) => Ok(k),
         (None, None) => Ok(0),
