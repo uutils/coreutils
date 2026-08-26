@@ -236,7 +236,25 @@ fn format_with_modifiers(
                 let formatted = broken_down.to_string_with_config(config, &base_format)?;
 
                 if !parsed.flags.is_empty() || parsed.width.is_some() {
-                    let modified = apply_modifiers(&formatted, &parsed)?;
+                    // Strip `-` from composite specifiers (D, F, T, etc.) so
+                    // apply_modifiers does not remove inner leading zeros.
+                    let effective =
+                        if is_composite_specifier(parsed.spec) && parsed.flags.contains('-') {
+                            ParsedSpec {
+                                flags: &parsed.flags.replace('-', ""),
+                                width: parsed.width,
+                                spec: parsed.spec,
+                                len: parsed.len,
+                            }
+                        } else {
+                            ParsedSpec {
+                                flags: parsed.flags,
+                                width: parsed.width,
+                                spec: parsed.spec,
+                                len: parsed.len,
+                            }
+                        };
+                    let modified = apply_modifiers(&formatted, &effective)?;
                     result.push_str(&modified);
                 } else {
                     result.push_str(&formatted);
@@ -254,6 +272,13 @@ fn format_with_modifiers(
     }
 
     Ok(result)
+}
+
+/// Returns true if the specifier is composite (multi-field, e.g. %D = %m/%d/%y).
+fn is_composite_specifier(spec: &str) -> bool {
+    // strip leading colons (e.g. ":z" → "z")
+    let s = spec.trim_start_matches(':');
+    matches!(s, "D" | "F" | "T" | "r" | "R" | "c" | "x" | "X")
 }
 
 /// Returns true if the specifier produces text output (default pad is space)

@@ -3148,3 +3148,27 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     // compare to 4 because of \n
     assert_eq!(result.stdout().len(), 4);
 }
+
+// Regression test for https://github.com/uutils/coreutils/issues/11657
+// strftime flags like `-` should not propagate into composite specifiers like %D
+#[test]
+fn test_date_format_composite_specifier_flags_issue11657() {
+    // GNU date treats %D as atomic — the `-` flag should NOT strip leading
+    // zeros from the month/day within the expansion of %D.
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-06-15")
+        .arg("+%-D")
+        .succeeds()
+        .stdout_is("06/15/24\n");
+
+    // Same for %F (ISO date)
+    new_ucmd!()
+        .env("TZ", "UTC")
+        .arg("-d")
+        .arg("2024-01-05")
+        .arg("+%-F")
+        .succeeds()
+        .stdout_is("2024-01-05\n");
+}
