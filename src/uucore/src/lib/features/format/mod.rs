@@ -244,10 +244,9 @@ impl<C: FormatChar> FormatItem<C> {
         args: &mut FormatArguments,
     ) -> Result<ControlFlow<()>, FormatError> {
         match self {
-            Self::Spec(spec) => spec.write(writer, args)?,
-            Self::Char(c) => return c.write(writer).map_err(FormatError::IoError),
+            Self::Spec(spec) => spec.write(writer, args),
+            Self::Char(c) => c.write(writer).map_err(FormatError::IoError),
         }
-        Ok(ControlFlow::Continue(()))
     }
 }
 
