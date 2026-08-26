@@ -236,13 +236,13 @@ pub fn path_is_tailable(path: &Path) -> bool {
 }
 
 #[inline]
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "fuchsia")))]
 pub fn stdin_is_bad_fd() -> bool {
     uucore::signals::stdin_was_closed()
 }
 
 #[inline]
-#[cfg(not(unix))]
+#[cfg(not(all(unix, not(target_os = "fuchsia"))))]
 pub fn stdin_is_bad_fd() -> bool {
     false
 }

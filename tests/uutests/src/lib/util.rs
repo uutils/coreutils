@@ -340,8 +340,8 @@ impl CmdResult {
     ///
     /// # Platform specific behavior
     ///
-    /// This assertion method is only available on unix systems.
-    #[cfg(unix)]
+    /// This assertion method is only available on unix systems, except for fuchsia.
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     #[track_caller]
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;

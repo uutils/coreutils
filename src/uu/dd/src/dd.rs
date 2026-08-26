@@ -1582,7 +1582,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         diag_args.as_deref(),
     )?;
 
-    #[cfg(unix)]
+    #[cfg(all(unix, not(target_os = "fuchsia")))]
     if uucore::signals::stderr_was_closed() && settings.status != Some(StatusLevel::None) {
         return Err(USimpleError::new(1, "write error"));
     }
