@@ -464,7 +464,7 @@ fn test_stdin_redirect() {
 fn test_without_argument() {
     new_ucmd!()
         .fails()
-        .stderr_contains("missing operand\nTry 'stat --help' for more information.");
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]
