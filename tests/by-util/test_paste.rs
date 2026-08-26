@@ -123,6 +123,14 @@ const EXAMPLE_DATA: &[TestData] = &[
         ins: &["1\na\n", "2\nb\n"],
         out: "1💣2\na💣b\n",
     },
+    // `-d=` must select `=` itself as a delimiter; clap strips a leading `=`
+    // from attached short-option values, hence the rewrite. #14120
+    TestData {
+        name: "equals-delim-attached",
+        args: &["-d="],
+        ins: &["1\na\n", "2\nb\n"],
+        out: "1=2\na=b\n",
+    },
     TestData {
         name: "multibyte-delim-serial",
         args: &["-d", "💣", "-s"],
