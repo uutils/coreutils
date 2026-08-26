@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 //
-// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST KST uueuu ueuu vasárnap június január distros
+// spell-checker: ignore: AEDT AEST EEST NZDT NZST Kolkata Iseconds févr février janv janvier mercredi samedi sommes juin décembre Januar Juni Dezember enero junio diciembre gennaio giugno dicembre junho dezembro lundi dimanche Montag Sonntag Samstag sábado febr MEST MESZ KST uueuu ueuu vasárnap június január distros
 // spell-checker: ignore: uppercases
 
 use std::cmp::Ordering;
@@ -99,6 +99,51 @@ fn test_large_year_default_output_boundary() {
         .args(&["-d", "10000-02-30"])
         .fails_with_code(1)
         .stderr_contains("invalid date");
+}
+
+#[test]
+fn test_date_rejects_input_that_cannot_take_a_timezone() {
+    // A trailing timezone abbreviation must not rescue an input that already
+    // carries zone information, or that cannot take a zone at all. GNU date
+    // rejects all of these.
+    for input in [
+        "Jan 23 6:00PM GMT-1 EST",    // offset plus abbreviation
+        "023-060 MEST",               // time with offset, plus abbreviation
+        "2024-01-15 12:00 EST EST",   // the same abbreviation twice
+        "@0 EST",                     // a timestamp cannot take a zone
+        "2024-01-15 12:00 UTC EST",   // a named zone whose offset matches TZ
+        "2024-01-15 12:00 GMT EST",   // likewise, spelled differently
+        "2024-01-15 12:00 +0000 EST", // a numeric offset matching TZ
+        "2024-01-15 12:00 -0500 EST", // a standalone negative offset
+        "UTC 2024-01-15 12:00 EST",   // zone stated before the date
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-d", input])
+            .fails_with_code(1)
+            .stderr_contains("invalid date");
+    }
+}
+
+#[test]
+fn test_date_accepts_gnu_timezone_abbreviations() {
+    // Abbreviations GNU date accepts, with the UTC time they map to.
+    for (input, expected) in [
+        ("2024-01-15 12:00 MEZ", "11:00\n"),
+        ("2024-01-15 12:00 MESZ", "10:00\n"),
+        ("2024-01-15 12:00 MEST", "10:00\n"),
+        ("2024-01-15 12:00 KST", "03:00\n"),
+        ("2024-01-15 12:00 EST", "17:00\n"),
+        ("2024-01-15 12:00 IST", "06:30\n"),
+    ] {
+        new_ucmd!()
+            .env("LC_ALL", "C")
+            .env("TZ", "UTC0")
+            .args(&["-u", "-d", input, "+%H:%M"])
+            .succeeds()
+            .stdout_is(expected);
+    }
 }
 
 #[test]
