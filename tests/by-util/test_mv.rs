@@ -2452,6 +2452,85 @@ mod inter_partition_copying {
         let moved_fifo = other_fs_tempdir.path().join("dir/fifo");
         assert!(moved_fifo.symlink_metadata().unwrap().file_type().is_fifo());
     }
+
+    // A symlink pointing at a hardlinked sibling must not be mistaken for a
+    // member of that hardlink group. Keying the inode map on metadata() (which
+    // follows symlinks) instead of symlink_metadata() made mv "preserve" the
+    // hardlink by linking the regular files to the copied *symlink*, leaving
+    // self-referential symlinks and destroying the content.
+    #[test]
+    #[cfg(unix)]
+    pub(crate) fn test_mv_symlink_to_hardlinked_sibling_across_partitions() {
+        use std::os::unix::fs::MetadataExt;
+
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+
+        at.mkdir("dir");
+        at.write("dir/realfile", "important data");
+        at.hard_link("dir/realfile", "dir/realfile2");
+        // Two symlinks so the test does not depend on readdir order: one sorts
+        // before the hardlink group, one after.
+        at.relative_symlink_file("realfile", "dir/aaa_link");
+        at.relative_symlink_file("realfile", "dir/zzz_link");
+
+        let other_fs_tempdir =
+            TempDir::new_in("/dev/shm/").expect("Unable to create temp directory in /dev/shm");
+
+        scene
+            .ucmd()
+            .arg("dir")
+            .arg(other_fs_tempdir.path().to_str().unwrap())
+            .succeeds()
+            .no_output();
+
+        let moved_dir = other_fs_tempdir.path().join("dir");
+        let moved_realfile = moved_dir.join("realfile");
+        let moved_realfile2 = moved_dir.join("realfile2");
+
+        for file in [&moved_realfile, &moved_realfile2] {
+            assert!(
+                file.symlink_metadata().unwrap().file_type().is_file(),
+                "{} should still be a regular file, not a symlink",
+                file.display()
+            );
+            assert_eq!(
+                fs::read_to_string(file).unwrap(),
+                "important data",
+                "{} lost its content",
+                file.display()
+            );
+        }
+
+        let realfile_metadata = fs::metadata(&moved_realfile).unwrap();
+        assert_eq!(
+            realfile_metadata.ino(),
+            fs::metadata(&moved_realfile2).unwrap().ino(),
+            "realfile and realfile2 should still be hardlinked"
+        );
+        assert_eq!(
+            realfile_metadata.nlink(),
+            2,
+            "the hardlink group should not have gained the symlinks"
+        );
+
+        for link in ["aaa_link", "zzz_link"] {
+            let moved_link = moved_dir.join(link);
+            assert!(
+                moved_link
+                    .symlink_metadata()
+                    .unwrap()
+                    .file_type()
+                    .is_symlink(),
+                "{link} should still be a symlink"
+            );
+            assert_eq!(
+                fs::read_link(&moved_link).unwrap(),
+                std::path::Path::new("realfile"),
+                "{link} should still point at realfile"
+            );
+        }
+    }
 }
 
 #[test]
