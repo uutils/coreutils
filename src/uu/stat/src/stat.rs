@@ -1428,15 +1428,14 @@ impl Stater {
                 "%n %i %l %t %s %S %b %f %a %c %d\n".into()
             } else {
                 format!(
-                    "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{} \
-                         {}: %-10s {} {}: %S\n{}: {}: %-10b \
+                    "  {}: \"%n\"\n    {}: %-8i {}: %-7l {}: %T\n{}: %-10s \
+                         {} {}: %S\n{}: {}: %-10b \
                          {}: %-10f {}: %a\n{}: {}: %-10c {}: %d\n",
                     translate!("stat-word-file"),
                     translate!("stat-word-id"),
                     translate!("stat-word-namelen"),
                     translate!("stat-word-type"),
-                    translate!("stat-word-block"),
-                    translate!("stat-word-size"),
+                    translate!("stat-word-block-size-capitalized"),
                     translate!("stat-word-fundamental"),
                     translate!("stat-word-block-size"),
                     translate!("stat-word-blocks"),
