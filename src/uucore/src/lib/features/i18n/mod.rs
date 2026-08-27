@@ -38,7 +38,7 @@ const DEFAULT_LOCALE: Locale = locale!("und");
 pub fn get_locale_from_env(locale_name: &str) -> (Locale, UEncoding) {
     let locale_var = ["LC_ALL", locale_name, "LANG"]
         .iter()
-        .find_map(|&key| std::env::var(key).ok());
+        .find_map(|&key| std::env::var(key).ok().filter(|v| !v.is_empty()));
 
     if let Some(locale_var_str) = locale_var {
         let mut split = locale_var_str.split(&['.', '@']);
