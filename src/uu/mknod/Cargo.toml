@@ -17,7 +17,7 @@ path = "src/mknod.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(target_os = "haiku")))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 nix = { workspace = true, features = ["fs"] }
@@ -36,3 +36,4 @@ workspace = true
 [[bin]]
 name = "mknod"
 path = "src/main.rs"
+required-features = ["uucore/default"]

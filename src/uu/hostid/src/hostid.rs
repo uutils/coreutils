@@ -5,6 +5,11 @@
 
 // spell-checker:ignore (ToDO) gethostid nodename addrs Addrs
 
+#![cfg(any(
+    all(unix, not(any(target_os = "fuchsia", target_os = "redox"))),
+    windows
+))]
+
 use clap::Command;
 use core::ffi::c_long;
 use std::io::{Write, stdout};

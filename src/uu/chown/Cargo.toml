@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/chown.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["entries", "fs", "perms"] }
@@ -30,3 +30,4 @@ workspace = true
 [[bin]]
 name = "chown"
 path = "src/main.rs"
+required-features = ["uucore/default"]

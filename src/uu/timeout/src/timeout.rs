@@ -5,7 +5,7 @@
 
 // spell-checker:ignore (ToDO) tstr sigstr cmdname setpgid sigchld getpid TTIN TTOU
 
-#![cfg(not(target_os = "fuchsia"))]
+#![cfg(any(windows, all(unix, not(target_os = "fuchsia"))))]
 
 mod platform;
 mod status;

@@ -18,7 +18,7 @@ path = "src/uptime.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))), windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 jiff = { workspace = true }
@@ -36,3 +36,4 @@ workspace = true
 [[bin]]
 name = "uptime"
 path = "src/main.rs"
+required-features = ["uucore/default"]

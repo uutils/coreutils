@@ -16,12 +16,10 @@ path = "src/mkfifo.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["fs", "mode"] }
-
-[target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(target_vendor = "apple")'.dependencies]
@@ -40,3 +38,4 @@ workspace = true
 [[bin]]
 name = "mkfifo"
 path = "src/main.rs"
+required-features = ["uucore/default"]
