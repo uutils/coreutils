@@ -274,7 +274,6 @@ fn test_n0_with_follow() {
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: errno/error-message mismatches")]
 fn test_permission_denied() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -285,17 +284,19 @@ fn test_permission_denied() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ts.ucmd()
-        .arg("unreadable")
-        .fails_with_code(1)
-        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .no_stdout();
+    let cmd = ts.ucmd().arg("unreadable").fails_with_code(1);
+    cmd.no_stdout();
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.stderr_contains("tail: cannot open 'unreadable' for reading:");
+    } else {
+        cmd.stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n");
+    }
 }
 
 // TODO: Add similar test for windows
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: errno/error-message mismatches")]
 fn test_permission_denied_multiple() {
     use std::os::unix::fs::PermissionsExt;
 
@@ -308,10 +309,16 @@ fn test_permission_denied_multiple() {
         .set_permissions(PermissionsExt::from_mode(0o000))
         .unwrap();
 
-    ucmd.args(&["file1", "unreadable", "file2"])
-        .fails_with_code(1)
-        .stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n")
-        .stdout_is("==> file1 <==\n\n==> file2 <==\n");
+    let cmd = ucmd
+        .args(&["file1", "unreadable", "file2"])
+        .fails_with_code(1);
+    cmd.stdout_is("==> file1 <==\n\n==> file2 <==\n");
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        cmd.stderr_contains("tail: cannot open 'unreadable' for reading:");
+    } else {
+        cmd.stderr_is("tail: cannot open 'unreadable' for reading: Permission denied\n");
+    }
 }
 
 #[test]
@@ -344,7 +351,6 @@ fn test_follow_redirect_stdin_name_retry() {
     not(target_os = "openbsd"),
     not(windows)
 ))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: errno/error-message mismatches")]
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -354,17 +360,23 @@ fn test_stdin_redirect_dir() {
     let at = &ts.fixtures;
     at.mkdir("dir");
 
+    let expected = if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        "tail: Is a directory\n"
+    } else {
+        "tail: error reading 'standard input': Is a directory\n"
+    };
+
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n");
+        .stderr_is(expected);
     ts.ucmd()
         .set_stdin(File::open(at.plus("dir")).unwrap())
         .arg("-")
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: error reading 'standard input': Is a directory\n");
+        .stderr_is(expected);
 }
 
 // On macOS path.is_dir() can be false for directories if it was a redirect,
@@ -376,10 +388,6 @@ fn test_stdin_redirect_dir() {
 //  `test_stdin_redirect_dir`
 #[test]
 #[cfg(target_vendor = "apple")]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: directory redirected into stdin reports ENOENT rather than EISDIR"
-)]
 fn test_stdin_redirect_dir_when_target_os_is_macos() {
     // $ mkdir dir
     // $ tail < dir, $ tail - < dir
@@ -755,19 +763,30 @@ fn test_follow_stdin_pipe() {
 
 #[test]
 #[cfg(not(windows))] // FIXME: for currently not working platforms
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_follow_invalid_pid() {
+    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
+    let negative_pid_error = if wasm {
+        "tail: invalid PID: '-1234': invalid digit found in string\n"
+    } else {
+        "tail: invalid PID: '-1234'\n"
+    };
+
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
         .fails_with_code(1)
         .no_stdout()
-        .stderr_is("tail: invalid PID: '-1234'\n");
+        .stderr_is(negative_pid_error);
     new_ucmd!()
         .args(&["-f", "--pid=abc"])
         .fails()
         .no_stdout()
         .stderr_is("tail: invalid PID: 'abc': invalid digit found in string\n");
-    let max_pid = (i32::MAX as i64 + 1).to_string();
+
+    let max_pid = if wasm {
+        (u128::from(u64::MAX) + 1).to_string()
+    } else {
+        (i64::from(i32::MAX) + 1).to_string()
+    };
     new_ucmd!()
         .args(&["-f", "--pid", &max_pid])
         .fails()
@@ -3849,22 +3868,17 @@ fn test_when_argument_file_is_a_symlink() {
 // TODO: make this work on windows
 #[test]
 #[cfg(unix)]
-#[cfg_attr(
-    wasi_runner,
-    ignore = "WASI: symlink-to-directory error path differs from POSIX (ELOOP/EISDIR not reliably surfaced)"
-)]
 fn test_when_argument_file_is_a_symlink_to_directory_then_error() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
 
     at.mkdir("dir");
-    at.symlink_file("dir", "dir_link");
+    at.relative_symlink_file("dir", "dir_link");
 
-    let expected = "tail: error reading 'dir_link': Is a directory\n";
     ts.ucmd()
         .arg("dir_link")
         .fails_with_code(1)
-        .stderr_only(expected);
+        .stderr_only("tail: error reading 'dir_link': Is a directory\n");
 }
 
 // TODO: make this work on windows
@@ -4224,11 +4238,24 @@ fn test_args_when_settings_check_warnings_then_shows_warnings() {
 }
 
 #[test]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
 fn test_args_when_settings_check_warnings_follow_retry() {
     let scene = TestScenario::new(util_name!());
     let file_data = "file data\n";
     scene.fixtures.write("data", file_data);
+
+    if std::env::var("UUTESTS_WASM_RUNNER").is_ok() {
+        scene
+            .ucmd()
+            .args(&["--follow=descriptor", "--retry", "data"])
+            .stderr_to_stdout()
+            .fails_with_code(1)
+            .stdout_only(format!(
+                "tail: warning: --retry only effective for the initial open\n\
+                {file_data}\
+                tail: follow mode is not supported on this platform\n"
+            ));
+        return;
+    }
 
     let expected_stdout = format!(
         "tail: warning: --retry only effective for the initial open\n\
@@ -5160,11 +5187,16 @@ fn test_when_piped_input_then_no_broken_pipe() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(wasi_runner, ignore = "WASI: tail follow mode disabled")]
+#[cfg_attr(
+    wasi_runner,
+    ignore = "WASI: closed stdout reports a generic I/O error rather than BrokenPipe"
+)]
 fn test_when_output_closed_then_no_broken_pipe() {
-    let mut cmd = new_ucmd!();
+    let (at, mut cmd) = at_and_ucmd!();
+    at.make_file("input").set_len(10_000_000).unwrap();
+
     let mut child = cmd
-        .args(&["-c", "10000000", "/dev/zero"])
+        .args(&["-c", "10000000", "input"])
         .set_stdout(Stdio::piped())
         .run_no_wait();
     // Dropping the stdout should not lead to an error.
