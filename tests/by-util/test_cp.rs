@@ -834,6 +834,32 @@ fn test_cp_f_i_verbose_non_writeable_destination_empty() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_cp_f_preserves_dest_mode_when_writable_by_privilege() {
+    use uucore::process::geteuid;
+
+    // A privileged process can write to a file regardless of its permission
+    // bits, so `cp -f` must not unlink and recreate such a destination: GNU
+    // cp only removes the destination when it genuinely cannot be opened for
+    // writing. Removing it needlessly loses the destination's original mode
+    // (e.g. resets `000` to the umask-derived default).
+    if geteuid() != 0 {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    at.write("a", "s");
+    at.write("b", "d");
+    at.set_mode("b", 0o000);
+
+    ucmd.args(&["-f", "a", "b"]).succeeds();
+
+    assert_eq!(at.read("b"), "s");
+    assert_eq!(at.metadata("b").permissions().mode() & 0o777, 0o000);
+}
+
+#[test]
 #[cfg(target_os = "linux")]
 fn test_cp_arg_link() {
     use std::os::linux::fs::MetadataExt;

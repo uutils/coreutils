@@ -2157,11 +2157,9 @@ fn delete_dest_if_needed_and_allowed(
         OverwriteMode::Clobber(cl) | OverwriteMode::Interactive(cl) => {
             match cl {
                 ClobberMode::Force => {
-                    // TODO
-                    // Using `readonly` here to check if `dest` needs to be deleted is not correct:
-                    // "On Unix-based platforms this checks if any of the owner, group or others write permission bits are set. It does not check if the current user is in the file's assigned group. It also does not check ACLs. Therefore the return value of this function cannot be relied upon to predict whether attempts to read or write the file will actually succeed."
-                    // This results in some copy operations failing, because this necessary deletion is being skipped.
-                    is_symlink_loop(dest) || fs::metadata(dest)?.permissions().readonly()
+                    // Determine whether `dest` needs to be removed before
+                    // copying by trying to open it for writing.
+                    is_symlink_loop(dest) || OpenOptions::new().write(true).open(dest).is_err()
                 }
                 ClobberMode::RemoveDestination => true,
                 ClobberMode::Standard => {
