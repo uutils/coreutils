@@ -864,7 +864,10 @@ fn test_cp_f_preserves_dest_mode_when_writable_by_privilege() {
     ucmd.args(&["-f", "a", "b"]).succeeds();
 
     assert_eq!(at.read("b"), "s");
-    assert_eq!(rustix::fs::stat(at.plus("b")).unwrap().st_mode & 0o777, 0o000);
+    assert_eq!(
+        rustix::fs::stat(at.plus("b")).unwrap().st_mode & 0o777,
+        0o000
+    );
 }
 
 #[test]
