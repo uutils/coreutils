@@ -5,6 +5,8 @@
 //
 // spell-checker:ignore fstatat openat dirfd
 
+#![cfg(any(unix, windows))]
+
 use clap::{Arg, ArgAction, ArgMatches, Command, builder::PossibleValue};
 use glob::{Pattern, PatternError};
 use rustc_hash::FxHashSet as HashSet;
@@ -12,7 +14,7 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, DirEntry, File, Metadata};
 use std::io::{self, BufRead, BufReader, Write, stdout};
-#[cfg(not(windows))]
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 #[cfg(windows)]
 use std::os::windows::fs::OpenOptionsExt;
@@ -214,7 +216,7 @@ impl Stat {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(unix)]
 fn get_blocks(_path: &Path, metadata: &Metadata) -> u64 {
     metadata.blocks()
 }

@@ -5,6 +5,11 @@
 
 // spell-checker:ignore (ToDO) runlevel mesg
 
+#![cfg(all(
+    unix,
+    not(any(target_os = "android", target_os = "fuchsia", target_os = "redox"))
+))]
+
 use clap::{Arg, ArgAction, Command};
 use uucore::format_usage;
 use uucore::translate;

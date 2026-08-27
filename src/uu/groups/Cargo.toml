@@ -16,7 +16,7 @@ path = "src/groups.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["entries", "process"] }
@@ -28,3 +28,4 @@ workspace = true
 [[bin]]
 name = "groups"
 path = "src/main.rs"
+required-features = ["uucore/default"]

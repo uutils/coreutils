@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) Chmoder cmode fmode fperm fref ugoa RFILE RFILE's
 
+#![cfg(unix)]
+
 use clap::{Arg, ArgAction, Command};
 use std::collections::HashSet;
 use std::ffi::OsString;

@@ -19,7 +19,7 @@ path = "src/hostname.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(target_os = "redox")), windows))'.dependencies]
 clap = { workspace = true }
 hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
@@ -34,6 +34,7 @@ windows-sys = { workspace = true, features = [
 [[bin]]
 name = "hostname"
 path = "src/main.rs"
+required-features = ["uucore/default"]
 
 [[bench]]
 name = "hostname_bench"

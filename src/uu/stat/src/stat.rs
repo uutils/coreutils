@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 // spell-checker:ignore datetime
 
+#![cfg(unix)]
+
 use std::ops::Range;
 use uucore::diagnostics::OptionValue;
 use uucore::error::{UError, UResult, USimpleError};

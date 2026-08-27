@@ -4,6 +4,9 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) NEWROOT Userspec chrooting chroots chdir pstatus repointed
+
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
+
 mod error;
 
 use crate::error::ChrootError;

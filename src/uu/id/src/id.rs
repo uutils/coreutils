@@ -30,6 +30,7 @@
 //   `uu_ls -Z` being implemented and therefore fails at the moment
 //
 
+#![cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 #![allow(non_camel_case_types)]
 #![allow(dead_code)]
 

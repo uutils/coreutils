@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) passwd
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 use std::io::{Write, stdout};
 use thiserror::Error;
 use uucore::{

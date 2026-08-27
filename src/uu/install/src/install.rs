@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) rwxr sourcepath targetpath Isnt uioerror matchpathcon
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 mod mode;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};

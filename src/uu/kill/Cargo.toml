@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/kill.rs"
 doctest = false
 
-[target.'cfg(not(target_os = "fuchsia"))'.dependencies]
+[target.'cfg(any(windows, all(unix, not(target_os = "fuchsia"))))'.dependencies]
 clap = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = ["process", "signals"] }
@@ -31,3 +31,4 @@ workspace = true
 [[bin]]
 name = "kill"
 path = "src/main.rs"
+required-features = ["uucore/default"]

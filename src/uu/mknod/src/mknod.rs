@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) parsemode makedev sysmacros perror IFBLK IFCHR IFIFO sflag
 
+#![cfg(all(unix, not(target_os = "redox")))]
+
 use clap::{Arg, ArgAction, Command, value_parser};
 use nix::libc::{S_IRGRP, S_IROTH, S_IRUSR, S_IWGRP, S_IWOTH, S_IWUSR, mode_t};
 use nix::sys::stat::{Mode, SFlag, mknod as nix_mknod, umask as nix_umask};
