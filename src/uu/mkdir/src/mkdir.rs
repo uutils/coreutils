@@ -353,7 +353,19 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             Ok(())
         }
 
-        Err(_) if config.recursive && path.is_dir() => {
+        Err(_) if path.is_dir() => {
+            // Directory already exists. Only treat this as success when we
+            // are creating parent directories (is_parent) or when -p was
+            // given (recursive). In the plain `mkdir dir` case, EEXIST must
+            // be an error — even if the directory was created by a concurrent
+            // process — to preserve the mkdir-as-mutex pattern.
+            if !is_parent && !config.recursive {
+                return Err(USimpleError::new(
+                    1,
+                    translate!("mkdir-error-file-exists", "path" => path.maybe_quote()),
+                ));
+            }
+
             // Directory already exists - check if this is a logical directory creation
             // (i.e., not just a parent reference like "test_dir/..")
             let ends_with_parent_dir = matches!(
