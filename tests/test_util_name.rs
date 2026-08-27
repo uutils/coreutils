@@ -34,6 +34,7 @@ fn init() {
 fn binary_name_protection() {
     let ts = TestScenario::new("env");
     let bin = ts.bin_path.clone();
+    // protect against wrong argv[0]
     ts.ucmd()
         .arg("-a")
         .arg("hijacked")
@@ -41,6 +42,13 @@ fn binary_name_protection() {
         .arg("--version")
         .succeeds()
         .stdout_contains("coreutils");
+    // memfd has AT_EXECFN = /proc/self/fd/N. Fallback to argv[0]
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("/proc/se/f/fd/3 3<{}", &bin.display()))
+        .arg("--version")
+        .output()
+        .unwrap();
 }
 
 #[test]
