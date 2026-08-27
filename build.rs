@@ -40,6 +40,8 @@ pub fn main() {
 
     let out_dir = env::var("OUT_DIR").unwrap();
 
+    let target_arch = env::var_os("CARGO_CFG_TARGET_ARCH").unwrap();
+    let is_unix = env::var_os("CARGO_CFG_UNIX").is_some();
     let is_feat_selinux = env::var_os("CARGO_FEATURE_FEAT_SELINUX").is_some();
     let target_os = env::var_os("CARGO_CFG_TARGET_OS").unwrap();
     for (key, val) in env::vars() {

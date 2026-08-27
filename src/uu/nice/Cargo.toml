@@ -16,7 +16,7 @@ path = "src/nice.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(unix, windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true }
@@ -37,3 +37,4 @@ workspace = true
 [[bin]]
 name = "nice"
 path = "src/main.rs"
+required-features = ["uucore/default"]

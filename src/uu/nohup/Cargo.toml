@@ -19,12 +19,10 @@ doctest = false
 [target.'cfg(any(unix, windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
-thiserror = { workspace = true }
-uucore = { workspace = true, features = ["fs"] }
-
-[target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 rustix = { workspace = true, features = ["stdio"] }
+thiserror = { workspace = true }
+uucore = { workspace = true, features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_System_Threading"] }
