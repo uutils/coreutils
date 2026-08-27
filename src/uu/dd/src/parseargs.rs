@@ -497,11 +497,20 @@ fn show_zero_multiplier_warning() {
     );
 }
 
+enum ParsedFactor {
+    Value(u64),
+    Overflow(ParseError),
+}
+
 /// Parse bytes using [`str::parse`], then map error if needed.
-fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
-    s[..i]
-        .parse()
-        .map_err(|_| ParseError::MultiplierStringParseFailure(s.to_string()))
+fn parse_bytes_only(s: &str, i: usize) -> Result<ParsedFactor, ParseError> {
+    match s[..i].parse() {
+        Ok(value) => Ok(ParsedFactor::Value(value)),
+        Err(error) if *error.kind() == std::num::IntErrorKind::PosOverflow => Ok(
+            ParsedFactor::Overflow(ParseError::MultiplierStringParseFailure(s.to_string())),
+        ),
+        Err(_) => Err(ParseError::MultiplierStringParseFailure(s.to_string())),
+    }
 }
 
 /// Parse a number of bytes from the given string, assuming no `'x'` characters.
@@ -530,29 +539,44 @@ fn parse_bytes_only(s: &str, i: usize) -> Result<u64, ParseError> {
 /// assert_eq!(parse_bytes_no_x("2k", "2k").unwrap(), 2 * 1024);
 /// ```
 fn parse_bytes_no_x(full: &str, s: &str) -> Result<u64, ParseError> {
+    match parse_bytes_no_x_with_overflow(full, s)? {
+        ParsedFactor::Value(value) => Ok(value),
+        ParsedFactor::Overflow(error) => Err(error),
+    }
+}
+
+fn parse_bytes_no_x_with_overflow(full: &str, s: &str) -> Result<ParsedFactor, ParseError> {
     let parser = SizeParser {
         capital_b_bytes: true,
         no_empty_numeric: true,
         ..Default::default()
     };
     let (num, multiplier) = match (s.find('c'), s.rfind('w'), s.rfind('b')) {
+        (Some(i), None, None) if i == s.len() - 1 => (parse_bytes_only(s, i)?, 1),
+        (None, Some(i), None) if i == s.len() - 1 => (parse_bytes_only(s, i)?, 2),
+        (None, None, Some(i)) if i == s.len() - 1 => (parse_bytes_only(s, i)?, 512),
         (None, None, None) => match parser.parse_u64(s) {
-            Ok(n) => (n, 1),
+            Ok(n) => (ParsedFactor::Value(n), 1),
             Err(ParseSizeError::SizeTooBig(_)) => {
-                return Err(ParseError::InvalidNumberWithErrMsg(
+                return Ok(ParsedFactor::Overflow(ParseError::InvalidNumberWithErrMsg(
                     full.to_string(),
                     "Value too large for defined data type".to_string(),
-                ));
+                )));
             }
             Err(_) => return Err(ParseError::InvalidNumber(full.to_string())),
         },
-        (Some(i), None, None) => (parse_bytes_only(s, i)?, 1),
-        (None, Some(i), None) => (parse_bytes_only(s, i)?, 2),
-        (None, None, Some(i)) => (parse_bytes_only(s, i)?, 512),
         _ => return Err(ParseError::MultiplierStringParseFailure(full.to_string())),
     };
-    num.checked_mul(multiplier)
-        .ok_or_else(|| ParseError::MultiplierStringOverflow(full.to_string()))
+    if let ParsedFactor::Overflow(error) = num {
+        return Ok(ParsedFactor::Overflow(error));
+    }
+    let ParsedFactor::Value(num) = num else {
+        unreachable!();
+    };
+    Ok(match num.checked_mul(multiplier) {
+        Some(value) => ParsedFactor::Value(value),
+        None => ParsedFactor::Overflow(ParseError::MultiplierStringOverflow(full.to_string())),
+    })
 }
 
 /// Parse byte and multiplier like 512, 5KiB, or 1G.
@@ -575,20 +599,33 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     // individually, then multiplied together.
     let parts: Vec<&str> = s.split('x').collect();
     if parts.len() == 1 {
-        parse_bytes_no_x(s, parts[0])
-    } else {
-        let mut total: u64 = 1;
-        for (i, part) in parts.iter().enumerate() {
-            if *part == "0" && i != parts.len() - 1 {
-                show_zero_multiplier_warning();
-            }
-            let num = parse_bytes_no_x(s, part)?;
-            total = total
-                .checked_mul(num)
-                .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
-        }
-        Ok(total)
+        return parse_bytes_no_x(s, parts[0]);
     }
+
+    let mut total: u64 = 1;
+    let mut zero_warnings = 0;
+    for (i, part) in parts.iter().enumerate() {
+        match parse_bytes_no_x_with_overflow(s, part)? {
+            ParsedFactor::Overflow(_) if total == 0 => {}
+            ParsedFactor::Overflow(error) => return Err(error),
+            ParsedFactor::Value(0) => {
+                if *part == "0" && i != parts.len() - 1 {
+                    zero_warnings += 1;
+                }
+                total = 0;
+            }
+            ParsedFactor::Value(_) if total == 0 => {}
+            ParsedFactor::Value(value) => {
+                total = total
+                    .checked_mul(value)
+                    .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
+            }
+        }
+    }
+    for _ in 0..zero_warnings {
+        show_zero_multiplier_warning();
+    }
+    Ok(total)
 }
 
 fn get_ctable(
@@ -688,6 +725,7 @@ mod tests {
             2 * 2 * (3 * 2) // (1 * 2) * (2 * 1) * (3 * 2)
         );
     }
+
     #[test]
     fn test_parse_n() {
         for arg in ["1x8x4", "1c", "123b", "123w"] {

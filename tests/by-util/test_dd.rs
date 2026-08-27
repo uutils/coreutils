@@ -279,6 +279,23 @@ fn test_x_multiplier() {
 }
 
 #[test]
+fn test_zero_factor_does_not_warn_on_invalid_later_factor() {
+    for value in [
+        "0xfoo",
+        "0x1cb",
+        "0x1bc",
+        "0x0c9999999999999999999999999999999999999999999999999999999999999",
+    ] {
+        new_ucmd!()
+            .arg(format!("count={value}"))
+            .pipe_in("")
+            .fails()
+            .no_stdout()
+            .stderr_is(format!("dd: invalid number: '{value}'\n"));
+    }
+}
+
+#[test]
 fn test_zero_multiplier_warning() {
     for arg in ["count", "seek", "skip"] {
         new_ucmd!()
@@ -320,6 +337,17 @@ fn test_zero_multiplier_warning() {
             .succeeds()
             .no_stdout()
             .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\ndd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
+
+        new_ucmd!()
+            .args(&[
+                format!("{arg}=0x9999999999999999999999999999999999999999999999999999999999999x0")
+                    .as_str(),
+                "status=none",
+            ])
+            .pipe_in("")
+            .succeeds()
+            .no_stdout()
+            .stderr_is("dd: warning: '0x' is a zero multiplier; use '00x' if that is intended\n");
     }
 }
 

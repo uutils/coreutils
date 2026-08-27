@@ -445,6 +445,8 @@ fn parse_oflag_tokens_linux() {
 }
 
 // ----- Multiplier Strings etc. -----
+const BIG: &str = "9999999999999999999999999999999999999999999999999999999999999";
+
 macro_rules! test_byte_parser (
     ( $test_name:ident, $bs_str:expr, $bs:expr ) =>
     {
@@ -468,6 +470,25 @@ test_byte_parser!(test_bytes_b, "1b", 512);
 test_byte_parser!(test_bytes_k, "1kB", 1000);
 test_byte_parser!(test_bytes_K, "1K", 1024);
 test_byte_parser!(test_bytes_Ki, "1KiB", 1024);
+
+#[test]
+fn test_zero_factor_skips_later_overflow() {
+    for input in [format!("0x{BIG}"), format!("00x{BIG}"), format!("0x{BIG}w")] {
+        assert_eq!(parse_bytes_with_opt_multiplier(&input), Ok(0));
+    }
+}
+
+#[test]
+fn test_zero_factor_still_validates_later_factors() {
+    for input in [
+        "0xfoo",
+        "0x0x1xfoo",
+        "0x0c9999999999999999999999999999999999999999999999999999999999999",
+        &format!("{BIG}x1"),
+    ] {
+        assert!(parse_bytes_with_opt_multiplier(input).is_err());
+    }
+}
 
 test_byte_parser!(test_bytes_MB, "2MB", 2 * 1000 * 1000);
 test_byte_parser!(test_bytes_M, "2M", 2 * 1024 * 1024);
