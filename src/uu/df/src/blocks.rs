@@ -131,19 +131,21 @@ pub(crate) enum BlockSize {
     ///
     /// The number must be positive.
     Bytes(u64),
+    /// for when we need to display suffix along with blocksize
+    PrefixedBytes(u64, String),
 }
 
 impl BlockSize {
     /// Returns the associated value
     pub(crate) fn as_u64(&self) -> u64 {
         match *self {
-            Self::Bytes(n) => n,
+            Self::Bytes(n) | Self::PrefixedBytes(n, _) => n,
         }
     }
 
     pub(crate) fn to_header(&self) -> String {
         match self {
-            Self::Bytes(n) => {
+            Self::Bytes(n) | Self::PrefixedBytes(n, _) => {
                 if n % 1024 == 0 && n % 1000 != 0 {
                     to_magnitude_and_suffix(*n as u128, SuffixType::Iec, false)
                 } else {
@@ -166,10 +168,18 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
         let bytes = parse_size_u64(s)?;
 
         if bytes > 0 {
-            Ok(BlockSize::Bytes(bytes))
+            if s.chars().all(char::is_alphabetic) {
+                Ok(BlockSize::PrefixedBytes(bytes, s.clone()))
+            } else {
+                Ok(BlockSize::Bytes(bytes))
+            }
         } else {
             Err(ParseSizeError::ParseFailure(format!("{}", s.quote())))
         }
+    } else if matches.get_flag("mega") {
+        Ok(BlockSize::Bytes(1024 * 1024))
+    } else if matches.get_flag("kilo") {
+        Ok(BlockSize::Bytes(1024))
     } else if matches.get_flag(OPT_PORTABILITY) {
         Ok(BlockSize::default())
     } else if let Some(bytes) =
@@ -184,7 +194,7 @@ pub(crate) fn read_block_size(matches: &ArgMatches) -> Result<BlockSize, ParseSi
 impl fmt::Display for BlockSize {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Bytes(n) => {
+            Self::Bytes(n) | Self::PrefixedBytes(n, _) => {
                 let s = if n % 1024 == 0 && n % 1000 != 0 {
                     to_magnitude_and_suffix(*n as u128, SuffixType::Iec, true)
                 } else {
