@@ -32,8 +32,6 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-use filetime::FileTime;
 #[cfg(target_os = "linux")]
 use std::ffi::OsString;
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -2470,13 +2468,16 @@ fn test_cp_no_deref_folder_to_folder() {
 #[cfg(target_os = "linux")]
 fn test_cp_archive() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_utc();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    filetime::set_file_times(
-        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
-        previous,
-        previous,
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .unwrap();
+    file.set_times(
+        std_fs::FileTimes::new()
+            .set_accessed(previous)
+            .set_modified(previous),
     )
     .unwrap();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -2567,13 +2568,16 @@ fn test_cp_archive_recursive() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_utc();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    filetime::set_file_times(
-        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
-        previous,
-        previous,
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .unwrap();
+    file.set_times(
+        std_fs::FileTimes::new()
+            .set_accessed(previous)
+            .set_modified(previous),
     )
     .unwrap();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
@@ -2600,13 +2604,16 @@ fn test_cp_preserve_timestamps() {
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_cp_no_preserve_timestamps() {
     let (at, mut ucmd) = at_and_ucmd!();
-    let ts = time::OffsetDateTime::now_utc();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
+    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
     // set the file creation/modification an hour ago
-    filetime::set_file_times(
-        at.plus_as_string(TEST_HELLO_WORLD_SOURCE),
-        previous,
-        previous,
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus(TEST_HELLO_WORLD_SOURCE))
+        .unwrap();
+    file.set_times(
+        std_fs::FileTimes::new()
+            .set_accessed(previous)
+            .set_modified(previous),
     )
     .unwrap();
     sleep(Duration::from_millis(100));
@@ -2793,8 +2800,7 @@ fn test_cp_reflink_never() {
 #[test]
 #[cfg(target_os = "macos")]
 fn test_cp_reflink_never_does_not_clonefile() {
-    use filetime::FileTime;
-
+    use filetime::FileTime; // todo: replace with std
     let (at, mut ucmd) = at_and_ucmd!();
     at.write("src", "reflink never contents");
     // Stamp the source with a mtime well in the past; a clonefile would copy it verbatim.
@@ -7790,7 +7796,6 @@ fn test_cp_current_directory_verbose() {
 #[test]
 #[cfg(all(not(windows), not(target_os = "freebsd"), not(target_os = "openbsd")))]
 fn test_cp_current_directory_preserve_attributes() {
-    use filetime::FileTime;
     use std::os::unix::prelude::MetadataExt;
 
     let (at, mut ucmd) = at_and_ucmd!();
@@ -7805,10 +7810,29 @@ fn test_cp_current_directory_preserve_attributes() {
     at.set_mode("source_dir/file2.txt", 0o755);
 
     // Set specific timestamps on the source files (1 hour ago)
-    let ts = time::OffsetDateTime::now_utc();
-    let previous = FileTime::from_unix_time(ts.unix_timestamp() - 3600, ts.nanosecond());
-    filetime::set_file_times(at.plus("source_dir/file1.txt"), previous, previous).unwrap();
-    filetime::set_file_times(at.plus("source_dir/file2.txt"), previous, previous).unwrap();
+    let previous = std::time::SystemTime::now() - Duration::from_secs(3600);
+    let file1 = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("source_dir/file1.txt"))
+        .unwrap();
+    file1
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(previous)
+                .set_modified(previous),
+        )
+        .unwrap();
+    let file2 = std::fs::OpenOptions::new()
+        .write(true)
+        .open(at.plus("source_dir/file2.txt"))
+        .unwrap();
+    file2
+        .set_times(
+            std::fs::FileTimes::new()
+                .set_accessed(previous)
+                .set_modified(previous),
+        )
+        .unwrap();
 
     // Create existing destination directory
     at.mkdir("dest_dir");
