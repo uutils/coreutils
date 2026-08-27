@@ -15,7 +15,7 @@ readme.workspace = true
 path = "src/stat.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 rustix = { workspace = true, features = ["fs"] }
@@ -41,3 +41,4 @@ workspace = true
 [[bin]]
 name = "stat"
 path = "src/main.rs"
+required-features = ["uucore/default"]

@@ -5,6 +5,8 @@
 
 // spell-checker:ignore (ToDO) getlogin userlogin
 
+#![cfg(unix)]
+
 use clap::Command;
 use core::ffi::CStr;
 use std::io::{Write, stdout};

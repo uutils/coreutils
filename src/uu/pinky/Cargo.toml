@@ -17,7 +17,7 @@ readme.workspace = true
 path = "src/pinky.rs"
 doctest = false
 
-[dependencies]
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "android", target_os = "fuchsia", target_os = "redox"))))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["utmpx", "entries"] }
@@ -33,3 +33,4 @@ workspace = true
 [[bin]]
 name = "pinky"
 path = "src/main.rs"
+required-features = ["uucore/default"]

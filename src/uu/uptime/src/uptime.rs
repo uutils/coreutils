@@ -5,6 +5,11 @@
 
 // spell-checker:ignore behaviour loadavg nusers
 
+#![cfg(any(
+    all(unix, not(any(target_os = "fuchsia", target_os = "redox"))),
+    windows
+))]
+
 mod platform;
 
 use clap::{Arg, ArgAction, Command};
