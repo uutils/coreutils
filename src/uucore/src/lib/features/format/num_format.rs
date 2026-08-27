@@ -749,6 +749,17 @@ fn strip_fractional_zeroes_and_dot(s: &mut String) {
     }
 }
 
+// helper to write padding without allocating a huge buffer
+fn write_pad<W: Write>(writer: &mut W, pad_byte: u8, mut pad: usize) -> std::io::Result<()> {
+    let chunk = [pad_byte; 1024];
+    while pad > 0 {
+        let n = pad.min(chunk.len());
+        writer.write_all(&chunk[..n])?;
+        pad -= n;
+    }
+    Ok(())
+}
+
 fn write_output(
     mut writer: impl Write,
     sign_indicator: String,
@@ -761,35 +772,63 @@ fn write_output(
         writer.write_all(s.as_bytes())?;
         return Ok(());
     }
+    // Validate extremely large widths against the configured limit to avoid
+    // pathological output / resource use (manual padding now, not Rust's formatter)
+    super::check_width(width)?;
+
     // Take length of `sign_indicator`, which could be 0 or 1, into consideration when padding
     // by storing remaining_width indicating the actual width needed.
     // Using min() because self.width could be 0, 0usize - 1usize should be avoided
     let remaining_width = width - min(width, sign_indicator.len());
 
-    // Check if the width is too large for formatting
-    super::check_width(remaining_width)?;
-
     match alignment {
-        NumberAlignment::Left => write!(writer, "{sign_indicator}{s:<remaining_width$}"),
+        NumberAlignment::Left => {
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(s.as_bytes())?;
+            if s.len() < remaining_width {
+                write_pad(&mut writer, b' ', remaining_width - s.len())?;
+            }
+            Ok(())
+        }
         NumberAlignment::RightSpace => {
-            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+'); // When sign_indicator is in ['-', '+']
+            let is_sign = sign_indicator.starts_with('-') || sign_indicator.starts_with('+');
             if is_sign && remaining_width > 0 {
-                // Make sure sign_indicator is just next to number, e.g. "% +5.1f" 1 ==> $ +1.0
-                let s = sign_indicator + s.as_str();
-                write!(writer, "{s:>width$}", width = remaining_width + 1) // Since we now add sign_indicator and s together, plus 1
+                // is_sign implies sign_len == 1, so target == width; avoid allocation
+                let target = width;
+                super::check_width(target)?;
+                let content_len = sign_indicator.len() + s.len();
+                if content_len < target {
+                    write_pad(&mut writer, b' ', target - content_len)?;
+                }
+                writer.write_all(sign_indicator.as_bytes())?;
+                writer.write_all(s.as_bytes())?;
+                Ok(())
             } else {
-                write!(writer, "{sign_indicator}{s:>remaining_width$}")
+                if s.len() < remaining_width {
+                    writer.write_all(sign_indicator.as_bytes())?;
+                    write_pad(&mut writer, b' ', remaining_width - s.len())?;
+                    writer.write_all(s.as_bytes())?;
+                } else {
+                    writer.write_all(sign_indicator.as_bytes())?;
+                    writer.write_all(s.as_bytes())?;
+                }
+                Ok(())
             }
         }
         NumberAlignment::RightZero => {
-            // Add the padding after "0x" for hexadecimals
             let (prefix, rest) = if s.len() >= 2 && s[..2].eq_ignore_ascii_case("0x") {
                 (&s[..2], &s[2..])
             } else {
                 ("", s.as_str())
             };
             let remaining_width = remaining_width.saturating_sub(prefix.len());
-            write!(writer, "{sign_indicator}{prefix}{rest:0>remaining_width$}")
+            writer.write_all(sign_indicator.as_bytes())?;
+            writer.write_all(prefix.as_bytes())?;
+            if rest.len() < remaining_width {
+                write_pad(&mut writer, b'0', remaining_width - rest.len())?;
+            }
+            writer.write_all(rest.as_bytes())?;
+            Ok(())
         }
     }
 }

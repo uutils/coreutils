@@ -453,6 +453,19 @@ fn sub_string_char_width_above_u16_max_no_panic() {
 }
 
 #[test]
+fn sub_num_width_above_u16_max_no_panic() {
+    // Regression test for #13850: numeric width above u16::MAX must not panic
+    new_ucmd!()
+        .args(&["%65536d", "5"])
+        .succeeds()
+        .stdout_only(format!("{}5", " ".repeat(65535)));
+    new_ucmd!()
+        .args(&["%65536x", "255"])
+        .succeeds()
+        .stdout_only(format!("{}ff", " ".repeat(65534)));
+}
+
+#[test]
 fn sub_str_max_chars_input() {
     new_ucmd!()
         .args(&["hello %7.2s", "world"])
