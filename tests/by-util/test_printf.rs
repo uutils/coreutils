@@ -1574,6 +1574,25 @@ fn test_extreme_field_width_overflow() {
 }
 
 #[test]
+fn test_width_65536_does_not_panic() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13850
+    // Widths above u16::MAX (65535) previously panicked because Rust's
+    // write! macro uses u16 internally for formatting width.
+    new_ucmd!().args(&["%65536d", "1"]).succeeds();
+}
+
+#[test]
+fn test_width_above_u16_max_succeeds() {
+    // Widths above u16::MAX should succeed when output is not a terminal.
+    // The fix uses chunked space writing instead of the write! macro.
+    let result = new_ucmd!().args(&["|%65537d|", "1"]).succeeds();
+    assert!(
+        String::from_utf8_lossy(result.stdout()).contains('1'),
+        "output should contain the formatted value"
+    );
+}
+
+#[test]
 fn test_asterisk_width_i64_min_no_panic() {
     // Regression test for https://github.com/uutils/coreutils/issues/13766
     // An `i64::MIN` '*' width used to panic with "attempt to negate with overflow".
