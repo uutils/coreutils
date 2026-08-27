@@ -52,6 +52,16 @@ fn test_fs_format() {
     ts.ucmd().args(&args).succeeds().stdout_is(expected_stdout);
 }
 
+#[test]
+#[cfg(unix)]
+fn test_fs_default_format_block_size_label() {
+    // GNU prints "Block size:", not "Block Size:".
+    new_ucmd!()
+        .args(&["-f", "/"])
+        .succeeds()
+        .stdout_contains("Block size:");
+}
+
 #[cfg(unix)]
 #[test]
 fn test_terse_normal_format() {
