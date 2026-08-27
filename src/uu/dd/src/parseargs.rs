@@ -578,10 +578,17 @@ pub fn parse_bytes_with_opt_multiplier(s: &str) -> Result<u64, ParseError> {
     } else {
         let mut total: u64 = 1;
         for (i, part) in parts.iter().enumerate() {
-            if *part == "0" && i != parts.len() - 1 {
-                show_zero_multiplier_warning();
-            }
             let num = parse_bytes_no_x(s, part)?;
+            if num == 0 && i != parts.len() - 1 {
+                // GNU dd short-circuits on a zero factor — the product is
+                // zero regardless of the remaining factors, so return early
+                // rather than failing on huge numbers in later factors.
+                // Only warn for the literal "0" multiplier, not "00".
+                if *part == "0" {
+                    show_zero_multiplier_warning();
+                }
+                return Ok(0);
+            }
             total = total
                 .checked_mul(num)
                 .ok_or_else(|| ParseError::InvalidNumber(s.to_string()))?;
