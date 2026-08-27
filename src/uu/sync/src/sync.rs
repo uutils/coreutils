@@ -3,6 +3,8 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
+#![cfg(any(all(unix, not(target_os = "redox")), windows))]
+
 use clap::{Arg, ArgAction, Command};
 use std::path::Path;
 use uucore::display::Quotable;

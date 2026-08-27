@@ -19,12 +19,12 @@ path = "src/sync.rs"
 test = false
 doctest = false
 
-[dependencies]
+[target.'cfg(any(all(unix, not(target_os = "redox")), windows))'.dependencies]
 clap = { workspace = true }
 fluent = { workspace = true }
 uucore = { workspace = true, features = ["wide"] }
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(target_os = "redox")))'.dependencies]
 rustix = { workspace = true, features = ["fs"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -44,3 +44,4 @@ workspace = true
 [[bin]]
 name = "sync"
 path = "src/main.rs"
+required-features = ["uucore/default"]
