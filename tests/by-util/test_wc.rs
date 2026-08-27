@@ -375,6 +375,42 @@ fn test_file_one_long_word() {
         .stdout_is("    1     1 10001 10001 10000 onelongword.txt\n");
 }
 
+/// Test that the size of stdin dictates the display width when stdin is a
+/// regular file.
+///
+/// A stream of unknown length falls back to the minimum width, but a regular
+/// file redirected onto stdin has a size known up front, so it dictates the
+/// width just like a named file does.
+#[test]
+fn test_stdin_size_dictates_width() {
+    use std::fs::File;
+
+    // lorem_ipsum.txt contains 772 bytes, a width of 3.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.set_stdin(File::open(at.plus("lorem_ipsum.txt")).unwrap())
+        .succeeds()
+        .stdout_is(" 13 109 772\n");
+
+    // The same content piped in has no size known in advance, so the counts
+    // are padded to the minimum width instead.
+    new_ucmd!()
+        .pipe_in_fixture("lorem_ipsum.txt")
+        .succeeds()
+        .stdout_is("     13     109     772\n");
+
+    // "-" contributes the size of stdin to the total, so 772 + 302 = 1074
+    // bytes give a width of 4.
+    let (at, mut ucmd) = at_and_ucmd!();
+    ucmd.args(&["-", "alice_in_wonderland.txt"])
+        .set_stdin(File::open(at.plus("lorem_ipsum.txt")).unwrap())
+        .succeeds()
+        .stdout_is(concat!(
+            "  13  109  772 -\n",
+            "   5   57  302 alice_in_wonderland.txt\n",
+            "  18  166 1074 total\n",
+        ));
+}
+
 /// Test that the total size of all the files in the input dictates
 /// the display width.
 ///

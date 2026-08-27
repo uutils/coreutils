@@ -707,14 +707,15 @@ fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult 
 
 /// Compute the number of digits needed to represent all counts in all inputs.
 ///
-/// For [`Inputs::Stdin`], [`MINIMUM_WIDTH`] is returned, unless there is only one counter number
-/// to be printed, in which case 1 is returned.
+/// For [`Inputs::Stdin`], the width is derived from the size of stdin when stdin is a regular
+/// file, and [`MINIMUM_WIDTH`] otherwise; if there is only one counter number to be printed,
+/// 1 is returned.
 ///
 /// For [`Inputs::Files0From`], [`MINIMUM_WIDTH`] is returned.
 ///
 /// An [`Inputs::Paths`] may include zero or more "-" entries, each of which represents reading
-/// from `stdin`. The presence of any such entry causes this function to return a width that is at
-/// least [`MINIMUM_WIDTH`].
+/// from `stdin`. Such an entry contributes the size of stdin when stdin is a regular file, and
+/// otherwise causes this function to return a width that is at least [`MINIMUM_WIDTH`].
 ///
 /// If an [`Inputs::Paths`] contains only one path and only one number needs to be printed then
 /// this function is optimized to return 1 without making any calls to get file metadata.
@@ -725,7 +726,10 @@ fn word_count_from_input(input: &Input<'_>, settings: &Settings) -> CountResult 
 fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
     match inputs {
         Inputs::Stdin if settings.number_enabled() == 1 => 1,
-        Inputs::Stdin => MINIMUM_WIDTH,
+        Inputs::Stdin => match stdin_size() {
+            Some(size) => width_of(size, 1),
+            None => MINIMUM_WIDTH,
+        },
         Inputs::Files0From(_) => 1,
         Inputs::Paths(inputs) => {
             if settings.number_enabled() == 1 && inputs.len() == 1 {
@@ -736,7 +740,10 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
             let mut total: u64 = 0;
             for input in inputs {
                 match input {
-                    Input::Stdin(_) => minimum_width = MINIMUM_WIDTH,
+                    Input::Stdin(_) => match stdin_size() {
+                        Some(size) => total += size,
+                        None => minimum_width = MINIMUM_WIDTH,
+                    },
                     Input::Path(path) => {
                         if let Ok(meta) = fs::metadata(path) {
                             if meta.is_file() {
@@ -749,16 +756,44 @@ fn compute_number_width(inputs: &Inputs, settings: &Settings) -> usize {
                 }
             }
 
-            if total == 0 {
-                minimum_width
-            } else {
-                let total_width = (1 + total.ilog10())
-                    .try_into()
-                    .expect("ilog of a u64 should fit into a usize");
-                max(total_width, minimum_width)
-            }
+            width_of(total, minimum_width)
         }
     }
+}
+
+/// The width in digits of `total`, but never less than `minimum_width`.
+///
+/// A `total` of zero carries no information about the counts, so it leaves
+/// `minimum_width` untouched.
+fn width_of(total: u64, minimum_width: usize) -> usize {
+    if total == 0 {
+        minimum_width
+    } else {
+        let total_width = (1 + total.ilog10())
+            .try_into()
+            .expect("ilog of a u64 should fit into a usize");
+        max(total_width, minimum_width)
+    }
+}
+
+/// The size of stdin, if stdin refers to a regular file.
+///
+/// Counts read from a stream of unknown length are formatted with
+/// [`MINIMUM_WIDTH`], but when stdin is a regular file its size is known up
+/// front and dictates the width the same way a named file's size does.
+fn stdin_size() -> Option<u64> {
+    #[cfg(unix)]
+    use std::os::fd::AsFd;
+    #[cfg(windows)]
+    use std::os::windows::io::AsHandle;
+
+    let stdin = io::stdin();
+    #[cfg(unix)]
+    let cloned = stdin.as_fd().try_clone_to_owned().ok()?;
+    #[cfg(windows)]
+    let cloned = stdin.as_handle().try_clone_to_owned().ok()?;
+    let metadata = File::from(cloned).metadata().ok()?;
+    metadata.is_file().then_some(metadata.len())
 }
 
 type InputIterItem<'a> = Result<Input<'a>, Box<dyn UError>>;
