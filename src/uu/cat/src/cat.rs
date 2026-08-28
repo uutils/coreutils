@@ -416,7 +416,7 @@ where
     let line_joiner = "\ncat: ";
 
     Err(uucore::error::USimpleError::new(
-        error_messages.len() as i32,
+        1,
         error_messages.join(line_joiner),
     ))
 }
