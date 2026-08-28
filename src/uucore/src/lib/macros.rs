@@ -155,7 +155,7 @@ macro_rules! show_error(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
         let _ = writeln!(
-            std::io::stderr().lock(),
+            std::io::stderr(),
             "{}: {}",
             $crate::util_name(),
             format_args!($($args)+)
@@ -183,7 +183,7 @@ macro_rules! show_warning(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
         let _ = writeln!(
-            std::io::stderr().lock(),
+            std::io::stderr(),
             "{}: warning: {}",
             $crate::util_name(),
             format_args!($($args)+)
@@ -197,7 +197,7 @@ macro_rules! show_warning_caps(
     ($($args:tt)+) => ({
 		use std::io::Write as _;
         let _ = writeln!(
-            std::io::stderr().lock(),
+            std::io::stderr(),
             "{}: WARNING: {}",
             $crate::util_name(),
             format_args!($($args)+)
