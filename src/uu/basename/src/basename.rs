@@ -33,16 +33,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
+    // todo: use .required(true) of clap and sed GnuTests to provide better error message
     let mut name_args = matches
         .get_many::<OsString>(options::NAME)
-        .unwrap_or_default()
+        .ok_or_else(|| UUsageError::new(1, translate!("basename-error-missing-operand")))?
         .collect::<Vec<_>>();
-    if name_args.is_empty() {
-        return Err(UUsageError::new(
-            1,
-            translate!("basename-error-missing-operand"),
-        ));
-    }
     let multiple_paths = matches.get_one::<OsString>(options::SUFFIX).is_some()
         || matches.get_flag(options::MULTIPLE);
     let suffix = if multiple_paths {

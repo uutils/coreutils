@@ -1934,9 +1934,21 @@ pub(crate) fn copy_attributes(
             CpError::Error(translate!("cp-error-selinux-get-context", "path" => source.quote()))
         })?;
         if let Some(context) = context {
-            context.set_for_path(dest, false, false).map_err(|e|CpError::Error(
-					translate!("cp-error-selinux-set-context", "path" => dest.quote(), "error" => e),
-				))?;
+            context.set_for_path(dest, false, false).map_err(|e| {
+                // Keep the errno: the ENOTSUP of a mount with a fixed context is
+                // what -a and --preserve=all have to stay quiet about.
+                let source = match e {
+                    selinux::errors::Error::IO { source, .. }
+                    | selinux::errors::Error::IO1Name { source, .. }
+                    | selinux::errors::Error::IO1Path { source, .. }
+                    | selinux::errors::Error::IO1Process { source, .. } => source,
+                    e => io::Error::other(e),
+                };
+                CpError::IoErrContext(
+                    source,
+                    translate!("cp-error-selinux-set-context", "path" => dest.quote()),
+                )
+            })?;
         }
         Ok(())
     })?;

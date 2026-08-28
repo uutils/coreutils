@@ -89,7 +89,9 @@ fn test_sleep_zero_duration() {
 
 #[test]
 fn test_sleep_no_argument() {
-    new_ucmd!().fails().usage_error("missing operand");
+    new_ucmd!()
+        .fails()
+        .stderr_contains("the following required arguments were not provided"); // clap provided message
 }
 
 #[test]

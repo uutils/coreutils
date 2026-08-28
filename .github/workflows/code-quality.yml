@@ -250,12 +250,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: stable
-          components: rustfmt, clippy
-
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 

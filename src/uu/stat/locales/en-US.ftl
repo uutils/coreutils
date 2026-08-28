@@ -56,8 +56,6 @@ stat-after-help = Valid format sequences for files (without `--file-system`):
 
 stat-error-invalid-quoting-style = Invalid quoting style: {$style}
 stat-warning-invalid-env-quoting-style = ignoring invalid value of environment variable QUOTING_STYLE: '{$style}'
-stat-error-missing-operand = missing operand
-  Try 'stat --help' for more information.
 stat-error-invalid-directive = {$directive}: invalid directive
 stat-error-cannot-read-filesystem = cannot read table of mounted file systems: {$error}
 stat-error-stdin-filesystem-mode = using '-' to denote standard input does not work in file system mode

@@ -1246,6 +1246,25 @@ fn test_merge_write_error_does_not_panic() {
     }
 }
 
+// A read error must be reported with context and without the raw io::Error suffix.
+// It used to print `sort: Input/output error (os error 5)`.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error_message() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
+    result.no_stdout();
+    // The strerror text for EIO differs between C libraries: glibc says
+    // "Input/output error" while musl says "I/O error".
+    let stderr = result.stderr_str();
+    assert!(
+        stderr == "sort: read failed: Input/output error\n"
+            || stderr == "sort: read failed: I/O error\n",
+        "unexpected stderr: {stderr}"
+    );
+}
+
 #[test]
 fn test_merge_unique() {
     new_ucmd!()
@@ -1783,6 +1802,37 @@ fn test_separator_null() {
         .pipe_in("z\0a\0b\nz\0b\0a\na\0z\0z\n")
         .succeeds()
         .stdout_only("a\0z\0z\nz\0b\0a\nz\0a\0b\n");
+}
+
+#[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator (clap strips a leading
+    // `=` from attached short-option values), matching GNU sort. #14120
+    new_ucmd!()
+        .args(&["-t=", "-k", "2"])
+        .pipe_in("a=b=c\nb=a=d\n")
+        .succeeds()
+        .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_attached_equals_double() {
+    // `-t==` selects the two-character separator `==`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t==", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=='");
+}
+
+#[test]
+fn test_separator_attached_equals_multi_char() {
+    // `-t=a` selects the two-character separator `=a`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t=a", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=a'");
 }
 
 #[test]

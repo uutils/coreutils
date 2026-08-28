@@ -129,30 +129,27 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .map(os_string_to_vec)
         .collect::<Result<Vec<_>, _>>()?;
 
-    if args.len() == 1 && args[0] == b"--help" {
-        uu_app().print_help()?;
-    } else if args.len() == 1 && args[0] == b"--version" {
-        writeln!(stdout(), "expr {}", uucore::crate_version!())?;
-    } else {
-        // The first argument may be "--" and should be be ignored.
-        let args = if !args.is_empty() && args[0] == b"--" {
-            &args[1..]
-        } else {
-            &args
-        };
-
-        let res = match evaluate(args) {
-            Ok(res) => res,
-            Err((e, at)) => {
-                let reported = uucore::diagnostics::enabled() && diagnostics::render(args, &e, &at);
-                return Err(uucore::error::quiet_if_reported(reported, e));
+    let mut args = &args[..];
+    match args {
+        [a] if a == b"--help" => uu_app().print_help()?,
+        [a] if a == b"--version" => writeln!(stdout(), "expr {}", uucore::crate_version!())?,
+        _ => {
+            // ignore -- as the 1st argument
+            if let [a, rest @ ..] = args
+                && a == b"--"
+            {
+                args = rest;
             }
-        };
-        let _ = stdout().write_all(&res);
-        let _ = stdout().write_all(b"\n");
 
-        if !is_truthy(&res.into()) {
-            return Err(1.into());
+            let res = evaluate(args).map_err(|(e, at)| {
+                let reported = uucore::diagnostics::enabled() && diagnostics::render(args, &e, &at);
+                uucore::error::quiet_if_reported(reported, e)
+            })?;
+            stdout().write_all(&res)?;
+            stdout().write_all(b"\n")?;
+            if !is_truthy(&res.into()) {
+                return Err(1.into());
+            }
         }
     }
 

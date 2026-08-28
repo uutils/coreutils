@@ -4187,6 +4187,30 @@ fn test_ls_quoting_style_env_var_default() {
         .stdout_only(format!("{correct_c}\n"));
 }
 
+// An unwritable stderr must not turn the QUOTING_STYLE warning into an abort:
+// the diagnostic is best-effort, so a failed write is dropped and the listing
+// still goes out. /dev/full is Linux-only.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zeta");
+    at.touch("alpha");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .set_stderr(dev_full)
+        .succeeds()
+        .stdout_is("alpha\nzeta\n");
+}
+
 #[test]
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());

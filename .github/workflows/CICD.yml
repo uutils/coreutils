@@ -690,6 +690,7 @@ jobs:
       if: steps.vars.outputs.DEPLOY && matrix.job.skip-publish != true && matrix.job.check-only != true
       with:
         draft: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
@@ -704,6 +705,7 @@ jobs:
           commit: ${{ github.sha }}
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           ${{ steps.vars.outputs.STAGING }}/${{ steps.vars.outputs.PKG_NAME }}
           docs.tar.zst
@@ -861,7 +863,6 @@ jobs:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -919,7 +920,6 @@ jobs:
     - uses: actions/checkout@v7
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: taiki-e/install-action@nextest
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
@@ -1003,7 +1003,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Build SELinux utilities as stubs
       run: cargo build -p uu_chcon -p uu_runcon
@@ -1025,7 +1024,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace and libselinux headers (needed to build chcon)
       run: sudo apt-get update && sudo apt-get install -y strace libselinux1-dev
@@ -1043,7 +1041,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install fakeroot
       run: sudo apt-get update && sudo apt-get install -y fakeroot
@@ -1061,7 +1058,6 @@ jobs:
     - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
-    - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - name: Install strace
       run: sudo apt-get update && sudo apt-get install -y strace

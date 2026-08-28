@@ -374,6 +374,7 @@ setpipe
 
 # * other
 auxv
+btrfs
 getlimits
 weblate
 algs

@@ -1828,6 +1828,43 @@ fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     assert!(output.stderr.starts_with(expected));
 }
 
+// `O_DIRECT` requires the read buffer to satisfy the device's DMA alignment;
+// with a misaligned buffer the kernel fails the read with EINVAL (#12085).
+// Reading a regular file with `iflag=direct` exercises the same requirement
+// on filesystems that support it.
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_iflag_direct_read_uses_aligned_buffer() {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    // A multiple of the block size: the EOF read then happens at an aligned
+    // file offset. A trailing partial block would leave the offset
+    // misaligned, which some kernels (e.g. f2fs on Android) reject with
+    // EINVAL instead of reporting end of file.
+    let data = build_ascii_block(2 * 4096);
+    at.write_bytes("direct-in.bin", &data);
+
+    if OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECT)
+        .open(at.plus("direct-in.bin"))
+        .is_err()
+    {
+        print!("Test skipped; filesystem does not support O_DIRECT");
+        return;
+    }
+
+    ucmd.args(&[
+        "if=direct-in.bin",
+        "of=direct-out.bin",
+        "iflag=direct",
+        "bs=4096",
+    ])
+    .succeeds();
+    assert_eq!(at.read_bytes("direct-out.bin"), data);
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_iflag_directory_fails_when_file_is_passed_via_std_in() {
@@ -1997,6 +2034,37 @@ fn test_skip_overflow() {
         .stderr_contains(
             "dd: invalid number: '9223372036854775808': Value too large for defined data type",
         );
+}
+
+#[test]
+fn test_skip_blocks_times_ibs_overflow_does_not_wrap() {
+    // 17592186044416 * 1048576 == 2^64 would wrap around to 0, and
+    // must be rejected
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in.f", "0123456789abcdef");
+    ucmd.args(&["if=in.f", "skip=17592186044416", "ibs=1048576", "count=1"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Value too large for defined data type");
+}
+
+#[test]
+fn test_seek_blocks_times_obs_overflow_does_not_wrap() {
+    // Same as test_skip_blocks_times_ibs_overflow_does_not_wrap,
+    // but for `seek=`/`obs=`.
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("out.f", "0123456789abcdef");
+    ucmd.args(&[
+        "if=/dev/null",
+        "of=out.f",
+        "seek=17592186044416",
+        "obs=1048576",
+        "conv=notrunc",
+    ])
+    .fails()
+    .stderr_contains("Value too large for defined data type");
+    // The output file must be untouched, not overwritten at offset 0.
+    assert_eq!(at.read("out.f"), "0123456789abcdef");
 }
 
 #[test]
@@ -2405,6 +2473,52 @@ dd: unrecognized operand 'bsx=1'
             .fails_with_code(1)
             .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_contains("--help' for more information.")
+            .stderr_does_not_contain("╭─");
+    }
+
+    // The three below cover the shared switch in `uucore::diagnostics`.
+
+    #[test]
+    fn test_report_is_drawn_into_a_pipe_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "always")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_str();
+
+        // No terminal anywhere, and the report is drawn all the same.
+        assert!(stderr.contains("dd:1:4"), "{stderr}");
+        assert!(stderr.contains("1 \u{2502} dd bsx=1"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_plain_message_at_a_terminal_when_asked_for() {
+        let result = new_ucmd!()
+            .env("UUTILS_DIAG", "never")
+            .terminal_sim_stderr()
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(
+            stderr.contains("dd: unrecognized operand 'bsx=1'"),
+            "{stderr}"
+        );
+        assert!(!stderr.contains('\u{256d}'), "{stderr}");
+    }
+
+    #[test]
+    fn test_unknown_mode_leaves_the_terminal_in_charge() {
+        // A value nobody meant behaves as if the variable were unset.
+        new_ucmd!()
+            .env("UUTILS_DIAG", "sometimes")
+            .args(&["bsx=1"])
+            .pipe_in("")
+            .fails_with_code(1)
+            .stderr_contains("dd: unrecognized operand 'bsx=1'\n")
             .stderr_does_not_contain("╭─");
     }
 }
