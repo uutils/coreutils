@@ -3482,6 +3482,7 @@ dependencies = [
  "parse_datetime",
  "rustix",
  "tempfile",
+ "thiserror 2.0.20",
  "uucore",
  "windows-sys 0.61.2",
 ]
