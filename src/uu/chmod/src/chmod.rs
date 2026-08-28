@@ -165,10 +165,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         modes.unwrap().to_owned() // modes is required
     };
+    // todo: use .required(true) of clap and sed GnuTests to provide better error message
     let mut files: Vec<OsString> = matches
         .get_many::<OsString>(options::FILE)
         .map(|v| v.cloned().collect())
-        .unwrap_or_default();
+        .ok_or_else(|| UUsageError::new(1, translate!("chmod-error-missing-operand")))?;
     let cmode = if fmode.is_some() {
         // "--reference" and MODE are mutually exclusive
         // if "--reference" was used MODE needs to be interpreted as another FILE
@@ -178,13 +179,6 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     } else {
         Some(cmode)
     };
-
-    if files.is_empty() {
-        return Err(UUsageError::new(
-            1,
-            translate!("chmod-error-missing-operand"),
-        ));
-    }
 
     let (recursive, dereference, traverse_symlinks) =
         configure_symlink_and_recursion(&matches, TraverseSymlinks::First)?;
