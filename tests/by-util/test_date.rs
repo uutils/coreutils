@@ -1385,7 +1385,7 @@ fn test_date_empty_string() {
 fn test_date_empty_string_variations() {
     // Test multiple variations of empty/whitespace strings
     // All should produce midnight (00:00:00)
-    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t"];
+    let test_cases = vec!["", " ", "  ", "\t", "\n", " \t ", "\t\n\t", "\x0B", "\x0C"];
 
     for input in test_cases {
         new_ucmd!()
@@ -1406,6 +1406,26 @@ fn test_date_empty_string_variations() {
         .succeeds()
         .stdout_contains("00:00:00")
         .stdout_contains("UTC");
+}
+
+#[test]
+fn test_date_whitespace_between_items() {
+    // GNU date accepts \v and \f as whitespace between items
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "Jan 23\x0B 2026 1:00AM"])
+        .succeeds()
+        .stdout_is("Fri Jan 23 01:00:00 UTC 2026\n");
+
+    new_ucmd!()
+        .env("LANG", "C")
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC0")
+        .args(&["-d", "Jan 23\x0C2026 1:00AM"])
+        .succeeds()
+        .stdout_is("Fri Jan 23 01:00:00 UTC 2026\n");
 }
 
 #[test]
