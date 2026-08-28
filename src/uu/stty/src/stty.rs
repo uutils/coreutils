@@ -437,6 +437,20 @@ fn stty(opts: &Options) -> UResult<()> {
             }
         }
         tcsetattr(opts.file.as_fd(), set_arg, &termios)?;
+
+        // Verify that tcsetattr actually applied all requested settings.
+        // POSIX allows tcsetattr to succeed while only partially applying
+        // changes. GNU stty re-reads and compares; we do the same.
+        let actual = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
+        if actual != termios {
+            return Err(USimpleError::new(
+                1,
+                format!(
+                    "{0}: unable to perform all requested tcsetattr operations",
+                    opts.device_name
+                ),
+            ));
+        }
     } else {
         let termios = tcgetattr(opts.file.as_fd()).map_err_context(|| opts.device_name.clone())?;
         print_settings(&termios, opts)?;
