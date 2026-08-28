@@ -884,7 +884,12 @@ fn parse_timestamp(s: &str) -> UResult<FileTime> {
     // only care about the timestamp anyway.
     // Tested in gnu/tests/touch/60-seconds
     if dt.second() == 59 && ts.ends_with(".60") {
-        dt += 1.second();
+        dt = dt.checked_add(1.second()).map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("touch-error-invalid-date-format", "date" => s.quote()),
+            )
+        })?;
     }
 
     // Due to daylight saving time switch, local time can jump from 1:59 AM to
@@ -998,6 +1003,15 @@ mod tests {
             Err(e) => panic!("Expected TouchError::InvalidFiletime, got {e}"),
             Ok(_) => panic!("Expected to error with TouchError::InvalidFiletime but succeeded"),
         }
+    }
+
+    // -t 999912312359.60 bumps the leap second one past the very last representable
+    // instant in jiff's calendar (9999-12-31T23:59:59), which used to overflow the
+    // civil DateTime year field via an unchecked `+=` and abort the process (SIGABRT)
+    // instead of returning a normal parse error.
+    #[test]
+    fn test_parse_timestamp_leap_second_overflow_does_not_panic() {
+        assert!(super::parse_timestamp("999912312359.60").is_err());
     }
 
     #[cfg(unix)]
