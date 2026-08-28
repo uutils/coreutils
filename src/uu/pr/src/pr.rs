@@ -1179,7 +1179,7 @@ fn get_pages(
             // TODO Optimization opportunity: don't bother pushing
             // lines and pages if we aren't going to display it.
             if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                pages.push((page_num, page.clone()));
+                pages.push((page_num, std::mem::take(&mut page)));
             }
             page_num += 1;
             page.clear();
@@ -1203,7 +1203,7 @@ fn get_pages(
             // and clear the `page` buffer for the next iteration.
             if page.len() >= lines_needed_per_page {
                 if start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-                    pages.push((page_num, page.clone()));
+                    pages.push((page_num, std::mem::take(&mut page)));
                 }
                 page_num += 1;
                 page.clear();
@@ -1219,7 +1219,7 @@ fn get_pages(
 
     // Consider all trailing lines as the last page.
     if !page.is_empty() && start_page <= page_num + 1 && end_page.is_none_or(|e| page_num < e) {
-        pages.push((page_num, page.clone()));
+        pages.push((page_num, std::mem::take(&mut page)));
     }
 
     (pages, page_num + 1)
@@ -1249,8 +1249,7 @@ fn group_lines(num_files: usize, lines: Vec<FileLine>) -> Vec<(usize, Vec<FileLi
                 current_group.push(file_line);
             }
             Some(key) => {
-                result.push((key, current_group.clone()));
-                current_group.clear();
+                result.push((key, std::mem::take(&mut current_group)));
                 current_key = Some(group_key(num_files, &file_line));
                 current_group.push(file_line);
             }
