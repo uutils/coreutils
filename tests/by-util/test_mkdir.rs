@@ -1134,3 +1134,65 @@ mod diagnostics {
         assert!(!stderr.contains(":1:"), "{stderr}");
     }
 }
+
+/// Regression test: plain `mkdir` on an existing directory must fail with
+/// exit 1, not 0.  Previously the EEXIST path checked `path.is_dir()` and
+/// returned Ok(()), which broke the mkdir-as-mutex pattern under
+/// concurrency (issue #13970).
+#[test]
+fn test_mkdir_eexist_returns_error() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = at.plus("existing_dir");
+
+    let dir_str = dir.to_str().unwrap();
+
+    // Create the directory first
+    new_ucmd!().args(&[dir_str]).succeeds();
+
+    // Trying again without -p must fail
+    new_ucmd!()
+        .args(&[dir_str])
+        .fails_with_code(1)
+        .stderr_contains("File exists");
+}
+
+/// Regression test: concurrent `mkdir` (no -p) on the same path must
+/// produce exactly one winner (issue #13970).
+#[test]
+fn test_mkdir_concurrent_eexist() {
+    use std::thread;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    let dir = at.plus("race_dir");
+    let path_str = dir.to_string_lossy().to_string();
+    let bin_path = scene.bin_path.clone();
+
+    for _ in 0..10 {
+        // Remove directory before each round
+        let _ = std::fs::remove_dir(&path_str);
+
+        let mut handles = vec![];
+        for _ in 0..20 {
+            let path = path_str.clone();
+            let bin = bin_path.clone();
+            handles.push(thread::spawn(move || {
+                std::process::Command::new(&bin)
+                    .arg("mkdir")
+                    .arg(&path)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            }));
+        }
+
+        let winners: usize = handles
+            .into_iter()
+            .map(|h| h.join().unwrap() as usize)
+            .sum();
+        assert_eq!(winners, 1, "Expected exactly 1 winner, got {winners}");
+    }
+}
