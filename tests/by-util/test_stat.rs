@@ -53,7 +53,9 @@ fn test_fs_format() {
 }
 
 #[test]
-#[cfg(unix)]
+// `stat -f` is only implemented for these targets; elsewhere `fs_type` is
+// still `unimplemented!()`.
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn test_fs_default_format_block_size_label() {
     // GNU prints "Block size:", not "Block Size:".
     new_ucmd!()
