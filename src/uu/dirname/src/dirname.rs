@@ -105,15 +105,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     let line_ending = LineEnding::from_zero_flag(matches.get_flag(options::ZERO));
 
+    // todo: use .required(true) of clap and sed GnuTests to provide better error message
     let dirnames: Vec<OsString> = matches
         .get_many::<OsString>(options::DIR)
-        .unwrap_or_default()
+        .ok_or_else(|| UUsageError::new(1, translate!("dirname-missing-operand")))?
         .cloned()
         .collect();
-
-    if dirnames.is_empty() {
-        return Err(UUsageError::new(1, translate!("dirname-missing-operand")));
-    }
 
     for path in &dirnames {
         let path_bytes = uucore::os_str_as_bytes(path.as_os_str()).unwrap_or(&[]);
