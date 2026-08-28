@@ -160,7 +160,7 @@ impl Num {
 
     fn to_bytes(self, block_size: u64) -> u64 {
         match self {
-            Self::Blocks(n) => n.checked_mul(block_size).unwrap_or(u64::MAX),
+            Self::Blocks(n) => n.saturating_mul(block_size),
             Self::Bytes(n) => n,
         }
     }
