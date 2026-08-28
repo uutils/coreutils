@@ -26,7 +26,6 @@ i18n-datetime = [
 ]
 
 [dependencies]
-thiserror = { workspace = true }
 clap = { workspace = true }
 fluent = { workspace = true }
 icu_calendar = { workspace = true, optional = true }
@@ -38,6 +37,7 @@ jiff = { workspace = true, features = [
   "tzdb-concatenated",
 ] }
 parse_datetime = { workspace = true }
+thiserror = { workspace = true }
 uucore = { workspace = true, features = ["parser", "i18n-datetime"] }
 
 [target.'cfg(unix)'.dependencies]
