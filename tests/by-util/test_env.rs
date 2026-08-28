@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler
+// spell-checker:ignore (words) bamf chdir rlimit prlimit COMSPEC cout cerr FFFD winsize xpixel ypixel Secho sighandler putenv
 #![allow(clippy::missing_errors_doc)]
 
 #[cfg(unix)]
@@ -58,8 +58,27 @@ impl Target {
         #[cfg(not(target_os = "macos"))]
         self.child.delay(100);
     }
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    fn send_raw_signal(&mut self, signal: i32) {
+        // nix's `Signal` enum cannot represent real-time signals, so send the raw number.
+        // SAFETY: kill(2) with the child's pid and a valid signal number.
+        unsafe { libc::kill(self.child.id() as libc::pid_t, signal) };
+        self.child.delay(100);
+    }
     fn is_alive(&mut self) -> bool {
         self.child.is_alive()
+    }
+    /// Polls until the child is gone, up to two seconds. A fixed sleep is not
+    /// enough on a loaded CI container, where tearing the process down after the
+    /// signal can take far longer than on a developer machine.
+    fn died(&mut self) -> bool {
+        for _ in 0..40 {
+            if !self.child.is_alive() {
+                return true;
+            }
+            self.child.delay(50);
+        }
+        false
     }
 }
 #[cfg(unix)]
@@ -1009,8 +1028,50 @@ fn test_env_arg_ignore_signal_valid_signals() {
     {
         let mut target = Target::new(&["int", "usr2"]);
         target.send_signal(Signal::SIGUSR1);
-        assert!(!target.is_alive());
+        assert!(target.died());
     }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_env_ignore_signal_realtime() {
+    // Real-time signals (SIGRTMIN..=SIGRTMAX) are not in nix's Signal enum; make sure
+    // env still applies the action to them. Regression for env-signal-handler.sh.
+    let rtmin = libc::SIGRTMIN();
+    {
+        let mut target = Target::new(&["RTMIN"]);
+        target.send_raw_signal(rtmin);
+        assert!(target.is_alive(), "env should ignore SIGRTMIN");
+    }
+    {
+        // Control: a signal env does not ignore still terminates by default.
+        let mut target = Target::new(&["int"]);
+        target.send_raw_signal(rtmin);
+        assert!(target.died(), "SIGRTMIN should terminate by default");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_env_list_signal_handling_realtime() {
+    let rtmin = libc::SIGRTMIN();
+    let result = new_ucmd!()
+        .env("PATH", PATH)
+        .args(&["--ignore-signal=RTMIN", "--list-signal-handling", "true"])
+        .succeeds();
+    let stderr = result.stderr_str();
+    // The number, the IGNORE disposition, and the "RTMIN" name must all appear:
+    // env must print the real-time signal name like GNU, not "?".
+    assert!(
+        stderr.contains(&format!("({rtmin})"))
+            && stderr.contains("IGNORE")
+            && stderr.contains("RTMIN"),
+        "unexpected signal listing: {stderr}"
+    );
+    assert!(
+        !stderr.contains('?'),
+        "real-time signal name should not be '?': {stderr}"
+    );
 }
 
 #[test]

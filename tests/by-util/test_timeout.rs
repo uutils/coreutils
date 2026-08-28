@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore dont SIGBREAK
+// spell-checker:ignore dont SIGBREAK sigwait
 
 use rstest::rstest;
 use std::time::Duration;
@@ -75,6 +75,47 @@ fn test_verbose() {
             .no_stdout()
             .stderr_contains("timeout: sending signal 0 to command")
             .stderr_contains("timeout: sending signal KILL to command");
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn test_signal_realtime() {
+    // A real-time signal must be forwarded to the child so it terminates on its own;
+    // otherwise timeout falls back to SIGKILL (exit 137 + a KILL line). Regression for
+    // tests/env/env-signal-handler.sh.
+    // The kill-after window is generous: a regression sends SIGKILL at once, while a
+    // slow CI container just needs time to tear the child down.
+    new_ucmd!()
+        .args(&["--verbose", "-k5", "--signal=RTMIN", ".1", "sleep", "10"])
+        .fails_with_code(124)
+        .stderr_only("timeout: sending signal RTMIN to command 'sleep'\n");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_signal_not_swallowed_by_own_group() {
+    // timeout signals its own process group, and blocks these signals so it can
+    // consume them with sigwait. A blocked signal is queued even when its
+    // disposition is SIG_IGN, so timeout used to read back the signal it had just
+    // sent and jump straight to SIGKILL instead of letting the child die on its own.
+    // SIGQUIT is left out on purpose: it dumps core, which can take longer than the
+    // test is willing to wait. The kill-after window is generous for the same reason:
+    // a regression sends SIGKILL at once, it never waits for it.
+    for signal in ["INT", "PIPE", "USR1"] {
+        new_ucmd!()
+            .args(&[
+                "--verbose",
+                "-k5",
+                &format!("--signal={signal}"),
+                ".1",
+                "sleep",
+                "10",
+            ])
+            .fails_with_code(124)
+            .stderr_only(format!(
+                "timeout: sending signal {signal} to command 'sleep'\n"
+            ));
     }
 }
 
