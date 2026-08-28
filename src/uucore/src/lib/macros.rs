@@ -93,7 +93,7 @@ macro_rules! show(
 
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        let _ = writeln!(std::io::stderr().lock(), "{}: {e}", $crate::util_name());
+        let _ = writeln!(std::io::stderr(), "{}: {e}", $crate::util_name());
     })
 );
 
