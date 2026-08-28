@@ -3384,6 +3384,27 @@ mod quoting {
             .succeeds()
             .stdout_is("é\n");
     }
+
+    #[test]
+    fn test_empty_lc_all_falls_through_to_lang() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        // Create a file with a non-ASCII character.
+        at.touch("café");
+
+        // When LC_ALL is empty it should be treated as unset,
+        // falling through to LANG for locale resolution.
+        // Without the fix, empty LC_ALL was treated as POSIX,
+        // causing the non-ASCII name to be octal-escaped.
+        scene
+            .ucmd()
+            .env("LC_ALL", "")
+            .env("LANG", "en_US.UTF-8")
+            .env("LC_CTYPE", "en_US.UTF-8")
+            .args(&["--quoting-style=literal"])
+            .succeeds()
+            .stdout_contains("café");
+    }
 }
 
 #[test]
