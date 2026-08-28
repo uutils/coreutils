@@ -45,6 +45,28 @@ test: invalid integer &#x27;zap&#x27;
 
 [Try it in the playground](https://uutils.org/playground/?cmd=test+7+-eq+zap).
 
+### `cut`
+
+A list of ranges is often long, and only one item in it is wrong:
+
+Before:
+
+<pre class="diag"><span class="a-p">$</span> cut -f 1,4-2,9-12 notes.txt
+cut: invalid decreasing range</pre>
+
+After:
+
+<pre class="diag"><span class="a-p">$</span> cut -f 1,4-2,9-12 notes.txt
+cut: invalid decreasing range
+   <span class="a-d">╭─[</span> cut:1:10 <span class="a-d">]</span>
+   <span class="a-d">│</span>
+ <span class="a-d">1 │</span> <span class="a-s">cut -f 1,</span><span class="a-e">4-2</span><span class="a-s">,9-12 notes.txt</span>
+ <span class="a-f">  │</span>          <span class="a-e">─┬─</span>
+ <span class="a-f">  │</span>           <span class="a-e">╰───</span> this range ends before it starts
+ <span class="a-f">  │</span>
+ <span class="a-f">  │</span> <span class="a-h">Help</span>: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
+<span class="a-d">───╯</span></pre>
+
 ### `expr`
 
 Before:
@@ -203,28 +225,6 @@ env: only ${VARNAME} expansion is supported, error at: ${1FOO}
 
 Note that the `-S` string holds spaces, so it is echoed back quoted - and the
 caret still points inside it.
-
-### `cut`
-
-A list of ranges is often long, and only one item in it is wrong:
-
-Before:
-
-<pre class="diag"><span class="a-p">$</span> cut -f 1,4-2,9-12 notes.txt
-cut: invalid decreasing range</pre>
-
-After:
-
-<pre class="diag"><span class="a-p">$</span> cut -f 1,4-2,9-12 notes.txt
-cut: invalid decreasing range
-   <span class="a-d">╭─[</span> cut:1:10 <span class="a-d">]</span>
-   <span class="a-d">│</span>
- <span class="a-d">1 │</span> <span class="a-s">cut -f 1,</span><span class="a-e">4-2</span><span class="a-s">,9-12 notes.txt</span>
- <span class="a-f">  │</span>          <span class="a-e">─┬─</span>
- <span class="a-f">  │</span>           <span class="a-e">╰───</span> this range ends before it starts
- <span class="a-f">  │</span>
- <span class="a-f">  │</span> <span class="a-h">Help</span>: a list is N, N-M, N- or -M, separated by commas, as in -f1,4-6,9-
-<span class="a-d">───╯</span></pre>
 
 ### `head`
 
