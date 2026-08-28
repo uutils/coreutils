@@ -638,6 +638,13 @@ impl<'a> State<'a> {
                 return Ok(Some(line));
             }
 
+            // In Default mode the warning is only emitted when there are
+            // already unpaired lines, so skip the (potentially expensive)
+            // locale comparison on every line when no violation is possible yet.
+            if input.check_order == CheckOrder::Default && (!self.has_unpaired || self.has_failed) {
+                return Ok(Some(line));
+            }
+
             let diff = input.compare(self.get_current_key(), line.get_field(self.key));
 
             if diff == Ordering::Greater
