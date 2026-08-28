@@ -28,6 +28,19 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_set_echo_and_verify() {
+    let (path, _controller, _replica) = pty_path();
+
+    new_ucmd!().args(&["--file", &path, "-echo"]).succeeds();
+    new_ucmd!()
+        .args(&["--file", &path, "--all"])
+        .succeeds()
+        .stdout_contains("-echo");
+}
+
+#[test]
+#[cfg(unix)]
 fn test_basic() {
     let (path, _controller, _replica) = pty_path();
     new_ucmd!()
