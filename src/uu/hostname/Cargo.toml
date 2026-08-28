@@ -25,9 +25,6 @@ hostname = { workspace = true, features = ["set"] }
 uucore = { workspace = true, features = ["wide"] }
 fluent = { workspace = true }
 
-[target.'cfg(any(target_os = "freebsd", target_os = "openbsd"))'.dependencies]
-dns-lookup = { workspace = true }
-
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_Networking_WinSock",

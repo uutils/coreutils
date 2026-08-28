@@ -6,7 +6,6 @@
 // spell-checker:ignore hashset Addrs addrs
 
 use std::io::{Write, stdout};
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
 use std::net::ToSocketAddrs;
 use std::str;
 use std::{collections::hash_set::HashSet, ffi::OsString};
@@ -14,8 +13,6 @@ use std::{collections::hash_set::HashSet, ffi::OsString};
 use clap::builder::ValueParser;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-#[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-use dns_lookup::lookup_host;
 use uucore::translate;
 
 use uucore::{
@@ -123,26 +120,9 @@ fn display_hostname(matches: &ArgMatches) -> UResult<()> {
         .into_owned();
 
     if matches.get_flag(OPT_IP_ADDRESS) {
-        let addresses;
-
-        #[cfg(not(any(target_os = "freebsd", target_os = "openbsd")))]
-        {
-            let hostname = hostname + ":1";
-            let addrs = hostname
-                .to_socket_addrs()
-                .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
-            addresses = addrs;
-        }
-
-        // DNS reverse lookup via "hostname:1" does not work on FreeBSD and OpenBSD
-        // use dns-lookup crate instead
-        #[cfg(any(target_os = "freebsd", target_os = "openbsd"))]
-        {
-            let addrs: Vec<std::net::IpAddr> = lookup_host(hostname.as_str())
-                .map_err_context(|| "failed to lookup hostname".to_owned())?
-                .collect();
-            addresses = addrs;
-        }
+        let addresses = (hostname, 1)
+            .to_socket_addrs()
+            .map_err_context(|| "failed to resolve socket addresses".to_owned())?;
 
         let mut hashset = HashSet::new();
         let mut output = String::new();
