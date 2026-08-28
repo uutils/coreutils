@@ -430,7 +430,7 @@ ctrlc = { version = "3.5.2", features = ["termination"] }
 data-encoding = "2.6"
 data-encoding-macro = "0.1.15"
 divan = { package = "codspeed-divan-compat", version = "5.0.0" }
-dns-lookup = { version = "3.0.0" }
+dns-lookup = { version = "4.0.0" }
 dunce = "1.0.4"
 filetime = "0.2.29"
 foldhash = "0.2.0"
