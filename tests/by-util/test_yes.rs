@@ -72,6 +72,20 @@ fn test_long_input() {
     run(&[&arg[..arg.len() - 1]], expected_out.as_bytes());
 }
 
+/// A joined line larger than the internal broker pipe's capacity (1 MiB)
+/// can cause a deadlock
+#[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_long_line_exceeds_pipe_capacity() {
+    // A single argv string is capped at ~128 KiB by the kernel, so use many
+    // args joined by spaces to build a >1 MiB line instead of one huge arg.
+    let word = "a".repeat(60_000);
+    let args: Vec<&str> = std::iter::repeat_n(word.as_str(), 20).collect();
+    let line = args.join(" ");
+    run(&args, format!("{line}\n{line}\n").as_bytes());
+}
+
 #[test]
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 #[cfg_attr(wasi_runner, ignore)]

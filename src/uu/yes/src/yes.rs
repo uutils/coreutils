@@ -99,7 +99,11 @@ pub fn exec(bytes: &[u8]) -> io::Result<()> {
     // tee() cannot control offset. We can do tee only if original bytes.len() is multiple of PIPE_BUF,
     // but it is slower than mixing splice even it reduces syscalls...
     let bytes_len = bytes.len();
-    if let Ok((p_read, mut p_write)) = pipe::<true>()
+    // Skip the splice/tee fast path if bytes wouldn't fit in the pipe.
+    // p_write.write_all(bytes) below has nothing draining p_read yet, so writing more than
+    // the pipe holds deadlocks.
+    if bytes_len <= MAX_ROOTLESS_PIPE_SIZE
+        && let Ok((p_read, mut p_write)) = pipe::<true>()
         && p_write.write_all(bytes).is_ok()
         && let Ok((broker_read, broker_write)) = pipe::<true>()
         // GNU catches all strace injections for splice expect for 1st one (checking support of it)
