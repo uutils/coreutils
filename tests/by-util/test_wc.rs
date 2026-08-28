@@ -382,6 +382,9 @@ fn test_file_one_long_word() {
 /// file redirected onto stdin has a size known up front, so it dictates the
 /// width just like a named file does.
 #[test]
+// `at_and_ucmd!` is only imported on unix in this file, and the wasm targets
+// have no meaningful stdin file to redirect.
+#[cfg(unix)]
 fn test_stdin_size_dictates_width() {
     use std::fs::File;
 
