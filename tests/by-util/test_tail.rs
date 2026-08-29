@@ -1428,15 +1428,15 @@ fn test_retry_follow_name_waits_for_creation() {
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.wait_for_stderr_contains("cannot open 'missing'", WAIT_TIMEOUT)
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
             .make_assertion()
             .is_alive();
 
         at.touch(missing);
         p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
-        at.truncate(missing, "X\n");
-        p.wait_for_stdout_contains("X\n", WAIT_TIMEOUT);
+        at.truncate(missing, "hello\n");
+        p.wait_for_stdout_contains("hello\n", WAIT_TIMEOUT);
 
         p.kill()
             .make_assertion()
@@ -1482,19 +1482,19 @@ fn test_retry_descriptor_detects_truncation() {
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.wait_for_stderr_contains("cannot open 'missing'", WAIT_TIMEOUT)
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
             .make_assertion()
             .is_alive();
 
         at.touch(missing);
         p.wait_for_stderr_contains("has appeared", WAIT_TIMEOUT);
 
-        at.truncate(missing, "X1\n");
-        p.wait_for_stdout_contains("X1\n", WAIT_TIMEOUT);
+        at.truncate(missing, "greetings\n");
+        p.wait_for_stdout_contains("greetings\n", WAIT_TIMEOUT);
 
-        at.truncate(missing, "X\n");
+        at.truncate(missing, "hi\n");
         p.wait_for_stderr_contains("file truncated", WAIT_TIMEOUT)
-            .wait_for_stdout_contains("X1\nX\n", WAIT_TIMEOUT);
+            .wait_for_stdout_contains("greetings\nhi\n", WAIT_TIMEOUT);
 
         p.make_assertion().is_alive();
         p.kill()
@@ -1540,7 +1540,7 @@ fn test_retry_descriptor_gives_up_on_untailable() {
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.wait_for_stderr_contains("cannot open 'missing'", WAIT_TIMEOUT)
+        p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
             .make_assertion()
             .is_alive();
 
@@ -1559,8 +1559,8 @@ fn test_retry_descriptor_gives_up_on_untailable() {
 
 // intermittent failures on android with diff
 // Diff < left / right > :
-// ==> existing <==
-// >X
+// ==> active <==
+// >here
 #[test]
 #[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
 fn test_descriptor_no_retry_skips_late_file() {
@@ -1583,22 +1583,22 @@ fn test_descriptor_no_retry_skips_late_file() {
             "-s.1",
             "--max-unchanged-stats=1",
             "--follow=descriptor",
-            "missing",
-            "existing",
+            missing,
+            existing,
         ])
         .run_no_wait();
 
-    p.wait_for_stderr_contains("cannot open 'missing'", WAIT_TIMEOUT)
-        .wait_for_stdout_contains("==> existing <==", WAIT_TIMEOUT)
+    p.wait_for_stderr_contains(&format!("cannot open '{missing}'"), WAIT_TIMEOUT)
+        .wait_for_stdout_contains(&format!("==> {existing} <=="), WAIT_TIMEOUT)
         .make_assertion()
         .is_alive();
 
-    at.truncate(missing, "Y\n");
+    at.truncate(missing, "gone\n");
     // Without --retry, missing must stay ignored. Brief settle before writing existing.
     p.delay(50);
 
-    at.truncate(existing, "X\n");
-    p.wait_for_stdout_contains("X\n", WAIT_TIMEOUT);
+    at.truncate(existing, "here\n");
+    p.wait_for_stdout_contains("here\n", WAIT_TIMEOUT);
 
     p.make_assertion().is_alive();
     p.kill()
@@ -1653,12 +1653,12 @@ fn test_capital_f_recovers_after_dir_swap() {
         // or (The first is the common case, "has appeared" arises with slow rmdir):
         // tail: 'untailable' has appeared;  following new file
         at.rmdir(untailable);
-        at.truncate(untailable, "foo\n");
-        p.wait_for_stdout_contains("foo\n", WAIT_TIMEOUT)
+        at.truncate(untailable, "alpha\n");
+        p.wait_for_stdout_contains("alpha\n", WAIT_TIMEOUT)
             .wait_for_stderr_contains("has become accessible", WAIT_TIMEOUT);
 
         // NOTE: GNU's `tail` only shows "become inaccessible"
-        // if there's a gap between rm and mkdir — wait for the event before mkdir.
+        // if there's a gap between rm and mkdir. Wait for the event before mkdir.
         // tail: 'untailable' has become inaccessible: No such file or directory
         at.remove(untailable);
         p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
@@ -1669,8 +1669,8 @@ fn test_capital_f_recovers_after_dir_swap() {
 
         // full circle, back to the beginning
         at.rmdir(untailable);
-        at.truncate(untailable, "bar\n");
-        p.wait_for_stdout_contains("foo\nbar\n", WAIT_TIMEOUT)
+        at.truncate(untailable, "beta\n");
+        p.wait_for_stdout_contains("alpha\nbeta\n", WAIT_TIMEOUT)
             .wait_until(WAIT_TIMEOUT, |_, stderr| {
                 stderr.matches("has become accessible").count() >= 2
             });
@@ -2069,17 +2069,17 @@ fn test_follow_name_shows_headers_on_creation() {
     for _ in 0..2 {
         let mut p = ts.ucmd().args(&args).run_no_wait();
 
-        p.wait_for_stderr_contains("cannot open 'b'", WAIT_TIMEOUT)
+        p.wait_for_stderr_contains(&format!("cannot open '{file_b}'"), WAIT_TIMEOUT)
             .make_assertion()
             .is_alive();
 
-        at.truncate(file_a, "x\n");
-        p.wait_for_stdout_contains("==> a <==\nx\n", WAIT_TIMEOUT)
-            .wait_for_stderr_contains("'a' has appeared", WAIT_TIMEOUT);
+        at.truncate(file_a, "ping\n");
+        p.wait_for_stdout_contains(&format!("==> {file_a} <==\nping\n"), WAIT_TIMEOUT)
+            .wait_for_stderr_contains(&format!("'{file_a}' has appeared"), WAIT_TIMEOUT);
 
-        at.truncate(file_b, "y\n");
-        p.wait_for_stdout_contains("==> b <==\ny\n", WAIT_TIMEOUT)
-            .wait_for_stderr_contains("'b' has appeared", WAIT_TIMEOUT);
+        at.truncate(file_b, "pong\n");
+        p.wait_for_stdout_contains(&format!("==> {file_b} <==\npong\n"), WAIT_TIMEOUT)
+            .wait_for_stderr_contains(&format!("'{file_b}' has appeared"), WAIT_TIMEOUT);
 
         let expected_stderr = "tail: cannot open 'log1' for reading: No such file or directory\n\
                 tail: cannot open 'log2' for reading: No such file or directory\n\
@@ -2473,7 +2473,7 @@ fn test_follow_name_hash_table_stress() {
         at.truncate("9", "x\n");
         p.wait_for_stdout_contains("x\n", WAIT_TIMEOUT);
 
-        at.rename("1", "f");
+        at.rename("1", "moved");
         p.wait_for_stderr_contains("has become inaccessible", WAIT_TIMEOUT);
 
         at.truncate("1", "a\n");
