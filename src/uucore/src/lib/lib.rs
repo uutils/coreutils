@@ -7,6 +7,7 @@
 
 //! library ~ (core/bundler file)
 
+#![cfg(not(any(target_os = "aix", target_os = "horizon")))]
 // #![deny(missing_docs)] //TODO: enable this
 #![cfg_attr(
     any(
