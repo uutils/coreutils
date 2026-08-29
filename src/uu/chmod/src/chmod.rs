@@ -146,12 +146,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let verbose = matches.get_flag(options::VERBOSE);
     let preserve_root = matches.get_flag(options::PRESERVE_ROOT);
     let fmode = match matches.get_one::<OsString>(options::REFERENCE) {
-        Some(fref) => match fs::metadata(fref) {
-            Ok(meta) => Some(meta.mode() & 0o7777),
-            Err(_) => {
-                return Err(ChmodError::CannotStat(fref.into()).into());
-            }
-        },
+        Some(fref) => Some(
+            fs::metadata(fref)
+                .map(|meta| meta.mode() & 0o7777)
+                .map_err(|_| ChmodError::CannotStat(fref.into()))?,
+        ),
         None => None,
     };
 
