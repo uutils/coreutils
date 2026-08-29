@@ -18,8 +18,7 @@ all-features = true
 [lib]
 path = "src/lib/lib.rs"
 
-[dependencies]
-ctor = { workspace = true }
+[target.'cfg(not(any(target_os = "aix", target_os = "horizon")))'.dependencies]
 libc = { workspace = true }
 pretty_assertions = { workspace = true }
 rand = { workspace = true }
@@ -33,9 +32,10 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+[target.'cfg(not(any(target_os = "aix", target_os = "horizon")))'.dev-dependencies]
+ctor = { workspace = true }
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "horizon"))))'.dependencies]
 nix = { workspace = true, features = ["fs", "term"] }
 rustix = { workspace = true, features = ["process"] }
 
