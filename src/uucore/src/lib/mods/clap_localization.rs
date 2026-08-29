@@ -399,8 +399,8 @@ where
     handle_clap_result_with_exit_code(cmd, itr, 1)
 }
 
-/// Parses the command line as [`handle_clap_result`] does, keeping a copy of
-/// it for a caret diagnostic first.
+/// Parses the command line as [`handle_clap_result_with_exit_code`] does,
+/// keeping a copy of it for a caret diagnostic first.
 ///
 /// Parsing consumes the argument list, and a caret echoes it as it was typed,
 /// so the copy has to be taken before — which is what this saves every caller
