@@ -736,14 +736,14 @@ mod tests {
         writer_crlf.write_all(b"\r").unwrap();
         writer_crlf.write_all(b"\n").unwrap();
         writer_crlf.finalize();
-        let result_crlf = digest.result();
+        let result_crlf = digest.result().unwrap();
 
         // We expect "\r\n" to be replaced with "\n" in text mode on Windows.
         let mut digest = Box::new(Md5::default()) as Box<dyn Digest>;
         let mut writer_lf = DigestWriter::new(&mut digest, false);
         writer_lf.write_all(b"\n").unwrap();
         writer_lf.finalize();
-        let result_lf = digest.result();
+        let result_lf = digest.result().unwrap();
 
         assert_eq!(result_crlf, result_lf);
     }
