@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spell-checker:ignore (jargon) profdata profraw sysroot rustlib nullglob aeiou nocheck CGU mktemp Cprofile awk
+# spell-checker:ignore (jargon) profdata profraw sysroot rustlib nullglob aeiou nocheck CGU Cprofile cygpath
 #
 # Build uutils coreutils with Profile-Guided Optimization.
 #
@@ -8,31 +8,50 @@
 #   3. merge them with llvm-profdata
 #   4. build the optimized binary (-Cprofile-use), unless --train-only
 #
+# Runs on Linux, macOS and Windows (git-bash).
+#
 # Usage:
-#   util/build-pgo.sh [--target-dir DIR] [--features LIST] [--train-only]
-#                     [--llvm-profdata PATH]
+#   util/build-pgo.sh [--target TRIPLE] [--target-dir DIR] [--features LIST]
+#                     [--train-only] [--llvm-profdata PATH]
 
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# On Windows the instrumented binary, rustc and the profiler runtime are all
+# native programs that do not understand git-bash's `/d/a/...` paths, while bash
+# itself does not understand `D:\a\...`. `cygpath -m` yields `D:/a/...`, which
+# both sides accept, so every path the script builds goes through it.
+norm_path() {
+    if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi
+}
+
+REPO_ROOT="$(norm_path "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)")"
 TARGET_DIR="${REPO_ROOT}/target/coreutils-pgo"
 FEATURES="unix"
+TARGET=""
 TRAIN_ONLY=0
 LLVM_PROFDATA=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --target) TARGET="$2"; shift 2 ;;
         --target-dir) TARGET_DIR="$2"; shift 2 ;;
         --features) FEATURES="$2"; shift 2 ;;
         --llvm-profdata) LLVM_PROFDATA="$2"; shift 2 ;;
         --train-only) TRAIN_ONLY=1; shift ;;
-        -h|--help) sed -n '3,14p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) sed -n '3,16p' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) echo "unknown argument: $1" >&2; exit 2 ;;
     esac
 done
 
 mkdir -p "$TARGET_DIR"
-TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
+TARGET_DIR="$(norm_path "$(cd "$TARGET_DIR" && pwd)")"
+
+HOST="$(rustc --print host-tuple)"
+[ -n "$TARGET" ] || TARGET="$HOST"
+# Cargo puts the artifacts of an explicit --target under a per-target directory,
+# and Windows binaries carry a suffix.
+case "$TARGET" in *windows*) EXE=".exe" ;; *) EXE="" ;; esac
+echo "target: ${TARGET} (host: ${HOST})"
 
 SCRIPT_START=$SECONDS
 
@@ -52,8 +71,10 @@ MERGED="${TARGET_DIR}/coreutils.profdata"
 # llvm-profdata must come from the *active* toolchain: its version has to match
 # the rustc that instrumented the binary.
 if [ -z "$LLVM_PROFDATA" ]; then
-    HOST="$(rustc --print host-tuple)"
-    LLVM_PROFDATA="$(rustc --print sysroot)/lib/rustlib/${HOST}/bin/llvm-profdata"
+    SYSROOT="$(norm_path "$(rustc --print sysroot)")"
+    # llvm-profdata ships for the host, whatever we are cross-building for.
+    case "$HOST" in *windows*) PROFDATA_EXE=".exe" ;; *) PROFDATA_EXE="" ;; esac
+    LLVM_PROFDATA="${SYSROOT}/lib/rustlib/${HOST}/bin/llvm-profdata${PROFDATA_EXE}"
 fi
 if [ ! -x "$LLVM_PROFDATA" ]; then
     echo "llvm-profdata not found at ${LLVM_PROFDATA}" >&2
@@ -73,9 +94,9 @@ cargo_build() {
         export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }$2"
         # bash 3.2 (macOS) errors on an empty array expansion under `set -u`,
         # hence the `[@]+` guard on both expansions below.
-        echo "Running: cargo build --release ${feature_args[*]+${feature_args[*]}}"
+        echo "Running: cargo build --release --target=${TARGET} ${feature_args[*]+${feature_args[*]}}"
         echo "  RUSTFLAGS=${RUSTFLAGS}"
-        cargo build --release ${feature_args[@]+"${feature_args[@]}"}
+        cargo build --release --target="$TARGET" ${feature_args[@]+"${feature_args[@]}"}
     )
 }
 
@@ -89,8 +110,14 @@ mkdir -p "$PROFILE_DIR"
 # runs whole-program codegen, and the profile is then largely wasted on it.
 cargo_build "$INSTR_DIR" "-Cprofile-generate=${PROFILE_DIR}"
 
-BIN="${INSTR_DIR}/release/coreutils"
+BIN="${INSTR_DIR}/${TARGET}/release/coreutils${EXE}"
 [ -x "$BIN" ] || { echo "instrumented binary not found: ${BIN}" >&2; exit 1; }
+# Training runs the binary we just built, so a foreign target only works where
+# the host can execute it (x86_64 on arm64 macOS needs Rosetta, for instance).
+if ! "$BIN" true >/dev/null 2>&1; then
+    echo "cannot run the instrumented ${TARGET} binary on this ${HOST} host" >&2
+    exit 1
+fi
 end_step
 
 begin_step "Step 2: corpus"
@@ -107,18 +134,24 @@ PAIRS="${CORPUS_DIR}/pairs.txt"
 BLOB="${CORPUS_DIR}/blob.bin"
 COLUMNS="${CORPUS_DIR}/columns.txt"
 
+# Built with bash's own printf rather than awk: git-bash has no awk, and the
+# whole corpus is still generated in a couple of seconds.
 # Shuffled by a stride so sort/uniq get unordered input rather than a no-op.
-awk 'BEGIN { for (i = 0; i < 200000; i++) printf "w%06d\n", (i * 7919) % 200000 }' > "$WORDS"
-awk 'BEGIN { for (i = 0; i < 100000; i++) printf "line%04d\n", i % 1000 }' > "$REPEATED"
-awk 'BEGIN { for (i = 0; i < 100000; i++) printf "%08d value%d\n", i, i }' > "$PAIRS"
-awk 'BEGIN { for (i = 0; i < 2000; i++) printf "user%d:x:%d:%d:User %d:/home/user%d:/bin/sh\n", i, 1000+i, 1000+i, i, i }' > "$COLUMNS"
+for ((i = 0; i < 200000; i++)); do printf 'w%06d\n' $(((i * 7919) % 200000)); done > "$WORDS"
+for ((i = 0; i < 100000; i++)); do printf 'line%04d\n' $((i % 1000)); done > "$REPEATED"
+for ((i = 0; i < 100000; i++)); do printf '%08d value%d\n' "$i" "$i"; done > "$PAIRS"
+for ((i = 0; i < 2000; i++)); do printf 'user%d:x:%d:%d:User %d:/home/user%d:/bin/sh\n' "$i" $((1000 + i)) $((1000 + i)) "$i" "$i"; done > "$COLUMNS"
 # seq/dd are part of what we want to profile, so use the instrumented binary.
 "$BIN" seq 500000 > "$NUMBERS"
 "$BIN" dd "if=${BIN}" "of=${BLOB}" bs=64K count=64 2>/dev/null
 end_step
 
 begin_step "Step 3: training workloads"
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/coreutils-pgo.XXXXXX")"
+# Kept inside the target dir rather than under TMPDIR: git-bash may hand back a
+# Windows-style TMPDIR that neither mktemp nor the workloads would agree on.
+WORK="${TARGET_DIR}/work"
+rm -rf "$WORK"
+mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
 
 # Individual workloads are allowed to fail (a util may be absent from the
@@ -207,15 +240,28 @@ echo "Merged profile: ${MERGED}"
 # barely-optimized binary, so fail loudly instead: every workload in step 3 is
 # allowed to fail individually, and without this a broken corpus would ship.
 "$LLVM_PROFDATA" show "$MERGED" | head -6
-COVERED="$("$LLVM_PROFDATA" show "$MERGED" | awk '/^Total functions:/ { print $3 }')"
+COVERED="$("$LLVM_PROFDATA" show "$MERGED" | sed -n 's/^Total functions: *//p')"
 MIN_FUNCTIONS=500
 if [ -z "$COVERED" ] || [ "$COVERED" -lt "$MIN_FUNCTIONS" ]; then
     echo "profile covers only ${COVERED:-0} functions (expected >= ${MIN_FUNCTIONS})" >&2
     echo "the training workloads probably did not run; refusing to ship this profile" >&2
+    # Distinguish "the workloads never ran" from "they ran but the counters were
+    # never written": the first leaves no/short raw files, the second leaves
+    # plenty of same-sized ones that merge down to zero functions.
+    echo "--- raw profiles in ${PROFILE_DIR}:" >&2
+    ls -l "$PROFILE_DIR" | head -12 >&2
+    echo "--- first raw profile (${RAW[0]}):" >&2
+    "$LLVM_PROFDATA" show "${RAW[0]}" >&2 || true
+    echo "--- instrumented binary: ${BIN}" >&2
+    ls -l "$BIN" >&2
     exit 1
 fi
 echo "Profile covers ${COVERED} functions."
 end_step
+
+# CI needs the absolute, natively-spelled path to put in RUSTFLAGS; it cannot
+# reconstruct it portably because of the Windows path rewriting above.
+printf '%s\n' "$MERGED" > "${TARGET_DIR}/profdata-path.txt"
 
 if [ "$TRAIN_ONLY" -eq 1 ]; then
     echo
@@ -229,5 +275,5 @@ begin_step "Step 5: optimized build"
 cargo_build "$TARGET_DIR" "-Cprofile-use=${MERGED}"
 end_step
 echo
-echo "Optimized binary: ${TARGET_DIR}/release/coreutils"
+echo "Optimized binary: ${TARGET_DIR}/${TARGET}/release/coreutils${EXE}"
 echo "Total: $(fmt_duration $((SECONDS - SCRIPT_START)))"
