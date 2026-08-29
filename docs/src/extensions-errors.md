@@ -132,6 +132,32 @@ tr: range-endpoints of &#x27;y-b&#x27; are in reverse collating sequence order
 
 [Try it in the playground](https://uutils.org/playground/?cmd=tr+%27qw%5By-b%5D%27+x).
 
+### `csplit`
+
+A pattern is a small language of its own, and the regex engine already knows
+which character of it it choked on - so the caret can say so too:
+
+Before:
+
+<pre class="diag"><span class="a-p">$</span> csplit notes.txt &#x27;/a{2,1}/&#x27;
+csplit: &#x27;/a{2,1}/&#x27;: invalid pattern</pre>
+
+After:
+
+<pre class="diag"><span class="a-p">$</span> csplit notes.txt &#x27;/a{2,1}/&#x27;
+csplit: &#x27;/a{2,1}/&#x27;: invalid pattern
+   <span class="a-d">╭─[</span> csplit:1:20 <span class="a-d">]</span>
+   <span class="a-d">│</span>
+ <span class="a-d">1 │</span> <span class="a-s">csplit notes.txt /a</span><span class="a-e">{2,1}</span><span class="a-s">/</span>
+ <span class="a-f">  │</span>                    <span class="a-e">──┬──</span>
+ <span class="a-f">  │</span>                      <span class="a-e">╰──── </span>invalid repetition count range, the start must be &lt;= the end
+ <span class="a-f">  │</span>
+ <span class="a-f">  │</span> <span class="a-h">Help</span>: a pattern is a line number N, /REGEXP/[OFFSET] or %REGEXP%[OFFSET], each optionally followed by {N} or {*}
+<span class="a-d">───╯</span></pre>
+
+The label is quoted from the regex engine rather than translated, since that
+is the only place the wording exists.
+
 ### `sort`
 
 Before:
@@ -417,6 +443,7 @@ give it a pty with `script -qec "..." /dev/null`, or `unbuffer` from expect.
 | `dd`     | the failing key, value or flag of a `KEY=VALUE` operand | [`dd conv=ucase,zap`](https://uutils.org/playground/?cmd=dd+conv%3Ducase%2Czap) |
 | `join`   | the failing field of the output format given to `-o` | [`join -o 1.2,2.x fruits.txt fruits.txt`](https://uutils.org/playground/?cmd=join+-o+1.2%2C2.x+fruits.txt+fruits.txt) |
 | `cut`    | the failing range in the list given to `-b`, `-c`, `-f` or `-F` | [`cut -f 1,4-2 fruits.txt`](https://uutils.org/playground/?cmd=cut+-f+1%2C4-2+fruits.txt) |
+| `csplit` | the failing pattern operand, the character of its regex that broke, or the format given to `-b`/`-n` | [`csplit fruits.txt '/a(b/'`](https://uutils.org/playground/?cmd=csplit+fruits.txt+%27%2Fa%28b%2F%27) |
 | `split`  | the failing part of the SIZE given to `-b`, `-C` or `-l` | [`split -b 7zq fruits.txt`](https://uutils.org/playground/?cmd=split+-b+7zq+fruits.txt) |
 | `shred`  | the failing part of the SIZE given to `-s`/`--size` | [`shred -s 4vv fruits.txt`](https://uutils.org/playground/?cmd=shred+-s+4vv+fruits.txt) |
 | `head`   | the failing part of the SIZE given to `-c` or `-n` | [`head -c 1fb fruits.txt`](https://uutils.org/playground/?cmd=head+-c+1fb+fruits.txt) |
