@@ -38,17 +38,17 @@ use uucore::time::{FormatSystemTimeFallback, format_system_time, system_time_to_
 
 #[derive(Debug, Error)]
 enum StatError {
-    #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style.clone()))]
+    #[error("{}", translate!("stat-error-invalid-quoting-style", "style" => style))]
     InvalidQuotingStyle { style: String },
-    #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive.clone()))]
+    #[error("{}", translate!("stat-error-invalid-directive", "directive" => directive))]
     InvalidDirective { directive: String },
-    #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem", "error" => error))]
     CannotReadFilesystem { error: String },
     #[error("{}", translate!("stat-error-stdin-filesystem-mode"))]
     StdinFilesystemMode,
-    #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file.clone(), "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-read-filesystem-info", "file" => file, "error" => error))]
     CannotReadFilesystemInfo { file: String, error: String },
-    #[error("{}", translate!("stat-error-cannot-statx", "file" => file.clone(), "error" => error.clone()))]
+    #[error("{}", translate!("stat-error-cannot-statx", "file" => file, "error" => error))]
     CannotStatx { file: String, error: String },
 }
 

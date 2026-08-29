@@ -71,7 +71,7 @@ enum MkTempError {
     #[error("{}", translate!("mktemp-error-too-many-templates"))]
     TooManyTemplates,
 
-    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0.clone(), "template" => .1.quote()))]
+    #[error("{}", translate!("mktemp-error-not-found", "template_type" => .0, "template" => .1.quote()))]
     NotFound(String, PathBuf),
 }
 
@@ -264,12 +264,10 @@ impl Params {
         let prefix_from_template = &template_str[..i];
         let prefix_path = Path::new(&prefix_from_option).join(prefix_from_template);
         if options.treat_as_template && prefix_from_template.contains(MAIN_SEPARATOR) {
-            return Err(MkTempError::PrefixContainsDirSeparator(
-                template_str.clone(),
-            ));
+            return Err(MkTempError::PrefixContainsDirSeparator(template_str));
         }
         if tmpdir.is_some() && Path::new(prefix_from_template).is_absolute() {
-            return Err(MkTempError::InvalidTemplate(template_str.clone().into()));
+            return Err(MkTempError::InvalidTemplate(template_str.into()));
         }
 
         // Split the parent directory from the file part of the prefix.

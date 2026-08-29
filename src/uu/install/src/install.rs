@@ -77,7 +77,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-chmod-failed", "path" => .0.quote()))]
     ChmodFailed(PathBuf),
 
-    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1.clone()))]
+    #[error("{}", translate!("install-error-chown-failed", "path" => .0.quote(), "error" => .1))]
     ChownFailed(PathBuf, String),
 
     #[error("{}", translate!("install-error-invalid-target", "path" => .0.quote()))]
@@ -92,10 +92,10 @@ enum InstallError {
     #[error("{}", translate!("install-error-backing-up-destroy-source", "dest" => .0.quote(), "source" => .1.quote()))]
     BackupWouldDestroySource(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2.clone()))]
+    #[error("{}", translate!("install-error-install-failed", "from" => .0.quote(), "to" => .1.quote(), "error" => .2))]
     InstallFailed(PathBuf, PathBuf, String),
 
-    #[error("{}", translate!("install-error-strip-failed", "error" => .0.clone()))]
+    #[error("{}", translate!("install-error-strip-failed", "error" => .0))]
     StripProgramFailed(String),
 
     #[error("{}", translate!("install-error-strip-terminated"))]
@@ -125,7 +125,7 @@ enum InstallError {
     #[error("{}", translate!("install-error-same-file", "file1" => .0.quote(), "file2" => .1.quote()))]
     SameFile(PathBuf, PathBuf),
 
-    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1.clone()))]
+    #[error("{}", translate!("install-error-extra-operand", "operand" => .0.quote(), "usage" => .1))]
     ExtraOperand(OsString, String),
 
     #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
@@ -655,7 +655,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
 
         // If -t is used, check if target exists as a file before trying to create directories
         if b.target_dir.is_some() && target.exists() && !target.is_dir() {
-            return Err(InstallError::NotADirectory(target.clone()).into());
+            return Err(InstallError::NotADirectory(target).into());
         }
 
         if let Some(to_create) = to_create {
