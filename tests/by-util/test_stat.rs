@@ -380,10 +380,10 @@ fn test_pipe_fifo() {
 #[cfg(all(
     unix,
     not(any(
+        target_vendor = "apple",
         target_os = "android",
         target_os = "freebsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     ))
 ))]
 fn test_stdin_pipe_fifo1() {
@@ -408,7 +408,7 @@ fn test_stdin_pipe_fifo1() {
 
 // TODO(#7583): Re-enable on Mac OS X (and maybe Android)
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
 fn test_stdin_pipe_fifo2() {
     // $ stat -
     // File: -
@@ -438,8 +438,8 @@ fn test_stdin_with_fs_option() {
 #[cfg(all(
     unix,
     not(any(
-        target_os = "android",
         target_vendor = "apple",
+        target_os = "android",
         target_os = "freebsd",
         target_os = "openbsd"
     ))

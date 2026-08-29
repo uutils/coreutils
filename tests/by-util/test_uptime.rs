@@ -116,7 +116,7 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(unix)]
-#[cfg(not(any(target_os = "openbsd", target_vendor = "apple", target_os = "android")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "openbsd", target_os = "android")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),

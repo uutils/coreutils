@@ -477,7 +477,7 @@ fn test_from_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "android", target_vendor = "apple")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "android")))]
 fn test_from_with_invalid_group() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
