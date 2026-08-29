@@ -154,11 +154,11 @@ fn invalid_setting() {
 #[test]
 fn invalid_baud_setting() {
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     )))]
     new_ucmd!()
         .args(&["100"])
@@ -181,11 +181,11 @@ fn invalid_baud_setting() {
         .stderr_contains("missing argument to 'ospeed'");
 
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     )))]
     new_ucmd!()
         .args(&["ispeed", "995"])
@@ -193,11 +193,11 @@ fn invalid_baud_setting() {
         .stderr_contains("invalid ispeed '995'");
 
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     )))]
     new_ucmd!()
         .args(&["ospeed", "995"])
@@ -474,11 +474,11 @@ fn grouped_flag_removal() {
 fn baud_rate_validation() {
     // Test various baud rate formats
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     ))]
     {
         // BSD accepts numeric baud rates
@@ -1506,11 +1506,11 @@ fn invalid_baud_rate() {
     // On non-BSD systems, test invalid numeric baud rate
     // On BSD systems, any u32 is accepted, so we skip this test
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     )))]
     {
         new_ucmd!()
@@ -1671,11 +1671,11 @@ fn test_ispeed_ospeed_valid_speeds() {
 #[cfg(all(
     unix,
     not(any(
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "dragonfly",
         target_os = "netbsd",
-        target_os = "openbsd",
-        target_vendor = "apple"
+        target_os = "openbsd"
     ))
 ))]
 #[ignore = "Issue: #9547"]

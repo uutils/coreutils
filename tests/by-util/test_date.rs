@@ -1731,7 +1731,7 @@ fn test_date_locale_hu_hungarian() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
     // French typically uses 24-hour format and may have localized day/month names
@@ -1789,7 +1789,7 @@ fn test_date_posix_format_specifiers() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_b_french_locale() {
     // Test both %B and %b formats with French locale using a loop
     // This test expects localized month names when i18n support is available
@@ -1824,7 +1824,7 @@ fn test_date_format_b_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_a_french_locale() {
     // Test both %A and %a formats with French locale using a loop
     // This test expects localized day names when i18n support is available
@@ -1859,7 +1859,7 @@ fn test_date_format_a_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_french_full_sentence() {
     let result = new_ucmd!()
         .env("LANG", "fr_FR.UTF-8")
@@ -1885,7 +1885,7 @@ fn test_date_french_full_sentence() {
 /// This is a regression test for locale-aware date formatting
 #[test]
 #[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_x_locale_aware() {
     // With C locale, %x should output MM/DD/YY (US format)
     new_ucmd!()
