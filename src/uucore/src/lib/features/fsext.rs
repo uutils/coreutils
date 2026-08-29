@@ -19,8 +19,8 @@ const MAX_PATH: usize = 266;
 static EXIT_ERR: i32 = 1;
 
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd"
 ))]
@@ -85,9 +85,9 @@ use std::os::unix::fs::MetadataExt;
 use std::time::Duration;
 
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
-    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd"
 ))]
@@ -104,9 +104,9 @@ pub use libc::statfs as StatFs;
 pub use libc::statvfs as StatFs;
 
 #[cfg(any(
+    target_vendor = "apple",
     target_os = "linux",
     target_os = "android",
-    target_vendor = "apple",
     target_os = "freebsd",
     target_os = "openbsd",
 ))]
@@ -342,8 +342,8 @@ impl MountInfo {
 }
 
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd",
 ))]
@@ -428,8 +428,8 @@ fn mount_dev_id(mount_dir: &OsStr) -> String {
 
 use crate::error::UResult;
 #[cfg(any(
-    target_os = "freebsd",
     target_vendor = "apple",
+    target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd",
     windows
@@ -474,8 +474,8 @@ pub fn read_fs_list() -> UResult<Vec<MountInfo>> {
             .collect::<Vec<_>>())
     }
     #[cfg(any(
-        target_os = "freebsd",
         target_vendor = "apple",
+        target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd"
     ))]
@@ -774,9 +774,9 @@ impl FsMeta for StatFs {
         return self.f_ffree.try_into().unwrap();
     }
     #[cfg(any(
+        target_vendor = "apple",
         target_os = "linux",
         target_os = "android",
-        target_vendor = "apple",
         target_os = "freebsd"
     ))]
     fn fs_type(&self) -> i64 {
@@ -807,9 +807,9 @@ impl FsMeta for StatFs {
         return self.f_type.try_into().unwrap();
     }
     #[cfg(not(any(
+        target_vendor = "apple",
         target_os = "linux",
         target_os = "android",
-        target_vendor = "apple",
         target_os = "freebsd"
     )))]
     fn fs_type(&self) -> i64 {

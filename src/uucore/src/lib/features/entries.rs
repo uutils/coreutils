@@ -33,7 +33,7 @@
 //! ```
 
 use core::ffi::{CStr, c_char, c_int};
-#[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
 use libc::time_t;
 use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
@@ -116,14 +116,14 @@ pub struct Passwd {
     #[expect(clippy::struct_field_names)]
     pub user_passwd: Option<String>,
     /// AKA passwd.pw_class
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub user_access_class: Option<String>,
     /// AKA passwd.pw_change
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     #[expect(clippy::struct_field_names)]
     pub passwd_change_time: time_t,
     /// AKA passwd.pw_expire
-    #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     pub expiration: time_t,
 }
 
@@ -158,11 +158,11 @@ impl Passwd {
             user_shell: cstr2string(raw.pw_shell),
             user_dir: cstr2string(raw.pw_dir),
             user_passwd: cstr2string(raw.pw_passwd),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             user_access_class: cstr2string(raw.pw_class),
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             passwd_change_time: raw.pw_change,
-            #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
             expiration: raw.pw_expire,
         }
     }
