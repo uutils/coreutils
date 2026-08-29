@@ -77,7 +77,7 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     // Flag::new("iuclc", I::IUCLC),
     Flag::new("ixany", I::IXANY),
     Flag::new("imaxbel", I::IMAXBEL).sane(),
-    #[cfg(any(target_os = "android", target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "android", target_os = "linux", target_vendor = "apple"))]
     Flag::new("iutf8", I::IUTF8),
 ];
 

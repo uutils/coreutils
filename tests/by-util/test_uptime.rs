@@ -116,7 +116,7 @@ fn test_uptime_with_non_existent_file() {
 // This will pass
 #[test]
 #[cfg(unix)]
-#[cfg(not(any(target_os = "openbsd", target_os = "macos", target_os = "android")))]
+#[cfg(not(any(target_os = "openbsd", target_vendor = "apple", target_os = "android")))]
 #[cfg(not(target_env = "musl"))]
 #[cfg_attr(
     all(target_arch = "aarch64", target_os = "linux"),
@@ -343,7 +343,7 @@ fn test_uptime_pretty_print() {
 /// This addresses intermittent failures from issue #3621 by ensuring
 /// the command consistently succeeds when utmpx data is unavailable.
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_uptime_macos_reliability() {
     // Run uptime multiple times to ensure consistent success
     // (Previously would fail intermittently when utmpx had no BOOT_TIME)
@@ -367,7 +367,7 @@ fn test_uptime_macos_reliability() {
 /// Test uptime --since reliability on macOS.
 /// Verifies the sysctl fallback works for the --since flag.
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_uptime_since_macos() {
     let re = Regex::new(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}").unwrap();
 
@@ -389,7 +389,7 @@ fn test_uptime_since_macos() {
 /// Test that uptime output format is consistent on macOS.
 /// Ensures the sysctl fallback produces properly formatted output.
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_uptime_macos_output_format() {
     let result = new_ucmd!().succeeds();
     let stdout = result.stdout_str();

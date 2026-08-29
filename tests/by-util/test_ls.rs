@@ -6570,7 +6570,7 @@ fn test_term_colorterm() {
     );
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_display() {
     use std::process::Command;
@@ -6626,7 +6626,7 @@ fn test_acl_display() {
 
 // Regression test for https://github.com/uutils/coreutils/issues/10980
 // Each file with an ACL must not inflate the link-count column width.
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_padding_not_inflated() {
     use std::process::Command;
@@ -7046,7 +7046,7 @@ fn test_unknown_format_specifier() {
         .stdout_matches(&re_custom_format);
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 #[test]
 fn test_acl_display_symlink() {
     use std::process::Command;
@@ -7630,7 +7630,7 @@ fn test_ls_recursive_no_fd_leak() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_ls_non_utf8_hidden() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let scene = TestScenario::new(util_name!());

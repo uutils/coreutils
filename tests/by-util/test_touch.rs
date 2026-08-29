@@ -1001,7 +1001,7 @@ fn test_touch_trailing_slash_no_create() {
     ucmd.args(&["-c", "loop/"]).fails_with_code(1);
     assert!(!at.file_exists("loop"));
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(target_vendor = "apple"))]
     // MacOS supports trailing slash for symlinks to files
     {
         let (at, mut ucmd) = at_and_ucmd!();

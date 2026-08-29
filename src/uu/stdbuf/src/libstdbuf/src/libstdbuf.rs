@@ -20,7 +20,7 @@ fn init() {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stdinp() -> *mut FILE;
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
@@ -83,7 +83,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdin() -> *mut FILE {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stdoutp() -> *mut FILE;
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",
@@ -146,7 +146,7 @@ pub unsafe extern "C" fn __stdbuf_get_stdout() -> *mut FILE {
 /// This function is unsafe because it calls a C API
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
-    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", target_os = "freebsd"))]
     {
         unsafe extern "C" {
             fn __stderrp() -> *mut FILE;
@@ -191,7 +191,7 @@ pub unsafe extern "C" fn __stdbuf_get_stderr() -> *mut FILE {
     }
 
     #[cfg(not(any(
-        target_os = "macos",
+        target_vendor = "apple",
         target_os = "freebsd",
         target_os = "netbsd",
         target_os = "openbsd",

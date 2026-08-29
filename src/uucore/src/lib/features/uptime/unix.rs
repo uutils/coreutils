@@ -22,7 +22,7 @@ use libc::time_t;
 /// # Returns
 ///
 /// Returns Some(time_t) if successful, None if the call fails.
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn get_macos_boot_time_sysctl() -> Option<time_t> {
     use std::process::Command;
 
@@ -130,7 +130,7 @@ pub fn get_uptime(boot_time: Option<time_t>) -> UResult<i64> {
     // on macOS and is always available, making uptime more reliable on this platform.
     //
     // This fallback only runs if utmpx failed to provide a boot time.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     let derived_boot_time = {
         let mut t = derived_boot_time;
         if t.is_none() {
@@ -243,7 +243,7 @@ pub fn get_loadavg() -> UResult<(f64, f64, f64)> {
     Err(UptimeError::SystemLoadavg)?
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(all(test, target_vendor = "apple"))]
 mod tests {
     use super::*;
     use jiff::Timestamp;
