@@ -117,10 +117,13 @@ impl UError for LsError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let args: Vec<OsString> = args.collect();
-    // Kept for the caret in SIZE diagnostics, which echoes the command line.
-    let diag_args = uucore::diagnostics::capture(&args);
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        2,
+    )?;
 
     uucore::i18n::collator::init_locale_collation();
 
