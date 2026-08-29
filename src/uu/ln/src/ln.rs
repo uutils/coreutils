@@ -263,10 +263,7 @@ pub fn uu_app() -> Command {
         )
 }
 
-/// Executes the `ln` utility with the given paths and settings.
-///
-/// This is made public to allow other apps to use `ln` as a library.
-pub fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
+fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
     // Handle cases where we create links in a directory first.
     if let Some(ref target_path) = settings.target_dir {
         // 4th form: a directory is specified by -t.
@@ -398,8 +395,11 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
     }
 }
 
+/// Create symlink to src at dst with the given settings
+///
+/// made public to allow other apps to use `ln` as a library
 #[allow(clippy::cognitive_complexity)]
-fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
+pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
     let source: Cow<'_, Path> = if settings.relative {
         relative_path(src, dst)
