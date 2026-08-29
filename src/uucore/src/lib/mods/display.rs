@@ -27,7 +27,7 @@
 
 use std::ffi::OsStr;
 use std::fs::File;
-use std::io::{self, BufWriter, Stdout, StdoutLock, Write as _};
+use std::io::{self, BufWriter, Stderr, StderrLock, Stdout, StdoutLock, Write as _};
 use std::{env, fmt};
 
 // These used to be defined here, but they live in their own crate now.
@@ -104,6 +104,8 @@ pub trait OsWrite: io::Write {
 impl OsWrite for File {}
 impl OsWrite for Stdout {}
 impl OsWrite for StdoutLock<'_> {}
+impl OsWrite for Stderr {}
+impl OsWrite for StderrLock<'_> {}
 // A future smarter Windows implementation can first flush the BufWriter before
 // doing a raw write.
 impl<W: OsWrite> OsWrite for BufWriter<W> {}
