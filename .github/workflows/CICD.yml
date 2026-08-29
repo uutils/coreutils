@@ -2,7 +2,7 @@ name: CICD
 
 # spell-checker:ignore (abbrev/names) CACHEDIR CICD CodeCOV MacOS MinGW MSVC musl taiki
 # spell-checker:ignore (env/flags) Awarnings Ccodegen Coverflow Cpanic Dwarnings RUSTDOCFLAGS RUSTFLAGS Zpanic CARGOFLAGS CLEVEL nodocs
-# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw
+# spell-checker:ignore (jargon) SHAs deps dequote softprops subshell toolchain fuzzers dedupe devel profdata profraw Cprofile
 # spell-checker:ignore (people) Peltoche rivy Anson dawidd
 # spell-checker:ignore (shell/tools) binutils choco clippy dmake esac fakeroot fdesc fdescfs gmake grcov halium lcov libclang libcrypto libfuse libssl limactl nextest nocross pacman popd printf pushd redoxer rsync rustc rustfmt rustup shopt sccache setfacl utmpdump xargs zstd
 # spell-checker:ignore (misc) aarch alnum armhf bindir busytest coreutils defconfig DESTDIR gecos getenforce gnueabihf issuecomment maint manpages msys multisize noconfirm nofeatures nullglob onexitbegin onexitend pell runtest tempfile testsuite toybox uutils libsystemd codspeed wasip libexecinfo oniguruma sysroot
@@ -635,6 +635,40 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
+    - name: Install llvm-tools (PGO)
+      if: |
+        matrix.job.skip-publish != true && matrix.job.check-only != true &&
+        matrix.job.use-cross != 'use-cross' &&
+        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      shell: bash
+      run: rustup component add llvm-tools
+    - name: Train PGO profiles
+      if: |
+        matrix.job.skip-publish != true && matrix.job.check-only != true &&
+        matrix.job.use-cross != 'use-cross' &&
+        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      shell: bash
+      run: |
+        ./util/build-pgo.sh \
+          --target-dir "${{ github.workspace }}/target/coreutils-pgo" \
+          --features "${{ matrix.job.features }}" \
+          --train-only
+        echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=${{ github.workspace }}/target/coreutils-pgo/coreutils.profdata" >> "$GITHUB_ENV"
+    - name: Verify PGO is applied to the published build
+      if: |
+        matrix.job.skip-publish != true && matrix.job.check-only != true &&
+        matrix.job.use-cross != 'use-cross' &&
+        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      shell: bash
+      run: |
+        ## The release artifact must be the PGO build: if RUSTFLAGS did not
+        ## survive GITHUB_ENV we would silently publish an unoptimized binary.
+        echo "RUSTFLAGS=${RUSTFLAGS}"
+        case "${RUSTFLAGS}" in
+          *-Cprofile-use=*) ;;
+          *) echo "::error::-Cprofile-use missing from RUSTFLAGS" ; exit 1 ;;
+        esac
+        test -s "${{ github.workspace }}/target/coreutils-pgo/coreutils.profdata"
     - name: Build coreutils
       shell: bash
       if: matrix.job.skip-publish != true && matrix.job.check-only != true && matrix.job.target != 'x86_64-pc-windows-msvc'
