@@ -1434,6 +1434,9 @@ fn enter_directory<O: LsOutput>(
             continue;
         }
 
+        // Register clean-up now.
+        stack.push(StackItem::Exit(entry.id));
+
         let path_data = PathData::new(
             entry.path.as_path().into(),
             None,
@@ -1460,8 +1463,6 @@ fn enter_directory<O: LsOutput>(
                         err,
                         entry.command_line,
                     ));
-                    // Force-free the inode if we encounter an error.
-                    listed_ancestors.remove(&entry.id);
                     continue;
                 }
                 Ok(rd) => rd,
@@ -1470,10 +1471,6 @@ fn enter_directory<O: LsOutput>(
 
         collect_directory_entries(entries, &path_data, config, output, &mut current_read_dir)?;
         write_directory_entries(entries, config, output)?;
-
-        // Sets the inode to be removed after all children and descendants have
-        // been processed. The exit marker sits under the children in the stack.
-        stack.push(StackItem::Exit(entry.id));
 
         if config.recursive {
             for child in entries
