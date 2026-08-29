@@ -1258,9 +1258,9 @@ fn create_hyperlink(name: &OsStr, path: &PathData) -> OsString {
     ret.push(HOSTNAME.as_os_str());
 
     // a set of safe ASCII bytes that don't need encoding
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/');
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let unencoded = |c| matches!(c, '_' | '-' | '.' | '~' | '/' | '\\' | ':');
 
     for &b in absolute_path.as_os_str().as_encoded_bytes() {

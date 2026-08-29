@@ -432,7 +432,7 @@ use crate::error::UResult;
     target_vendor = "apple",
     target_os = "netbsd",
     target_os = "openbsd",
-    target_os = "windows"
+    windows
 ))]
 use crate::error::USimpleError;
 #[cfg(any(target_os = "linux", target_os = "android", target_os = "cygwin"))]
@@ -442,9 +442,9 @@ use std::io::{BufRead, BufReader};
 #[cfg(any(
     target_vendor = "apple",
     target_os = "freebsd",
-    target_os = "windows",
     target_os = "netbsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    windows
 ))]
 use std::ptr;
 #[cfg(any(

@@ -274,7 +274,7 @@ fn open(path: &OsString) -> UResult<BufReader<Box<dyn Read>>> {
     }
     let path_ref = Path::new(path);
     // some platforms cannot catch this as read error. accept additional overhead.
-    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    #[cfg(any(target_os = "wasi", windows))]
     if path_ref.is_dir() {
         return Err(uucore::error::USimpleError::new(
             1,

@@ -475,9 +475,9 @@ pub fn uu_app() -> Command {
     let polling_help = translate!("tail-help-polling-linux");
     #[cfg(all(unix, not(target_os = "linux")))]
     let polling_help = translate!("tail-help-polling-unix");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let polling_help = translate!("tail-help-polling-windows");
-    #[cfg(not(any(unix, target_os = "windows")))]
+    #[cfg(not(any(unix, windows)))]
     let polling_help = translate!("tail-help-polling-unix");
 
     Command::new("tail")
