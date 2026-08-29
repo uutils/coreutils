@@ -117,11 +117,14 @@ impl UError for LsError {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in SIZE diagnostics, which echoes the command line.
+    let diag_args = uucore::diagnostics::capture(&args);
     let matches = uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 2)?;
 
     uucore::i18n::collator::init_locale_collation();
 
-    let config = Config::from(&matches)?;
+    let config = Config::from(&matches, diag_args.as_deref())?;
 
     let locs = matches
         .get_many::<OsString>(options::PATHS)
@@ -1153,7 +1156,7 @@ impl LsOutput for TextOutput<'_> {
 /// use uu_ls::{Config, list_with_output, StreamingOutput};
 /// use std::path::Path;
 ///
-/// let config = Config::from(&matches)?;
+/// let config = Config::from(&matches, None)?;
 /// let mut output = StreamingOutput::new();
 /// list_with_output(vec![Path::new(".")], &config, &mut output)?;
 ///

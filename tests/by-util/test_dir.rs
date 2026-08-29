@@ -97,3 +97,30 @@ fn test_write_error() {
         .fails()
         .stderr_is("dir: write error: No space left on device\n");
 }
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(2);
+        let stderr = result.stderr_as_displayed();
+
+        // The report names the utility as it was called, not `ls`.
+        assert!(stderr.contains("dir:1:"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .arg("--block-size=1fb")
+            .fails_with_code(2)
+            .stderr_is("dir: invalid --block-size argument '1fb'\n");
+    }
+}
