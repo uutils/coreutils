@@ -210,12 +210,6 @@ fn test_debug_2() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"input args:\n",
-            r"arg\[0\]: 'env'\n",
-            r"arg\[1\]: '-vv'\n",
-            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"arg\[3\]: 'echo'\n",
-            r"arg\[4\]: 'hello2'\n",
             r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
@@ -259,18 +253,60 @@ fn test_debug2_part_of_string_arg() {
         .succeeds();
     result.stderr_matches(
         &Regex::new(concat!(
-            r"input args:\n",
-            r"arg\[0\]: 'env'\n",
-            r"arg\[1\]: '-vvS FOO=BAR'\n",
-            r"arg\[2\]: '[^\n]+(\/|\\)coreutils(.exe)?'\n",
-            r"arg\[3\]: 'echo'\n",
-            r"arg\[4\]: 'hello2'\n",
             r"executing: [^\n]+(\/|\\)coreutils(.exe)?\n",
             r"   arg\[0\]= '[^\n]+(\/|\\)coreutils(.exe)?'\n",
             r"   arg\[1\]= 'echo'\n",
             r"   arg\[2\]= 'hello2'"
         ))
         .unwrap(),
+    );
+}
+
+#[test]
+fn test_debug_trace_environment_changes() {
+    let result = new_ucmd!().args(&["-i", "-v", "A=1"]).succeeds();
+    assert_eq!(result.stdout_str(), "A=1\n");
+    assert_eq!(result.stderr_str(), "cleaning environ\nsetenv:   A=1\n");
+}
+
+#[test]
+fn test_debug_2_output_is_debug_1() {
+    let ts = TestScenario::new(util_name!());
+    let v = ts.ucmd().args(&["-i", "-v", "A=1"]).succeeds();
+    let vv = ts.ucmd().args(&["-i", "-vv", "A=1"]).succeeds();
+    assert_eq!(v.stderr_str(), vv.stderr_str());
+    assert_eq!(v.stdout_str(), vv.stdout_str());
+}
+
+#[test]
+fn test_debug_trace_unset() {
+    let result = new_ucmd!()
+        .env("ENV_VERBOSE_UNSET_ME", "x")
+        .args(&["-v", "-u", "ENV_VERBOSE_UNSET_ME"])
+        .succeeds();
+    assert_eq!(result.stderr_str(), "unset:    ENV_VERBOSE_UNSET_ME\n");
+
+    // unsetting a variable that does not exist is also traced
+    let result = new_ucmd!()
+        .args(&["-v", "-u", "ENV_VERBOSE_NOT_SET"])
+        .succeeds();
+    assert_eq!(result.stderr_str(), "unset:    ENV_VERBOSE_NOT_SET\n");
+}
+
+#[cfg(feature = "echo")]
+#[test]
+fn test_debug_trace_chdir() {
+    let ts = TestScenario::new(util_name!());
+    let result = ts
+        .ucmd()
+        .args(&["-v", "-C", "."])
+        .arg(&ts.bin_path)
+        .args(&["echo", "hello"])
+        .succeeds();
+    assert!(
+        result
+            .stderr_str()
+            .starts_with("chdir:    '.'\nexecuting: ")
     );
 }
 
@@ -650,8 +686,7 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
     assert_eq!(out.stdout_str(), "xAx\nxBx\n");
     assert_eq!(
         out.stderr_str(),
-        "input args:\narg[0]: 'env'\narg[1]: $\
-        '-vvS printf x%sx\\\\n A \\t B \\x0B\\x0C\\r\\n'\nexecuting: printf\
+        "executing: printf\
         \n   arg[0]= 'printf'\n   arg[1]= $'x%sx\\n'\n   arg[2]= 'A'\n   arg[3]= 'B'\n"
     );
 }
