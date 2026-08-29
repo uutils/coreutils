@@ -7,6 +7,7 @@
 
 //! library ~ (core/bundler file)
 
+#![cfg(not(any(target_os = "aix", target_os = "horizon")))]
 // #![deny(missing_docs)] //TODO: enable this
 
 // * feature-gated external crates (re-shared as public internal modules)
