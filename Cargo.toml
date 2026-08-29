@@ -393,8 +393,10 @@ runcon = { optional = true, version = "0.13.0", package = "uu_runcon", path = "s
 
 [target.'cfg(unix)'.dev-dependencies]
 nix = { workspace = true, features = ["fs", "signal"] }
-rlimit = { workspace = true }
 rustix = { workspace = true, features = ["net", "process"] }
+
+[target.'cfg(all(unix, not(target_os = "fuchsia")))'.dev-dependencies]
+rlimit = { workspace = true }
 
 [build-dependencies]
 phf_codegen.workspace = true
