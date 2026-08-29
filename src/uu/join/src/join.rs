@@ -844,8 +844,24 @@ fn parse_settings(matches: &clap::ArgMatches, diag_args: Option<&[OsString]>) ->
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in `-o` diagnostics, which needs
     // the list as typed.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    // GNU `join` supports `-t=` to use `=` as the field separator.
+    // Clap strips a leading `=` from an attached short-option value, so split
+    // attached `-t<chars>` into `-t <chars>` (which clap passes through
+    // verbatim). The caret diagnostics keep echoing the arguments as typed.
+    // See https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    let raw: Vec<OsString> = args.collect();
+    let diag_args = uucore::diagnostics::capture(&raw);
+    let args = raw.into_iter().flat_map(|x| {
+        let as_str = x.to_string_lossy();
+        if as_str.starts_with("-t") && as_str.len() > 2 {
+            vec![OsString::from("-t"), OsString::from(&as_str[2..])]
+        } else {
+            vec![x]
+        }
+    });
+
+    let matches =
+        uucore::clap_localization::handle_clap_result(uu_app(), args.collect::<Vec<OsString>>())?;
 
     let mut opts = CollatorOptions::default();
     opts.alternate_handling = Some(AlternateHandling::Shifted);

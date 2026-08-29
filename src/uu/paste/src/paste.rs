@@ -27,6 +27,22 @@ mod options {
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    // GNU `paste` supports `-d=` to use `=` as a delimiter.
+    // Clap parsing is limited in this situation, see:
+    // https://github.com/uutils/coreutils/issues/2424#issuecomment-863825242
+    // (same rewrite as in `cut` and `sort`)
+    let args: Vec<OsString> = args
+        .into_iter()
+        .map(|x| {
+            let as_str = x.to_string_lossy();
+            if as_str.starts_with("-d") && as_str.len() > 2 {
+                OsString::from(format!("--{}={}", options::DELIMITER, &as_str[2..]))
+            } else {
+                x
+            }
+        })
+        .collect();
+
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
     let serial = matches.get_flag(options::SERIAL);
