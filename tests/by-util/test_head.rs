@@ -1181,3 +1181,17 @@ head: invalid number of bytes: '1fb'
             .stderr_is("head: invalid number of bytes: '1fb'\n");
     }
 }
+
+#[test]
+fn test_invalid_count_keeps_its_leading_zeros() {
+    // Leading zeros are stripped only so the count is read as decimal rather
+    // than octal. That is internal, so GNU still names the argument as typed.
+    new_ucmd!()
+        .args(&["-c", "0fb", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of bytes: '0fb'\n");
+    new_ucmd!()
+        .args(&["-n", "00x", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("head: invalid number of lines: '00x'\n");
+}
