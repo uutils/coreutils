@@ -706,11 +706,11 @@ pub fn uu_app() -> Command {
                 .value_name("STRING")
                 .allow_hyphen_values(true)
                 .help({
-                    #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+                    #[cfg(not(any(target_vendor = "apple", target_os = "redox")))]
                     {
                         translate!("date-help-set")
                     }
-                    #[cfg(target_os = "macos")]
+                    #[cfg(target_vendor = "apple")]
                     {
                         translate!("date-help-set-macos")
                     }
@@ -1226,7 +1226,7 @@ fn convert_for_set(date: Zoned, utc: bool) -> Zoned {
     }
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn set_system_datetime(_date: Zoned) -> UResult<()> {
     Err(USimpleError::new(
         1,
@@ -1242,7 +1242,7 @@ fn set_system_datetime(_date: Zoned) -> UResult<()> {
     ))
 }
 
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "redox")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "redox")))]
 /// System call to set date (unix).
 /// See here for more:
 /// `<https://doc.rust-lang.org/libc/i686-unknown-linux-gnu/libc/fn.clock_settime.html>`

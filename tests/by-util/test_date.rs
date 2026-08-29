@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan};
 use regex::Regex;
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 use rustix::process::geteuid;
 use uutests::util::TestScenario;
 #[cfg(unix)]
@@ -466,7 +466,7 @@ fn test_date_format_literal() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_date_set_valid() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -478,7 +478,7 @@ fn test_date_set_valid() {
 }
 
 #[test]
-#[cfg(any(windows, all(unix, not(target_os = "macos"))))]
+#[cfg(any(windows, all(unix, not(target_vendor = "apple"))))]
 fn test_date_set_invalid() {
     let result = new_ucmd!().arg("--set").arg("123abcd").fails();
     result.no_stdout();
@@ -486,7 +486,7 @@ fn test_date_set_invalid() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
 fn test_date_set_permissions_error() {
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
         let result = new_ucmd!()
@@ -499,7 +499,7 @@ fn test_date_set_permissions_error() {
 }
 
 #[test]
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
 fn test_date_set_hyphen_prefixed_values() {
     // test -s flag accepts hyphen-prefixed values like "-3 days"
     if !(geteuid().is_root() || uucore::os::is_wsl_1()) {
@@ -519,7 +519,7 @@ fn test_date_set_hyphen_prefixed_values() {
 }
 
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_date_set_mac_unavailable() {
     let result = new_ucmd!()
         .arg("--set")
@@ -534,7 +534,7 @@ fn test_date_set_mac_unavailable() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_date_set_valid_2() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -614,7 +614,7 @@ fn test_date_for_file_mtime() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_date_set_valid_3() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -626,7 +626,7 @@ fn test_date_set_valid_3() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_date_set_valid_4() {
     if geteuid().is_root() {
         new_ucmd!()
@@ -1731,7 +1731,7 @@ fn test_date_locale_hu_hungarian() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_date_locale_fr_french() {
     // Test French locale (fr_FR.UTF-8) behavior
     // French typically uses 24-hour format and may have localized day/month names
@@ -1789,7 +1789,7 @@ fn test_date_posix_format_specifiers() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_b_french_locale() {
     // Test both %B and %b formats with French locale using a loop
     // This test expects localized month names when i18n support is available
@@ -1824,7 +1824,7 @@ fn test_date_format_b_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_a_french_locale() {
     // Test both %A and %a formats with French locale using a loop
     // This test expects localized day names when i18n support is available
@@ -1859,7 +1859,7 @@ fn test_date_format_a_french_locale() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_french_full_sentence() {
     let result = new_ucmd!()
         .env("LANG", "fr_FR.UTF-8")
@@ -1885,7 +1885,7 @@ fn test_date_french_full_sentence() {
 /// This is a regression test for locale-aware date formatting
 #[test]
 #[ignore = "https://bugs.launchpad.net/ubuntu/+source/rust-coreutils/+bug/2137410"]
-#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux"))]
 fn test_date_format_x_locale_aware() {
     // With C locale, %x should output MM/DD/YY (US format)
     new_ucmd!()

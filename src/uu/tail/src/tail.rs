@@ -260,7 +260,7 @@ fn tail_stdin(
     // bad file descriptor or might not catch directory cases
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     if uucore::fs::is_stdin_directory(&stdin()) {
         set_exit_code(1);
         show_error!(

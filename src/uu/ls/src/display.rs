@@ -33,7 +33,7 @@ use term_grid::{DEFAULT_SEPARATOR_SIZE, Direction, Filling, Grid, GridOptions};
 
 #[cfg(unix)]
 use uucore::entries;
-#[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+#[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
 use uucore::fsxattr::has_acl;
 #[cfg(unix)]
 use uucore::libc::{dev_t, major, minor};
@@ -964,10 +964,10 @@ fn display_item_long(
         state.display_buf.extend(b"  ");
     }
     if let Some(md) = item.metadata() {
-        #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+        #[cfg(any(not(unix), target_os = "android", target_vendor = "apple"))]
         // TODO: See how Mac should work here
         let is_acl_set = false;
-        #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+        #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
         let is_acl_set = has_acl(item.path());
         state
             .display_buf
@@ -1363,10 +1363,10 @@ fn calculate_padding_collection(
             // the permissions column by one to reserve space for the `+`/`.`
             // indicator.
             {
-                #[cfg(any(not(unix), target_os = "android", target_os = "macos"))]
+                #[cfg(any(not(unix), target_os = "android", target_vendor = "apple"))]
                 // TODO: See how Mac should work here
                 let is_acl_set = false;
-                #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+                #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
                 let is_acl_set = has_acl(item.path());
                 if context_len > 1 || is_acl_set {
                     padding_collections.permissions = PERMISSIONS_WIDTH + 1;

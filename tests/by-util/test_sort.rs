@@ -2175,7 +2175,7 @@ fn test_files0_from_two_entries_trailing_nul() {
 
 #[test]
 // Test files0-from with non-UTF-8 filenames
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_files0_from_non_utf8_content() {
     use std::os::unix::ffi::OsStringExt;
     let (at, mut ucmd) = at_and_ucmd!();

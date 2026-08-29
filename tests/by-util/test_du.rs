@@ -2280,7 +2280,7 @@ fn test_du_long_symlink_chain() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_du_bind_mount_simulation() {
     // Simulate bind mount scenario using hard links where possible
     // Note: This test simulates what bind mounts do - making the same directory

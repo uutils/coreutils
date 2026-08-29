@@ -8,10 +8,7 @@
 #[cfg(unix)]
 use rstest::rstest;
 use uucore::display::Quotable;
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 use uucore::selinux::get_getfattr_output;
 use uutests::util::TestScenario;
 use uutests::{at_and_ucmd, new_ucmd, path_concat, util_name};
@@ -65,7 +62,7 @@ static TEST_MOUNT_OTHER_FILESYSTEM_FILE: &str = "mount/DO_NOT_copy_me.txt";
 static TEST_NONEXISTENT_FILE: &str = "nonexistent_file.txt";
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+    not(any(target_os = "android", target_vendor = "apple", target_os = "openbsd"))
 ))]
 use uutests::util::compare_xattrs;
 
@@ -329,7 +326,7 @@ fn test_cp_multiple_files_with_empty_file_name() {
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn test_cp_recurse() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-r")
@@ -342,7 +339,7 @@ fn test_cp_recurse() {
 }
 
 #[test]
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn test_cp_recurse_several() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("-r")
@@ -385,7 +382,7 @@ fn test_cp_with_dirs_t() {
 
 #[test]
 // FixME: for MacOS, this has intermittent failures; track repair progress at GH:uutils/coreutils/issues/1590
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 fn test_cp_with_dirs() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -1923,7 +1920,7 @@ fn test_cp_preserve_all() {
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "openbsd", target_os = "macos"))
+    not(any(target_os = "android", target_os = "openbsd", target_vendor = "apple"))
 ))]
 fn test_cp_p_does_not_preserve_xattr_by_default() {
     use std::process::Command;
@@ -1982,7 +1979,7 @@ fn test_cp_preserve_xattr() {
         .succeeds();
 
     // FIXME: macos copy keeps the original mtime
-    #[cfg(not(any(target_os = "freebsd", target_os = "macos")))]
+    #[cfg(not(any(target_os = "freebsd", target_vendor = "apple")))]
     {
         // Assert that the mode, ownership, and timestamps are *NOT* preserved
         // NOTICE: the ownership is not modified on the src file, because that requires root permissions
@@ -1995,7 +1992,7 @@ fn test_cp_preserve_xattr() {
 
 #[test]
 #[cfg(all(
-    not(feature = "feat_selinux"),
+    not(feature = "selinux"),
     any(target_os = "linux", target_os = "android")
 ))]
 fn test_cp_preserve_all_context_fails_on_non_selinux() {
@@ -2720,7 +2717,7 @@ fn test_cp_one_file_system() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_cp_reflink_always() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
@@ -2738,7 +2735,7 @@ fn test_cp_reflink_always() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_cp_reflink_auto() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg("--reflink=auto")
@@ -2751,7 +2748,7 @@ fn test_cp_reflink_auto() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_cp_reflink_none() {
     let (at, mut ucmd) = at_and_ucmd!();
     let result = ucmd
@@ -2769,7 +2766,7 @@ fn test_cp_reflink_none() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_cp_reflink_never() {
     for argument in ["--reflink=never", "--reflink=neve", "--reflink=n"] {
         let (at, mut ucmd) = at_and_ucmd!();
@@ -2798,7 +2795,7 @@ fn test_cp_reflink_never() {
 // A real (non-clone) copy stamps the destination with its own mtime, so after `--reflink=never`
 // the destination must NOT inherit the source's (old) mtime.
 #[test]
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 fn test_cp_reflink_never_does_not_clonefile() {
     use filetime::FileTime; // todo: replace with std
     let (at, mut ucmd) = at_and_ucmd!();
@@ -2819,7 +2816,7 @@ fn test_cp_reflink_never_does_not_clonefile() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
 fn test_cp_reflink_bad() {
     let (_, mut ucmd) = at_and_ucmd!();
     let _result = ucmd
@@ -3433,7 +3430,7 @@ fn test_cp_symlink_overwrite_detection() {
         });
     let contents = at.read("tmp/foo");
     // None of the files seem to be copied in macos
-    if cfg!(not(target_os = "macos")) {
+    if cfg!(not(target_vendor = "apple")) {
         assert_eq!(contents, "file1");
     }
 }
@@ -4488,9 +4485,9 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", windows, target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows, target_vendor = "apple"))]
 fn test_cp_debug_default() {
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
     #[cfg(target_os = "linux")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: no";
@@ -4510,7 +4507,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", windows, target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows, target_vendor = "apple"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -4527,7 +4524,7 @@ fn test_cp_debug_multiple_default() {
         .arg(dir)
         .succeeds();
 
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
     #[cfg(target_os = "linux")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: no";
@@ -4608,7 +4605,7 @@ fn test_cp_debug_sparse_auto() {
     let at = &ts.fixtures;
     at.touch("a");
 
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(not(any(target_os = "linux", target_vendor = "apple")))]
     ts.ucmd()
         .arg("--debug")
         .arg("--sparse=auto")
@@ -4616,9 +4613,9 @@ fn test_cp_debug_sparse_auto() {
         .arg("b")
         .succeeds();
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(any(target_os = "linux", target_vendor = "apple"))]
     {
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
         #[cfg(target_os = "linux")]
         let expected = "copy offload: unknown, reflink: unsupported, sparse detection: no";
@@ -4634,9 +4631,9 @@ fn test_cp_debug_sparse_auto() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 fn test_cp_debug_reflink_auto() {
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
     #[cfg(target_os = "linux")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: no";
@@ -4698,7 +4695,7 @@ fn test_cp_dest_no_permissions() {
 }
 
 /// Test readonly destination behavior with reflink options
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
 #[test]
 fn test_cp_readonly_dest_with_reflink() {
     let ts = TestScenario::new(util_name!());
@@ -4949,7 +4946,7 @@ fn test_cp_no_such() {
 
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+    not(any(target_os = "android", target_vendor = "apple", target_os = "openbsd"))
 ))]
 #[test]
 fn test_acl_preserve() {
@@ -7059,7 +7056,7 @@ fn test_cp_no_file() {
 #[test]
 #[cfg(all(
     unix,
-    not(any(target_os = "android", target_os = "macos", target_os = "openbsd"))
+    not(any(target_os = "android", target_vendor = "apple", target_os = "openbsd"))
 ))]
 fn test_cp_preserve_xattr_readonly_source() {
     use std::process::Command;
@@ -7181,7 +7178,7 @@ fn test_cp_archive_preserves_directory_permissions() {
 
 #[test]
 #[cfg(unix)]
-#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
 fn test_cp_from_stdin() {
     let (at, mut ucmd) = at_and_ucmd!();
     let target = "target";
@@ -7249,7 +7246,7 @@ fn test_cp_update_none_interactive_prompt_no() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
-#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream() {
     let target = "target";
@@ -7276,7 +7273,7 @@ fn test_cp_from_stream() {
 
 /// only unix has `/dev/fd/0`
 #[cfg(unix)]
-#[cfg_attr(target_os = "macos", ignore = "Flaky on MacOS, see #8453")]
+#[cfg_attr(target_vendor = "apple", ignore = "Flaky on MacOS, see #8453")]
 #[test]
 fn test_cp_from_stream_permission() {
     let target = "target";
@@ -7299,10 +7296,7 @@ fn test_cp_from_stream_permission() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7327,10 +7321,7 @@ fn test_cp_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_default_context_relative_dest() {
     // -Z labels the destination with the context the policy has for its path,
     // and the policy only lists absolute paths: a relative destination used to
@@ -7371,10 +7362,7 @@ fn test_cp_selinux_default_context_relative_dest() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_invalid() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -7398,10 +7386,7 @@ fn test_cp_selinux_invalid() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_selinux() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7439,10 +7424,7 @@ fn test_cp_preserve_selinux() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_selinux_admin_context() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -7501,10 +7483,7 @@ fn test_cp_preserve_selinux_admin_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_context_priority() {
     // This test verifies that -Z takes priority over --context
 
@@ -7584,10 +7563,7 @@ fn test_cp_selinux_context_priority() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_empty_context() {
     // This test verifies that --context without a value works like -Z
 
@@ -7633,10 +7609,7 @@ fn test_cp_selinux_empty_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_selinux_recursive() {
     // Test SELinux context preservation in recursive directory copies
 
@@ -7690,10 +7663,7 @@ fn test_cp_selinux_recursive() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_context_root() {
     use uutests::util::run_ucmd_as_root;
     let scene = TestScenario::new(util_name!());
@@ -8561,10 +8531,7 @@ fn test_cp_gnu_preserve_mode() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_z_overrides_context() {
     // Verifies -aZ succeeds (-Z overrides implicit --preserve=context from -a)
     use std::path::Path;
@@ -8582,10 +8549,7 @@ fn test_cp_a_z_overrides_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_a_preserves_context() {
     use std::path::Path;
     use uucore::selinux::{get_selinux_security_context, set_selinux_security_context};
@@ -8608,10 +8572,7 @@ fn test_cp_a_preserves_context() {
 }
 
 #[test]
-#[cfg(all(
-    feature = "feat_selinux",
-    any(target_os = "linux", target_os = "android")
-))]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_cp_preserve_context_with_z_fails() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("src");
@@ -8643,7 +8604,7 @@ fn test_cp_preserve_setuid_when_chown_succeeds() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_cp_recursive_non_utf8_source() {
     use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
     let (at, mut ucmd) = at_and_ucmd!();

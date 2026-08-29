@@ -378,12 +378,12 @@ impl Who {
         let last_change;
         if let Ok(meta) = p.metadata() {
             #[cfg(all(
+                not(target_vendor = "apple"),
                 not(target_os = "android"),
-                not(target_os = "freebsd"),
-                not(target_vendor = "apple")
+                not(target_os = "freebsd")
             ))]
             let iwgrp = S_IWGRP;
-            #[cfg(any(target_os = "android", target_os = "freebsd", target_vendor = "apple"))]
+            #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "freebsd"))]
             let iwgrp = S_IWGRP as u32;
             mesg = if meta.mode() & iwgrp == 0 { '-' } else { '+' };
             last_change = meta.atime();
