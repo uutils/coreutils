@@ -73,7 +73,7 @@ cargo_build() {
         export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }$2"
         # bash 3.2 (macOS) errors on an empty array expansion under `set -u`,
         # hence the `[@]+` guard on both expansions below.
-        echo "Running: cargo build --release ${feature_args[@]+${feature_args[*]}}"
+        echo "Running: cargo build --release ${feature_args[*]+${feature_args[*]}}"
         echo "  RUSTFLAGS=${RUSTFLAGS}"
         cargo build --release ${feature_args[@]+"${feature_args[@]}"}
     )
