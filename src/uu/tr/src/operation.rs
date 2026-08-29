@@ -133,7 +133,7 @@ impl Display for BadSequence {
             Self::MultipleCharInEquivalence(s) => write!(
                 f,
                 "{}",
-                translate!("tr-error-multiple-char-in-equivalence", "chars" => s.clone())
+                translate!("tr-error-multiple-char-in-equivalence", "chars" => s)
             ),
         }
     }

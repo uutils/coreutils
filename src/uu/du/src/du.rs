@@ -832,7 +832,7 @@ fn build_exclude_patterns(matches: &ArgMatches) -> UResult<Vec<Pattern>> {
         if matches.get_flag(options::VERBOSE) {
             println!(
                 "{}",
-                translate!("du-verbose-adding-to-exclude-list", "pattern" => f.clone())
+                translate!("du-verbose-adding-to-exclude-list", "pattern" => f)
             );
         }
         let glob = parse_glob::from_str(&f).map_err(DuError::InvalidGlob)?;

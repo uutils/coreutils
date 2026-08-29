@@ -59,7 +59,7 @@ use thiserror::Error;
 pub enum EnvError {
     #[error("{}", translate!("env-error-missing-closing-quote", "position" => .0, "quote" => .1))]
     EnvMissingClosingQuote(usize, char),
-    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1.clone()))]
+    #[error("{}", translate!("env-error-invalid-backslash-at-end", "position" => .0, "context" => .1))]
     EnvInvalidBackslashAtEndOfStringInMinusS(usize, String),
     #[error("{}", translate!("env-error-backslash-c-not-allowed", "position" => .0))]
     EnvBackslashCNotAllowedInDoubleQuotes(usize),
@@ -71,7 +71,7 @@ pub enum EnvError {
     EnvParsingOfMissingVariable(usize),
     #[error("{}", translate!("env-error-only-braced-variable", "position" => .0))]
     EnvParsingOfVariableOnlyBracedName(usize),
-    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1.clone()))]
+    #[error("{}", translate!("env-error-unexpected-number", "position" => .0, "char" => .1))]
     EnvParsingOfVariableUnexpectedNumber(usize, String),
     #[error("")]
     EnvReachedEnd,

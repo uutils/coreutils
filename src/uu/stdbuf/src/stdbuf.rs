@@ -91,7 +91,7 @@ enum ProgramOptionsError {
     LineBufferingStdinMeaningless,
     #[error("{}", translate!("stdbuf-error-invalid-mode", "error" => _0.error.to_string()))]
     InvalidMode(Box<ModeError>),
-    #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0.clone()))]
+    #[error("{}", translate!("stdbuf-error-value-too-large", "value" => _0))]
     ValueTooLarge(String),
 }
 

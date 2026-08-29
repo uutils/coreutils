@@ -251,7 +251,7 @@ impl Settings {
             settings.sleep_sec = parse_time::from_str(source, false).map_err(|_| {
                 UUsageError::new(
                     1,
-                    translate!("tail-error-invalid-number-of-seconds", "source" => source.clone()),
+                    translate!("tail-error-invalid-number-of-seconds", "source" => source),
                 )
             })?;
         }
