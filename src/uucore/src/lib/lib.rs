@@ -106,20 +106,35 @@ pub use crate::features::pipes;
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "hurd", target_os = "redox"))))]
 pub use crate::features::safe_traversal;
 #[cfg(all(
-    any(windows, all(unix, not(target_os = "fuchsia"))),
-    feature = "signals"
+    feature = "signals",
+    any(
+        windows,
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "solaris"
+    )
 ))]
 pub use crate::features::signals;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub use crate::features::utmpx;
 // ** windows-only

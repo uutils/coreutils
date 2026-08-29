@@ -88,7 +88,7 @@ pub mod proc_info;
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "hurd", target_os = "redox"))))]
 pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;
@@ -100,8 +100,21 @@ pub mod hardware;
 #[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 pub mod selinux;
 #[cfg(all(
-    any(windows, all(unix, not(target_os = "fuchsia"))),
-    feature = "signals"
+    feature = "signals",
+    any(
+        windows,
+        target_vendor = "apple",
+        target_os = "aix",
+        target_os = "android",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "illumos",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "redox",
+        target_os = "solaris"
+    )
 ))]
 pub mod signals;
 #[cfg(all(feature = "smack", target_os = "linux"))]
@@ -109,12 +122,14 @@ pub mod smack;
 #[cfg(feature = "feat_systemd_logind")]
 pub mod systemd_logind;
 #[cfg(all(
-    unix,
-    not(target_os = "android"),
-    not(target_os = "fuchsia"),
-    not(target_os = "openbsd"),
-    not(target_os = "redox"),
-    feature = "utmpx"
+    feature = "utmpx",
+    any(
+        target_vendor = "apple",
+        target_os = "cygwin",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd"
+    )
 ))]
 pub mod utmpx;
 // ** windows-only

@@ -18,7 +18,7 @@ all-features = true
 [lib]
 path = "src/lib/lib.rs"
 
-[dependencies]
+[target.'cfg(not(target_os = "aix"))'.dependencies]
 ctor = { workspace = true }
 libc = { workspace = true }
 pretty_assertions = { workspace = true }
@@ -33,14 +33,14 @@ uucore = { workspace = true, features = [
   "utmpx",
 ] }
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
-
-[target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["process", "signal", "term", "user"] }
+[target.'cfg(all(unix, not(any(target_os = "aix", target_os = "fuchsia"))))'.dependencies]
 rlimit = { workspace = true }
 
-[target.'cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))'.dependencies]
+[target.'cfg(all(unix, not(any(target_vendor = "apple", target_os = "aix", target_os = "openbsd"))))'.dependencies]
 xattr = { workspace = true }
+
+[target.'cfg(all(unix, not(target_os = "aix")))'.dependencies]
+nix = { workspace = true, features = ["process", "signal", "term", "user"] }
 
 [lints]
 workspace = true
