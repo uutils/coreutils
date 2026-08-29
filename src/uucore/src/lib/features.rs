@@ -35,7 +35,7 @@ pub mod extendedbigdecimal;
 pub mod fast_inc;
 #[cfg(feature = "format")]
 pub mod format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", not(target_os = "haiku")))]
 pub mod fs;
 #[cfg(feature = "fsext")]
 pub mod fsext;
@@ -88,7 +88,10 @@ pub mod proc_info;
 pub mod process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub mod safe_copy;
-#[cfg(all(unix, not(any(target_os = "hurd", target_os = "redox"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
 pub mod safe_traversal;
 #[cfg(all(target_os = "linux", feature = "tty"))]
 pub mod tty;

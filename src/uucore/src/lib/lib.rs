@@ -54,7 +54,7 @@ pub use crate::features::extendedbigdecimal;
 pub use crate::features::fast_inc;
 #[cfg(feature = "format")]
 pub use crate::features::format;
-#[cfg(feature = "fs")]
+#[cfg(all(feature = "fs", not(target_os = "haiku")))]
 pub use crate::features::fs;
 #[cfg(feature = "hardware")]
 pub use crate::features::hardware;
@@ -106,7 +106,10 @@ pub use crate::features::pipes;
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
-#[cfg(all(unix, not(any(target_os = "hurd", target_os = "redox"))))]
+#[cfg(all(
+    unix,
+    not(any(target_os = "aix", target_os = "hurd", target_os = "redox"))
+))]
 pub use crate::features::safe_traversal;
 #[cfg(all(
     feature = "signals",
