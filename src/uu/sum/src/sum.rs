@@ -76,7 +76,7 @@ fn open(name: &OsString) -> UResult<Reader> {
     } else {
         let path = Path::new(name);
         // some platforms cannot catch those errors when open or read. needs additional cost
-        #[cfg(any(target_os = "wasi", target_os = "windows"))]
+        #[cfg(any(target_os = "wasi", windows))]
         match path.metadata() {
             Ok(_) => {
                 if path.is_dir() {

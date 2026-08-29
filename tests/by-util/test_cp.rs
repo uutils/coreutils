@@ -2997,7 +2997,7 @@ fn test_cp_sparse_never_reflink_always() {
 // Regression test for https://github.com/uutils/coreutils/issues/12186
 // `cp --sparse=always` should be supported on Windows (matching GNU), not
 // rejected with "--sparse is only supported on linux".
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_sparse_always_windows() {
     use std::os::windows::fs::MetadataExt;
@@ -3034,7 +3034,7 @@ fn test_cp_sparse_always_windows() {
 // Companion to the regression above: `cp --sparse=never` must also be accepted
 // on Windows and produce a faithful, non-sparse copy (it was rejected by the
 // same "--sparse is only supported on linux" error before #12186).
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_sparse_never_windows() {
     use std::os::windows::fs::MetadataExt;
@@ -3061,7 +3061,7 @@ fn test_cp_sparse_never_windows() {
 // `--sparse=auto` (the default) must preserve an already-sparse source on Windows,
 // matching GNU. Before this fix the default mode did a plain copy that dropped the
 // source's holes. A non-sparse source must still copy plainly (no new holes).
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_sparse_auto_preserves_sparse_source_windows() {
     use std::os::windows::fs::MetadataExt;
@@ -3116,7 +3116,7 @@ fn test_cp_sparse_auto_preserves_sparse_source_windows() {
 // `--reflink=auto` means "clone if possible, else plain copy" (GNU), so on
 // Windows — which has no reflink support — it must fall back to a plain copy
 // rather than fail.
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_reflink_auto_windows() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3129,7 +3129,7 @@ fn test_cp_reflink_auto_windows() {
 
 // `--reflink=always` (and bare `--reflink`, which defaults to `always`) must
 // still fail on Windows: cloning was explicitly required but is unsupported.
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_reflink_always_windows() {
     for argument in ["--reflink=always", "--reflink"] {
@@ -3142,7 +3142,7 @@ fn test_cp_reflink_always_windows() {
 
 // `--debug` must report the sparse detection that actually happened: `zeros`
 // when the sparse copy ran (the test temp dir is NTFS, which supports it).
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_cp_debug_sparse_always_windows() {
     let (at, mut ucmd) = at_and_ucmd!();
@@ -3360,7 +3360,7 @@ fn test_copy_through_just_created_symlink() {
             .arg("b/1")
             .arg("c")
             .fails()
-            .stderr_only(if cfg!(not(target_os = "windows")) {
+            .stderr_only(if cfg!(not(windows)) {
                 "cp: will not copy 'b/1' through just-created symlink 'c/1'\n"
             } else {
                 "cp: will not copy 'b/1' through just-created symlink 'c\\1'\n"
@@ -3426,7 +3426,7 @@ fn test_cp_symlink_overwrite_detection() {
         .arg("good/README")
         .arg("tmp")
         .fails()
-        .stderr_only(if cfg!(target_os = "windows") {
+        .stderr_only(if cfg!(windows) {
             "cp: will not copy 'good/README' through just-created symlink 'tmp\\README'\n"
         } else {
             "cp: will not copy 'good/README' through just-created symlink 'tmp/README'\n"
@@ -3455,7 +3455,7 @@ fn test_cp_dangling_symlink_inside_directory() {
         .arg("good/README")
         .arg("tmp")
         .fails()
-        .stderr_only( if cfg!(target_os="windows") {
+        .stderr_only( if cfg!(windows) {
             "cp: not writing through dangling symlink 'tmp\\README'\ncp: not writing through dangling symlink 'tmp\\README'\n"
         } else {
             "cp: not writing through dangling symlink 'tmp/README'\ncp: not writing through dangling symlink 'tmp/README'\n"
@@ -4488,7 +4488,7 @@ fn test_cp_archive_on_directory_ending_dot() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows, target_os = "macos"))]
 fn test_cp_debug_default() {
     #[cfg(target_os = "macos")]
     let expected = "copy offload: unknown, reflink: unsupported, sparse detection: unsupported";
@@ -4510,7 +4510,7 @@ fn test_cp_debug_default() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows, target_os = "macos"))]
 fn test_cp_debug_multiple_default() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -6984,7 +6984,7 @@ fn test_copy_symlink_overwrite() {
         .arg("b/1")
         .arg("c")
         .fails()
-        .stderr_only(if cfg!(not(target_os = "windows")) {
+        .stderr_only(if cfg!(not(windows)) {
             "cp: will not overwrite just-created 'c/1' with 'b/1'\n"
         } else {
             "cp: will not overwrite just-created 'c\\1' with 'b/1'\n"
@@ -7000,7 +7000,7 @@ fn test_symlink_mode_overwrite() {
     at.write("a/t", "hello");
     at.write("b/t", "hello");
 
-    if cfg!(not(target_os = "windows")) {
+    if cfg!(not(windows)) {
         ucmd.arg("-s")
             .arg("a/t")
             .arg("b/t")
@@ -8460,7 +8460,7 @@ fn test_cp_xattr_enotsup_handling() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_cp_preserve_directory_permissions_by_default() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8504,7 +8504,7 @@ fn test_cp_preserve_directory_permissions_by_default() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_cp_existing_perm_dir() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
@@ -8534,7 +8534,7 @@ fn test_cp_existing_perm_dir() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_cp_gnu_preserve_mode() {
     use std::io;
 

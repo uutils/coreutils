@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))]
+#[cfg(not(any(target_os = "freebsd", windows)))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -340,7 +340,7 @@ fn test_type_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "windows")))] // FIXME: fix test for FreeBSD, OpenBSD & Win
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", windows)))] // FIXME: fix test for FreeBSD, OpenBSD & Win
 #[cfg(not(feature = "feat_selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
@@ -1006,7 +1006,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1025,7 +1025,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -1048,7 +1048,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")

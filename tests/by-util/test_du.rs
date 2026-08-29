@@ -9,10 +9,10 @@
 #[cfg(not(windows))]
 use regex::Regex;
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, new_ucmd, util_name};
 
@@ -56,7 +56,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics(s: &str) {
     let answer = concat!(
         "0\t.\\subdir\\deeper\\deeper_dir\n",
@@ -68,11 +68,7 @@ fn du_basics(s: &str) {
     assert_eq!(s, answer);
 }
 
-#[cfg(all(
-    not(target_vendor = "apple"),
-    not(target_os = "windows"),
-    not(target_os = "openbsd")
-))]
+#[cfg(all(not(target_vendor = "apple"), not(target_os = "openbsd"), not(windows)))]
 fn du_basics(s: &str) {
     let answer = concat!(
         "8\t./subdir/deeper/deeper_dir\n",
@@ -116,7 +112,7 @@ fn test_du_basics_subdir() {
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "4\tsubdir/deeper/deeper_dir\n8\tsubdir/deeper\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_basics_subdir(s: &str) {
     assert_eq!(s, "0\tsubdir/deeper\\deeper_dir\n0\tsubdir/deeper\n");
 }
@@ -126,9 +122,9 @@ fn du_basics_subdir(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_basics_subdir(s: &str) {
     // MS-WSL linux has altered expected output
@@ -522,7 +518,7 @@ fn test_du_soft_link() {
     println!("Output: {s}");
 
     // Helper closure to assert output matches one of the valid sizes
-    #[cfg(any(target_vendor = "apple", target_os = "windows", target_os = "freebsd"))]
+    #[cfg(any(target_vendor = "apple", windows, target_os = "freebsd"))]
     let assert_valid_size = |output: &str, valid_sizes: &[&str]| {
         assert!(
             valid_sizes.contains(&output),
@@ -541,7 +537,7 @@ fn test_du_soft_link() {
         assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let valid_sizes = ["4\tsubdir/links\n", "8\tsubdir/links\n"];
         assert_valid_size(s, &valid_sizes);
@@ -555,11 +551,7 @@ fn test_du_soft_link() {
         assert_valid_size(s, &valid_sizes);
     }
 
-    #[cfg(all(
-        not(target_vendor = "apple"),
-        not(target_os = "windows"),
-        not(target_os = "freebsd")
-    ))]
+    #[cfg(all(not(target_vendor = "apple"), not(target_os = "freebsd"), not(windows)))]
     {
         // MS-WSL linux has altered expected output
         if uucore::os::is_wsl_1() {
@@ -596,7 +588,7 @@ fn test_du_hard_link() {
 fn du_hard_link(s: &str) {
     assert_eq!(s, "12\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_hard_link(s: &str) {
     assert_eq!(s, "8\tsubdir/links\n");
 }
@@ -606,10 +598,10 @@ fn du_hard_link(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
-    not(target_os = "android")
+    not(target_os = "android"),
+    not(windows)
 ))]
 fn du_hard_link(s: &str) {
     // MS-WSL linux has altered expected output
@@ -642,7 +634,7 @@ fn test_du_d_flag() {
 fn du_d_flag(s: &str) {
     assert_eq!(s, "20\t./subdir\n24\t.\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_d_flag(s: &str) {
     assert_eq!(s, "8\t.\\subdir\n8\t.\n");
 }
@@ -652,9 +644,9 @@ fn du_d_flag(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_d_flag(s: &str) {
     // MS-WSL linux has altered expected output
@@ -716,7 +708,7 @@ fn test_du_dereference_args() {
 fn du_dereference(s: &str) {
     assert_eq!(s, "4\tsubdir/links/deeper_dir\n16\tsubdir/links\n");
 }
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn du_dereference(s: &str) {
     assert_eq!(s, "0\tsubdir/links\\deeper_dir\n8\tsubdir/links\n");
 }
@@ -726,9 +718,9 @@ fn du_dereference(s: &str) {
 }
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn du_dereference(s: &str) {
     // MS-WSL linux has altered expected output
@@ -740,10 +732,10 @@ fn du_dereference(s: &str) {
 }
 
 #[cfg(not(any(
-    target_os = "windows",
     target_os = "android",
     target_os = "freebsd",
-    target_os = "openbsd"
+    target_os = "openbsd",
+    windows
 )))]
 #[test]
 fn test_du_no_dereference() {
@@ -792,13 +784,13 @@ fn test_du_inodes_basic() {
     let ts = TestScenario::new(util_name!());
     let result = ts.ucmd().arg("--inodes").succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         let result_reference = unwrap_or_return!(expected_result(&ts, &["--inodes"]));
         assert_eq!(result.stdout_str(), result_reference.stdout_str());
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert_eq!(
         result.stdout_str(),
         concat!(
@@ -823,9 +815,9 @@ fn test_du_inodes() {
 
     let result = ts.ucmd().arg("--separate-dirs").arg("--inodes").succeeds();
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     result.stdout_contains("3\t.\\subdir\\links\n");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     result.stdout_contains("3\t./subdir/links\n");
     result.stdout_contains("3\t.\n");
 
@@ -1380,7 +1372,7 @@ fn test_du_time_unaffected_by_exclude() {
     assert!(stdout.contains("\td\n"), "missing dir entry: {stdout}");
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "openbsd")))]
+#[cfg(not(any(windows, target_os = "openbsd")))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_permission() {
@@ -1411,7 +1403,7 @@ fn test_du_no_permission() {
     assert_eq!(result.stdout_str(), "0\tsubdir/links\n");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_du_no_exec_permission() {
@@ -1533,7 +1525,7 @@ fn test_du_apparent_size() {
 
     let result = ucmd.args(&["--apparent-size", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("1\ta/b/file2");
         result.stdout_contains_line("1\ta/b/file1");
@@ -1541,7 +1533,7 @@ fn test_du_apparent_size() {
         result.stdout_contains_line("1\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("1\ta\\b\\file2");
         result.stdout_contains_line("1\ta\\b\\file1");
@@ -1561,7 +1553,7 @@ fn test_du_bytes() {
 
     let result = ucmd.args(&["--bytes", "--all", "a"]).succeeds();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         result.stdout_contains_line("6\ta/b/file2");
         result.stdout_contains_line("3\ta/b/file1");
@@ -1569,7 +1561,7 @@ fn test_du_bytes() {
         result.stdout_contains_line("9\ta");
     }
 
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         result.stdout_contains_line("6\ta\\b\\file2");
         result.stdout_contains_line("3\ta\\b\\file1");
@@ -1607,7 +1599,7 @@ fn test_du_exclude() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_2() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1658,7 +1650,7 @@ fn test_du_exclude_2() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_exclude_mix() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1713,7 +1705,7 @@ fn test_du_exclude_mix() {
 #[test]
 // Disable on Windows because we are looking for /
 // And the tests would be more complex if we have to support \ too
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_complex_exclude_patterns() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;
@@ -1823,7 +1815,7 @@ fn test_du_symlink_multiple_fail() {
 
 #[test]
 // Disable on Windows because of different path separators and handling of null characters
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_du_files0_from() {
     let ts = TestScenario::new(util_name!());
     let at = &ts.fixtures;

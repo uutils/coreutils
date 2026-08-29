@@ -75,7 +75,7 @@ fn test_invalid_arg() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_flags_after_command() {
     new_ucmd!()
         // This would cause an error if -u=v were processed because it's malformed
@@ -159,9 +159,9 @@ fn test_env_permissions() {
 
 #[test]
 fn test_echo() {
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     let args = ["cmd", "/d/c", "echo"];
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     let args = ["echo"];
 
     let result = new_ucmd!().args(&args).arg("FOO-bar").succeeds();
@@ -169,7 +169,7 @@ fn test_echo() {
     assert_eq!(result.stdout_str().trim(), "FOO-bar");
 }
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 #[test]
 fn test_if_windows_batch_files_can_be_executed() {
     let result = new_ucmd!().arg("./runBat.bat").succeeds();
@@ -538,7 +538,7 @@ fn test_chdir_happens_after_relative_file_loading() {
     );
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument_no_quotes() {
     let scene = TestScenario::new(util_name!());
@@ -551,7 +551,7 @@ fn test_split_string_into_args_one_argument_no_quotes() {
     assert_eq!(out, "hello world\n");
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_one_argument() {
     let scene = TestScenario::new(util_name!());
@@ -564,7 +564,7 @@ fn test_split_string_into_args_one_argument() {
     assert_eq!(out, "hello world\n");
 }
 
-#[cfg(not(target_os = "windows"))] // windows has no executable "echo", its only supported as part of a batch-file
+#[cfg(not(windows))] // windows has no executable "echo", its only supported as part of a batch-file
 #[test]
 fn test_split_string_into_args_s_escaping_challenge() {
     let scene = TestScenario::new(util_name!());
@@ -588,7 +588,7 @@ fn test_split_string_into_args_s_escaped_c_not_allowed() {
     );
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_s_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -601,7 +601,7 @@ fn test_split_string_into_args_s_whitespace_handling() {
     assert_eq!(out, "xAx\nxBx\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_long_option_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -614,7 +614,7 @@ fn test_split_string_into_args_long_option_whitespace_handling() {
     assert_eq!(out, "xAx\nxBx\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_option_forms_match_gnu_required_argument_handling() {
     let scene = TestScenario::new(util_name!());
@@ -638,7 +638,7 @@ fn test_split_string_option_forms_match_gnu_required_argument_handling() {
         .stdout_is("x:one\nx:two\n");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_into_args_debug_output_whitespace_handling() {
     let scene = TestScenario::new(util_name!());
@@ -685,7 +685,7 @@ fn test_env_split_quoted_with_backslash_space() {
     assert_eq!(out.stdout_str(), output);
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
     let scene = TestScenario::new(util_name!());
@@ -721,7 +721,7 @@ fn test_split_string_single_quotes_keep_unknown_backslash_sequences_literal() {
         .stdout_is("\\9");
 }
 
-#[cfg(not(target_os = "windows"))] // no printf available
+#[cfg(not(windows))] // no printf available
 #[test]
 fn test_split_string_backslash_a_behavior_matches_gnu_quoting_context() {
     let scene = TestScenario::new(util_name!());
@@ -1496,7 +1496,7 @@ mod test_raw_string_parser {
         string_parser,
     };
 
-    const LEN_OWL: usize = if cfg!(target_os = "windows") { 2 } else { 4 };
+    const LEN_OWL: usize = if cfg!(windows) { 2 } else { 4 };
 
     #[test]
     fn test_ascii_only_take_one_look_at_correct_data_and_end_behavior() {
@@ -1709,7 +1709,7 @@ mod test_raw_string_parser {
     fn test_deal_with_invalid_encoding() {
         let owl_invalid_part;
         let (brace_1, brace_2);
-        #[cfg(target_os = "windows")]
+        #[cfg(windows)]
         {
             let mut buffer = [0u16; 2];
             let owl = '🦉'.encode_utf16(&mut buffer);
@@ -1717,7 +1717,7 @@ mod test_raw_string_parser {
             brace_1 = '<'.encode_utf16(&mut buffer).to_vec();
             brace_2 = '>'.encode_utf16(&mut buffer).to_vec();
         }
-        #[cfg(not(target_os = "windows"))]
+        #[cfg(not(windows))]
         {
             let mut buffer = [0u8; 4];
             let owl = '🦉'.encode_utf8(&mut buffer);
@@ -1987,7 +1987,7 @@ fn test_shebang_error() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_reject_shell_style_variable_expansions() {
     for split in [
         "-Secho $TEST_VAR_12345",
@@ -2004,7 +2004,7 @@ fn test_reject_shell_style_variable_expansions() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_simple_braced_variable() {
     new_ucmd!()
         .env("TEST_VAR_12345", "value")

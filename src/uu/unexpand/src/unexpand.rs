@@ -297,7 +297,7 @@ impl Read for Input {
 
 fn open(path: &OsString) -> UResult<BufReader<Input>> {
     // some platforms show different read error
-    #[cfg(any(target_os = "wasi", target_os = "windows"))]
+    #[cfg(any(target_os = "wasi", windows))]
     {
         let filename = std::path::Path::new(path);
         if filename.is_dir() {

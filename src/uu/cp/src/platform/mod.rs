@@ -24,14 +24,14 @@ mod linux;
 #[cfg(any(target_os = "linux", target_os = "android"))]
 pub(crate) use self::linux::copy_on_write;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 mod windows;
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 pub(crate) use self::windows::copy_on_write;
 
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, windows)))]
 mod other;
-#[cfg(not(any(unix, target_os = "windows")))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) use self::other::copy_on_write;
 
 #[cfg(target_os = "wasi")]
