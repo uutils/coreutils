@@ -1905,7 +1905,7 @@ fn test_mv_dir_into_path_slash() {
     assert!(at.dir_exists("f/b"));
 }
 
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))]
+#[cfg(all(unix, not(any(target_vendor = "apple", target_os = "openbsd"))))]
 #[test]
 fn test_acl() {
     use std::process::Command;
