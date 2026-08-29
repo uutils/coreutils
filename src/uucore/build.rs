@@ -260,6 +260,15 @@ fn embed_static_utility_locales(
         return Ok(()); // nothing to scan
     };
 
+    // Which utilities we embed here depends on the crates unpacked next to us
+    // in the registry, i.e. on what the consumer depends on. Cargo only knows
+    // about the files we declare, so without watching the consumer's lock file
+    // a utility added after the first build would keep printing raw message
+    // ids until uucore is rebuilt by hand.
+    if let Some(lock_file) = consumer_lock_file(env::var_os("OUT_DIR").as_deref()) {
+        println!("cargo:rerun-if-changed={}", lock_file.display());
+    }
+
     // First, try to embed uucore locales - critical for common translations like "Usage:"
     embed_component_locales(embedded_file, locales_to_embed, "uucore", |locale| {
         Path::new(&manifest_dir).join(format!("locales/{locale}.ftl"))
@@ -289,6 +298,19 @@ fn embed_static_utility_locales(
     }
 
     Ok(())
+}
+
+/// Find the `Cargo.lock` of the project we are being built for, by walking up
+/// from `OUT_DIR` (`<target>/<profile>/build/uucore-<hash>/out`) until a lock
+/// file shows up next to a target directory.
+///
+/// Returns `None` when there is none to watch, e.g. for a build with a target
+/// directory outside of the project.
+fn consumer_lock_file(out_dir: Option<&std::ffi::OsStr>) -> Option<PathBuf> {
+    Path::new(out_dir?)
+        .ancestors()
+        .map(|dir| dir.join("Cargo.lock"))
+        .find(|lock| lock.is_file())
 }
 
 /// Determines which locales to embed into the binary.
@@ -436,6 +458,21 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn consumer_lock_file_found_above_target_dir() {
+        let tmp = std::env::temp_dir().join(format!("uucore-build-{}", std::process::id()));
+        let out_dir = tmp.join("target/debug/build/uucore-1234/out");
+        std::fs::create_dir_all(&out_dir).unwrap();
+        assert_eq!(consumer_lock_file(Some(out_dir.as_os_str())), None);
+
+        let lock = tmp.join("Cargo.lock");
+        std::fs::write(&lock, "").unwrap();
+        assert_eq!(consumer_lock_file(Some(out_dir.as_os_str())), Some(lock));
+
+        assert_eq!(consumer_lock_file(None), None);
+        std::fs::remove_dir_all(&tmp).unwrap();
+    }
 
     #[test]
     fn get_locales_to_embed_no_lang() {
