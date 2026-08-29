@@ -4308,7 +4308,6 @@ dependencies = [
  "notify",
  "rstest",
  "rustix",
- "same-file",
  "uucore",
  "windows-sys 0.61.2",
 ]

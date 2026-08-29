@@ -483,7 +483,6 @@ rustc-hash = "2.1.1"
 rust-ini = "0.21.0"
 # raw-backend's linux_execfn is not supported on linux < 6.4 if /proc is not mounted. So use-libc-auxv is needed
 rustix = { version = "1.1.4", features = ["param", "use-libc-auxv", "time"] }
-same-file = "1.0.6"
 self_cell = "1.0.4"
 selinux = "0.6"
 string-interner = "0.20.0"
