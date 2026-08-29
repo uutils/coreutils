@@ -36,19 +36,6 @@ enum RemainingMode {
     Plus,
 }
 
-/// Decide whether the character is either a space or a comma.
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// assert!(is_space_or_comma(' '))
-/// assert!(is_space_or_comma(','))
-/// assert!(!is_space_or_comma('a'))
-/// ```
-fn is_space_or_comma(c: char) -> bool {
-    c == ' ' || c == ','
-}
-
 /// Decide whether the character is either a digit or a comma.
 fn is_digit_or_comma(c: char) -> bool {
     c.is_ascii_digit() || c == ','
@@ -76,16 +63,16 @@ impl UError for ParseError {}
 /// Parse a list of tabstops from a `--tabs` argument.
 ///
 /// This function returns both the vector of numbers appearing in the
-/// comma- or space-separated list, and also an optional mode, specified
+/// space-, tab-, or comma-separated list, and also an optional mode, specified
 /// by either a "/" or a "+" character appearing before the final number
 /// in the list. This mode defines the strategy to use for computing the
 /// number of spaces to use for columns beyond the end of the tab stop
 /// list specified here.
 fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
-    // Leading commas and spaces are ignored.
-    let s = s.trim_start_matches(is_space_or_comma);
+    // Leading spaces, tabs, and commas are ignored.
+    let s = s.trim_start_matches([' ', '\t', ',']);
 
-    // If there were only commas and spaces in the string, just use the
+    // If there were only spaces, tabs, and commas in the string, just use the
     // default tabstops.
     if s.is_empty() {
         return Ok((RemainingMode::None, vec![DEFAULT_TABSTOP]));
@@ -94,7 +81,7 @@ fn tabstops_parse(s: &str) -> Result<(RemainingMode, Vec<usize>), ParseError> {
     let mut nums = vec![];
     let mut remaining_mode = RemainingMode::None;
     let mut is_specifier_already_used = false;
-    for word in s.split(is_space_or_comma) {
+    for word in s.split([' ', '\t', ',']) {
         let bytes = word.as_bytes();
         for i in 0..bytes.len() {
             match bytes[i] {

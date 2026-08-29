@@ -66,21 +66,15 @@ fn test_with_multiple_files() {
 }
 
 #[test]
-fn test_tabs_space_separated_list() {
-    new_ucmd!()
-        .args(&["--tabs", "3 6 9"])
-        .pipe_in("a\tb\tc\td\te")
-        .succeeds()
-        .stdout_is("a  b  c  d e");
-}
-
-#[test]
-fn test_tabs_mixed_style_list() {
-    new_ucmd!()
-        .args(&["--tabs", ", 3,6 9"])
-        .pipe_in("a\tb\tc\td\te")
-        .succeeds()
-        .stdout_is("a  b  c  d e");
+fn test_tabs() {
+    for list in ["3 6 9", "3,6,9", "3\t6\t9", ", \t3,\t6 9,"] {
+        new_ucmd!()
+            .arg("--tabs")
+            .arg(list)
+            .pipe_in("a\tb\tc\td\te")
+            .succeeds()
+            .stdout_is("a  b  c  d e");
+    }
 }
 
 #[test]
