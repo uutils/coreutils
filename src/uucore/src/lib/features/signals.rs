@@ -656,13 +656,13 @@ pub unsafe extern "C" fn capture_startup_state() {
 #[cfg(unix)]
 macro_rules! init_startup_state_capture {
     () => {
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "ios")))]
         #[used]
         #[unsafe(link_section = ".init_array")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
             $crate::signals::capture_startup_state;
 
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
         #[used]
         #[unsafe(link_section = "__DATA,__mod_init_func")]
         static CAPTURE_STARTUP_STATE: unsafe extern "C" fn() =
