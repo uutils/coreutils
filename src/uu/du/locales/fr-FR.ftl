@@ -64,7 +64,6 @@ du-error-cannot-open-for-reading = impossible d'ouvrir { $file } en lecture : Au
 du-error-invalid-zero-length-file-name = { $file }:{ $line } : nom de fichier de longueur zéro invalide
 du-error-extra-operand-with-files0-from = opérande supplémentaire { $file }
   les opérandes de fichier ne peuvent pas être combinées avec --files0-from
-du-error-invalid-block-size-argument = argument --{ $option } invalide { $value }
 du-error-cannot-access-no-such-file = impossible d'accéder à { $path } : Aucun fichier ou répertoire de ce type
 du-error-printing-thread-panicked = Le thread d'affichage a paniqué.
 du-error-invalid-suffix = suffixe invalide dans l'argument --{ $option } { $value }

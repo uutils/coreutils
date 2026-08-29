@@ -64,7 +64,6 @@ du-error-cannot-open-for-reading = cannot open { $file } for reading: No such fi
 du-error-invalid-zero-length-file-name = { $file }:{ $line }: invalid zero-length file name
 du-error-extra-operand-with-files0-from = extra operand { $file }
   file operands cannot be combined with --files0-from
-du-error-invalid-block-size-argument = invalid --{ $option } argument { $value }
 du-error-cannot-access-no-such-file = cannot access { $path }: No such file or directory
 du-error-printing-thread-panicked = Printing thread panicked.
 du-error-invalid-suffix = invalid suffix in --{ $option } argument { $value }

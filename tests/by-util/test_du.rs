@@ -1502,6 +1502,16 @@ fn test_du_invalid_threshold() {
     ts.ucmd().arg(format!("--threshold={threshold}")).fails();
 }
 
+/// GNU du hands `--threshold` to `xstrtoumax` without trimming, so a padded
+/// value is rejected rather than read as the size it surrounds.
+#[test]
+fn test_du_threshold_with_leading_whitespace() {
+    new_ucmd!()
+        .arg("--threshold=  -1K")
+        .fails()
+        .stderr_only("du: invalid --threshold argument '  -1K'\n");
+}
+
 #[test]
 fn test_du_threshold_error_handling() {
     // Test missing threshold value
@@ -2796,4 +2806,111 @@ fn test_du_repeated_time_style() {
         .arg("date_test")
         .succeeds();
     result.stdout_only("0\t2016-06-16 00:00:00.000000000 +0000\tdate_test\n");
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+du: invalid suffix in --block-size argument '1fb'
+   ╭─[ du:1:8 ]
+   │
+ 1 │ du -B 1fb
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_an_attached_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=1fb")
+            .fails_with_code(1);
+
+        assert_eq!(result.caret_column(), Some(18));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Zero parses as a number but is not a usable block size, so the
+        // whole value is underlined and nothing is said about the unit.
+        assert!(
+            stderr.starts_with("du: invalid --block-size argument '0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_the_sign_of_a_rejected_threshold() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-0"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // '-0' is rejected for the sign and the zero together, so the caret
+        // covers both.
+        assert!(
+            stderr.starts_with("du: invalid --threshold argument '-0'"),
+            "{stderr}"
+        );
+        assert_eq!(result.caret_column(), Some(7));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_skips_the_sign_of_a_threshold_with_an_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-t", "-1fb"])
+            .fails_with_code(1);
+
+        // Here only the unit is at fault, so the sign is not underlined.
+        assert_eq!(result.caret_column(), Some(9));
+        assert!(
+            result.stderr_as_displayed().contains("not a known unit"),
+            "{}",
+            result.stderr_as_displayed()
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1)
+            .stderr_is("du: invalid suffix in --block-size argument '1fb'\n");
+    }
 }
