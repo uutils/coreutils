@@ -30,6 +30,8 @@ use paths::{FileExtTail, HeaderPrinter, Input, InputKind};
 use std::cmp::Ordering;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write, stdin, stdout};
+#[cfg(unix)]
+use std::os::fd::AsFd;
 use std::path::{Path, PathBuf};
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult, USimpleError, set_exit_code};
@@ -259,10 +261,7 @@ fn tail_stdin(
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
     #[cfg(target_vendor = "apple")]
-    if let Ok(mut stdin_handle) = same_file::Handle::stdin()
-        && let Ok(meta) = stdin_handle.as_file_mut().metadata()
-        && meta.file_type().is_dir()
-    {
+    if uucore::fs::is_stdin_directory(&stdin()) {
         set_exit_code(1);
         show_error!(
             "{}",
@@ -288,9 +287,7 @@ fn tail_stdin(
         // Save the current seek position/offset of a stdin redirected file.
         // This is needed to pass "gnu/tests/tail-2/start-middle.sh"
         #[cfg(unix)]
-        let stdin_offset = same_file::Handle::stdin()
-            .and_then(|mut h| h.as_file_mut().stream_position())
-            .unwrap_or(0); // fifo
+        let stdin_offset = rustix::fs::tell(stdin().as_fd()).unwrap_or(0); // fifo
         tail_file(
             settings,
             header_printer,
@@ -574,7 +571,7 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
 // Print the target section of the file
 // use zero-copy on Linux
 fn print_target_section<
-    #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + rustix::fd::AsFd,
+    #[cfg(any(target_os = "linux", target_os = "android"))] R: Read + AsFd,
     #[cfg(not(any(target_os = "linux", target_os = "android")))] R: Read,
 >(
     file: &mut R,
