@@ -283,18 +283,15 @@ fn exec(files: &[PathBuf], settings: &Settings) -> LnResult<()> {
 
     // 1st form. Now there should be only two operands, but if -T is
     // specified we may have a wrong number of operands.
-    if files.len() == 1 {
-        return Err(LnError::MissingDestination(files[0].clone()));
-    }
-    if files.len() > 2 {
-        return Err(LnError::ExtraOperand(
-            files[2].clone().into(),
+    match files {
+        [] => unreachable!("clap excluded it"),
+        [f0] => Err(LnError::MissingDestination(f0.clone())),
+        [f0, f1] => link(f0, f1, settings),
+        [_, _, f2, ..] => Err(LnError::ExtraOperand(
+            f2.clone().into(),
             uucore::execution_phrase().to_string(),
-        ));
+        )),
     }
-    assert!(!files.is_empty());
-
-    link(&files[0], &files[1], settings)
 }
 
 #[allow(clippy::cognitive_complexity)]
