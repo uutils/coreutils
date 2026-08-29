@@ -101,7 +101,7 @@ pub use crate::features::entries;
 pub use crate::features::perms;
 #[cfg(all(feature = "pipes", any(target_os = "linux", target_os = "android")))]
 pub use crate::features::pipes;
-#[cfg(all(any(unix, windows), feature = "process"))]
+#[cfg(all(any(all(unix, not(target_os = "aix")), windows), feature = "process"))]
 pub use crate::features::process;
 #[cfg(all(unix, feature = "safe-copy"))]
 pub use crate::features::safe_copy;
