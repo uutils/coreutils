@@ -17,7 +17,7 @@ use string_interner::StringInterner;
 use string_interner::backend::BucketBackend;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::{UError, UResult, USimpleError};
+use uucore::error::{FromIo, UError, UResult, USimpleError};
 use uucore::{format_usage, show, translate};
 
 // short types for switching interning behavior on the fly.
@@ -62,7 +62,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 return Err(TsortError::IsDir(input.to_string_lossy().to_string()).into());
             }
         }
-        let file = File::open(input)?;
+        let file = File::open(input).map_err_context(|| input.maybe_quote().to_string())?;
         // advise the OS we will access the data sequentially if possible
         #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
         let _ = rustix::fs::fadvise(&file, 0, None, rustix::fs::Advice::Sequential);

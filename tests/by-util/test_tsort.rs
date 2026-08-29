@@ -243,3 +243,11 @@ fn test_only_one_input_file() {
         .fails_with_code(1)
         .stderr_only(TSORT_EXTRA_OPERAND_ERROR);
 }
+
+#[test]
+fn test_nonexistent_file_error_includes_filename() {
+    new_ucmd!()
+        .arg("nosuchfile.txt")
+        .fails_with_code(1)
+        .stderr_only("tsort: nosuchfile.txt: No such file or directory\n");
+}
