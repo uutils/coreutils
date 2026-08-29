@@ -347,7 +347,14 @@ the difference:
   says otherwise (see below). In a script, a pipe, or a test harness, the
   utility keeps printing its plain one-line message, so existing scripts that
   match on stderr keep working.
-- Exit codes are unchanged.
+- A report is drawn only when the error can be **tied to something on the
+  command line**. When it cannot - the error is not about any one argument, or
+  the operand it names was rewritten or consumed before it could be located -
+  the plain one-line message is printed instead, even at a terminal. A utility
+  in the table below therefore reports the parse errors it can place, not
+  every error it has.
+- Exit codes are unchanged, and so is the `Try '... --help'` hint: an error
+  that is a usage error still prints it under the report.
 - Colors follow the usual conventions: they are used only on a terminal, and
   [`NO_COLOR`](https://no-color.org/) disables them.
 - All messages, labels and help lines are localized like the rest of uutils
