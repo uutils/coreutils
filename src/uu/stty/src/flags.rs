@@ -80,7 +80,7 @@ pub const INPUT_FLAGS: &[Flag<I>] = &[
     Flag::new("ixany", I::IXANY),
     #[cfg(not(target_os = "redox"))]
     Flag::new("imaxbel", I::IMAXBEL).sane(),
-    #[cfg(any(target_os = "android", target_os = "linux", target_vendor = "apple"))]
+    #[cfg(any(target_vendor = "apple", target_os = "android", target_os = "linux"))]
     Flag::new("iutf8", I::IUTF8),
 ];
 

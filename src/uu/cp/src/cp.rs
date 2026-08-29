@@ -175,11 +175,11 @@ pub enum ReflinkMode {
 impl Default for ReflinkMode {
     #[allow(clippy::derivable_impls)]
     fn default() -> Self {
-        #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+        #[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
         {
             Self::Auto
         }
-        #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+        #[cfg(not(any(target_vendor = "apple", target_os = "linux", target_os = "android")))]
         {
             Self::Never
         }
@@ -2815,8 +2815,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         };
 
         #[cfg(not(any(
-            target_os = "android",
             target_vendor = "apple",
+            target_os = "android",
             target_os = "freebsd",
             target_os = "redox",
         )))]
@@ -2831,8 +2831,8 @@ fn handle_no_preserve_mode(options: &Options, org_mode: u32) -> u32 {
         }
 
         #[cfg(any(
-            target_os = "android",
             target_vendor = "apple",
+            target_os = "android",
             target_os = "freebsd",
             target_os = "redox",
         ))]

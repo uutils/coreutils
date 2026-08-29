@@ -48,8 +48,8 @@ fn test_permission() {
 #[cfg(all(
     feature = "feat_external_libstdbuf",
     unix,
-    not(target_os = "openbsd"),
     not(target_vendor = "apple"),
+    not(target_os = "openbsd"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
@@ -274,8 +274,8 @@ fn test_stdbuf_invalid_mode_fails() {
 // musl libc dynamic loader does not support LD_DEBUG, so disable on musl targets as well.
 #[cfg(all(
     unix,
-    not(target_os = "openbsd"),
     not(target_vendor = "apple"),
+    not(target_os = "openbsd"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
