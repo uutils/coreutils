@@ -765,9 +765,7 @@ fn standard(mut paths: Vec<OsString>, b: &Behavior) -> UResult<()> {
         }
 
         if b.no_target_dir && target.is_dir() {
-            return Err(
-                InstallError::OverrideDirectoryFailed(target.clone(), source.clone()).into(),
-            );
+            return Err(InstallError::OverrideDirectoryFailed(target, source.clone()).into());
         }
 
         if is_potential_directory_path(&target) {
@@ -993,11 +991,9 @@ fn copy_file(from: &Path, to: &Path) -> UResult<()> {
     }
 
     if to.is_dir() && !from.is_dir() {
-        return Err(InstallError::OverrideDirectoryFailed(
-            to.to_path_buf().clone(),
-            from.to_path_buf().clone(),
-        )
-        .into());
+        return Err(
+            InstallError::OverrideDirectoryFailed(to.to_path_buf(), from.to_path_buf()).into(),
+        );
     }
 
     // Remove existing file (create_new below provides TOCTOU protection)
