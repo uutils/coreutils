@@ -8,7 +8,7 @@
 
 use std::ffi::OsString;
 
-use uucore::diagnostics::Snapshot;
+use uucore::diagnostics::{Snapshot, ValueOptions};
 use uucore::translate;
 
 use crate::csplit_error::CsplitError;
@@ -26,10 +26,12 @@ pub struct Operands<'a> {
     pub digits: Option<&'a str>,
 }
 
-/// The short and long spellings of the options whose value takes a separate
-/// argument, which a positional operand must not be counted as.
-const VALUE_SHORTS: [u8; 3] = [b'b', b'f', b'n'];
-const VALUE_LONGS: [&str; 3] = ["suffix-format", "prefix", "digits"];
+/// The options whose value can be a separate argument, which an operand must
+/// not be counted as.
+const VALUE_OPTIONS: ValueOptions = ValueOptions {
+    shorts: &['b', 'f', 'n'],
+    longs: &["suffix-format", "prefix", "digits"],
+};
 
 /// Render `err` against `args` — the whole argument list, program name
 /// included — where `operands` are the operands as typed.
@@ -38,11 +40,12 @@ const VALUE_LONGS: [&str; 3] = ["suffix-format", "prefix", "digits"];
 /// the caller should fall back to the plain one-line message.
 pub fn render(args: &[OsString], operands: &Operands, err: &CsplitError) -> bool {
     let snapshot = Snapshot::with_program(args);
+    let index_of_pattern = |pattern: &str| index_of_pattern(args, &snapshot, operands, pattern);
     let message = err.to_string();
 
     match err {
         CsplitError::InvalidPattern(pattern, problem) => {
-            let Some(index) = index_of_pattern(args, operands, pattern) else {
+            let Some(index) = index_of_pattern(pattern) else {
                 return false;
             };
             // Without a problem there is no offset to trust, so the operand is
@@ -66,9 +69,9 @@ pub fn render(args: &[OsString], operands: &Operands, err: &CsplitError) -> bool
         }
         // Neither error says which operand it is about, so the pattern is
         // found by the line number it carries.
-        CsplitError::LineNumberIsZero => render_line_number(&snapshot, args, operands, 0, &message),
+        CsplitError::LineNumberIsZero => render_line_number(args, &snapshot, operands, 0, &message),
         CsplitError::LineNumberSmallerThanPrevious(current, _) => {
-            render_line_number(&snapshot, args, operands, *current, &message)
+            render_line_number(args, &snapshot, operands, *current, &message)
         }
         CsplitError::InvalidNumber(_) => {
             let Some(digits) = operands.digits else {
@@ -110,8 +113,8 @@ pub fn render(args: &[OsString], operands: &Operands, err: &CsplitError) -> bool
 /// Render `message` against the pattern operand holding the line number
 /// `line_number`.
 fn render_line_number(
-    snapshot: &Snapshot,
     args: &[OsString],
+    snapshot: &Snapshot,
     operands: &Operands,
     line_number: usize,
     message: &str,
@@ -123,7 +126,7 @@ fn render_line_number(
     else {
         return false;
     };
-    let Some(index) = index_of_pattern(args, operands, pattern) else {
+    let Some(index) = index_of_pattern(args, snapshot, operands, pattern) else {
         return false;
     };
     snapshot.render(
@@ -136,91 +139,98 @@ fn render_line_number(
 
 /// Where in `args` the pattern operand `pattern` sits.
 ///
-/// The patterns are positional operands following FILE, but three of csplit's
-/// options take a separate value, so a positional cannot simply be counted
-/// off: in `csplit -n 3 file 5` the `3` is not one. The list is walked with
-/// those three in mind, and the argument arrived at is checked against the
-/// pattern as typed, so a walk thrown off by a spelling this does not know
-/// draws nothing rather than the wrong thing.
-fn index_of_pattern(args: &[OsString], operands: &Operands, pattern: &str) -> Option<usize> {
+/// The patterns are the operands following FILE. The argument arrived at is
+/// checked against the pattern as typed, so a walk thrown off by a spelling
+/// [`VALUE_OPTIONS`] does not know draws nothing rather than the wrong thing.
+fn index_of_pattern(
+    args: &[OsString],
+    snapshot: &Snapshot,
+    operands: &Operands,
+    pattern: &str,
+) -> Option<usize> {
     let nth = operands.patterns.iter().position(|p| *p == pattern)?;
-    // FILE is the first positional; the patterns follow it.
-    let index = *positional_indices(args).get(nth + 1)?;
+    // FILE is the first operand; the patterns follow it.
+    let index = snapshot.index_of_operand(nth + 1, &VALUE_OPTIONS)?;
     (args[index].as_encoded_bytes() == pattern.as_bytes()).then_some(index)
-}
-
-/// The indices in `args` of the positional operands, program name excluded.
-fn positional_indices(args: &[OsString]) -> Vec<usize> {
-    let mut positionals = Vec::new();
-    let mut options_ended = false;
-    let mut expect_value = false;
-
-    for (index, arg) in args.iter().enumerate().skip(1) {
-        let bytes = arg.as_encoded_bytes();
-        if expect_value {
-            expect_value = false;
-            continue;
-        }
-        if options_ended {
-            positionals.push(index);
-            continue;
-        }
-        if bytes == b"--" {
-            options_ended = true;
-        } else if bytes == b"-" || !bytes.starts_with(b"-") {
-            positionals.push(index);
-        } else if let Some(long) = bytes.strip_prefix(b"--") {
-            // `--name=value` carries its own value; `--name` takes the next
-            // argument. Long names may be abbreviated, so a prefix counts.
-            let name = String::from_utf8_lossy(long);
-            expect_value =
-                !name.contains('=') && VALUE_LONGS.iter().any(|long| long.starts_with(&*name));
-        } else {
-            // A cluster of short options: the first that takes a value
-            // swallows the rest of the cluster, or the next argument when the
-            // cluster ends there.
-            let cluster = &bytes[1..];
-            if let Some(at) = cluster.iter().position(|c| VALUE_SHORTS.contains(c)) {
-                expect_value = at + 1 == cluster.len();
-            }
-        }
-    }
-    positionals
 }
 
 #[cfg(test)]
 mod tests {
-    use super::positional_indices;
+    use super::{Operands, VALUE_OPTIONS, index_of_pattern};
     use std::ffi::OsString;
+    use uucore::diagnostics::Snapshot;
 
-    fn indices(args: &[&str]) -> Vec<usize> {
+    /// The index the caret would be drawn at for `pattern`, given a command
+    /// line and the patterns clap picked out of it.
+    fn index(args: &[&str], patterns: &[&str], pattern: &str) -> Option<usize> {
         let args: Vec<OsString> = args.iter().map(OsString::from).collect();
-        positional_indices(&args)
+        let operands = Operands {
+            patterns,
+            suffix_format: None,
+            digits: None,
+        };
+        index_of_pattern(&args, &Snapshot::with_program(&args), &operands, pattern)
     }
 
     #[test]
-    fn a_separate_option_value_is_not_a_positional() {
-        assert_eq!(indices(&["csplit", "-n", "3", "file", "5"]), vec![3, 4]);
-        assert_eq!(indices(&["csplit", "-n3", "file", "5"]), vec![2, 3]);
+    fn a_separate_option_value_is_not_a_pattern() {
+        // Without the option table, the `3` would be taken for the first
+        // pattern and the caret drawn on it.
         assert_eq!(
-            indices(&["csplit", "--digits", "3", "file", "5"]),
-            vec![3, 4]
+            index(&["csplit", "-n", "3", "file", "5"], &["5"], "5"),
+            Some(4)
         );
-        assert_eq!(indices(&["csplit", "--digits=3", "file", "5"]), vec![2, 3]);
+        assert_eq!(index(&["csplit", "-n3", "file", "5"], &["5"], "5"), Some(3));
+        assert_eq!(
+            index(&["csplit", "--digits", "3", "file", "5"], &["5"], "5"),
+            Some(4)
+        );
+        assert_eq!(
+            index(&["csplit", "--digits=3", "file", "5"], &["5"], "5"),
+            Some(3)
+        );
         // An abbreviated long name still takes its value.
-        assert_eq!(indices(&["csplit", "--dig", "3", "file", "5"]), vec![3, 4]);
+        assert_eq!(
+            index(&["csplit", "--dig", "3", "file", "5"], &["5"], "5"),
+            Some(4)
+        );
     }
 
     #[test]
     fn a_flag_takes_nothing_and_a_cluster_ends_in_its_value() {
-        assert_eq!(indices(&["csplit", "-k", "file", "5"]), vec![2, 3]);
-        assert_eq!(indices(&["csplit", "-kn", "3", "file", "5"]), vec![3, 4]);
-        assert_eq!(indices(&["csplit", "-kn3", "file", "5"]), vec![2, 3]);
+        assert_eq!(index(&["csplit", "-k", "file", "5"], &["5"], "5"), Some(3));
+        assert_eq!(
+            index(&["csplit", "-kn", "3", "file", "5"], &["5"], "5"),
+            Some(4)
+        );
+        assert_eq!(
+            index(&["csplit", "-kn3", "file", "5"], &["5"], "5"),
+            Some(3)
+        );
     }
 
     #[test]
-    fn everything_after_a_double_dash_is_positional() {
-        assert_eq!(indices(&["csplit", "--", "-file", "5"]), vec![2, 3]);
-        assert_eq!(indices(&["csplit", "-", "5"]), vec![1, 2]);
+    fn the_patterns_are_counted_in_order_after_the_file() {
+        let args = ["csplit", "notes.txt", "3", "1"];
+        assert_eq!(index(&args, &["3", "1"], "3"), Some(2));
+        assert_eq!(index(&args, &["3", "1"], "1"), Some(3));
+    }
+
+    #[test]
+    fn a_walk_landing_elsewhere_draws_nothing() {
+        // The patterns clap reports do not line up with the line: rather than
+        // blame whatever sits there, nothing is drawn.
+        assert_eq!(index(&["csplit", "notes.txt"], &["5"], "5"), None);
+    }
+
+    #[test]
+    fn the_option_table_names_every_value_taking_option() {
+        for option in VALUE_OPTIONS.longs {
+            assert!(VALUE_OPTIONS.takes_next(&format!("--{option}")));
+        }
+        for short in VALUE_OPTIONS.shorts {
+            assert!(VALUE_OPTIONS.takes_next(&format!("-{short}")));
+        }
+        assert!(!VALUE_OPTIONS.takes_next("-k"));
     }
 }

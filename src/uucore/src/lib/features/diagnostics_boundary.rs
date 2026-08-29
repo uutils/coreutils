@@ -93,6 +93,48 @@ impl OptionValue {
     }
 }
 
+/// The options whose value is written as a separate argument.
+///
+/// An operand cannot be counted off by position alone once a value can sit
+/// between the operands: in `csplit -n 3 file 5` the `3` is a value, not the
+/// first operand. Only the spellings that put the value in the *next*
+/// argument matter; `--name=value` and `-dq` are self-contained.
+pub struct ValueOptions<'a> {
+    /// The short names, without the `-`.
+    pub shorts: &'a [char],
+    /// The long names, without the `--`. An unambiguous abbreviation counts
+    /// too, since `infer_long_args` accepts one; an ambiguous one never gets
+    /// this far, clap having refused it first.
+    pub longs: &'a [&'a str],
+}
+
+impl ValueOptions<'_> {
+    /// For a utility none of whose options takes a separate value, where an
+    /// operand is simply an argument that does not look like an option.
+    pub const NONE: Self = Self {
+        shorts: &[],
+        longs: &[],
+    };
+
+    /// Whether `arg` names one of these options in the spelling that takes the
+    /// argument after it as its value.
+    ///
+    /// # Arguments
+    ///
+    /// * `arg` - An argument already known to start with `-` and not to be a
+    ///   lone `-` or a bare `--`.
+    pub fn takes_next(&self, arg: &str) -> bool {
+        if let Some(long) = arg.strip_prefix("--") {
+            // `--name=value` carries its own value.
+            return !long.contains('=') && self.longs.iter().any(|name| name.starts_with(long));
+        }
+        // In a run of short options, only the last one can carry the value.
+        arg.strip_prefix('-')
+            .and_then(|cluster| cluster.chars().next_back())
+            .is_some_and(|last| self.shorts.contains(&last))
+    }
+}
+
 /// The items of a separated list, each with its byte range inside `list`.
 ///
 /// A caret pointing at one item of a list — a `dd` conversion flag, a `join`
