@@ -66,7 +66,7 @@ pub enum LnError {
     #[error("{}", translate!("ln-error-missing-destination", "operand" => _0.quote()))]
     MissingDestination(PathBuf),
 
-    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1.clone()))]
+    #[error("{}", translate!("ln-error-extra-operand", "operand" => _0.quote(), "program" => _1))]
     ExtraOperand(OsString, String),
 
     #[error("{}", translate!("ln-failed-to-create-hard-link-dir", "source" => _0.to_string_lossy()))]
@@ -350,7 +350,7 @@ fn link_files_in_dir(files: &[PathBuf], target_dir: &Path, settings: &Settings) 
             all_successful = false;
         }
 
-        linked_destinations.insert(targetpath.clone());
+        linked_destinations.insert(targetpath);
     }
     if all_successful {
         Ok(())

@@ -134,15 +134,15 @@ impl Options {
 enum OptionsError {
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-block-size-too-large", "size" => .0))]
     BlockSizeTooLarge(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.,
-    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-block-size", "size" => .0))]
     InvalidBlockSize(String),
     // TODO This needs to vary based on whether `--block-size`
     // or `-B` were provided.
-    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0.clone()))]
+    #[error("{}", translate!("df-error-invalid-suffix", "size" => .0))]
     InvalidSuffix(String),
 
     /// An error getting the columns to display in the output table.
@@ -189,7 +189,7 @@ fn block_size_error(
     let message = options_error.to_string();
     error.size_value_error(
         diag_args,
-        &OptionValue::new(size.clone(), 'B', OPT_BLOCKSIZE_LONG),
+        &OptionValue::new(size, 'B', OPT_BLOCKSIZE_LONG),
         0,
         &message,
         DfError::OptionsError(options_error),

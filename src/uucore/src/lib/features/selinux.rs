@@ -21,16 +21,16 @@ pub enum SeLinuxError {
     #[error("{}", translate!("selinux-error-not-enabled"))]
     SELinuxNotEnabled,
 
-    #[error("{}", translate!("selinux-error-file-open-failure", "error" => .0.clone()))]
+    #[error("{}", translate!("selinux-error-file-open-failure", "error" => .0))]
     FileOpenFailure(String),
 
-    #[error("{}", translate!("selinux-error-context-retrieval-failure", "error" => .0.clone()))]
+    #[error("{}", translate!("selinux-error-context-retrieval-failure", "error" => .0))]
     ContextRetrievalFailure(String),
 
-    #[error("{}", translate!("selinux-error-context-set-failure", "context" => .0.clone(), "error" => .1.clone()))]
+    #[error("{}", translate!("selinux-error-context-set-failure", "context" => .0, "error" => .1))]
     ContextSetFailure(String, String),
 
-    #[error("{}", translate!("selinux-error-context-conversion-failure", "context" => .0.clone(), "error" => .1.clone()))]
+    #[error("{}", translate!("selinux-error-context-conversion-failure", "context" => .0, "error" => .1))]
     ContextConversionFailure(String, String),
 
     #[error("{}", translate!("selinux-error-operation-not-supported"))]

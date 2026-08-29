@@ -134,7 +134,7 @@ impl Display for BackupError {
         write!(
             f,
             "{}",
-            translate!("cp-error-backup-format", "error" => self.0.clone(), "exec" => uucore::execution_phrase())
+            translate!("cp-error-backup-format", "error" => self.0, "exec" => uucore::execution_phrase())
         )
     }
 }
