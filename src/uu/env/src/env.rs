@@ -42,7 +42,7 @@ use std::mem::zeroed;
 #[cfg(unix)]
 use std::os::unix::ffi::OsStrExt;
 
-use uucore::display::{Quotable, print_all_env_vars};
+use uucore::display::{OsWrite, Quotable, print_all_env_vars};
 use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, strip_errno};
 use uucore::line_ending::LineEnding;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -109,6 +109,7 @@ struct Options<'a> {
     sets: Vec<(Cow<'a, OsStr>, Cow<'a, OsStr>)>,
     program: Vec<&'a OsStr>,
     argv0: Option<&'a OsStr>,
+    debug: bool,
     #[cfg(all(unix, not(target_os = "fuchsia")))]
     ignore_signal: SignalRequest,
     #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -492,19 +493,10 @@ fn to_error(text: &NativeIntStr, e: &EnvError) -> Box<dyn UError> {
     }
 }
 
-fn debug_print_args(args: &[OsString]) {
-    let mut error = stderr().lock();
-    let _ = writeln!(error, "input args:");
-    for (i, arg) in args.iter().enumerate() {
-        let _ = writeln!(error, "arg[{i}]: {}", arg.quote());
-    }
-}
-
 fn check_and_handle_string_args(
     arg: &OsString,
     prefix_to_test: &str,
     all_args: &mut Vec<OsString>,
-    do_debug_print_args: Option<&Vec<OsString>>,
     require_non_empty_payload: bool,
     strip_optional_leading_equals: bool,
     located: Option<(&[OsString], usize)>,
@@ -513,10 +505,6 @@ fn check_and_handle_string_args(
     if let Some(remaining_arg) = native_arg.strip_prefix(&*NCvt::convert(prefix_to_test)) {
         if require_non_empty_payload && remaining_arg.is_empty() {
             return Ok(false);
-        }
-
-        if let Some(input_args) = do_debug_print_args {
-            debug_print_args(input_args); // do it here, such that its also printed when we get an error/panic during parsing
         }
 
         let remaining_arg = if strip_optional_leading_equals {
@@ -545,12 +533,10 @@ fn check_and_handle_string_args(
 #[derive(Default)]
 struct EnvAppData {
     do_debug_printing: bool,
-    do_input_debug_printing: Option<bool>,
     had_string_argument: bool,
 }
 
 struct ParsedArguments {
-    original_args: Vec<OsString>,
     matches: clap::ArgMatches,
     #[cfg(all(unix, not(target_os = "fuchsia")))]
     signal_apply_all: BTreeSet<&'static str>,
@@ -605,7 +591,6 @@ impl EnvAppData {
                     b,
                     "--split-string",
                     &mut all_args,
-                    None,
                     true,
                     true,
                     located,
@@ -617,7 +602,6 @@ impl EnvAppData {
                     b,
                     "-S",
                     &mut all_args,
-                    None,
                     true,
                     false,
                     located,
@@ -629,7 +613,6 @@ impl EnvAppData {
                     b,
                     "-vS",
                     &mut all_args,
-                    None,
                     true,
                     false,
                     located,
@@ -642,14 +625,12 @@ impl EnvAppData {
                     b,
                     "-vvS",
                     &mut all_args,
-                    Some(original_args),
                     true,
                     false,
                     located,
                 )? =>
                 {
                     self.do_debug_printing = true;
-                    self.do_input_debug_printing = Some(false); // already done
                     self.had_string_argument = true;
                 }
                 b if b == "--split-string" || b == "-S" || b == "-vS" || b == "-vvS" => {
@@ -660,10 +641,6 @@ impl EnvAppData {
 
                     if b == "-vS" || b == "-vvS" {
                         self.do_debug_printing = true;
-                    }
-                    if b == "-vvS" {
-                        debug_print_args(original_args);
-                        self.do_input_debug_printing = Some(false);
                     }
 
                     let native_next_arg = NCvt::convert(next_arg);
@@ -752,7 +729,6 @@ impl EnvAppData {
             }
         };
         Ok(ParsedArguments {
-            original_args,
             matches,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             signal_apply_all,
@@ -761,23 +737,16 @@ impl EnvAppData {
 
     fn run_env(&mut self, original_args: impl uucore::Args) -> UResult<()> {
         let ParsedArguments {
-            original_args,
             matches,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             signal_apply_all,
         } = self.parse_arguments(original_args)?;
 
         self.do_debug_printing = self.do_debug_printing || (0 != matches.get_count("debug"));
-        self.do_input_debug_printing = self
-            .do_input_debug_printing
-            .or(Some(matches.get_count("debug") >= 2));
-        if Some(true) == self.do_input_debug_printing {
-            debug_print_args(&original_args);
-            self.do_input_debug_printing = Some(false);
-        }
 
         let opts = make_options(
             &matches,
+            self.do_debug_printing,
             #[cfg(all(unix, not(target_os = "fuchsia")))]
             &signal_apply_all,
         )?;
@@ -822,7 +791,7 @@ impl EnvAppData {
             // no program provided, so just dump all env vars to stdout
             print_all_env_vars(opts.line_ending)?;
         } else {
-            return self.run_program(&opts, self.do_debug_printing);
+            return self.run_program(&opts);
         }
 
         Ok(())
@@ -837,11 +806,8 @@ impl EnvAppData {
     /// - 125: if the env command itself fails
     /// - 126: if the program is found but cannot be invoked
     /// - 127: if the program cannot be found
-    fn run_program(
-        &mut self,
-        opts: &Options<'_>,
-        do_debug_printing: bool,
-    ) -> Result<(), Box<dyn UError>> {
+    fn run_program(&mut self, opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
+        let do_debug_printing = opts.debug;
         let prog = Cow::from(opts.program[0]);
 
         let arg0 = match opts.argv0 {
@@ -945,6 +911,10 @@ impl EnvAppData {
 fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
     // remove all env vars if told to ignore presets
     if opts.ignore_env {
+        if opts.debug {
+            let mut error = stderr().lock();
+            let _ = writeln!(error, "cleaning environ");
+        }
         for (ref name, _) in env::vars_os() {
             unsafe {
                 env::remove_var(name);
@@ -956,6 +926,7 @@ fn apply_removal_of_all_env_vars(opts: &Options<'_>) {
 #[cfg_attr(not(unix), allow(clippy::elidable_lifetime_names))]
 fn make_options<'a>(
     matches: &'a clap::ArgMatches,
+    debug: bool,
     #[cfg(all(unix, not(target_os = "fuchsia")))] signal_apply_all: &BTreeSet<&'static str>,
 ) -> UResult<Options<'a>> {
     let ignore_env = matches.get_flag("ignore-environment");
@@ -988,6 +959,7 @@ fn make_options<'a>(
         sets: vec![],
         program: vec![],
         argv0,
+        debug,
         #[cfg(all(unix, not(target_os = "fuchsia")))]
         ignore_signal,
         #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -1024,6 +996,12 @@ fn make_options<'a>(
 
 fn apply_unset_env_vars(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     for name in &opts.unsets {
+        if opts.debug {
+            let mut error = stderr().lock();
+            let _ = error.write_all(b"unset:    ");
+            let _ = error.write_all_os(name);
+            let _ = error.write_all(b"\n");
+        }
         let native_name = NativeStr::new(name);
         if name.is_empty()
             || native_name.contains('\0').unwrap()
@@ -1051,6 +1029,10 @@ fn apply_change_directory(opts: &Options<'_>) -> Result<(), Box<dyn UError>> {
     }
 
     if let Some(d) = opts.running_directory {
+        if opts.debug {
+            let mut error = stderr().lock();
+            let _ = writeln!(error, "chdir:    {}", d.quote());
+        }
         match env::set_current_dir(d) {
             Ok(()) => d,
             Err(error) => {
@@ -1095,6 +1077,14 @@ fn apply_specified_env_vars(opts: &Options<'_>) {
                 translate!("env-warning-no-name-specified", "value" => val.quote())
             );
             continue;
+        }
+        if opts.debug {
+            let mut error = stderr().lock();
+            let _ = error.write_all(b"setenv:   ");
+            let _ = error.write_all_os(name);
+            let _ = error.write_all(b"=");
+            let _ = error.write_all_os(val);
+            let _ = error.write_all(b"\n");
         }
         unsafe {
             env::set_var(name, val);
