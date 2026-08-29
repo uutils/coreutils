@@ -182,7 +182,7 @@ const MAX_KTIME_T: Duration = if cfg!(target_os = "linux") {
 /// Sets up a timer on SIGALRM for platforms that support POSIX.1-2008 realtime
 /// clock extensions. Notably, both Android and Redox do not support the latter
 /// fallback since it was removed in that same spec.
-#[cfg(not(any(target_vendor = "apple", target_os = "openbsd", target_os = "windows")))]
+#[cfg(not(any(target_vendor = "apple", target_os = "openbsd", windows)))]
 mod timer {
     use super::MAX_KTIME_T;
     use std::io;
@@ -297,7 +297,7 @@ mod timer {
 
 /// Sets up a timer on SIGALRM for platforms that do not support POSIX.1-2008
 /// realtime clock extensions. Notably, Darwin, OpenBSD, and Windows.
-#[cfg(any(target_vendor = "apple", target_os = "openbsd", target_os = "windows"))]
+#[cfg(any(target_vendor = "apple", target_os = "openbsd", windows))]
 mod timer {
     use super::MAX_KTIME_T;
     use nix::errno::Errno;

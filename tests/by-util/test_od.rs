@@ -1401,7 +1401,7 @@ fn test_hex_lowercase() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg_attr(wasi_runner, ignore)]
 fn test_is_a_directory() {
     let scene = TestScenario::new(util_name!());

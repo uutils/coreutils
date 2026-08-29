@@ -558,11 +558,11 @@ fn unbounded_tail<T: Read>(reader: &mut BufReader<T>, settings: &Settings) -> UR
         }
         _ => {}
     }
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     writer.flush()?;
 
     // SIGPIPE is not available on Windows.
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     writer.flush().inspect_err(|err| {
         if err.kind() == ErrorKind::BrokenPipe {
             std::process::exit(13);

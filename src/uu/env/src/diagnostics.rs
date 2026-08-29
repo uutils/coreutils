@@ -118,12 +118,12 @@ fn describe(
 /// drawn from. Anything past the end of `payload` stays past it, so that
 /// [`diagnostics::char_span`] still reads it as "nothing left to point at".
 fn byte_offset(payload: &str, pos: usize) -> usize {
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         let _ = payload;
         pos
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     {
         let mut units = 0;
         for (offset, c) in payload.char_indices() {

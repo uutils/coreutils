@@ -6,11 +6,11 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 use std::io::Read;
 use uutests::new_ucmd;
@@ -577,11 +577,11 @@ fn test_all_but_last_lines_large_file() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -681,11 +681,11 @@ fn test_validate_stdin_offset_lines() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -810,11 +810,11 @@ fn test_validate_stdin_offset_bytes() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -827,11 +827,11 @@ fn test_read_backwards_bytes_proc_fs_version() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -848,11 +848,11 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -869,11 +869,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]

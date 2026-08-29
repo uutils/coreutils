@@ -704,7 +704,7 @@ fn write_end_of_line<W: Write>(
 
 fn handle_broken_pipe(error: &io::Error) {
     // SIGPIPE is not available on Windows.
-    if cfg!(target_os = "windows") && error.kind() == ErrorKind::BrokenPipe {
+    if cfg!(windows) && error.kind() == ErrorKind::BrokenPipe {
         std::process::exit(13);
     }
 }

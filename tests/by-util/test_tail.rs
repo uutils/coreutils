@@ -18,9 +18,9 @@ use rand::distr::Alphanumeric;
 use rstest::rstest;
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(windows)
 ))]
 use rustix::process::{Pid, Signal, kill_process};
 use std::char::from_digit;
@@ -31,9 +31,9 @@ use std::io::{Seek, SeekFrom};
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 use std::path::Path;
 use std::process::Stdio;
@@ -41,9 +41,9 @@ use tail::chunks::BUFFER_SIZE as CHUNK_BUFFER_SIZE;
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 use tail::text;
 use uutests::at_and_ucmd;
@@ -336,10 +336,10 @@ fn test_follow_redirect_stdin_name_retry() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_stdin_redirect_dir() {
     // $ mkdir dir
@@ -552,7 +552,7 @@ fn test_follow_single() {
 
 /// Test for following when bytes are written that are not valid UTF-8.
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: test times out
+#[cfg(not(windows))] // FIXME: test times out
 fn test_follow_non_utf8_bytes() {
     // Tail the test file and start following it.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -730,7 +730,7 @@ fn test_follow_stdin_pipe() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
+#[cfg(not(windows))] // FIXME: for currently not working platforms
 fn test_follow_invalid_pid() {
     new_ucmd!()
         .args(&["-f", "--pid=-1234"])
@@ -758,9 +758,9 @@ fn test_follow_invalid_pid() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
-    not(target_os = "freebsd")
+    not(target_os = "freebsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_with_pid() {
     use std::process::Command;
@@ -1377,10 +1377,10 @@ fn test_retry_missing_file_error() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_retry_follow_name_waits_for_creation() {
     // Test tail --retry behavior
@@ -1422,10 +1422,10 @@ fn test_retry_follow_name_waits_for_creation() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_retry_descriptor_detects_truncation() {
     // Test tail --retry behavior
@@ -1481,10 +1481,10 @@ fn test_retry_descriptor_detects_truncation() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_retry_descriptor_gives_up_on_untailable() {
     // Test tail --retry behavior
@@ -1526,7 +1526,7 @@ fn test_retry_descriptor_gives_up_on_untailable() {
 // ==> existing <==
 // >X
 #[test]
-#[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
+#[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
 fn test_descriptor_no_retry_skips_late_file() {
     // Test tail --retry behavior
     // Ensure that --follow=descriptor (without --retry) does *not* try
@@ -1571,10 +1571,10 @@ fn test_descriptor_no_retry_skips_late_file() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_capital_f_recovers_after_dir_swap() {
     // Test tail --retry behavior
@@ -1702,10 +1702,10 @@ fn test_follow_name_replaced_by_symlink_is_untailable() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_retry8() {
     // Ensure that inotify will switch to polling mode if directory
@@ -1772,9 +1772,9 @@ fn test_retry8() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_retry9() {
     // Test inotify behavior when directory is recreated
@@ -1854,9 +1854,9 @@ fn test_retry9() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename1() {
     // Test file descriptor behavior vs rename
@@ -1918,9 +1918,9 @@ fn test_follow_descriptor_vs_rename1() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_descriptor_vs_rename2() {
     // Ensure the headers are correct for --verbose.
@@ -1970,10 +1970,10 @@ fn test_follow_descriptor_vs_rename2() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_shows_headers_on_creation() {
     // Test -F flag with file headers
@@ -2040,7 +2040,7 @@ fn test_follow_name_shows_headers_on_creation() {
 }
 
 #[test]
-#[cfg(all(not(target_os = "windows"), not(target_os = "android")))] // FIXME: for currently not working platforms
+#[cfg(all(not(windows), not(target_os = "android")))] // FIXME: for currently not working platforms
 fn test_follow_name_remove() {
     // This test triggers a remove event while `tail --follow=name file` is running.
     // ((sleep 2 && rm file &)>/dev/null 2>&1 &) ; tail --follow=name file
@@ -2213,7 +2213,7 @@ fn test_follow_name_truncate3() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
+    not(windows),
     not(feature = "feat_selinux") // flaky
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_truncate4() {
@@ -2250,7 +2250,7 @@ fn test_follow_name_truncate4() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
+#[cfg(not(windows))] // FIXME: for currently not working platforms
 fn test_follow_detects_file_truncation() {
     // Test tail behavior on file truncation
     // Ensure all logs are output upon file truncation
@@ -2305,10 +2305,10 @@ fn test_follow_detects_file_truncation() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_create1() {
     // This test triggers a move/create event while `tail --follow=name file` is running.
@@ -2362,9 +2362,9 @@ fn test_follow_name_move_create1() {
 #[cfg(all(
     not(target_vendor = "apple"),
     not(target_os = "android"),
-    not(target_os = "windows"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_hash_table_stress() {
     // Test inotify hash table under heavy file churn by watching 9 files simultaneously.
@@ -2441,10 +2441,10 @@ fn test_follow_name_hash_table_stress() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move1() {
     // This test triggers a move event while `tail --follow=name file` is running.
@@ -2503,10 +2503,10 @@ fn test_follow_name_move1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move2() {
     // Like test_follow_name_move1, but move to a name that's already monitored.
@@ -2591,10 +2591,10 @@ fn test_follow_name_move2() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_move_retry1() {
     // Similar to test_follow_name_move1 but with `--retry` (`-F`)
@@ -2651,10 +2651,10 @@ fn test_follow_name_move_retry1() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))] // FIXME: for currently not working platforms
 fn test_follow_name_rename_chain() {
     // Test -F flag behavior across file renames
@@ -2755,7 +2755,7 @@ fn test_follow_name_rename_chain() {
 }
 
 #[test]
-#[cfg(not(target_os = "windows"))] // FIXME: for currently not working platforms
+#[cfg(not(windows))] // FIXME: for currently not working platforms
 fn test_follow_inotify_only_regular() {
     // The GNU test inotify-only-regular.sh uses strace to ensure that `tail -f`
     // doesn't make inotify syscalls and only uses inotify for regular files or fifos.
@@ -2830,10 +2830,10 @@ fn test_fifo() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 fn test_fifo_with_pid() {
     use std::process::{Command, Stdio};
@@ -3208,7 +3208,7 @@ fn test_pipe_when_lines_option_given_input_size_is_one_byte_greater_than_buffer_
 // FIXME: windows: this test failed with timeout in the CI. Running this test in
 // a Windows VirtualBox image produces no errors.
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_pipe_when_lines_option_given_input_size_has_multiple_size_of_buffer_size() {
     let total_lines = 100;
     let random_string = RandomizedString::generate_with_delimiter(
@@ -3508,7 +3508,7 @@ fn test_pipe_when_bytes_option_given_input_size_is_one_byte_greater_than_buffer_
 // FIXME: windows: this test failed with timeout in the CI. Running this test in
 // a Windows VirtualBox image produces no errors.
 #[test]
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 fn test_pipe_when_bytes_option_given_input_size_has_multiple_size_of_buffer_size() {
     let random_string = RandomizedString::generate(AlphanumericNewline, CHUNK_BUFFER_SIZE * 3);
     let random_string = random_string.as_str();
@@ -3622,7 +3622,7 @@ fn test_seek_bytes_forward_outside_file() {
 // Some basic tests for ---presume-input-pipe. These tests build upon the
 // debug_assert in bounded tail to detect that we're using the bounded_tail in
 // case the option is given on command line.
-#[cfg(all(not(target_os = "android"), not(target_os = "windows")))] // FIXME:
+#[cfg(all(not(target_os = "android"), not(windows)))] // FIXME:
 #[test]
 fn test_args_when_presume_input_pipe_given_input_is_pipe() {
     let random_string = RandomizedString::generate(AlphanumericNewline, 1000);
@@ -4638,7 +4638,7 @@ fn test_args_when_directory_given_shorthand_big_f_together_with_retry() {
 #[test]
 #[cfg(all(
     not(target_vendor = "apple"),
-    not(target_os = "windows"),
+    not(windows),
     not(target_os = "freebsd"),
     not(target_os = "openbsd"),
     not(feature = "feat_selinux") // flaky

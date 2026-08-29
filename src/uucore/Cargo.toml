@@ -118,7 +118,7 @@ xattr = { workspace = true, optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 procfs = { workspace = true, optional = true }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+[target.'cfg(windows)'.dependencies]
 wild = { workspace = true }
 windows-sys = { workspace = true, optional = true, default-features = false, features = [
   "Wdk_System_SystemInformation",

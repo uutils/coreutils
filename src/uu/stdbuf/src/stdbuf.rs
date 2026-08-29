@@ -46,7 +46,7 @@ const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf
 
 #[cfg(all(
     not(feature = "feat_external_libstdbuf"),
-    any(target_os = "cygwin", target_os = "windows")
+    any(target_os = "cygwin", windows)
 ))]
 const STDBUF_INJECT: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/libstdbuf.dll"));
 

@@ -3296,7 +3296,7 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
     #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
@@ -3743,7 +3743,7 @@ fn test_ls_indicator_style() {
     }
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))] // Truncate not available on mac or win
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
@@ -6316,7 +6316,7 @@ fn test_ls_hyperlink() {
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         at.touch("back\\slash");
         at.touch("ques?tion");
@@ -6325,7 +6325,7 @@ fn test_ls_hyperlink_encode_link() {
     at.touch("sp ace");
 
     let result = ucmd.arg("--hyperlink").succeeds();
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         assert!(
             result
@@ -6491,9 +6491,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let at = &scene.fixtures;
 
     at.touch("café.txt");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     at.touch("file:with:colons.txt");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     at.touch("file-with-colons.txt");
     at.touch("file with spaces.txt");
 
@@ -6501,9 +6501,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let output = result.stdout_str();
 
     assert!(output.contains("caf%c3%a9.txt"));
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     assert!(output.contains("file%3awith%3acolons.txt"));
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert!(output.contains("file-with-colons.txt"));
     assert!(output.contains("file%20with%20spaces.txt"));
 
