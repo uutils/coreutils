@@ -13,10 +13,10 @@ use uucore::{error::UResult, format_usage, quoting_style::QuotingStyle, translat
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let command = uu_app();
 
-    let args: Vec<OsString> = args.collect();
-    // Kept for the caret in SIZE diagnostics, which echoes the command line.
-    let diag_args = uucore::diagnostics::capture(&args);
-    let matches = uucore::clap_localization::handle_clap_result_with_exit_code(command, args, 2)?;
+    // The arguments are kept for the caret in SIZE diagnostics, which echoes
+    // the command line.
+    let (matches, diag_args) =
+        uucore::clap_localization::handle_clap_result_with_diagnostics(command, args.collect(), 2)?;
 
     let mut default_quoting_style = false;
     let mut default_format_style = false;

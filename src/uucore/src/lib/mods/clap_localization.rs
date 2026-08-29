@@ -412,6 +412,7 @@ where
 ///
 /// * `cmd` - The clap `Command` to parse arguments against
 /// * `args` - The command line, program name included
+/// * `exit_code` - The exit code to use when parsing fails
 ///
 /// # Returns
 ///
@@ -421,9 +422,13 @@ where
 pub fn handle_clap_result_with_diagnostics(
     cmd: Command,
     args: Vec<OsString>,
+    exit_code: i32,
 ) -> UResult<(ArgMatches, Option<Vec<OsString>>)> {
     let diag_args = crate::diagnostics::capture(&args);
-    Ok((handle_clap_result(cmd, args)?, diag_args))
+    Ok((
+        handle_clap_result_with_exit_code(cmd, args, exit_code)?,
+        diag_args,
+    ))
 }
 
 /// Handles clap command parsing with a custom exit code for errors.
