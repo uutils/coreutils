@@ -1089,9 +1089,9 @@ impl Options {
                 .get_one::<String>(update_control::arguments::OPT_UPDATE)
                 .is_some_and(|v| v == "none" || v == "none-fail")
         {
-            return Err(CpError::InvalidArgument(
-                translate!("cp-error-invalid-backup-argument").to_string(),
-            ));
+            return Err(CpError::InvalidArgument(translate!(
+                "cp-error-invalid-backup-argument"
+            )));
         }
 
         let backup_suffix = backup_control::determine_backup_suffix(matches);
