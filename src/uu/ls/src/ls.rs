@@ -1245,10 +1245,11 @@ pub fn list_with_output<O: LsOutput>(
         // Only recursion can revisit a directory, so only then is it worth a
         // stat to remember this one; without -R the set is never consulted.
         let mut listed_ancestors = FxHashSet::default();
-        let inode = if config.recursive {
-            let inode = FileInformation::from_path(path_data.path(), path_data.must_dereference)?;
-            listed_ancestors.insert(inode.clone());
-            Some(inode)
+        let id = if config.recursive {
+            let info = FileInformation::from_path(path_data.path(), path_data.must_dereference)?;
+            let id = DirId::new(&info);
+            listed_ancestors.insert(id);
+            Some(id)
         } else {
             None
         };
@@ -1257,15 +1258,12 @@ pub fn list_with_output<O: LsOutput>(
             path_data,
             read_dir,
             config,
-            inode.as_ref(),
+            id,
             &mut listed_ancestors,
             output,
             &mut entries,
         )?;
 
-        if let Some(ref inode) = inode {
-            listed_ancestors.remove(inode);
-        }
         debug_assert!(listed_ancestors.is_empty());
     }
 
@@ -1371,6 +1369,19 @@ fn write_directory_entries<O: LsOutput>(
     }
 }
 
+/// Wrapper for `(dev, inode)`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
+struct DirId(u64, u64);
+
+impl DirId {
+    fn new(info: &FileInformation) -> Self {
+        #[cfg(any(unix, target_os = "wasi"))]
+        return Self(info.dev(), info.inode());
+        #[cfg(windows)]
+        return Self(info.dev(), info.file_index());
+    }
+}
+
 /// Recursively traverse directories using an explicit stack.
 ///
 /// This avoids deep recursive call chains while preserving GNU-style
@@ -1379,8 +1390,8 @@ fn enter_directory<O: LsOutput>(
     path_data: &PathData,
     read_dir: ReadDir,
     config: &Config,
-    inode: Option<&FileInformation>,
-    listed_ancestors: &mut FxHashSet<FileInformation>,
+    id: Option<DirId>,
+    listed_ancestors: &mut FxHashSet<DirId>,
     output: &mut O,
     entries: &mut Vec<PathData>,
 ) -> UResult<()> {
@@ -1388,14 +1399,14 @@ fn enter_directory<O: LsOutput>(
         path: PathBuf,
         command_line: bool,
         is_first: bool,
-        inode: Option<FileInformation>,
+        id: DirId,
     }
 
     /// Controls inode freeing precisely in the loop, so we correctly thread
     /// cycle detection and inode discarding. Does away with many headaches.
     enum StackItem {
         Enter(StackEntry),
-        Exit(FileInformation),
+        Exit(DirId),
     }
 
     let mut stack = Vec::new();
@@ -1403,24 +1414,21 @@ fn enter_directory<O: LsOutput>(
         path: path_data.path().to_path_buf(),
         command_line: path_data.command_line,
         is_first: true,
-        inode: inode.cloned(),
+        id: id.unwrap_or_default(),
     }));
     let mut initial_read_dir = Some(read_dir);
 
     while let Some(entry) = current.take().or_else(|| stack.pop()) {
         let entry = match entry {
-            StackItem::Exit(inode) => {
-                listed_ancestors.remove(&inode);
+            StackItem::Exit(id) => {
+                listed_ancestors.remove(&id);
                 continue;
             }
             StackItem::Enter(entry) => entry,
         };
 
         // Check for duplicates at entry time, so we can reliably track cycles.
-        if !entry.is_first
-            && let Some(ref inode) = entry.inode
-            && !listed_ancestors.insert(inode.clone())
-        {
+        if !entry.is_first && !listed_ancestors.insert(entry.id) {
             output.flush()?;
             show!(LsError::AlreadyListedError(entry.path.clone()));
             continue;
@@ -1453,9 +1461,7 @@ fn enter_directory<O: LsOutput>(
                         entry.command_line,
                     ));
                     // Force-free the inode if we encounter an error.
-                    if let Some(ref inode) = entry.inode {
-                        listed_ancestors.remove(inode);
-                    }
+                    listed_ancestors.remove(&entry.id);
                     continue;
                 }
                 Ok(rd) => rd,
@@ -1467,9 +1473,7 @@ fn enter_directory<O: LsOutput>(
 
         // Sets the inode to be removed after all children and descendants have
         // been processed. The exit marker sits under the children in the stack.
-        if let Some(ref inode) = entry.inode {
-            stack.push(StackItem::Exit(inode.clone()));
-        }
+        stack.push(StackItem::Exit(entry.id));
 
         if config.recursive {
             for child in entries
@@ -1492,12 +1496,23 @@ fn enter_directory<O: LsOutput>(
                     continue;
                 }
 
-                let inode = FileInformation::from_path(&child_path, child_must_dereference)?;
+                let info = match FileInformation::from_path(&child_path, child_must_dereference) {
+                    Ok(info) => info,
+                    Err(err) => {
+                        output.flush()?;
+                        show!(LsError::IOErrorContext(
+                            child_path.clone(),
+                            err,
+                            child_command_line,
+                        ));
+                        continue;
+                    }
+                };
                 stack.push(StackItem::Enter(StackEntry {
                     path: child_path,
                     command_line: child_command_line,
                     is_first: false,
-                    inode: Some(inode),
+                    id: DirId::new(&info),
                 }));
             }
         }
