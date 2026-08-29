@@ -14,6 +14,8 @@
 // spell-checker:ignore notaflag notacombo notabaud
 // spell-checker:ignore baudrate TCGETS
 
+#![cfg(unix)]
+
 mod flags;
 
 use crate::flags::AllFlags;
@@ -1252,6 +1254,11 @@ fn get_sane_control_char(cc_index: S) -> u8 {
         S::VEOL => 0,
         S::VEOL2 => 0,
         S::VMIN => 1,
+        #[cfg(not(any(
+            all(target_os = "linux", target_arch = "sparc64"),
+            target_os = "illumos",
+            target_os = "solaris"
+        )))]
         S::VTIME => 0,
         #[cfg(target_os = "linux")]
         S::VSWTC => 0,
