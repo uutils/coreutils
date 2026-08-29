@@ -65,15 +65,17 @@ echo "llvm-profdata: ${LLVM_PROFDATA}"
 cargo_build() {
     # $1: target dir, $2: extra rustflags
     local feature_args=()
-    [ -n "$FEATURES" ] && feature_args=(--features="$FEATURES")
+    if [ -n "$FEATURES" ]; then feature_args=(--features="$FEATURES"); fi
     (
         cd "$REPO_ROOT"
         export CARGO_TARGET_DIR="$1"
         export CARGO_INCREMENTAL=0
         export RUSTFLAGS="${RUSTFLAGS:+${RUSTFLAGS} }$2"
-        echo "Running: cargo build --release ${feature_args[*]}"
+        # bash 3.2 (macOS) errors on an empty array expansion under `set -u`,
+        # hence the `[@]+` guard on both expansions below.
+        echo "Running: cargo build --release ${feature_args[@]+${feature_args[*]}}"
         echo "  RUSTFLAGS=${RUSTFLAGS}"
-        cargo build --release "${feature_args[@]}"
+        cargo build --release ${feature_args[@]+"${feature_args[@]}"}
     )
 }
 
@@ -119,7 +121,7 @@ awk 'BEGIN { for (i = 0; i < 2000; i++) printf "user%d:x:%d:%d:User %d:/home/use
 end_step
 
 begin_step "Step 3: training workloads"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/coreutils-pgo.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # Individual workloads are allowed to fail (a util may be absent from the

@@ -635,18 +635,27 @@ jobs:
         ${{ steps.dep_vars.outputs.CARGO_UTILITY_LIST_OPTIONS }} -p coreutils
       env:
         RUST_BACKTRACE: "1"
+    - name: Decide whether to train PGO
+      shell: bash
+      run: |
+        ## PGO needs to run the instrumented binary, so it is limited to the
+        ## natively-built, published targets. x86_64-apple-darwin is excluded:
+        ## it is cross-compiled on an arm64 runner, which cannot execute it.
+        PGO=0
+        if [ '${{ matrix.job.skip-publish }}' != 'true' ] && \
+           [ '${{ matrix.job.check-only }}' != 'true' ] && \
+           [ '${{ matrix.job.use-cross }}' != 'use-cross' ]; then
+          case '${{ matrix.job.target }}' in
+            x86_64-unknown-linux-gnu|aarch64-unknown-linux-gnu|aarch64-apple-darwin) PGO=1 ;;
+          esac
+        fi
+        echo "PGO=${PGO}" >> "$GITHUB_ENV"
     - name: Install llvm-tools (PGO)
-      if: |
-        matrix.job.skip-publish != true && matrix.job.check-only != true &&
-        matrix.job.use-cross != 'use-cross' &&
-        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      if: env.PGO == '1'
       shell: bash
       run: rustup component add llvm-tools
     - name: Train PGO profiles
-      if: |
-        matrix.job.skip-publish != true && matrix.job.check-only != true &&
-        matrix.job.use-cross != 'use-cross' &&
-        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      if: env.PGO == '1'
       shell: bash
       run: |
         ./util/build-pgo.sh \
@@ -655,10 +664,7 @@ jobs:
           --train-only
         echo "RUSTFLAGS=${RUSTFLAGS:+${RUSTFLAGS} }-Cprofile-use=${{ github.workspace }}/target/coreutils-pgo/coreutils.profdata" >> "$GITHUB_ENV"
     - name: Verify PGO is applied to the published build
-      if: |
-        matrix.job.skip-publish != true && matrix.job.check-only != true &&
-        matrix.job.use-cross != 'use-cross' &&
-        (matrix.job.target == 'x86_64-unknown-linux-gnu' || matrix.job.target == 'aarch64-unknown-linux-gnu')
+      if: env.PGO == '1'
       shell: bash
       run: |
         ## The release artifact must be the PGO build: if RUSTFLAGS did not
