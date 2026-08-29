@@ -53,9 +53,9 @@ impl Target {
             .expect("failed to send signal")
             .wait();
         // macOS CI needs a longer delay for process teardown after signal delivery
-        #[cfg(target_os = "macos")]
+        #[cfg(target_vendor = "apple")]
         self.child.delay(500);
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(target_vendor = "apple"))]
         self.child.delay(100);
     }
     fn is_alive(&mut self) -> bool {
@@ -660,7 +660,7 @@ fn test_split_string_into_args_debug_output_whitespace_handling() {
 // thread 'test_env::test_env_split_quoted_with_backslash_space' panicked at 'assertion failed: `(left == right)`
 // left: `"X=Y Z=W\n__CF_USER_TEXT_ENCODING=0x1F5:0x0:0x0\n"`,
 // right: `"X=Y Z=W\n"`', tests/by-util/test_env.rs:369:5
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 #[test]
 fn test_env_split_quoted_with_backslash_space() {
     let scene = TestScenario::new(util_name!());

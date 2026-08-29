@@ -422,7 +422,7 @@ fn test_echo_invalid_unicode_in_arguments() {
 }
 
 #[cfg(any(unix, target_os = "wasi"))]
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(target_vendor = "apple"))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI: argv/filenames must be valid UTF-8")]
 fn test_invalid_unicode_in_filename() {

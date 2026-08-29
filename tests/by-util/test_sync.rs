@@ -142,7 +142,7 @@ fn test_sync_fdatasync_error_handling() {
         .stderr_contains("error opening");
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 #[test]
 fn test_sync_syncfs_error_handling_macos() {
     // Test that syncfs properly handles invalid paths on macOS

@@ -522,7 +522,7 @@ pub(crate) fn color_name(
     wrap: bool,
 ) -> OsString {
     // Check if the file has capabilities
-    #[cfg(all(unix, not(any(target_os = "android", target_os = "macos"))))]
+    #[cfg(all(unix, not(any(target_os = "android", target_vendor = "apple"))))]
     {
         // Skip checking capabilities if LS_COLORS=ca=:
         let has_capabilities = style_manager

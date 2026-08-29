@@ -258,7 +258,7 @@ fn tail_stdin(
     // bad file descriptor or might not catch directory cases
     // e.g. see the differences between running ls -l /dev/stdin /dev/fd/0
     // on macOS and Linux.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     if let Ok(mut stdin_handle) = same_file::Handle::stdin()
         && let Ok(meta) = stdin_handle.as_file_mut().metadata()
         && meta.file_type().is_dir()

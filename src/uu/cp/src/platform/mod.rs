@@ -5,18 +5,18 @@
 
 #[cfg(all(
     unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "android"))
+    not(any(target_vendor = "apple", target_os = "linux", target_os = "android"))
 ))]
 mod other_unix;
 #[cfg(all(
     unix,
-    not(any(target_os = "macos", target_os = "linux", target_os = "android"))
+    not(any(target_vendor = "apple", target_os = "linux", target_os = "android"))
 ))]
 pub(crate) use self::other_unix::copy_on_write;
 
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 mod macos;
-#[cfg(target_os = "macos")]
+#[cfg(target_vendor = "apple")]
 pub(crate) use self::macos::copy_on_write;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

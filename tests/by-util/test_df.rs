@@ -105,7 +105,7 @@ fn test_inodes_not_supported_windows() {
 
 #[test]
 fn test_df_output() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "Size",
@@ -179,7 +179,7 @@ fn test_df_rounding() {
 
 #[test]
 fn test_df_output_overridden() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "Size",
@@ -213,7 +213,7 @@ fn test_df_output_overridden() {
 
 #[test]
 fn test_default_headers() {
-    let expected = if cfg!(target_os = "macos") {
+    let expected = if cfg!(target_vendor = "apple") {
         vec![
             "Filesystem",
             "1K-blocks",

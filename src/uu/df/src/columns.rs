@@ -53,7 +53,7 @@ pub(crate) enum Column {
     Fstype,
 
     /// Percentage of bytes available to non-privileged processes.
-    #[cfg(target_os = "macos")]
+    #[cfg(target_vendor = "apple")]
     Capacity,
 }
 
@@ -87,7 +87,7 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,
@@ -130,7 +130,7 @@ impl Column {
                 Self::Size,
                 Self::Used,
                 Self::Avail,
-                #[cfg(target_os = "macos")]
+                #[cfg(target_vendor = "apple")]
                 Self::Capacity,
                 Self::Pcent,
                 Self::Target,

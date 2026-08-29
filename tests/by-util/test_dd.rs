@@ -19,7 +19,7 @@ use uucore::io::OwnedFileDescriptorOrHandle;
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 use std::process::Command;
 use std::process::Stdio;
 #[cfg(not(windows))]
@@ -1700,7 +1700,7 @@ fn test_seek_past_dev() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1740,7 +1740,7 @@ fn test_reading_partial_blocks_from_fifo() {
 }
 
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd"),))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd"),))]
 fn test_reading_partial_blocks_from_fifo_unbuffered() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -1789,7 +1789,7 @@ fn test_reading_partial_blocks_from_fifo_unbuffered() {
 /// The writer below runs `printf` inside `sh`, where it is a builtin, so this
 /// needs no `printf` feature.
 #[test]
-#[cfg(all(unix, not(target_os = "macos"), not(target_os = "freebsd")))]
+#[cfg(all(unix, not(target_vendor = "apple"), not(target_os = "freebsd")))]
 fn test_reading_partial_blocks_from_fifo_gathered_into_larger_obs() {
     // Create the FIFO.
     let ts = TestScenario::new(util_name!());
@@ -2300,7 +2300,7 @@ fn test_count_bytes_with_expanding_block_conv() {
 // A failed copy still has to report what it transferred, including complete
 // and partial records.
 #[test]
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_vendor = "apple")))]
 fn test_stats_are_reported_when_a_write_fails() {
     use rlimit::Resource;
 

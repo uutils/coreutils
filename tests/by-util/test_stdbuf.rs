@@ -49,7 +49,7 @@ fn test_permission() {
     feature = "feat_external_libstdbuf",
     unix,
     not(target_os = "openbsd"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
@@ -275,7 +275,7 @@ fn test_stdbuf_invalid_mode_fails() {
 #[cfg(all(
     unix,
     not(target_os = "openbsd"),
-    not(target_os = "macos"),
+    not(target_vendor = "apple"),
     not(target_os = "android"),
     not(target_env = "musl")
 ))]
