@@ -247,8 +247,11 @@ impl BytesWriter {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in size diagnostics, which needs
     // the size as typed.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     if !matches.contains_id(options::FILE) {
         return Err(UUsageError::new(

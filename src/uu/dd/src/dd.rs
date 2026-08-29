@@ -1572,8 +1572,11 @@ fn is_fifo(filename: &str) -> bool {
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // The command line is kept for the caret in operand diagnostics.
-    let (matches, diag_args) =
-        uucore::clap_localization::handle_clap_result_with_diagnostics(uu_app(), args.collect())?;
+    let (matches, diag_args) = uucore::clap_localization::handle_clap_result_with_diagnostics(
+        uu_app(),
+        args.collect(),
+        1,
+    )?;
 
     let settings: Settings = Parser::new().parse_with_diagnostics(
         matches
