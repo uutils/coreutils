@@ -17,11 +17,11 @@
 use core::str;
 #[cfg(unix)]
 use libc::mode_t;
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 use nix::pty::OpenptyResult;
 #[cfg(unix)]
 use nix::sys;
-#[cfg(not(windows))]
+#[cfg(unix)]
 use nix::sys::stat::{self, SFlag};
 use pretty_assertions::assert_eq;
 #[cfg(all(unix, not(target_os = "fuchsia")))]
@@ -351,8 +351,16 @@ impl CmdResult {
     ///
     /// # Platform specific behavior
     ///
-    /// This assertion method is only available on unix systems, except for fuchsia.
-    #[cfg(all(unix, not(target_os = "fuchsia")))]
+    /// This assertion method is only available on unix systems, except for fuchsia, haiku and hurd.
+    #[cfg(all(
+        unix,
+        not(any(
+            target_os = "dragonfly",
+            target_os = "fuchsia",
+            target_os = "haiku",
+            target_os = "hurd"
+        ))
+    ))]
     #[track_caller]
     pub fn signal_name_is(&self, name: &str) -> &Self {
         use uucore::signals::signal_by_name_or_value;
@@ -1206,7 +1214,7 @@ impl AtPath {
         let _ = self.make_file(file);
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn mkfifo<P: AsRef<Path>>(&self, fifo: P) {
         // rustix::fs::mkfifoat is linux only
         use nix::sys::stat::Mode;
@@ -1224,13 +1232,13 @@ impl AtPath {
         UnixListener::bind(path).expect("Socket file creation failed.");
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_fifo<P: AsRef<Path>>(&self, fifo: P) -> bool {
         stat::stat(&self.plus(fifo))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFIFO))
     }
 
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn is_char_device<P: AsRef<Path>>(&self, char_dev: P) -> bool {
         stat::stat(&self.plus(char_dev))
             .is_ok_and(|s| SFlag::from_bits_truncate(s.st_mode).contains(SFlag::S_IFCHR))
@@ -1246,6 +1254,7 @@ impl AtPath {
         hard_link(original, link).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     fn symlink_inner(&self, original: &Path, link: &Path) {
         log_info(
             "symlink",
@@ -1254,10 +1263,12 @@ impl AtPath {
         symlink_file(original, link).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
         self.symlink_inner(self.plus(original).as_ref(), self.plus(link).as_ref());
     }
 
+    #[cfg(any(unix, windows))]
     pub fn relative_symlink_file<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
         // Windows stores the target verbatim, so use native separators
         #[cfg(windows)]
@@ -1265,6 +1276,7 @@ impl AtPath {
         self.symlink_inner(original.as_ref(), self.plus(link).as_ref());
     }
 
+    #[cfg(any(unix, windows))]
     fn symlink_dir_inner(&self, original: &Path, link: &Path) {
         log_info(
             "symlink",
@@ -1273,10 +1285,12 @@ impl AtPath {
         symlink_dir(original, link).unwrap();
     }
 
+    #[cfg(any(unix, windows))]
     pub fn symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
         self.symlink_dir_inner(self.plus(original).as_ref(), self.plus(link).as_ref());
     }
 
+    #[cfg(any(unix, windows))]
     pub fn relative_symlink_dir<P1: AsRef<Path>, P2: AsRef<Path>>(&self, original: P1, link: P2) {
         // Windows stores the target verbatim, so use native separators
         #[cfg(windows)]
@@ -1366,7 +1380,7 @@ impl AtPath {
     ///
     /// This function panics if there is an error loading the metadata
     /// or setting the permissions of the file.
-    #[cfg(not(windows))]
+    #[cfg(unix)]
     pub fn set_mode<P: AsRef<Path>>(&self, filename: P, mode: u32) {
         let path = self.plus(filename);
         let mut perms = fs::metadata(&path).unwrap().permissions();
@@ -1966,9 +1980,9 @@ impl UCommand {
 
         let mut captured_stdout = None;
         let mut captured_stderr = None;
-        #[cfg(all(unix, not(target_os = "redox")))]
+        #[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
         let mut stdin_pty: Option<File> = None;
-        #[cfg(not(all(unix, not(target_os = "redox"))))]
+        #[cfg(not(all(unix, not(any(target_os = "fuchsia", target_os = "redox")))))]
         let stdin_pty: Option<File> = None;
         if self.stderr_to_stdout {
             let mut output = CapturedOutput::default();
@@ -2003,7 +2017,7 @@ impl UCommand {
                 .stderr(stderr);
         }
 
-        #[cfg(all(unix, not(target_os = "redox")))]
+        #[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
         if let Some(simulated_terminal) = &self.terminal_simulation {
             let terminal_size = simulated_terminal.size.unwrap_or(libc::winsize {
                 ws_col: 80,
@@ -3016,7 +3030,7 @@ pub fn whoami() -> String {
 
 /// Open a PTY whose two ends are close-on-exec, so that commands started by
 /// other tests in the meantime don't inherit them.
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
     #[cfg(any(target_os = "linux", target_os = "android", target_os = "freebsd"))]
     {
@@ -3067,7 +3081,7 @@ fn open_pty(size: Option<&libc::winsize>) -> OpenptyResult {
 /// - path: The filesystem path to the PTY replica device
 /// - controller: The controller file
 /// - replica: The replica file
-#[cfg(all(unix, not(target_os = "redox")))]
+#[cfg(all(unix, not(any(target_os = "fuchsia", target_os = "redox"))))]
 pub fn pty_path() -> (String, File, File) {
     use nix::unistd::ttyname;
     let pty = open_pty(None);
