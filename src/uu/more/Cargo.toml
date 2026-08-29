@@ -24,7 +24,7 @@ fluent = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 crossterm = { workspace = true, features = ["windows"] }
 
-[target.'cfg(target_os = "macos")'.dependencies]
+[target.'cfg(target_vendor = "apple")'.dependencies]
 crossterm = { workspace = true, features = ["use-dev-tty"] }
 
 [[bin]]
