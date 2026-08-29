@@ -225,7 +225,7 @@ fn test_reference() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_reference_multi_no_equal() {
     new_ucmd!()
         .arg("-v")
@@ -240,7 +240,7 @@ fn test_reference_multi_no_equal() {
 }
 
 #[test]
-#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+#[cfg(any(target_vendor = "apple", target_os = "linux", target_os = "android"))]
 fn test_reference_last() {
     new_ucmd!()
         .arg("-v")
