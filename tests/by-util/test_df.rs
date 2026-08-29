@@ -1160,3 +1160,52 @@ fn test_df_masked_proc_fallback() {
         }
     }
 }
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+df: invalid suffix in --block-size argument '1fb'
+   ╭─[ df:1:8 ]
+   │
+ 1 │ df -B 1fb
+   │        ─┬
+   │         ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_zero_block_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .arg("--block-size=0")
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert_eq!(result.caret_column(), Some(17));
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-B", "1fb"])
+            .fails_with_code(1)
+            .stderr_is("df: invalid suffix in --block-size argument '1fb'\n");
+    }
+}
