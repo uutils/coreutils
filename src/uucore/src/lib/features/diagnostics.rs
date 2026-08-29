@@ -135,7 +135,7 @@ pub fn operands(args: &[OsString]) -> Option<Vec<OsString>> {
 }
 
 pub use crate::features::diagnostics_boundary::{
-    OptionValue, char_span, floor_boundary, list_items,
+    OptionValue, ValueOptions, char_span, floor_boundary, list_items,
 };
 
 /// The error to raise for something a caret may have just explained.
@@ -391,16 +391,56 @@ impl Snapshot {
     ///
     /// The index of that positional, or `None` if there are not that many.
     pub fn index_of_positional(&self, n: usize) -> Option<usize> {
+        self.index_of_operand(n, &ValueOptions::NONE)
+    }
+
+    /// Index of the `n`-th operand, stepping over the values of `options`.
+    ///
+    /// As [`Snapshot::index_of_positional`], but for a utility whose options
+    /// take a separate value: `csplit -n 3 file 5` has two operands, not
+    /// three, and naming `-n` is what keeps the caret off the `3`.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - Zero-based rank among the operands.
+    /// * `options` - The options whose value is a separate argument.
+    ///
+    /// # Returns
+    ///
+    /// The index of that operand, or `None` if there are not that many.
+    pub fn index_of_operand(&self, n: usize, options: &ValueOptions) -> Option<usize> {
         let mut options_ended = false;
-        let mut positionals = (self.first_operand..self.args.len()).filter(|&index| {
-            let bytes = self.args[index].as_encoded_bytes();
-            if !options_ended && bytes == b"--" {
-                options_ended = true;
-                return false;
+        let mut skip_value = false;
+        let mut rank = 0;
+
+        for index in self.first_operand..self.args.len() {
+            let arg = &self.args[index];
+            if skip_value {
+                skip_value = false;
+                continue;
             }
-            options_ended || !bytes.starts_with(b"-") || bytes == b"-"
-        });
-        positionals.nth(n)
+            if !options_ended {
+                let bytes = arg.as_encoded_bytes();
+                if bytes == b"--" {
+                    options_ended = true;
+                    continue;
+                }
+                // A lone `-` is an operand, and so is an argument that is not
+                // UTF-8, which no option spelling can be.
+                if let Some(text) = arg.to_str()
+                    && text.starts_with('-')
+                    && text != "-"
+                {
+                    skip_value = options.takes_next(text);
+                    continue;
+                }
+            }
+            if rank == n {
+                return Some(index);
+            }
+            rank += 1;
+        }
+        None
     }
 
     /// Byte range of the argument at `index`.
@@ -1022,6 +1062,64 @@ mod tests {
     fn a_lone_dash_is_a_positional() {
         let snap = snapshot(&["-c", "-", "x"]);
         assert_eq!(snap.index_of_positional(0), Some(1));
+    }
+
+    /// A utility with one option of each spelling that takes a value.
+    const VALUE_OPTIONS: ValueOptions = ValueOptions {
+        shorts: &['d'],
+        longs: &["suffix", "delimiter"],
+    };
+
+    #[test]
+    fn an_operand_is_found_past_a_detached_option_value() {
+        // Counting positionals would stop at the `q` given to `--suffix`.
+        let snap = Snapshot::with_program(&["numfmt", "--suffix", "q", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+        assert_eq!(snap.index_of_operand(1, &VALUE_OPTIONS), None);
+        assert_eq!(snap.index_of_positional(0), Some(2));
+    }
+
+    #[test]
+    fn an_attached_value_does_not_swallow_the_operand() {
+        for args in [
+            &["numfmt", "--suffix=q", "1000"][..],
+            &["numfmt", "-dq", "1000"][..],
+        ] {
+            let snap = Snapshot::with_program(args);
+            assert_eq!(
+                snap.index_of_operand(0, &VALUE_OPTIONS),
+                Some(2),
+                "in {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_abbreviated_long_option_still_takes_its_value() {
+        let snap = Snapshot::with_program(&["numfmt", "--suf", "q", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+    }
+
+    #[test]
+    fn only_the_last_of_a_short_cluster_takes_the_next_argument() {
+        // `-zd` ends in the value option, `-dz` does not.
+        let snap = Snapshot::with_program(&["numfmt", "-zd", ",", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(3));
+        let snap = Snapshot::with_program(&["numfmt", "-dz", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
+    }
+
+    #[test]
+    fn an_option_value_past_a_double_dash_is_an_operand() {
+        let snap = Snapshot::with_program(&["numfmt", "--", "--suffix", "q"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
+        assert_eq!(snap.index_of_operand(1, &VALUE_OPTIONS), Some(3));
+    }
+
+    #[test]
+    fn an_option_the_table_does_not_name_takes_nothing() {
+        let snap = Snapshot::with_program(&["numfmt", "--round", "up", "1000"]);
+        assert_eq!(snap.index_of_operand(0, &VALUE_OPTIONS), Some(2));
     }
 
     #[test]
