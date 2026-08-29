@@ -5277,3 +5277,22 @@ mod diagnostics {
             .stderr_is("tail: invalid number of lines: '5QQ'\n");
     }
 }
+
+#[test]
+fn test_invalid_count_keeps_its_leading_zeros() {
+    // Leading zeros are stripped only so the count is read as decimal rather
+    // than octal. That is internal, so GNU still names the argument as typed.
+    new_ucmd!()
+        .args(&["-c", "0fb", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of bytes: '0fb'\n");
+    new_ucmd!()
+        .args(&["-n", "000ff", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of lines: '000ff'\n");
+    // The sign is not put back with them: GNU reports `-c-0fb` as '0fb'.
+    new_ucmd!()
+        .args(&["-c-0fb", "/dev/null"])
+        .fails_with_code(1)
+        .stderr_is("tail: invalid number of bytes: '0fb'\n");
+}
