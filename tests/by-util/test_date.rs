@@ -3148,3 +3148,17 @@ fn test_nanoseconds_width_prefix_ignored_issue12001() {
     // compare to 4 because of \n
     assert_eq!(result.stdout().len(), 4);
 }
+
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_write_error() {
+    use std::fs::OpenOptions;
+
+    let dev_full = OpenOptions::new().write(true).open("/dev/full").unwrap();
+
+    new_ucmd!()
+        .set_stdout(dev_full)
+        .fails_with_code(1)
+        .stderr_is("date: write error: No space left on device\n");
+}

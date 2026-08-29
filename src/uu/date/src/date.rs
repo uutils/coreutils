@@ -19,9 +19,10 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write, stderr};
 use std::path::PathBuf;
 use std::sync::OnceLock;
+use thiserror::Error;
 use uucore::display::Quotable;
 use uucore::error::FromIo;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UError, UResult, USimpleError, strip_errno};
 #[cfg(feature = "i18n-datetime")]
 use uucore::i18n::datetime::{localize_format_string, should_use_icu_locale};
 use uucore::translate;
@@ -52,6 +53,14 @@ const OPT_SET: &str = "set";
 const OPT_REFERENCE: &str = "reference";
 const OPT_UNIVERSAL: &str = "universal";
 const OPT_UNIVERSAL_2: &str = "utc";
+
+#[derive(Error, Debug)]
+enum DateError {
+    #[error("{}", translate!("date-error-write", "error" => strip_errno(.0)))]
+    Write(std::io::Error),
+}
+
+impl UError for DateError {}
 
 /// Settings for this program, parsed from the command line
 struct Settings {
@@ -593,9 +602,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                     }
                 };
                 match formatted {
-                    Ok(s) => writeln!(stdout, "{s}").map_err(|e| {
-                        USimpleError::new(1, translate!("date-error-write", "error" => e))
-                    })?,
+                    Ok(s) => writeln!(stdout, "{s}").map_err(DateError::Write)?,
                     Err(e) => {
                         let _ = stdout.flush();
                         return Err(USimpleError::new(
@@ -615,9 +622,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         }
     }
 
-    stdout
-        .flush()
-        .map_err(|e| USimpleError::new(1, translate!("date-error-write", "error" => e)))?;
+    stdout.flush().map_err(DateError::Write)?;
     Ok(())
 }
 
