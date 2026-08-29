@@ -26,6 +26,7 @@ conv
 cyclomatic
 dedup
 deduplication
+dired
 demangle
 denoland
 deque
@@ -33,6 +34,7 @@ dequeue
 dev
 EINTR
 eintr
+ELOOP
 nextest
 SIGUSR
 nonprinting
@@ -160,6 +162,7 @@ SIGTTOU
 sigttou
 sigusr
 strcasecmp
+strtime
 strcoll
 subcommand
 subexpression
@@ -184,11 +187,14 @@ unintuitive
 unprefixed
 unportable
 unsync
+unwritable
 urand
+utimensat
 whitespace
 wordlist
 wordlists
 xattrs
+xffb
 xpass
 
 # * abbreviations
@@ -253,3 +259,5 @@ Hijri
 Nowruz
 charmap
 hijri
+ctype
+clocale

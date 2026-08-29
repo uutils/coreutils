@@ -23,9 +23,8 @@ pub const TESTS_BINARY: &str = env!("CARGO_BIN_EXE_uudoc");
 // Set the environment variable for any tests
 
 // Use the ctor attribute to run this function before any tests
-#[ctor::ctor]
+#[ctor::ctor(unsafe)]
 fn init() {
-    // No need for unsafe here
     unsafe {
         env::set_var("UUTESTS_BINARY_PATH", TESTS_BINARY);
     }

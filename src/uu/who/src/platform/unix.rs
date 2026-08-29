@@ -10,13 +10,12 @@ use crate::uu_app;
 
 use uucore::display::Quotable;
 use uucore::error::{FromIo, UResult};
-use uucore::libc::{S_IWGRP, STDIN_FILENO, ttyname};
+use uucore::libc::S_IWGRP;
 use uucore::translate;
 
 use uucore::utmpx::{self, UtmpxRecord, time};
 
 use std::borrow::Cow;
-use std::ffi::CStr;
 use std::fmt::Write;
 use std::io::{Write as _, stdout};
 use std::os::unix::fs::MetadataExt;
@@ -163,6 +162,8 @@ fn idle_string<'a>(when: i64, boottime: i64) -> Cow<'a, str> {
 }
 
 fn time_string(ut: &UtmpxRecord) -> String {
+    const FORMAT_DESCRIPTION_VERSION: usize = 2;
+
     let time_format: Vec<time::format_description::FormatItem> = if ["LC_ALL", "LC_TIME", "LANG"]
         .into_iter()
         .find_map(std::env::var_os)
@@ -170,26 +171,24 @@ fn time_string(ut: &UtmpxRecord) -> String {
         == Some(std::ffi::OsStr::new("C"))
     {
         // "%b %e %H:%M"
-        time::format_description::parse("[month repr:short] [day padding:space] [hour]:[minute]")
-            .unwrap()
+        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+            "[month repr:short] [day padding:space] [hour]:[minute]",
+        )
+        .unwrap()
     } else {
         // "%Y-%m-%d %H:%M"
-        time::format_description::parse("[year]-[month]-[day] [hour]:[minute]").unwrap()
+        time::format_description::parse_borrowed::<FORMAT_DESCRIPTION_VERSION>(
+            "[year]-[month]-[day] [hour]:[minute]",
+        )
+        .unwrap()
     };
     ut.login_time().format(&time_format).unwrap()
 }
 
-#[inline]
 fn current_tty() -> String {
-    let p = unsafe { ttyname(STDIN_FILENO) };
-    if p.is_null() {
-        String::new()
-    } else {
-        unsafe { CStr::from_ptr(p) }
-            .to_string_lossy()
-            .trim_start_matches("/dev/")
-            .to_owned()
-    }
+    rustix::termios::ttyname(std::io::stdin(), Vec::with_capacity(16))
+        .map(|s| s.to_string_lossy().trim_start_matches("/dev/").to_owned())
+        .unwrap_or_default()
 }
 
 impl Who {
@@ -210,8 +209,15 @@ impl Who {
                 .filter(UtmpxRecord::is_user_process)
                 .map(|ut| ut.user())
                 .collect::<Vec<_>>();
-            println!("{}", users.join(" "));
-            println!("{}", translate!("who-user-count", "count" => users.len()));
+            // `println!` panics on a write error; the rest of this file surfaces
+            // it through `?` instead so the caller can report it and exit
+            // non-zero, matching GNU (#13388).
+            writeln!(stdout(), "{}", users.join(" "))?;
+            writeln!(
+                stdout(),
+                "{}",
+                translate!("who-user-count", "count" => users.len())
+            )?;
         } else {
             let records = utmpx::Utmpx::iter_all_records_from(f);
 

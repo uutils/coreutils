@@ -2,7 +2,7 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore (words) autoformat nocheck
+// spell-checker:ignore (words) autoformat nocheck FILENUM
 
 #[cfg(any(target_os = "linux", target_os = "freebsd", target_os = "netbsd"))]
 use std::fs::OpenOptions;
@@ -254,6 +254,50 @@ fn default_format() {
 }
 
 #[test]
+fn repeated_o_accumulates_fields() {
+    // GNU lets -o repeat; the fields accumulate in the order they appear,
+    // here giving the reverse of the default format.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("2.2")
+        .arg("-o")
+        .arg("1.1")
+        .succeeds()
+        .stdout_only("a 1\nb 2\nc 3\ne 5\nh 8\n");
+}
+
+#[test]
+fn repeated_o_ignores_auto_when_mixed() {
+    // When -o is repeated and not every value is `auto`, each `auto` is
+    // ignored: only the explicit fields are printed, repeats included.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("2.2 2.2 1.1")
+        .succeeds()
+        .stdout_only("a a 1\nb b 2\nc c 3\ne e 5\nh h 8\n");
+}
+
+#[test]
+fn repeated_o_auto_stays_auto() {
+    // `auto` still applies when every -o value is `auto`.
+    new_ucmd!()
+        .arg("fields_1.txt")
+        .arg("fields_2.txt")
+        .arg("-o")
+        .arg("auto")
+        .arg("-o")
+        .arg("auto")
+        .succeeds()
+        .stdout_only_fixture("default.expected");
+}
+
+#[test]
 fn unpaired_lines_format() {
     new_ucmd!()
         .arg("fields_2.txt")
@@ -339,6 +383,71 @@ fn missing_format_fields() {
 }
 
 #[test]
+fn empty_fields_use_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    // A blank line splits into a single empty field, so the join field is
+    // present but zero length rather than missing.
+    at.write("blank", "hello\n\n\n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "blank", "blank"])
+        .succeeds()
+        .stdout_only("hello\nEMPTY\nEMPTY\nEMPTY\nEMPTY\n");
+
+    // The same holds for a line containing only whitespace.
+    at.write("spaces", "   \n");
+
+    ts.ucmd()
+        .args(&["-e", "EMPTY", "-o", "0,1.1", "spaces", "spaces"])
+        .succeeds()
+        .stdout_only("EMPTY EMPTY\n");
+
+    // A field between two adjacent separators is also present but empty.
+    at.write("gap", "a,,b\n");
+
+    ts.ucmd()
+        .args(&[
+            "-t",
+            ",",
+            "-e",
+            "EMPTY",
+            "-o",
+            "0,1.1,1.2,1.3",
+            "gap",
+            "gap",
+        ])
+        .succeeds()
+        .stdout_only("a,a,EMPTY,b\n");
+
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "EMPTY", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,EMPTY,b,EMPTY,b\n");
+}
+
+#[test]
+fn empty_fields_kept_without_empty_filler() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+
+    at.write("gap", "a,,b\n");
+
+    // Without -e an empty field stays empty.
+    ts.ucmd()
+        .args(&["-t", ",", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+
+    // Passing an empty string to -e is equivalent to not passing it at all.
+    ts.ucmd()
+        .args(&["-t", ",", "-e", "", "-o", "0,1.1,1.2,1.3", "gap", "gap"])
+        .succeeds()
+        .stdout_only("a,a,,b\n");
+}
+
+#[test]
 fn nocheck_order() {
     new_ucmd!()
         .arg("fields_1.txt")
@@ -357,8 +466,7 @@ fn wrong_line_order() {
         .fails()
         .stdout_contains("7 g f 4 fg")
         .stderr_is(format!(
-            "{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
-            ts.bin_path.to_string_lossy(),
+            "{0}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0}: input is not in sorted order\n",
             ts.util_name
         ));
 
@@ -383,8 +491,7 @@ fn both_files_wrong_line_order() {
         .fails()
         .stdout_contains("5 e 3 ef")
         .stderr_is(format!(
-            "{0} {1}: fields_5.txt:4: is not sorted: 3\n{0} {1}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0} {1}: input is not in sorted order\n",
-            ts.bin_path.to_string_lossy(),
+            "{0}: fields_5.txt:4: is not sorted: 3\n{0}: fields_4.txt:5: is not sorted: 11 g 5 gh\n{0}: input is not in sorted order\n",
             ts.util_name
         ));
 
@@ -598,4 +705,103 @@ fn test_locale_collation() {
         .succeeds()
         .stdout_contains("abc:d 2 y")
         .stdout_contains("ab:d 1 x");
+}
+
+#[test]
+fn test_incompatible_fields_reports_exact_field_number() {
+    // An out-of-range field clamps to usize::MAX, which used to overflow the
+    // one-based increment. Field numbers past 2^53 also used to be rounded on
+    // their way through the localization layer.
+    //
+    // `parse_field_number` uses `usize`, so a value at or above `usize::MAX`
+    // saturates to it. The saturation ceiling is therefore pointer-width
+    // dependent, and the expected text is built from `usize::MAX` rather than a
+    // hard-coded 64-bit literal.
+    let max_field = usize::MAX.to_string();
+
+    // A small field number takes the i64 number path through the localization
+    // layer and is platform-independent.
+    new_ucmd!()
+        .args(&["-j", "3", "-1", "5", "/dev/null", "/dev/null"])
+        .fails()
+        .stderr_contains("incompatible join fields 3, 5");
+
+    // Values at or above `usize::MAX` saturate to `usize::MAX` on every
+    // platform; the localization layer must carry that ceiling as an exact
+    // decimal string rather than rounding it through Fluent's f64-backed number
+    // type.
+    for field in ["18446744073709551615", "99999999999999999999999"] {
+        new_ucmd!()
+            .args(&["-j", field, "-1", "5", "/dev/null", "/dev/null"])
+            .fails()
+            .stderr_contains(format!("incompatible join fields {max_field}, 5"));
+    }
+
+    // A value above f64 precision (2^53) but below `usize::MAX` is reported
+    // exactly on 64-bit (where `usize` holds it); on 32-bit it saturates to
+    // `usize::MAX` like the cases above.
+    #[cfg(target_pointer_width = "64")]
+    let expected_above: String = "9007199254740993".to_string();
+    #[cfg(not(target_pointer_width = "64"))]
+    let expected_above: String = max_field.clone();
+    new_ucmd!()
+        .args(&[
+            "-j",
+            "9007199254740993",
+            "-1",
+            "5",
+            "/dev/null",
+            "/dev/null",
+        ])
+        .fails()
+        .stderr_contains(format!("incompatible join fields {expected_above}, 5"));
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_failing_field_of_a_list() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+
+        // The first field is fine; only the second one is at fault.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+join: invalid field number: 'x'
+   ╭─[ join:1:13 ]
+   │
+ 1 │ join -o 1.2,2.x /dev/null /dev/null
+   │             ───
+   │
+   │ Help: an output field is FILENUM.FIELD, as in -o 1.2,2.1; 0 stands for the join field
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_glued_short_option() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-o1.2,0.4", "/dev/null", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("join:1:12"), "{stderr}");
+        assert!(stderr.contains("invalid field specifier"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-o", "1.2,2.x", "/dev/null", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("join: invalid field number: 'x'\n");
+    }
 }

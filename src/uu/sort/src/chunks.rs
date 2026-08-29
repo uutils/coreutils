@@ -17,7 +17,8 @@ use std::{
 
 use memchr::memchr_iter;
 use self_cell::self_cell;
-use uucore::error::{UResult, USimpleError};
+use uucore::error::{UResult, USimpleError, strip_errno};
+use uucore::translate;
 
 use crate::{
     GeneralBigDecimalParseResult, GlobalSettings, Line, SortMode, numeric_str_cmp::NumInfo,
@@ -269,6 +270,8 @@ fn parse_lines<'a>(
     separator: u8,
     settings: &GlobalSettings,
 ) {
+    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
+
     let read = read.strip_suffix(&[separator]).unwrap_or(read);
 
     assert!(lines.is_empty());
@@ -279,7 +282,6 @@ fn parse_lines<'a>(
     assert!(line_data.collation_key_buffer.is_empty());
     assert!(line_data.collation_key_ends.is_empty());
     token_buffer.clear();
-    const SMALL_CHUNK_BYTES: usize = 64 * 1024;
     let mut estimated = (*line_count_hint).max(1);
     let mut exact_line_count = None;
     if *line_count_hint == 0 || read.len() <= SMALL_CHUNK_BYTES {
@@ -361,7 +363,6 @@ fn read_to_buffer<T: Read>(
     separator: u8,
 ) -> UResult<(usize, bool)> {
     let mut read_target = &mut buffer[start_offset..];
-    let mut last_file_empty = true;
     let mut newline_search_offset = 0;
     let mut found_newline = false;
     loop {
@@ -369,24 +370,23 @@ fn read_to_buffer<T: Read>(
             Ok(0) => {
                 if read_target.is_empty() {
                     // chunk is full
-                    if let Some(max_buffer_size) = max_buffer_size {
-                        if max_buffer_size > buffer.len() {
-                            // we can grow the buffer
-                            let prev_len = buffer.len();
-                            buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
-                            read_target = &mut buffer[prev_len..];
-                            continue;
-                        }
+                    if max_buffer_size.is_some_and(|max_buf_size| max_buf_size > buffer.len()) {
+                        // we can grow the buffer
+                        let prev_len = buffer.len();
+                        buffer.resize(prev_len + ALLOC_CHUNK_SIZE, 0);
+                        read_target = &mut buffer[prev_len..];
+                        continue;
                     }
 
+                    let search_start = newline_search_offset;
                     let mut sep_iter =
-                        memchr_iter(separator, &buffer[newline_search_offset..buffer.len()]).rev();
+                        memchr_iter(separator, &buffer[search_start..buffer.len()]).rev();
                     newline_search_offset = buffer.len();
                     if let Some(last_line_end) = sep_iter.next() {
                         if found_newline || sep_iter.next().is_some() {
                             // We read enough lines.
                             // We want to include the separator here, because it shouldn't be carried over.
-                            return Ok((last_line_end + 1, true));
+                            return Ok((search_start + last_line_end + 1, true));
                         }
                         found_newline = true;
                     }
@@ -398,20 +398,19 @@ fn read_to_buffer<T: Read>(
                 } else {
                     // This file has been fully read.
                     let mut leftover_len = read_target.len();
-                    if !last_file_empty {
-                        // The file was not empty.
-                        let read_len = buffer.len() - leftover_len;
-                        if buffer[read_len - 1] != separator {
-                            // The file did not end with a separator. We have to insert one.
-                            buffer[read_len] = separator;
-                            leftover_len -= 1;
-                        }
-                        let read_len = buffer.len() - leftover_len;
-                        read_target = &mut buffer[read_len..];
+                    // Decide from buffered bytes: a file may span calls, so a 0-byte read can
+                    // still leave an unterminated tail that must be separated from the next file.
+                    let read_len = buffer.len() - leftover_len;
+                    if read_len > 0 && buffer[read_len - 1] != separator {
+                        // The data so far does not end with a separator. We have to insert one.
+                        // `read_target` is non-empty here, so `buffer[read_len]` is in bounds.
+                        buffer[read_len] = separator;
+                        leftover_len -= 1;
                     }
+                    let read_len = buffer.len() - leftover_len;
+                    read_target = &mut buffer[read_len..];
                     if let Some(next_file) = next_files.next() {
                         // There is another file.
-                        last_file_empty = true;
                         *file = next_file?;
                     } else {
                         // This was the last file.
@@ -422,12 +421,16 @@ fn read_to_buffer<T: Read>(
             }
             Ok(n) => {
                 read_target = &mut read_target[n..];
-                last_file_empty = false;
             }
             Err(e) if e.kind() == ErrorKind::Interrupted => {
                 // retry
             }
-            Err(e) => return Err(USimpleError::new(2, e.to_string())),
+            Err(e) => {
+                return Err(USimpleError::new(
+                    2,
+                    translate!("sort-read-failed", "error" => strip_errno(&e)),
+                ));
+            }
         }
     }
 }

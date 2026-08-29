@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/shred.rs"
 doctest = false
@@ -24,6 +21,9 @@ rand = { workspace = true }
 uucore = { workspace = true, features = ["parser-size"] }
 libc = { workspace = true }
 fluent = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "shred"

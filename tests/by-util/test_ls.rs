@@ -3,15 +3,13 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 // spell-checker:ignore (words) READMECAREFULLY birthtime doesntexist oneline somebackup lrwx somefile somegroup somehiddenbackup somehiddenfile tabsize aaaaaaaa bbbb cccc dddddddd ncccc neee naaaaa nbcdef nfffff dired subdired tmpfs mdir COLORTERM mexe bcdef mfoo timefile
-// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE
+// spell-checker:ignore (words) fakeroot setcap drwxr bcdlps mdangling mentry awith acolons NOFILE NOTCAPABLE
 #![allow(
     clippy::similar_names,
     clippy::too_many_lines,
     clippy::cast_possible_truncation
 )]
 
-#[cfg(all(unix, feature = "chmod"))]
-use nix::unistd::{close, dup};
 use regex::Regex;
 #[cfg(unix)]
 use rlimit::Resource;
@@ -30,7 +28,7 @@ use uutests::new_ucmd;
 #[cfg(unix)]
 use uutests::unwrap_or_return;
 use uutests::util::TestScenario;
-#[cfg(any(unix, feature = "feat_selinux"))]
+#[cfg(any(unix, feature = "selinux"))]
 use uutests::util::expected_result;
 use uutests::{at_and_ucmd, util_name};
 
@@ -167,6 +165,15 @@ fn test_invalid_value_time_style() {
         .arg("--format=single-column")
         .succeeds()
         .no_stderr();
+}
+
+#[test]
+fn test_time_style_empty_after_posix_prefix() {
+    new_ucmd!()
+        .arg("-l")
+        .arg("--time-style=posix-")
+        .fails_with_code(2)
+        .stderr_contains("ls: invalid --time-style argument ''");
 }
 
 #[test]
@@ -478,7 +485,7 @@ fn test_ls_devices() {
     at.mkdir("some-dir1");
 
     // Regex tests correct device ID and correct (no pad) spacing for a single file
-    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    #[cfg(target_vendor = "apple")]
     {
         scene
             .ucmd()
@@ -599,8 +606,8 @@ fn test_ls_io_errors() {
 
         at.touch("some-dir4/bad-fd.txt");
         let fd1 = at.open("some-dir4/bad-fd.txt");
-        let fd2 = dup(dbg!(&fd1)).unwrap();
-        close(fd1).unwrap();
+        let fd2 = rustix::io::dup(dbg!(&fd1)).unwrap();
+        drop(fd1); //close
 
         // on the mac and in certain Linux containers bad fds are typed as dirs,
         // however sometimes bad fds are typed as links and directory entry on links won't fail
@@ -644,7 +651,7 @@ fn test_ls_io_errors() {
             .arg(format!("/dev/fd/{}", fd2.as_raw_fd()))
             .succeeds();
 
-        let _ = close(fd2);
+        drop(fd2); //close
     }
 }
 
@@ -1161,7 +1168,7 @@ fn test_ls_long() {
 
 #[cfg(not(windows))]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_format() {
     let scene = TestScenario::new(util_name!());
@@ -1282,7 +1289,14 @@ fn test_ls_long_symlink_color() {
     ];
 
     // We are only interested in lines or the ls output that are symlinks. These start with "lrwx".
-    let result = scene.ucmd().arg("-laR").arg("--color").arg(".").succeeds();
+    // Use --file-type to ensure symlink targets are stat'd and colored
+    let result = scene
+        .ucmd()
+        .arg("-laR")
+        .arg("--color")
+        .arg("--file-type")
+        .arg(".")
+        .succeeds();
     let mut result_lines = result
         .stdout_str()
         .lines()
@@ -1524,6 +1538,41 @@ fn test_ls_dangling_symlink_or_and_missing_colors() {
 }
 
 #[test]
+#[cfg(unix)]
+fn test_ls_symlink_to_dir_with_mi_colors() {
+    // When LS_COLORS contains mi=, ln=, di=, ls -lp should stat the symlink target,
+    // color the link with ln color, the target with di color, and append '/' to the target.
+    use std::os::unix::fs::symlink;
+
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("target_dir");
+    symlink("target_dir", at.plus("link")).unwrap();
+
+    let stdout = ts
+        .ucmd()
+        .env("LS_COLORS", "mi=41:ln=1;36:di=1;34")
+        .arg("-lp")
+        .arg("--color=always")
+        .arg("link")
+        .succeeds()
+        .stdout_str()
+        .to_string();
+
+    // Regex to capture link color and target color
+    let color_regex = Regex::new(
+        r"\x1b\[0m\x1b\[(?P<link>[0-9;]*)[m]link\x1b\[0m -> \x1b\[(?P<target>[0-9;]*)[m]target_dir\x1b\[0m/",
+    )
+    .unwrap();
+    let captures = color_regex
+        .captures(&stdout)
+        .expect("failed to capture symlink colors");
+
+    assert_eq!(captures.name("link").unwrap().as_str(), "1;36");
+    assert_eq!(captures.name("target").unwrap().as_str(), "1;34");
+}
+
+#[test]
 /// Mirrors GNU `tests/ls/ls-misc.pl::sl-dangle4`.
 fn test_ls_dangling_symlink_ln_or_priority() {
     let ts = TestScenario::new(util_name!());
@@ -1717,7 +1766,7 @@ fn test_ls_long_total_size() {
 }
 
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_long_formats() {
     let scene = TestScenario::new(util_name!());
@@ -1941,6 +1990,10 @@ fn test_ls_group_directories_first() {
     }
     filenames.sort_unstable();
 
+    for (i, name) in filenames.iter().enumerate() {
+        at.write_bytes(name, "a".repeat(i).as_bytes());
+    }
+
     let dirnames = ["aaa", "bbb", "ccc", "yyy"];
     for dirname in dirnames {
         at.mkdir(dirname);
@@ -1954,12 +2007,25 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dots.into_iter()
             .chain(dirnames.into_iter())
             .chain(filenames.into_iter())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
+    );
+
+    let result = scene
+        .ucmd()
+        .arg("-1")
+        .arg("--group-directories-first")
+        .arg("--sort=size")
+        .succeeds();
+    assert_eq!(
+        result.stdout_str().lines().collect::<Vec<_>>(),
+        dirnames
+            .into_iter()
+            .chain(filenames.into_iter().rev())
+            .collect::<Vec<_>>()
     );
 
     let result = scene
@@ -1968,13 +2034,12 @@ fn test_ls_group_directories_first() {
         .arg("--group-directories-first")
         .succeeds();
     assert_eq!(
-        result.stdout_str().split('\n').collect::<Vec<_>>(),
+        result.stdout_str().lines().collect::<Vec<_>>(),
         dirnames
             .into_iter()
             .rev()
             .chain(dots.into_iter().rev())
             .chain(filenames.into_iter().rev())
-            .chain([""].into_iter())
             .collect::<Vec<_>>(),
     );
 
@@ -2043,6 +2108,26 @@ fn test_ls_sort_name() {
         .arg("-A")
         .succeeds()
         .stdout_is(".a\n.b\na\nb\n");
+}
+
+// https://github.com/uutils/coreutils/issues/11831
+// In a UTF-8 locale, GNU ls places "." and ".." before names starting with
+// punctuation such as '#' due to locale-aware collation.
+#[test]
+fn test_ls_sort_dot_first_utf8_locale() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("#asdf");
+    at.touch("bar");
+    at.touch("foo");
+
+    scene
+        .ucmd()
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("-1a")
+        .succeeds()
+        .stdout_is(".\n..\n#asdf\nbar\nfoo\n");
 }
 
 #[test]
@@ -2656,11 +2741,38 @@ fn test_ls_recursive_1() {
         .stdout_is(out);
 }
 
+#[test]
+fn test_ls_recursive_all_with_version_sort_does_not_walk_up() {
+    // Regression test for https://github.com/uutils/coreutils/issues/13501:
+    // combining `-a` (show `.`/`..`) with `-R` (recursive) and `-v`
+    // (version/natural sort) used to make `ls` recurse into the listed
+    // `.`/`..` entries themselves, walking all the way up to the
+    // filesystem root instead of stopping at the leaf directories.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("a");
+    at.mkdir("a/b");
+    at.mkdir("a/b/c");
+
+    #[cfg(unix)]
+    let out = "a/b:\n.\n..\nc\n\na/b/c:\n.\n..\n";
+    #[cfg(windows)]
+    let out = "a/b:\n.\n..\nc\n\na/b\\c:\n.\n..\n";
+    scene
+        .ucmd()
+        .arg("-aRv")
+        .arg("a/b")
+        .succeeds()
+        .stdout_is(out);
+}
+
 /// The quoting module regroups tests that check the behavior of ls when
 /// quoting and escaping special characters with different quoting styles.
 #[cfg(unix)]
 mod quoting {
     use super::TestScenario;
+    use uutests::at_and_ucmd;
+    use uutests::util::is_locale_available;
     use uutests::util_name;
 
     /// Create a directory with "dirname", then for each check, assert that the
@@ -2706,6 +2818,78 @@ mod quoting {
             ],
             &[],
         );
+    }
+
+    // Regression test for GNU tests/ls/quoting-utf8.sh: in a UTF-8 locale the
+    // locale/clocale quoting styles use Unicode quotation marks U+2018/U+2019
+    // and must not escape embedded apostrophes or double quotes; in the C
+    // locale they fall back to ASCII single/double quotes.
+    #[test]
+    fn test_ls_quoting_locale_utf8() {
+        if !is_locale_available("en_US.UTF-8") {
+            return;
+        }
+
+        let lq = "\u{2018}";
+        let rq = "\u{2019}";
+
+        for style in ["locale", "clocale"] {
+            let (at, mut ucmd) = at_and_ucmd!();
+            at.touch("hello world");
+            at.touch("it's");
+            at.touch("say \"hi\"");
+            at.touch("tab\there");
+            at.touch("nel\u{0085}here");
+
+            let out = ucmd
+                .env("LC_ALL", "en_US.UTF-8")
+                .arg(format!("--quoting-style={style}"))
+                .arg("-1")
+                .succeeds()
+                .stdout_move_str();
+
+            assert!(
+                out.contains(&format!("{lq}hello world{rq}")),
+                "{style}: 'hello world' not quoted with Unicode quotes: {out:?}"
+            );
+            // Embedded apostrophe and double quote must stay unescaped.
+            assert!(
+                out.contains(&format!("{lq}it's{rq}")),
+                "{style}: embedded apostrophe should not be escaped: {out:?}"
+            );
+            assert!(
+                out.contains(&format!("{lq}say \"hi\"{rq}")),
+                "{style}: embedded double quote should not be escaped: {out:?}"
+            );
+            // Control characters are still C-escaped.
+            assert!(
+                out.contains(&format!("{lq}tab\\there{rq}")),
+                "{style}: tab should be escaped as \\t: {out:?}"
+            );
+            // Non-ASCII (C1) control characters are octal-escaped by byte.
+            assert!(
+                out.contains(&format!("{lq}nel\\302\\205here{rq}")),
+                "{style}: U+0085 should be octal-escaped: {out:?}"
+            );
+        }
+
+        // In the C locale, locale uses ASCII single quotes and clocale uses
+        // ASCII double quotes.
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("hello world");
+        ucmd.env("LC_ALL", "C")
+            .arg("--quoting-style=locale")
+            .arg("-1")
+            .succeeds()
+            .stdout_contains("'hello world'");
+
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("hello world");
+        ucmd.env("LC_ALL", "C")
+            .arg("--quoting-style=clocale")
+            .arg("-1")
+            .succeeds()
+            .stdout_contains("\"hello world\"");
     }
 
     #[test]
@@ -3112,7 +3296,7 @@ mod quoting {
         );
     }
 
-    #[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))]
+    #[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))]
     #[test]
     /// This test creates files with an UTF-8 encoded name and verify that it
     /// gets escaped depending on the used locale.
@@ -3175,6 +3359,30 @@ mod quoting {
                 .succeeds()
                 .stdout_only(utf_8_ref);
         }
+    }
+
+    #[test]
+    fn test_c_dot_utf8_renders_utf8() {
+        let scene = TestScenario::new(util_name!());
+        let at = &scene.fixtures;
+        let filename = "é";
+        at.touch(filename);
+
+        // C (no UTF-8): bytes 0xC3 0xA9 replaced with ??
+        scene
+            .ucmd()
+            .env("LC_ALL", "C")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("??\n");
+
+        // C.UTF-8: multi-byte UTF-8 character rendered literally
+        scene
+            .ucmd()
+            .env("LC_ALL", "C.UTF-8")
+            .args(&["--quoting-style=literal", "--hide-control-chars"])
+            .succeeds()
+            .stdout_is("é\n");
     }
 }
 
@@ -3247,7 +3455,7 @@ fn test_ls_color() {
 
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_inode() {
     let scene = TestScenario::new(util_name!());
@@ -3386,6 +3594,110 @@ fn test_ls_indicator_style() {
     }
 }
 
+#[test]
+#[cfg(not(windows))]
+fn test_ls_indicator_style_symlink_target_long() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    at.symlink_dir("dir", "dir_link");
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--classify")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> ")
+        .stdout_does_not_contain("dir_link@ -> ")
+        .stdout_contains("/dir/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_target_long() {
+    // GNU `ls -l --file-type` does append `/` to a symlink target that resolves to a
+    // directory unlike `ls -lp`
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir/")
+        .stdout_does_not_contain("dir_link/");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_filetype_symlink_to_executable_target_long() {
+    use std::fs;
+    use std::os::unix::fs::{PermissionsExt, symlink};
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.touch("exec_target");
+    let mut perms = fs::metadata(at.plus("exec_target")).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(at.plus("exec_target"), perms).unwrap();
+
+    symlink("exec_target", at.plus("link")).unwrap();
+    assert!(at.is_symlink("link"));
+
+    scene
+        .ucmd()
+        .arg("--file-type")
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link -> exec_target")
+        .stdout_does_not_contain("exec_target*");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_ls_indicator_style_slash_symlink_target_long() {
+    // GNU `ls -lp` does NOT append `/` to a symlink target that resolves to a
+    // directory — the slash indicator style only applies to real directories.
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir");
+    assert!(at.dir_exists("dir"));
+
+    // Use a relative-path symlink so the displayed target matches GNU output.
+    symlink("dir", at.plus("dir_link")).unwrap();
+    assert!(at.is_symlink("dir_link"));
+
+    scene
+        .ucmd()
+        .arg("-lp")
+        .arg("dir_link")
+        .succeeds()
+        .stdout_contains("dir_link -> dir\n")
+        .stdout_does_not_contain("dir_link/")
+        .stdout_does_not_contain("-> dir/");
+}
+
 // Essentially the same test as above, but only test symlinks and directories,
 // not pipes or sockets.
 #[test]
@@ -3431,7 +3743,7 @@ fn test_ls_indicator_style() {
     }
 }
 
-#[cfg(not(any(target_vendor = "apple", target_os = "windows", target_os = "openbsd")))] // Truncate not available on mac or win
+#[cfg(not(any(target_vendor = "apple", windows, target_os = "openbsd")))] // Truncate not available on mac or win
 #[test]
 fn test_ls_human_si() {
     let scene = TestScenario::new(util_name!());
@@ -3661,7 +3973,7 @@ fn test_ls_version_sort() {
     );
 
     let result = scene.ucmd().arg("-a1v").succeeds();
-    expected.insert(expected.len() - 1, "..");
+    expected.insert(0, "..");
     expected.insert(0, ".");
     assert_eq!(
         result.stdout_str().split('\n').collect::<Vec<_>>(),
@@ -3875,6 +4187,30 @@ fn test_ls_quoting_style_env_var_default() {
         .stdout_only(format!("{correct_c}\n"));
 }
 
+// An unwritable stderr must not turn the QUOTING_STYLE warning into an abort:
+// the diagnostic is best-effort, so a failed write is dropped and the listing
+// still goes out. /dev/full is Linux-only.
+#[cfg(target_os = "linux")]
+#[test]
+fn test_ls_invalid_quoting_style_env_var_with_unwritable_stderr() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.touch("zeta");
+    at.touch("alpha");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    scene
+        .ucmd()
+        .env("QUOTING_STYLE", "not-a-style")
+        .set_stderr(dev_full)
+        .succeeds()
+        .stdout_is("alpha\nzeta\n");
+}
+
 #[test]
 fn test_ls_quoting_style_arg_overrides_env_var() {
     let scene = TestScenario::new(util_name!());
@@ -3981,6 +4317,49 @@ fn test_ls_align_unquoted() {
         //                                  ^      ^          ^
         //                                  space  no-space   space
     }
+}
+
+#[test]
+fn test_ls_color_does_not_make_quoted_names_align_as_unquoted() {
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("dir one");
+    at.touch("file one");
+
+    let args = ["-C", "-T0", "-w=80", "--quoting-style=shell-escape-always"];
+
+    let plain = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    let ansi_re = Regex::new(r"\x1b\[[0-9;]*[A-Za-z]").unwrap();
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
+
+    let long_args = ["-l", "--quoting-style=shell-escape-always"];
+    let plain = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=never")
+        .succeeds()
+        .stdout_move_str();
+    let colored = scene
+        .ucmd()
+        .args(&long_args)
+        .arg("--color=always")
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(ansi_re.replace_all(&colored, ""), plain);
 }
 
 #[test]
@@ -4640,7 +5019,39 @@ fn test_ls_dangling_symlinks() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+fn test_ls_long_self_referential_dir_lists_contents() {
+    // `ls -l` for a directory referenced via `.` (e.g. run from inside a symlinked
+    // directory) must list its contents, not show a `. -> target` link entry. On
+    // Windows/Redox a `.` in a symlinked dir was reported as the symlink itself
+    // (issues #6467, #7873). A named symlink-to-dir argument must still be a link.
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+
+    at.mkdir("real");
+    at.touch("real/inside");
+    at.symlink_dir("real", "link");
+
+    // Run from inside the symlinked directory: the implicit `.` is the directory
+    // itself, so its contents must be listed, never shown as a `-> target` link.
+    scene
+        .ucmd()
+        .arg("-l")
+        .current_dir(at.plus("link"))
+        .succeeds()
+        .stdout_contains("inside")
+        .stdout_does_not_contain("-> ");
+
+    // A named symlink-to-dir argument is still shown as a link, not dereferenced.
+    scene
+        .ucmd()
+        .arg("-l")
+        .arg("link")
+        .succeeds()
+        .stdout_contains("link ->");
+}
+
+#[test]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context1() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4655,7 +5066,7 @@ fn test_ls_context1() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context2() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4671,7 +5082,7 @@ fn test_ls_context2() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_long() {
     if !uucore::selinux::is_selinux_enabled() {
         return;
@@ -4690,7 +5101,7 @@ fn test_ls_context_long() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4720,7 +5131,7 @@ fn test_ls_context_format() {
 }
 
 /// Helper function to validate `SELinux` context format
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn validate_selinux_context(context: &str) {
     assert!(
         context.contains(':'),
@@ -4735,7 +5146,7 @@ fn validate_selinux_context(context: &str) {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_format() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4768,7 +5179,7 @@ fn test_ls_selinux_context_format() {
 }
 
 #[test]
-#[cfg(feature = "feat_selinux")]
+#[cfg(all(feature = "selinux", any(target_os = "linux", target_os = "android")))]
 fn test_ls_selinux_context_indicator() {
     if !uucore::selinux::is_selinux_enabled() {
         println!("test skipped: Kernel has no support for SElinux context");
@@ -4989,7 +5400,7 @@ fn test_symlink_target_extension_color() {
     at.touch("archive.tar.gz");
     at.relative_symlink_file("archive.tar.gz", "link");
     let out = ucmd
-        .env("LS_COLORS", "*.tar.gz=31")
+        .env("LS_COLORS", "*.tar.gz=31:or=33")
         .args(&["-l", "--color=always", "link"])
         .succeeds()
         .stdout_move_str();
@@ -5001,8 +5412,17 @@ fn test_symlink_target_extension_color() {
 fn test_tabsize_option() {
     let scene = TestScenario::new(util_name!());
 
-    scene.ucmd().args(&["-T", "3"]).succeeds();
+    for valid in ["3", "0", "0xff"] {
+        scene.ucmd().args(&["-T", valid]).succeeds();
+    }
     scene.ucmd().args(&["--tabsize", "0"]).succeeds();
+    for invalid in ["-3", "a", "3.14"] {
+        scene
+            .ucmd()
+            .arg(format!("--tabsize={invalid}"))
+            .fails()
+            .stderr_is(format!("ls: invalid tab size: '{invalid}'\n"));
+    }
     scene.ucmd().arg("-T").fails();
 }
 
@@ -5054,17 +5474,7 @@ fn test_tabsize_formatting() {
         .stdout_is("aaaaaaaa  cccc\nbbbb      dddddddd\n");
 }
 
-#[cfg(any(
-    target_os = "linux",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "dragonfly",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "illumos",
-    target_os = "solaris"
-))]
+#[cfg(all(unix, not(target_os = "android")))]
 #[test]
 fn test_device_number() {
     use std::fs::{metadata, read_dir};
@@ -5340,7 +5750,7 @@ fn test_ls_dired_recursive_multiple() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
@@ -5486,7 +5896,7 @@ fn test_ls_dired_complex() {
         .map(|chunk| {
             let start_pos = chunk[0];
             let end_pos = chunk[1];
-            let filename = String::from_utf8(output.as_bytes()[start_pos..=end_pos].to_vec())
+            let filename = String::from_utf8(output.as_bytes()[start_pos..end_pos].to_vec())
                 .unwrap()
                 .trim()
                 .to_string();
@@ -5885,7 +6295,7 @@ fn test_ls_hyperlink() {
 fn test_ls_hyperlink_encode_link() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         at.touch("back\\slash");
         at.touch("ques?tion");
@@ -5894,7 +6304,7 @@ fn test_ls_hyperlink_encode_link() {
     at.touch("sp ace");
 
     let result = ucmd.arg("--hyperlink").succeeds();
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     {
         assert!(
             result
@@ -6020,7 +6430,7 @@ fn test_ls_hyperlink_symlink_target_handling() {
 
     let result = scene
         .ucmd()
-        .args(&["-l", "--hyperlink", "--color"])
+        .args(&["-l", "--hyperlink", "--color", "--file-type"])
         .succeeds();
     let output = result.stdout_str();
 
@@ -6060,9 +6470,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let at = &scene.fixtures;
 
     at.touch("café.txt");
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     at.touch("file:with:colons.txt");
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     at.touch("file-with-colons.txt");
     at.touch("file with spaces.txt");
 
@@ -6070,9 +6480,9 @@ fn test_ls_hyperlink_utf8_encoding() {
     let output = result.stdout_str();
 
     assert!(output.contains("caf%c3%a9.txt"));
-    #[cfg(not(target_os = "windows"))]
+    #[cfg(not(windows))]
     assert!(output.contains("file%3awith%3acolons.txt"));
-    #[cfg(target_os = "windows")]
+    #[cfg(windows)]
     assert!(output.contains("file-with-colons.txt"));
     assert!(output.contains("file%20with%20spaces.txt"));
 
@@ -6224,7 +6634,7 @@ fn test_acl_padding_not_inflated() {
     let scene = TestScenario::new(util_name!());
     let at = &scene.fixtures;
 
-    let uid = unsafe { libc::getuid() };
+    let uid = uucore::process::getuid();
     let names = ["file1", "file2", "file3", "file4", "file5"];
     for name in &names {
         at.touch(name);
@@ -6270,7 +6680,7 @@ fn test_acl_padding_not_inflated() {
 // setting is also configured).
 #[cfg(unix)]
 #[test]
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(feature = "selinux"))]
 // Disabled on the SELinux runner for now
 fn test_ls_color_norm() {
     let scene = TestScenario::new(util_name!());
@@ -7216,7 +7626,7 @@ fn test_ls_recursive_no_fd_leak() {
         .arg("1")
         .limit(Resource::NOFILE, 20, 20)
         .succeeds()
-        .stderr_is("");
+        .no_stderr();
 }
 
 #[test]
@@ -7244,4 +7654,82 @@ fn test_ls_a_dotdot_no_error_on_wasi() {
         .succeeds()
         .stdout_contains("..")
         .no_stderr();
+}
+
+#[test]
+#[cfg(target_os = "wasi")]
+fn test_ls_al_no_capabilities_insufficient_on_wasi() {
+    // `ls -al` reads metadata for every entry including "..". Without the
+    // WASI fallback, stat on ".." at the preopened root returns
+    // ERRNO_NOTCAPABLE, which surfaces to the user as "Capabilities
+    // insufficient". Guard against that regression here.
+    let scene = TestScenario::new(util_name!());
+    let out = scene.ucmd().arg("-al").succeeds();
+    out.no_stderr();
+    assert!(
+        !out.stdout_str().contains("Capabilities insufficient"),
+        "ls -al stdout leaked a WASI capability error: {}",
+        out.stdout_str()
+    );
+}
+
+// https://github.com/uutils/coreutils/issues/13280
+// options `--sort`, `--format`, `--time`, and `--blocksize` may be detached
+#[test]
+fn test_long_options_detached() {
+    new_ucmd!().arg("--sort").arg("name").succeeds();
+    new_ucmd!().arg("--format").arg("single-column").succeeds();
+    new_ucmd!().arg("--time").arg("mtime").succeeds();
+    new_ucmd!().arg("--block-size").arg("512").succeeds();
+}
+
+// Without -R a directory can never be revisited, so ls should not spend a stat
+// recording it for the loop detection that only recursion consults.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_no_extra_stat_without_recursion() {
+    use std::process::Command;
+
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.mkdir("some-dir");
+
+    let stats_of_some_dir = |args: &[&str]| -> Option<usize> {
+        let output = Command::new("strace")
+            .args(["-qq", "-e", "trace=stat,statx,lstat,newfstatat"])
+            .arg(&scene.bin_path)
+            .arg(scene.util_name.as_str())
+            .args(args)
+            .current_dir(scene.fixtures.as_string())
+            .output()
+            .ok()?;
+        let trace = String::from_utf8_lossy(&output.stderr);
+        // No syscalls traced at all means strace could not do its job here.
+        if !trace.contains('(') {
+            return None;
+        }
+        Some(trace.lines().filter(|l| l.contains("\"some-dir\"")).count())
+    };
+
+    let Some(count) = stats_of_some_dir(&["-F", "--color=always", "some-dir"]) else {
+        return; // strace unavailable, e.g. restricted ptrace in a container
+    };
+    assert_eq!(count, 1, "expected a single stat of the directory operand");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_write_error() {
+    let ts = TestScenario::new(util_name!());
+
+    ts.fixtures.touch("dummy_file.txt");
+
+    let dev_full = std::fs::OpenOptions::new()
+        .write(true)
+        .open("/dev/full")
+        .unwrap();
+
+    ts.ucmd()
+        .set_stdout(dev_full)
+        .fails_with_code(2)
+        .stderr_is("ls: write error: No space left on device\n");
 }

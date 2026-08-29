@@ -54,6 +54,8 @@ use std::time::Duration;
 /// assert!(from_str("2d", false).is_err());
 /// ```
 pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> {
+    const NANOS_PER_SEC: u32 = 1_000_000_000;
+
     // TODO: Switch to Duration::NANOSECOND if that ever becomes stable
     // https://github.com/rust-lang/rust/issues/57391
     const NANOSECOND_DURATION: Duration = Duration::from_nanos(1);
@@ -105,7 +107,6 @@ pub fn from_str(string: &str, allow_suffixes: bool) -> Result<Duration, String> 
         return Ok(NANOSECOND_DURATION);
     }
 
-    const NANOS_PER_SEC: u32 = 1_000_000_000;
     let whole_secs: u64 = match (&nanos_bi / NANOS_PER_SEC).try_into() {
         Ok(whole_secs) => whole_secs,
         Err(_) => return Ok(Duration::MAX),

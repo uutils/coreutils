@@ -156,10 +156,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["100"])
@@ -184,10 +183,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["ispeed", "995"])
@@ -197,10 +195,9 @@ fn invalid_baud_setting() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     new_ucmd!()
         .args(&["ospeed", "995"])
@@ -479,10 +476,9 @@ fn baud_rate_validation() {
     #[cfg(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     ))]
     {
         // BSD accepts numeric baud rates
@@ -949,6 +945,23 @@ fn test_combo_crt() {
         .args(&["--all"])
         .succeeds()
         .stdout_contains("echoe");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_combo_tabs() {
+    // Test tabs combination setting - tabs is an alias for tab0, -tabs for tab3
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["tabs"])
+        .succeeds()
+        .no_stderr();
+
+    new_ucmd!()
+        .terminal_simulation(true)
+        .args(&["-tabs"])
+        .succeeds()
+        .no_stderr();
 }
 
 #[test]
@@ -1495,10 +1508,9 @@ fn invalid_baud_rate() {
     #[cfg(not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     )))]
     {
         new_ucmd!()
@@ -1661,10 +1673,9 @@ fn test_ispeed_ospeed_valid_speeds() {
     not(any(
         target_os = "freebsd",
         target_os = "dragonfly",
-        target_os = "ios",
-        target_os = "macos",
         target_os = "netbsd",
-        target_os = "openbsd"
+        target_os = "openbsd",
+        target_vendor = "apple"
     ))
 ))]
 #[ignore = "Issue: #9547"]

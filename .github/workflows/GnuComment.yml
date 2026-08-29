@@ -62,7 +62,7 @@ jobs:
             const content = fs.readFileSync('./result.txt').toString();
 
             const marker = '<!-- gnu-comment-bot -->';
-            const body = `${marker}\nGNU testsuite comparison:\n\`\`\`\n${content}\n\`\`\``;
+            const body = `${marker}\nGNU testsuite comparison:\n\`\`\`\n${content}\`\`\``;
 
             const { data: comments } = await github.rest.issues.listComments({
               ...context.repo,

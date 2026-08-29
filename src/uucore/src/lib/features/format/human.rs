@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore gnulibs sfmt
+// spell-checker:ignore gnulibs sfmt replacen
 
 //! `human`-size formatting
 //!
@@ -24,6 +24,7 @@ pub enum SizeFormat {
 /// 3. The human-readable format uses powers for 1024, but does not display the "i"
 ///    that is commonly used to denote Kibi, Mebi, etc.
 /// 4. Kibi and Kilo are denoted differently ("k" and "K", respectively)
+/// 5. The decimal separator follows LC_NUMERIC ("1.3M" in C, "1,3M" in fr_FR)
 fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
     match prefixed {
         NumberPrefix::Standalone(bytes) => bytes.to_string(),
@@ -36,9 +37,26 @@ fn format_prefixed(prefixed: &NumberPrefix<f64>) -> String {
             if (10.0 * bytes).ceil() >= 100.0 {
                 format!("{:.0}{prefix_str}", bytes.ceil())
             } else {
-                format!("{:.1}{prefix_str}", (10.0 * bytes).ceil() / 10.0)
+                let number = format!("{:.1}", (10.0 * bytes).ceil() / 10.0);
+                format!("{}{prefix_str}", localize_decimal(number))
             }
         }
+    }
+}
+
+fn localize_decimal(s: String) -> String {
+    #[cfg(feature = "i18n-decimal")]
+    {
+        let sep = crate::i18n::decimal::locale_decimal_separator();
+        if sep == "." {
+            s
+        } else {
+            s.replacen('.', sep, 1)
+        }
+    }
+    #[cfg(not(feature = "i18n-decimal"))]
+    {
+        s
     }
 }
 

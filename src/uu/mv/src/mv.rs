@@ -4,6 +4,8 @@
 // file that was distributed with this source code.
 
 // spell-checker:ignore (ToDO) sourcepath targetpath nushell canonicalized unwriteable
+// spell-checker:ignore renameat symlinkat unlinkat unguessability RDONLY CLOEXEC
+// spell-checker:ignore renamer fsetxattr
 
 mod error;
 #[cfg(unix)]
@@ -34,13 +36,11 @@ use crate::hardlink::{
     HardlinkGroupScanner, HardlinkOptions, HardlinkTracker, create_hardlink_context,
     with_optional_hardlink_context,
 };
-use uucore::backup_control::{self, source_is_target_backup};
+use uucore::backup_control::{self, backup_would_destroy_source};
 use uucore::display::Quotable;
-use uucore::error::{FromIo, UResult, USimpleError, UUsageError, set_exit_code};
+use uucore::error::{FromIo, UError, UResult, USimpleError, UUsageError, set_exit_code};
 #[cfg(unix)]
 use uucore::fs::display_permissions_unix;
-#[cfg(unix)]
-use uucore::fs::make_fifo;
 use uucore::fs::{
     MissingHandling, ResolveMode, are_hardlinks_or_one_way_symlink_to_same_file,
     are_hardlinks_to_same_file, canonicalize, path_ends_with_terminator,
@@ -107,6 +107,9 @@ pub struct Options {
 
     /// `-Z, --context`
     pub context: Option<String>,
+
+    /// `--exchange` atomically exchange source and destination
+    pub exchange: bool,
 }
 
 impl Default for Options {
@@ -123,6 +126,7 @@ impl Default for Options {
             progress_bar: false,
             debug: false,
             context: None,
+            exchange: false,
         }
     }
 }
@@ -153,6 +157,7 @@ static ARG_FILES: &str = "files";
 static OPT_DEBUG: &str = "debug";
 static OPT_CONTEXT: &str = "context";
 static OPT_SELINUX: &str = "selinux";
+static OPT_EXCHANGE: &str = "exchange";
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
@@ -173,7 +178,8 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let overwrite_mode = determine_overwrite_mode(&matches);
-    let backup_mode = backup_control::determine_backup_mode(&matches)?;
+    let backup_mode =
+        backup_control::determine_backup_mode(env::var("VERSION_CONTROL").ok(), &matches)?;
     let update_mode = update_control::determine_update_mode(&matches);
 
     if backup_mode != BackupMode::None
@@ -193,10 +199,10 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         .get_one::<OsString>(OPT_TARGET_DIRECTORY)
         .map(OsString::from);
 
-    if let Some(ref maybe_dir) = target_dir {
-        if !Path::new(&maybe_dir).is_dir() {
-            return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
-        }
+    if let Some(ref maybe_dir) = target_dir
+        && !Path::new(&maybe_dir).is_dir()
+    {
+        return Err(MvError::TargetNotADirectory(maybe_dir.quote().to_string()).into());
     }
 
     // Handle -Z and --context options
@@ -220,6 +226,7 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         progress_bar: matches.get_flag(OPT_PROGRESS),
         debug: matches.get_flag(OPT_DEBUG),
         context,
+        exchange: matches.get_flag(OPT_EXCHANGE),
     };
 
     mv(&files[..], &opts)
@@ -333,6 +340,12 @@ pub fn uu_app() -> Command {
                 .help(translate!("mv-help-debug"))
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new(OPT_EXCHANGE)
+                .long(OPT_EXCHANGE)
+                .help(translate!("mv-help-exchange"))
+                .action(ArgAction::SetTrue),
+        )
 }
 
 fn determine_overwrite_mode(matches: &ArgMatches) -> OverwriteMode {
@@ -365,26 +378,29 @@ fn parse_paths(files: &[OsString], opts: &Options) -> Vec<PathBuf> {
 }
 
 fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()> {
-    if opts.backup == BackupMode::Simple && source_is_target_backup(source, target, &opts.suffix) {
+    // `mv` never follows a symlink source, so the guard must not either.
+    if backup_would_destroy_source(source, target, &opts.suffix, opts.backup, false) {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
             translate!("mv-error-backup-might-destroy-source", "target" => target.quote(), "source" => source.quote()),
         )
         .into());
     }
-    if source.symlink_metadata().is_err() {
+    let Ok(source_metadata) = source.symlink_metadata() else {
         return Err(if path_ends_with_terminator(source) {
             MvError::CannotStatNotADirectory(source.quote().to_string()).into()
         } else {
             MvError::NoSuchFile(source.quote().to_string()).into()
         });
-    }
+    };
 
-    let source_is_dir = source.is_dir() && !source.is_symlink();
-    let target_is_dir = if target.is_symlink() {
-        fs::canonicalize(target).is_ok_and(|p| p.is_dir())
-    } else {
-        target.is_dir()
+    // `symlink_metadata` does not follow symlinks, so this is equivalent to
+    // `source.is_dir() && !source.is_symlink()` without the extra `stat` calls.
+    let source_is_dir = source_metadata.is_dir();
+    let target_is_dir = match target.symlink_metadata() {
+        Ok(metadata) if metadata.is_symlink() => fs::canonicalize(target).is_ok_and(|p| p.is_dir()),
+        Ok(metadata) => metadata.is_dir(),
+        Err(_) => false,
     };
 
     if path_ends_with_terminator(target)
@@ -415,8 +431,20 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
                     hardlink_params.0,
                     hardlink_params.1,
                 )
-                .map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => source.quote(), "target" => target.quote())
+                .map_err(|e| -> Box<dyn UError> {
+                    let message = if is_directory_not_empty_error(&e) {
+                        translate!(
+                            "mv-error-cannot-overwrite-non-empty-directory",
+                            "target" => target.quote()
+                        )
+                    } else {
+                        translate!(
+                            "mv-error-cannot-move",
+                            "source" => source.quote(),
+                            "target" => target.quote()
+                        )
+                    };
+                    e.map_err_context(|| message)
                 })
             } else {
                 Err(MvError::DirectoryToNonDirectory(target.quote().to_string()).into())
@@ -424,7 +452,7 @@ fn handle_two_paths(source: &Path, target: &Path, opts: &Options) -> UResult<()>
         } else {
             move_files_into_dir(&[source.to_path_buf()], target, opts)
         }
-    } else if target.exists() && source_is_dir {
+    } else if source_is_dir && target.exists() {
         match opts.overwrite {
             OverwriteMode::NoClobber => return Ok(()),
             OverwriteMode::Interactive => prompt_overwrite(target, None)?,
@@ -501,14 +529,15 @@ fn assert_not_same_file(
         }
     };
 
-    let same_file = (canonicalized_source.eq(&canonicalized_target)
-        || are_hardlinks_to_same_file(source, target)
-        || are_hardlinks_or_one_way_symlink_to_same_file(source, target))
-        && opts.backup == BackupMode::None;
+    let same_file = opts.backup == BackupMode::None
+        && (canonicalized_source.eq(&canonicalized_target)
+            || are_hardlinks_to_same_file(source, target)
+            || are_hardlinks_or_one_way_symlink_to_same_file(source, target));
 
     // get the expected target path to show in errors
     // this is based on the argument and not canonicalized
-    let target_display = match source.file_name() {
+    // only computed when an error is actually reported
+    let target_display = || match source.file_name() {
         Some(file_name) if target_is_dir => {
             // join target_dir/source_file in a platform-independent manner
             let mut path = target
@@ -531,13 +560,13 @@ fn assert_not_same_file(
             || source.ends_with("/.")
             || source.is_file())
     {
-        return Err(MvError::SameFile(source.quote().to_string(), target_display).into());
+        return Err(MvError::SameFile(source.quote().to_string(), target_display()).into());
     } else if (same_file || canonicalized_target.starts_with(canonicalized_source))
         // don't error if we're moving a symlink of a directory into itself
         && !source.is_symlink()
     {
         return Err(
-            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display).into(),
+            MvError::SelfTargetSubdirectory(source.quote().to_string(), target_display()).into(),
         );
     }
     Ok(())
@@ -562,6 +591,16 @@ fn handle_multiple_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
 pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
     let paths = parse_paths(files, opts);
 
+    if opts.exchange {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        return exchange_paths(&paths, opts);
+        #[cfg(not(any(target_os = "linux", target_os = "android")))]
+        return Err(USimpleError::new(
+            1,
+            translate!("mv-error-exchange-not-supported"),
+        ));
+    }
+
     if let Some(ref name) = opts.target_dir {
         return move_files_into_dir(&paths, &PathBuf::from(name), opts);
     }
@@ -570,6 +609,63 @@ pub fn mv(files: &[OsString], opts: &Options) -> UResult<()> {
         2 => handle_two_paths(&paths[0], &paths[1], opts),
         _ => handle_multiple_paths(&paths, opts),
     }
+}
+
+/// Atomically exchange two paths with `--exchange` (renameat2 `RENAME_EXCHANGE`).
+///
+/// With more than two operands, the last operand must be a directory, and
+/// each of the other operands is exchanged with the file of the same name
+/// inside that directory (matching GNU `mv --exchange a b c dir/`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_paths(paths: &[PathBuf], opts: &Options) -> UResult<()> {
+    match paths {
+        [] | [_] => Err(UUsageError::new(
+            1,
+            translate!("mv-error-exchange-two-operands"),
+        )),
+        [from, to] => exchange_two_paths(from, to, opts),
+        [sources @ .., target_dir] => {
+            if !target_dir.is_dir() {
+                return Err(MvError::TargetNotADirectory(target_dir.quote().to_string()).into());
+            }
+            for source in sources {
+                let name = source
+                    .file_name()
+                    .ok_or_else(|| MvError::NoSuchFile(source.quote().to_string()))?;
+                exchange_two_paths(source, &target_dir.join(name), opts)?;
+            }
+            Ok(())
+        }
+    }
+}
+
+/// Atomically exchange the two given paths (renameat2 `RENAME_EXCHANGE`).
+#[cfg(any(target_os = "linux", target_os = "android"))]
+fn exchange_two_paths(from: &Path, to: &Path, opts: &Options) -> UResult<()> {
+    use rustix::fs::{CWD, RenameFlags, renameat_with};
+
+    let canonicalize_or_absolute = |p: &Path| {
+        canonicalize(absolute(p)?, MissingHandling::Normal, ResolveMode::Logical)
+            .or_else(|_| absolute(p))
+    };
+    if canonicalize_or_absolute(from)?.eq(&canonicalize_or_absolute(to)?)
+        || are_hardlinks_to_same_file(from, to)
+    {
+        return Err(MvError::SameFile(from.quote().to_string(), to.quote().to_string()).into());
+    }
+
+    renameat_with(CWD, from, CWD, to, RenameFlags::EXCHANGE)
+        .map_err(io::Error::from)
+        .map_err_context(
+            || translate!("mv-error-cannot-move", "source" => from.quote(), "target" => to.quote()),
+        )?;
+    if opts.verbose {
+        println!(
+            "{}",
+            translate!("mv-verbose-exchanged", "from" => from.quote(), "to" => to.quote())
+        );
+    }
+    Ok(())
 }
 
 #[allow(clippy::cognitive_complexity)]
@@ -668,21 +764,32 @@ fn move_files_into_dir(files: &[PathBuf], target_dir: &Path, options: &Options) 
         ) {
             Err(e) if e.to_string().is_empty() => set_exit_code(1),
             Err(e) => {
-                let e = e.map_err_context(|| {
-                    translate!("mv-error-cannot-move", "source" => sourcepath.quote(), "target" => targetpath.quote())
-                });
+                let message = if is_directory_not_empty_error(&e) {
+                    translate!(
+                        "mv-error-cannot-overwrite-non-empty-directory",
+                        "target" => targetpath.quote()
+                    )
+                } else {
+                    translate!(
+                        "mv-error-cannot-move",
+                        "source" => sourcepath.quote(),
+                        "target" => targetpath.quote()
+                    )
+                };
+                let e = e.map_err_context(|| message);
                 if let Some(ref pb) = display_manager {
                     pb.suspend(|| show!(e));
                 } else {
                     show!(e);
                 }
             }
-            Ok(()) => (),
+            Ok(()) => {
+                moved_destinations.insert(targetpath.clone());
+            }
         }
         if let Some(ref pb) = count_progress {
             pb.inc(1);
         }
-        moved_destinations.insert(targetpath.clone());
     }
     Ok(())
 }
@@ -744,13 +851,22 @@ fn rename(
     }
 
     // "to" may no longer exist if it was backed up
-    if to.exists() && to.is_dir() && !to.is_symlink() {
+    // `symlink_metadata` does not follow symlinks, so a symlink to a directory
+    // is not reported as a directory, as with the previous
+    // `to.exists() && to.is_dir() && !to.is_symlink()` check
+    if to
+        .symlink_metadata()
+        .is_ok_and(|metadata| metadata.is_dir())
+    {
         // normalize behavior between *nix and windows
         if from.is_dir() {
             if is_empty_dir(to) {
                 fs::remove_dir(to)?;
             } else {
-                return Err(io::Error::other(translate!("mv-error-directory-not-empty")));
+                return Err(io::Error::new(
+                    io::ErrorKind::DirectoryNotEmpty,
+                    translate!("mv-error-directory-not-empty"),
+                ));
             }
         }
     }
@@ -792,6 +908,10 @@ fn rename(
         }
     }
     Ok(())
+}
+
+fn is_directory_not_empty_error(err: &io::Error) -> bool {
+    err.kind() == io::ErrorKind::DirectoryNotEmpty
 }
 
 #[cfg(unix)]
@@ -885,7 +1005,9 @@ fn rename_fifo_fallback(from: &Path, to: &Path) -> io::Result<()> {
     if to.try_exists()? {
         fs::remove_file(to)?;
     }
-    make_fifo(to).and_then(|_| fs::remove_file(from))
+    // rustix::fs::mkfifoat is linux only
+    nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
+    fs::remove_file(from)
 }
 
 #[cfg(not(unix))]
@@ -902,14 +1024,92 @@ fn rename_fifo_fallback(_from: &Path, _to: &Path) -> io::Result<()> {
 #[cfg(unix)]
 fn rename_symlink_fallback(from: &Path, to: &Path) -> io::Result<()> {
     let path_symlink_points_to = fs::read_link(from)?;
-    unix::fs::symlink(path_symlink_points_to, to)?;
+
+    // On AlreadyExists, fall through to atomic temp-and-rename so the
+    // destination is replaced rather than the call failing.
+    match unix::fs::symlink(&path_symlink_points_to, to) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+            #[cfg(not(target_os = "redox"))]
+            create_symlink_replace(&path_symlink_points_to, to)?;
+            #[cfg(target_os = "redox")]
+            {
+                fs::remove_file(to)?;
+                unix::fs::symlink(&path_symlink_points_to, to)?;
+            }
+        }
+        Err(e) => return Err(e),
+    }
     #[cfg(not(any(target_os = "macos", target_os = "redox")))]
     {
-        let _ = copy_xattrs_if_supported(from, to);
+        let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
     }
-    // Preserve ownership (uid/gid) from the source symlink
     let _ = preserve_ownership(from, to);
     fs::remove_file(from)
+}
+
+/// Create a symlink at `to`, atomically replacing any existing entry via
+/// a temp-name + `renameat(2)` so observers never see `to` missing.
+///
+/// Mirrors GNU's `force_symlinkat` in `force-link.c`: open the parent
+/// directory once and operate via `*at` syscalls so a concurrent rename
+/// of the parent cannot redirect the operation, and pick the temp name
+/// from `/dev/urandom` so it is unguessable to other users in that
+/// directory.
+#[cfg(all(unix, not(target_os = "redox")))]
+fn create_symlink_replace(target: &Path, to: &Path) -> io::Result<()> {
+    use io::Read;
+    use rustix::fs::{AtFlags, CWD, Mode, OFlags, openat, renameat, symlinkat, unlinkat};
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    // GNU's template is `CuXXXXXX`: a 2-char prefix plus 6 random chars
+    // drawn from a 62-char alphabet. Modulo bias on a 256→62 mapping is
+    // ~3% per slot — irrelevant for an 8-char unguessability budget.
+    const ALPHABET: &[u8; 62] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    let parent = to
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let basename = to
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid destination path"))?;
+
+    let dir_fd = openat(
+        CWD,
+        parent,
+        OFlags::DIRECTORY | OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    )?;
+
+    let mut urandom = fs::File::open("/dev/urandom")?;
+
+    for _ in 0..32 {
+        let mut tmp_bytes = *b"Cu------";
+        let mut raw = [0u8; 6];
+        urandom.read_exact(&mut raw)?;
+        for (slot, byte) in tmp_bytes[2..].iter_mut().zip(raw) {
+            *slot = ALPHABET[(byte as usize) % ALPHABET.len()];
+        }
+        let tmp = OsStr::from_bytes(&tmp_bytes);
+
+        match symlinkat(target, &dir_fd, tmp) {
+            Ok(()) => {
+                if let Err(e) = renameat(&dir_fd, tmp, &dir_fd, basename) {
+                    let _ = unlinkat(&dir_fd, tmp, AtFlags::empty());
+                    return Err(io::Error::from(e));
+                }
+                return Ok(());
+            }
+            Err(e) if e == rustix::io::Errno::EXIST => {}
+            Err(e) => return Err(io::Error::from(e)),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not allocate a unique temp name in destination directory",
+    ))
 }
 
 #[cfg(windows)]
@@ -967,8 +1167,15 @@ fn rename_dir_fallback(
         (_, _) => None,
     };
 
+    // Retrieve xattrs through a file descriptor so a concurrent renamer cannot
+    // redirect the list/get calls to a different inode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    let xattrs = fsxattr::retrieve_xattrs(from).unwrap_or_else(|_| FxHashMap::default());
+    let xattrs = {
+        use std::fs::File;
+        File::open(from)
+            .and_then(|f| fsxattr::retrieve_xattrs_fd(&f))
+            .unwrap_or_else(|_| FxHashMap::default())
+    };
 
     // Use directory copying (with or without hardlink support)
     let result = copy_dir_contents(
@@ -983,8 +1190,18 @@ fn rename_dir_fallback(
         display_manager,
     );
 
+    // Apply xattrs using a file descriptor to avoid TOCTOU races, ignoring
+    // ENOTSUP/EOPNOTSUPP (filesystem without xattr support, which is expected
+    // for cross-device moves).
+    //
+    // The fd is opened read-only: a directory cannot be opened for writing, and
+    // fsetxattr checks write permission on the inode, not the open mode.
     #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    fsxattr::apply_xattrs(to, xattrs)?;
+    {
+        use std::fs::File;
+        let dest = File::open(to)?;
+        fsxattr::apply_xattrs_fd_ignore_unsupported(&dest, xattrs)?;
+    }
 
     result?;
 
@@ -995,6 +1212,23 @@ fn rename_dir_fallback(
 }
 
 /// Copy directory recursively, optionally preserving hardlinks
+/// Create `path`, refusing to reuse anything already there.
+///
+/// `create_dir_all` would accept a symlink planted at `path` after the caller
+/// removed the destination, redirecting the move out of the destination tree.
+fn create_dir_fail_closed(path: &Path) -> io::Result<()> {
+    fs::create_dir(path).map_err(|e| {
+        if e.kind() == io::ErrorKind::AlreadyExists {
+            io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                translate!("mv-error-dest-appeared", "path" => path.quote()),
+            )
+        } else {
+            e
+        }
+    })
+}
+
 fn copy_dir_contents(
     from: &Path,
     to: &Path,
@@ -1005,7 +1239,7 @@ fn copy_dir_contents(
     display_manager: Option<&MultiProgress>,
 ) -> io::Result<()> {
     // Create the destination directory
-    fs::create_dir_all(to)?;
+    create_dir_fail_closed(to)?;
 
     #[cfg(unix)]
     {
@@ -1087,7 +1321,7 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         } else if from_path.is_dir() {
             // Recursively copy subdirectory (only real directories, not symlinks)
-            fs::create_dir_all(&to_path)?;
+            create_dir_fail_closed(&to_path)?;
 
             // Preserve ownership (uid/gid) of the subdirectory
             #[cfg(unix)]
@@ -1128,10 +1362,10 @@ fn copy_dir_contents_recursive(
             print_verbose(&from_path, &to_path);
         }
 
-        if let Some(pb) = progress_bar {
-            if let Ok(metadata) = from_path.metadata() {
-                pb.inc(metadata.len());
-            }
+        if let Some(pb) = progress_bar
+            && let Ok(metadata) = from_path.metadata()
+        {
+            pb.inc(metadata.len());
         }
     }
 
@@ -1161,7 +1395,8 @@ fn copy_file_with_hardlinks_helper(
         // rename_symlink_fallback already preserves ownership and removes the source.
         rename_symlink_fallback(from, to)?;
     } else if is_fifo(from.symlink_metadata()?.file_type()) {
-        make_fifo(to)?;
+        // rustix::fs::mkfifoat is linux only
+        nix::unistd::mkfifo(to, nix::sys::stat::Mode::from_bits_truncate(0o666))?;
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
     } else {
@@ -1170,7 +1405,7 @@ fn copy_file_with_hardlinks_helper(
         // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
         #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
         {
-            let _ = copy_xattrs_if_supported(from, to);
+            let _ = fsxattr::copy_xattrs_ignore_unsupported(from, to);
         }
         // Preserve ownership (uid/gid) from the source
         let _ = preserve_ownership(from, to);
@@ -1213,20 +1448,51 @@ fn rename_file_fallback(
         }
     }
 
-    // Regular file copy
-    fs::copy(from, to)
-        .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
-
-    // Copy xattrs, ignoring ENOTSUP errors (filesystem doesn't support xattrs)
-    #[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-    {
-        let _ = copy_xattrs_if_supported(from, to);
-    }
-
-    // Preserve ownership (uid/gid) from the source file
+    // Open src/dst with O_NOFOLLOW and keep the fds alive across copy,
+    // chown, xattr, and chmod so a concurrent path-swap can't redirect any
+    // step to a different inode.
     #[cfg(unix)]
     {
-        let _ = preserve_ownership(from, to);
+        use std::fs::Permissions;
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        use uucore::safe_copy::{create_dest_restrictive, open_source};
+        let src_file = open_source(from, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        let src_mode = src_file
+            .metadata()
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?
+            .mode()
+            & 0o7777;
+        let mut dst_file = create_dest_restrictive(to, /* nofollow */ true)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+        uucore::buf_copy::copy_fast(&mut &src_file, &mut dst_file)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
+
+        #[cfg(not(any(target_os = "macos", target_os = "redox")))]
+        {
+            let _ = fsxattr::copy_xattrs_fd_ignore_unsupported(&src_file, &dst_file);
+        }
+
+        // chown before chmod: chown(2) clears setuid/setgid for non-root,
+        // so the final mode must be applied last to preserve those bits.
+        //
+        // If the chown did not take, the destination belongs to whoever ran
+        // `mv`, and re-applying setuid/setgid would hand them a binary running
+        // as themselves that used to run as someone else. GNU strips the bits
+        // in that case and so do we.
+        let ownership_preserved = preserve_ownership(from, to).unwrap_or(false);
+        let dest_mode = if ownership_preserved {
+            src_mode
+        } else {
+            src_mode & !0o6000
+        };
+        let _ = dst_file.set_permissions(Permissions::from_mode(dest_mode));
+    }
+
+    #[cfg(not(unix))]
+    {
+        fs::copy(from, to)
+            .map_err(|err| io::Error::new(err.kind(), translate!("mv-error-permission-denied")))?;
     }
 
     fs::remove_file(from)
@@ -1237,8 +1503,13 @@ fn rename_file_fallback(
 /// Preserve ownership (uid/gid) from source to destination.
 /// Uses lchown so it works on symlinks without following them.
 /// Errors are silently ignored for non-root users who cannot chown.
+///
+/// Returns whether the destination ended up with the source's uid and gid.
+/// Callers that re-apply the source mode must strip setuid/setgid when this is
+/// false: those bits on a file that changed hands grant the new owner's
+/// identity, not the original one's, which is why GNU drops them.
 #[cfg(unix)]
-fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
+fn preserve_ownership(from: &Path, to: &Path) -> io::Result<bool> {
     use std::os::unix::fs::MetadataExt;
 
     let source_meta = from.symlink_metadata()?;
@@ -1255,7 +1526,7 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
         // Use follow=false so lchown is used (works on symlinks)
         // Silently ignore errors: non-root users typically cannot chown to
         // arbitrary uid, matching GNU mv behavior which also uses best-effort.
-        let _ = wrap_chown(
+        if wrap_chown(
             to,
             &dest_meta,
             Some(uid),
@@ -1265,22 +1536,14 @@ fn preserve_ownership(from: &Path, to: &Path) -> io::Result<()> {
                 groups_only: false,
                 level: VerbosityLevel::Silent,
             },
-        );
+        )
+        .is_err()
+        {
+            return Ok(false);
+        }
     }
 
-    Ok(())
-}
-
-/// Copy xattrs from source to destination, ignoring ENOTSUP/EOPNOTSUPP errors.
-/// These errors indicate the filesystem doesn't support extended attributes,
-/// which is acceptable when moving files across filesystems.
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "redox"))))]
-fn copy_xattrs_if_supported(from: &Path, to: &Path) -> io::Result<()> {
-    match fsxattr::copy_xattrs(from, to) {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::EOPNOTSUPP) => Ok(()),
-        Err(e) => Err(e),
-    }
+    Ok(true)
 }
 
 fn is_empty_dir(path: &Path) -> bool {

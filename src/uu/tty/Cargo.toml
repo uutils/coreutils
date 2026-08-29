@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tty.rs"
 test = false
@@ -26,6 +23,15 @@ fluent = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs", "termios"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Storage_FileSystem",
+  "Win32_Foundation",
+] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tty"

@@ -89,6 +89,18 @@ fn test_invalid_buffer_size() {
         .fails_with_code(2)
         .stderr_only("sort: invalid --buffer-size argument '0x123%'\n");
 
+    // A percentage can fit in a u128 while its product with the total
+    // physical memory does not; the parser must report it as too large
+    // rather than panicking or silently wrapping.
+    #[cfg(target_os = "linux")]
+    new_ucmd!()
+        .arg("-S")
+        .arg("340282366920938463463374607431768211455%")
+        .fails_with_code(2)
+        .stderr_only(
+            "sort: --buffer-size argument '340282366920938463463374607431768211455%' too large\n",
+        );
+
     new_ucmd!()
         .arg("-n")
         .arg("-S")
@@ -181,6 +193,13 @@ fn test_months_whitespace() {
 #[test]
 fn test_version_empty_lines() {
     test_helper("version-empty-lines", &["-V", "--version-sort"]);
+}
+
+#[test]
+fn test_parallel_invalid() {
+    // clap provided stderr
+    new_ucmd!().arg("--parallel=0").fails().code_is(2);
+    new_ucmd!().arg("--parallel=NaN").fails().code_is(2);
 }
 
 #[test]
@@ -297,6 +316,16 @@ fn test_numeric_with_trailing_invalid_chars() {
 }
 
 #[test]
+fn test_numeric_sort_rejects_leading_plus_sign() {
+    // GNU sort -n does not treat '+' as a number sign; lines sort lexicographically.
+    new_ucmd!()
+        .arg("-n")
+        .pipe_in("+1\n+10\n+2\n")
+        .succeeds()
+        .stdout_is("+1\n+10\n+2\n");
+}
+
+#[test]
 fn test_check_zero_terminated_failure() {
     new_ucmd!()
         .arg("-z")
@@ -358,6 +387,56 @@ fn test_random_shuffle_two_runs_not_the_same() {
         assert_ne!(result, expected);
         assert_ne!(result, unexpected);
     }
+}
+
+#[test]
+fn test_random_source_shorter_than_the_salt() {
+    // GNU wants 128 bits out of the source and reports end of file below that,
+    // instead of shuffling with whatever it could read.
+    for len in [0, 1, 15] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write_bytes("source", &vec![b'x'; len]);
+        at.write("input", "b\na\nc\n");
+
+        ucmd.args(&["-R", "--random-source=source", "input"])
+            .fails_with_code(2)
+            .no_stdout()
+            .stderr_is("sort: 'source': end of file\n");
+    }
+}
+
+#[test]
+fn test_random_source_of_exactly_the_salt_length() {
+    use uutests::util_name;
+
+    let ts = TestScenario::new(util_name!());
+    ts.fixtures.write_bytes("source", &[b'x'; 16]);
+    ts.fixtures.write("input", "b\na\nc\n");
+
+    let first = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source", "input"])
+        .succeeds()
+        .stdout_move_str();
+    let second = ts
+        .ucmd()
+        .args(&["-R", "--random-source=source", "input"])
+        .succeeds()
+        .stdout_move_str();
+
+    assert_eq!(first, second);
+    assert_eq!(first.lines().count(), 3);
+}
+
+#[test]
+fn test_random_source_is_not_read_without_random_sort() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write_bytes("source", b"");
+    at.write("input", "b\na\nc\n");
+
+    ucmd.args(&["--random-source=source", "input"])
+        .succeeds()
+        .stdout_is("a\nb\nc\n");
 }
 
 #[test]
@@ -614,10 +693,8 @@ fn get_system_abmon(locale: &str) -> Option<Vec<String>> {
         .env("LC_ALL", locale)
         .arg("abmon")
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
+        .ok()
+        .filter(|s| s.status.success())?;
     let text = String::from_utf8(output.stdout).ok()?;
     let months: Vec<String> = text
         .trim()
@@ -1081,6 +1158,20 @@ fn test_multiple_files() {
         .stdout_only_fixture("multiple_files.expected");
 }
 
+/// A file that does not end with a separator must not be fused onto the next file.
+#[test]
+fn test_unterminated_file_not_fused_across_chunk_boundary() {
+    // "a\nb\nc" is 5 bytes, so `-S 5b` puts the chunk boundary exactly at its EOF.
+    for buffer_size in ["1b", "2b", "3b", "4b", "5b", "6b", "7b", "8b", "16b"] {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.write("first.txt", "a\nb\nc");
+        at.write("second.txt", "z\n");
+        ucmd.args(&["-S", buffer_size, "first.txt", "second.txt"])
+            .succeeds()
+            .stdout_only("a\nb\nc\nz\n");
+    }
+}
+
 #[test]
 fn test_merge_interleaved() {
     new_ucmd!()
@@ -1090,6 +1181,88 @@ fn test_merge_interleaved() {
         .arg("merge_ints_interleaved_3.txt")
         .succeeds()
         .stdout_only_fixture("merge_ints_interleaved.expected");
+}
+
+#[test]
+fn test_merge_preserves_long_lines() {
+    use std::fmt::Write;
+
+    const N_ROWS: usize = 3;
+    const LINE_LEN: usize = 32_000;
+    const LINE_VALUES: [&str; N_ROWS] = ["a", "b", "c"];
+    // Exercise merge reads where long lines span internal chunk boundaries.
+    let input = LINE_VALUES.into_iter().fold(
+        String::with_capacity(N_ROWS * (LINE_LEN + 1)),
+        |mut acc, value| {
+            writeln!(acc, "{}", value.repeat(LINE_LEN)).unwrap();
+            acc
+        },
+    );
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("long-lines.txt", &input);
+
+    let result = ucmd.arg("-m").arg("long-lines.txt").succeeds();
+    result.no_stderr();
+
+    let stdout = result.stdout_move_bytes();
+    assert_eq!(bytecount::count(&stdout, b'\n'), N_ROWS);
+    assert_eq!(stdout.len(), input.len());
+    assert_eq!(stdout.as_slice(), input.as_bytes());
+}
+
+// Regression test: a failing write must not take the merge reader thread down with it.
+// The write error used to propagate straight out of `write_all_to`, dropping the chunk
+// receivers while the reader was still sending, and `chunks::read` unwraps that send.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_write_error_does_not_panic() {
+    use std::fs::File;
+
+    // The inputs have to be long enough that the reader is still feeding us chunks when
+    // the write fails, otherwise it has already finished and there is nothing to race.
+    const LINES: usize = 100_000;
+    let mut input = String::with_capacity(LINES * 7);
+    for line in 0..LINES {
+        writeln!(input, "{line:06}").unwrap();
+    }
+
+    let ts = TestScenario::new("sort");
+    ts.fixtures.write("a.txt", &input);
+    ts.fixtures.write("b.txt", &input);
+
+    // Whether the reader is mid-send when the write fails is a race, so repeat: a single
+    // attempt reproduced the panic only about a quarter of the time. With the fix the
+    // reader is always shut down in an orderly fashion, so this cannot fail spuriously.
+    for _ in 0..20 {
+        let dev_full = File::create("/dev/full").expect("Failed to open /dev/full");
+        ts.ucmd()
+            .args(&["-m", "a.txt", "b.txt"])
+            .set_stdout(dev_full)
+            .fails()
+            .code_is(1)
+            .stderr_contains("No space left on device")
+            .stderr_does_not_contain("panicked");
+    }
+}
+
+// A read error must be reported with context and without the raw io::Error suffix.
+// It used to print `sort: Input/output error (os error 5)`.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore)]
+fn test_read_error_message() {
+    // Reading /proc/self/mem from offset 0 fails with EIO.
+    let result = new_ucmd!().arg("/proc/self/mem").fails_with_code(2);
+    result.no_stdout();
+    // The strerror text for EIO differs between C libraries: glibc says
+    // "Input/output error" while musl says "I/O error".
+    let stderr = result.stderr_str();
+    assert!(
+        stderr == "sort: read failed: Input/output error\n"
+            || stderr == "sort: read failed: I/O error\n",
+        "unexpected stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -1140,8 +1313,7 @@ fn test_pipe() {
     new_ucmd!()
         .pipe_in("one\ntwo\nfour")
         .succeeds()
-        .stdout_is("four\none\ntwo\n")
-        .stderr_is("");
+        .stdout_only("four\none\ntwo\n");
 }
 
 #[test]
@@ -1164,7 +1336,7 @@ fn test_check() {
             .arg(diagnose_arg)
             .arg("multiple_files.expected")
             .succeeds()
-            .stderr_is("");
+            .no_output();
     }
 }
 
@@ -1183,13 +1355,40 @@ fn test_check_silent() {
             .arg(silent_arg)
             .arg("check_fail.txt")
             .fails()
-            .stdout_is("");
+            .no_output();
         new_ucmd!()
             .arg(silent_arg)
             .arg("empty.txt")
             .succeeds()
             .no_output();
     }
+}
+
+#[test]
+fn test_check_stops_early_without_panicking() {
+    // `--check` returns as soon as it finds the first disorder. That used to drop the
+    // channel while the reader thread was still sending chunks, so the reader panicked
+    // on a `SendError`. Under `panic = "abort"` (our release profile) that aborts the
+    // whole process instead of exiting 1.
+    //
+    // The disorder sits midway through an input that is large relative to the buffer
+    // size, so the reader is certain to be blocked on a full channel when we stop.
+    // Note this cannot fail spuriously: once the receiver outlives the reader, no
+    // panic is possible.
+    const LINES_BEFORE: usize = 20_000;
+    let mut input = "c\n".repeat(LINES_BEFORE);
+    input.push_str("a\n");
+    input.push_str(&"c\n".repeat(LINES_BEFORE));
+
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("disorder.txt", &input);
+
+    ucmd.args(&["-c", "--buffer-size=1K", "disorder.txt"])
+        .fails_with_code(1)
+        .stderr_only(format!(
+            "sort: disorder.txt:{}: disorder: a\n",
+            LINES_BEFORE + 1
+        ));
 }
 
 #[test]
@@ -1433,6 +1632,66 @@ fn test_merge_batch_size_with_limit() {
 }
 
 #[test]
+// TODO(#7542): Re-enable on Android once we figure out why setting limit is broken.
+#[cfg(target_os = "linux")]
+fn test_batch_size_above_fd_limit_is_rejected() {
+    use rlimit::Resource;
+    // Only stdin, stdout and stderr are unavailable for merge inputs, so the
+    // largest acceptable --batch-size is the soft limit minus 3, here 27 - 3.
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=31")
+        .arg("gamma.txt")
+        .fails_with_code(2)
+        .stderr_contains("--batch-size argument '31' too large")
+        // 24 is forced by the limit above: 27 - 3 reserved descriptors.
+        .stderr_contains("maximum --batch-size argument with current rlimit is 24");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_batch_size_at_fd_limit_is_accepted() {
+    use rlimit::Resource;
+    let limit_fd = 27;
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("gamma.txt", "delta\nalpha\n");
+    // 24 is the largest value the limit above allows, and sorting must still happen.
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("--batch-size=24")
+        .arg("gamma.txt")
+        .succeeds()
+        .stdout_only("alpha\ndelta\n");
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_merge_more_files_than_fd_limit() {
+    use rlimit::Resource;
+    let (at, mut ucmd) = at_and_ucmd!();
+    // 40 single-line files cannot all be open at once with a soft limit of 24,
+    // so sort has to merge them in several batches through temporary files.
+    let count = 40;
+    let mut names = Vec::new();
+    for i in 0..count {
+        let name = format!("fdlimit_{i:02}.txt");
+        at.write(&name, &format!("{i:02}\n"));
+        names.push(name);
+    }
+    let mut expected = String::new();
+    for i in 0..count {
+        writeln!(expected, "{i:02}").unwrap();
+    }
+    let limit_fd = 24;
+    ucmd.limit(Resource::NOFILE, limit_fd, limit_fd)
+        .arg("-m")
+        .args(&names)
+        .succeeds()
+        .stdout_only(expected);
+}
+
+#[test]
 fn test_sigpipe_panic() {
     let mut cmd = new_ucmd!();
     let mut child = cmd.args(&["ext_sort.txt"]).run_no_wait();
@@ -1440,6 +1699,30 @@ fn test_sigpipe_panic() {
     // The "Broken pipe" error should be silently ignored.
     child.close_stdout();
     child.wait().unwrap().no_stderr();
+}
+
+#[test]
+#[cfg(unix)]
+fn test_fifo_without_trailing_newline() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.mkfifo("FIFO");
+
+    let mut child = ucmd.arg("FIFO").run_no_wait();
+    let fifo = at.plus("FIFO");
+    let writer = std::thread::spawn(move || std::fs::write(fifo, "hello").unwrap());
+    writer.join().unwrap();
+
+    for _ in 0..50 {
+        if child.is_not_alive() {
+            break;
+        }
+        child.delay(100);
+    }
+    if child.is_alive() {
+        child.kill();
+        panic!("sort did not exit after the FIFO writer closed");
+    }
+    child.wait().unwrap().success().stdout_is("hello\n");
 }
 
 #[test]
@@ -1522,6 +1805,37 @@ fn test_separator_null() {
 }
 
 #[test]
+fn test_separator_attached_equals() {
+    // `-t=` must select `=` itself as the separator (clap strips a leading
+    // `=` from attached short-option values), matching GNU sort. #14120
+    new_ucmd!()
+        .args(&["-t=", "-k", "2"])
+        .pipe_in("a=b=c\nb=a=d\n")
+        .succeeds()
+        .stdout_only("b=a=d\na=b=c\n");
+}
+
+#[test]
+fn test_separator_attached_equals_double() {
+    // `-t==` selects the two-character separator `==`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t==", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=='");
+}
+
+#[test]
+fn test_separator_attached_equals_multi_char() {
+    // `-t=a` selects the two-character separator `=a`, which GNU rejects.
+    new_ucmd!()
+        .args(&["-t=a", "-k", "2"])
+        .pipe_in("a=b=c\n")
+        .fails()
+        .stderr_contains("separator must be exactly one character long: '=a'");
+}
+
+#[test]
 fn test_output_is_input() {
     let input = "a\nb\nc\n";
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1548,8 +1862,7 @@ fn test_merge_empty_input() {
     new_ucmd!()
         .args(&["-m", "empty.txt"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 }
 
 #[test]
@@ -1571,10 +1884,9 @@ fn test_wrong_args_exit_code() {
 #[test]
 #[cfg(unix)]
 fn test_tmp_files_deleted_on_sigint() {
-    use std::{fs::read_dir, time::Duration};
-
-    use nix::{sys::signal, unistd::Pid};
     use rand::{RngExt as _, SeedableRng, rngs::SmallRng};
+    use rustix::process::{Pid, Signal, kill_process};
+    use std::{fs::read_dir, time::Duration};
 
     let (at, mut ucmd) = at_and_ucmd!();
     at.mkdir("tmp_dir");
@@ -1610,7 +1922,7 @@ fn test_tmp_files_deleted_on_sigint() {
     // `sort` should have created a temporary directory.
     assert!(read_dir(at.plus("tmp_dir")).unwrap().next().is_some());
     // kill sort with SIGINT
-    signal::kill(Pid::from_raw(child.id() as i32), signal::SIGINT).unwrap();
+    kill_process(Pid::from_raw(child.id() as i32).unwrap(), Signal::INT).unwrap();
     // wait for `sort` to exit
     child.wait().unwrap().code_is(2);
     // `sort` should have deleted the temporary directory again.
@@ -1665,19 +1977,19 @@ fn test_failed_write_is_reported() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o2"
-fn test_multiple_output_files() {
+// Test sort with output file (o2)
+fn test_error_on_multiple_output_flags() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "bar"])
+        .args(&["-o", "alpha", "-o", "beta"])
         .fails_with_code(2)
         .stderr_is("sort: multiple output files specified\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort.pl "o3"
-fn test_duplicate_output_files_allowed() {
+// Test sort with output file (o3)
+fn test_same_output_flag_twice_ok() {
     new_ucmd!()
-        .args(&["-o", "foo", "-o", "foo"])
+        .args(&["-o", "output", "-o", "output"])
         .pipe_in("")
         .succeeds()
         .no_stderr();
@@ -1707,8 +2019,8 @@ fn test_output_file_with_leading_dash() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "f-extra-arg"
-fn test_files0_from_extra_arg() {
+// Test files0-from with extra argument
+fn test_files0_from_rejects_extra_positional() {
     new_ucmd!()
         .args(&["--files0-from", "-", "foo"])
         .fails_with_code(2)
@@ -1719,8 +2031,8 @@ fn test_files0_from_extra_arg() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "missing"
-fn test_files0_from_missing() {
+// Test files0-from with missing file
+fn test_files0_from_nonexistent_file_fails() {
     new_ucmd!()
         .args(&["--files0-from", "missing_file"])
         .fails_with_code(2)
@@ -1733,8 +2045,8 @@ fn test_files0_from_missing() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "minus-in-stdin"
-fn test_files0_from_minus_in_stdin() {
+// Test files0-from reading from stdin
+fn test_files0_from_reads_stdin_via_dash() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("-")
@@ -1745,8 +2057,8 @@ fn test_files0_from_minus_in_stdin() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty"
-fn test_files0_from_empty() {
+// Test files0-from with empty file
+fn test_files0_from_empty_input_file() {
     let (at, mut ucmd) = at_and_ucmd!();
 
     at.touch("file");
@@ -1758,17 +2070,27 @@ fn test_files0_from_empty() {
 
 #[test]
 #[cfg(unix)]
-fn test_files0_read_error() {
+fn test_files0_from_non_utf8_filename() {
+    new_ucmd!()
+        .args(&["--files0-from", "-"])
+        .pipe_in(vec![0xff_u8])
+        .fails_with_code(2)
+        .stderr_contains("sort: cannot read");
+}
+
+#[test]
+#[cfg(unix)]
+fn test_files0_from_unreadable_source() {
     new_ucmd!()
         .args(&["--files0-from", "."])
         .fails_with_code(2)
         .stderr_only("sort: cannot read: .: Is a directory\n");
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "empty-non-regular"
-fn test_files0_from_empty_non_regular() {
+// Test files0-from with non-regular empty file
+fn test_files0_from_dev_null_is_empty() {
     new_ucmd!()
         .args(&["--files0-from", "/dev/null"])
         .fails_with_code(2)
@@ -1776,8 +2098,8 @@ fn test_files0_from_empty_non_regular() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-1"
-fn test_files0_from_nul() {
+// Test files0-from with NUL-separated input (case 1)
+fn test_files0_from_single_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0")
@@ -1786,8 +2108,8 @@ fn test_files0_from_nul() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "nul-2"
-fn test_files0_from_nul2() {
+// Test files0-from with NUL-separated input (case 2)
+fn test_files0_from_double_nul_is_invalid() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
         .pipe_in("\0\0")
@@ -1796,76 +2118,95 @@ fn test_files0_from_nul2() {
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1"
-fn test_files0_from_1() {
+// Test files0-from basic single file
+fn test_files0_from_single_entry() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file")
+        .pipe_in("words")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "1a"
-fn test_files0_from_1a() {
+// Test files0-from basic single file variant
+fn test_files0_from_single_entry_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0")
+        .pipe_in("words\0")
         .succeeds()
-        .stdout_only("a\n");
+        .stdout_only("kiwi\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2"
-fn test_files0_from_2() {
+// Test files0-from with two files
+fn test_files0_from_two_entries() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file")
+        .pipe_in("words\0words")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "2a"
-fn test_files0_from_2a() {
+// Test files0-from with two files variant
+fn test_files0_from_two_entries_trailing_nul() {
     let (at, mut ucmd) = at_and_ucmd!();
 
-    at.touch("file");
-    at.append("file", "a");
+    at.touch("words");
+    at.append("words", "mango\nkiwi");
 
     ucmd.args(&["--files0-from", "-"])
-        .pipe_in("file\0file\0")
+        .pipe_in("words\0words\0")
         .succeeds()
-        .stdout_only("a\na\n");
+        .stdout_only("kiwi\nkiwi\nmango\nmango\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-files0-from.pl "zero-len"
-fn test_files0_from_zero_length() {
+// Test files0-from with non-UTF-8 filenames
+#[cfg(all(unix, not(target_os = "macos")))]
+fn test_files0_from_non_utf8_content() {
+    use std::os::unix::ffi::OsStringExt;
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // non-UTF-8 bytes (0xFF)
+    let filename = std::ffi::OsString::from_vec(b"a\xffb".into());
+    std::fs::write(at.plus(&filename), b"20\n10\n").unwrap();
+
+    let list_contents = vec![b'a', 0xFF, b'b', 0];
+    at.write_bytes("list0", &list_contents);
+
+    ucmd.args(&["--files0-from", "list0"])
+        .succeeds()
+        .stdout_only("10\n20\n");
+}
+
+#[test]
+// Test files0-from with zero-length filename
+fn test_files0_from_zero_length_entry_fails() {
     new_ucmd!()
         .args(&["--files0-from", "-"])
-        .pipe_in("g\0\0b\0\0")
+        .pipe_in("x\0\0y\0\0")
         .fails_with_code(2)
         .stderr_only("sort: -:2: invalid zero-length file name\n");
 }
 
 #[test]
-// Test for GNU tests/sort/sort-float.sh
-fn test_g_float() {
-    let input = "0\n-3.3621031431120935063e-4932\n3.3621031431120935063e-4932\n";
-    let output = "-3.3621031431120935063e-4932\n0\n3.3621031431120935063e-4932\n";
+// Test sort with floating point numbers
+fn test_sort_general_numeric_extremes() {
+    let input = "0\n-1.7976931348623157e+308\n1.7976931348623157e+308\n";
+    let output = "-1.7976931348623157e+308\n0\n1.7976931348623157e+308\n";
     new_ucmd!()
         .args(&["-g"])
         .pipe_in(input)
@@ -1907,10 +2248,8 @@ fn test_human_numeric_blank_thousands_sep_locale() {
             .arg("thousands_sep")
             .env("LC_ALL", locale)
             .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
-        }
+            .ok()
+            .filter(|s| s.status.success())?;
         let sep = String::from_utf8_lossy(&output.stdout);
         let sep = sep.trim_end_matches(&['\n', '\r'][..]);
         if sep.is_empty() || sep.len() != 1 || !sep.chars().all(char::is_whitespace) {
@@ -2322,62 +2661,62 @@ fn test_debug_key_annotations() {
 fn test_debug_key_annotations_locale() {
     let ts = TestScenario::new("sort");
 
-    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8") {
-        if locale_fr_utf8 != "none" {
-            let probe = ts
-                .ucmd()
-                .args(&["-g", "--debug", "/dev/null"])
-                .env("LC_NUMERIC", &locale_fr_utf8)
-                .env("LC_MESSAGES", "C")
-                .run();
-            if probe
-                .stderr_str()
-                .contains("numbers use .*,.* as a decimal point")
-            {
-                let mut locale_output = String::new();
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", "C")
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&["--debug", "-k2g", "-k1b,1"])
-                        .pipe_in("   1²---++3   1,234  Mi\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
-                locale_output.push_str(
-                    &ts.ucmd()
-                        .env("LC_ALL", &locale_fr_utf8)
-                        .args(&[
-                            "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
-                            "-k3,3n", "-k3,3g", "-k3,3h",
-                        ])
-                        .pipe_in("+1234 1234Gi 1,234M\n")
-                        .succeeds()
-                        .stdout_move_str(),
-                );
+    if let Ok(locale_fr_utf8) = env::var("LOCALE_FR_UTF8")
+        && locale_fr_utf8 != "none"
+    {
+        let probe = ts
+            .ucmd()
+            .args(&["-g", "--debug", "/dev/null"])
+            .env("LC_NUMERIC", &locale_fr_utf8)
+            .env("LC_MESSAGES", "C")
+            .run();
+        if probe
+            .stderr_str()
+            .contains("numbers use .*,.* as a decimal point")
+        {
+            let mut locale_output = String::new();
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", "C")
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&["--debug", "-k2g", "-k1b,1"])
+                    .pipe_in("   1²---++3   1,234  Mi\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
+            locale_output.push_str(
+                &ts.ucmd()
+                    .env("LC_ALL", &locale_fr_utf8)
+                    .args(&[
+                        "--debug", "-k1,1n", "-k1,1g", "-k1,1h", "-k2,2n", "-k2,2g", "-k2,2h",
+                        "-k3,3n", "-k3,3g", "-k3,3h",
+                    ])
+                    .pipe_in("+1234 1234Gi 1,234M\n")
+                    .succeeds()
+                    .stdout_move_str(),
+            );
 
-                let normalized = locale_output
-                    .lines()
-                    .map(|line| {
-                        if line.starts_with("^^ ") {
-                            "^ no match for key".to_string()
-                        } else {
-                            line.to_string()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n")
-                    + "\n";
+            let normalized = locale_output
+                .lines()
+                .map(|line| {
+                    if line.starts_with("^^ ") {
+                        "^ no match for key".to_string()
+                    } else {
+                        line.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n";
 
-                assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
-            }
+            assert_eq!(normalized, EXPECTED_DEBUG_KEY_ANNOTATION_LOCALE);
         }
     }
 }
@@ -2958,6 +3297,281 @@ e f 5436 down data path1 path2 path3 path4 path5\n";
         .pipe_in(input)
         .succeeds()
         .stdout_is(input);
+}
+
+#[test]
+fn test_consistent_sorting_with_i18n_collate() {
+    // Regression test for issue #11980
+    // Lexicographic fallback sorting for equal sorting keys for 01 and 0_1
+    let expected_output = "0_1\n0_1\n01\n01\n02\n02\n";
+    new_ucmd!()
+        .env("LC_ALL", "en_US.UTF-8")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+
+    let expected_output = "01\n01\n02\n02\n0_1\n0_1\n";
+    new_ucmd!()
+        .env("LC_ALL", "C")
+        .arg("fix_i18n_collate_inconsistency_1.txt")
+        .arg("fix_i18n_collate_inconsistency_2.txt")
+        .succeeds()
+        .stdout_is(expected_output);
+}
+
+#[test]
+fn test_sort_locale_punctuation() {
+    // Punctuation gets a distinguishing collation weight, so lines differing
+    // only by punctuation sort in a stable order (issue #12542) and are never
+    // merged by -u. This holds across the plain, explicit-key and stable paths,
+    // and in both locales. The wildcard-domain case comes from dehydrated, which
+    // relied on -u keeping a `*.domain.com` alias distinct from the bare domain.
+    // (input, expected, [(locale, args)...])
+    let cases = [
+        (
+            "file10\nfile-10\n",
+            "file-10\nfile10\n",
+            &[("en_US.UTF-8", &[][..]), ("C", &[][..])][..],
+        ),
+        (
+            "EU\nE.U\nE-U\n",
+            "E-U\nE.U\nEU\n",
+            &[
+                ("en_US.UTF-8", &["-u"][..]),
+                ("C", &["-u"][..]),
+                ("en_US.UTF-8", &["-u", "-k1,1"][..]),
+                ("en_US.UTF-8", &["-s", "-k1,1"][..]),
+            ][..],
+        ),
+        (
+            "domain.com\n*.domain.com\ndomain.com\n",
+            "*.domain.com\ndomain.com\n",
+            &[("en_US.UTF-8", &["-u"][..]), ("C", &["-u"][..])][..],
+        ),
+    ];
+
+    for (input, expected, runs) in cases {
+        for (locale, args) in runs {
+            new_ucmd!()
+                .env("LC_ALL", *locale)
+                .args(args)
+                .pipe_in(input)
+                .succeeds()
+                .stdout_is(expected);
+        }
+    }
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_stray_character() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k2.3q", "/dev/null"])
+            .fails_with_code(2);
+
+        // The whole report: the `sort: ` prefix of the plain form, the key
+        // echoed back inside the option it was glued to, a caret on the `q`
+        // rather than on the whole `-k2.3q`, and the key syntax advice.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '2.3q'
+   ╭─[ sort:1:11 ]
+   │
+ 1 │ sort -k2.3q /dev/null
+   │           ─
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_detached_key() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k", "1.4,2w", "/dev/null"])
+            .fails_with_code(2);
+
+        // `-k 1.4,2w` puts the key in its own argument; the caret still lands
+        // on the offending character.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '1.4,2w'
+   ╭─[ sort:1:14 ]
+   │
+ 1 │ sort -k 1.4,2w /dev/null
+   │              ─
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_a_zero_character_offset() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k3.0", "/dev/null"])
+            .fails_with_code(2);
+
+        // No syntax advice here: the label already says where counting starts.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: character offset is zero: invalid field specification '3.0'
+   ╭─[ sort:1:10 ]
+   │
+ 1 │ sort -k3.0 /dev/null
+   │          ┬
+   │          ╰── counting starts at 1
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_a_missing_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-kw", "/dev/null"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid number at field start: invalid count at start of 'w'
+   ╭─[ sort:1:8 ]
+   │
+ 1 │ sort -kw /dev/null
+   │        ┬
+   │        ╰── expected a number here
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_reports_contradicting_ordering_options() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k1hV", "/dev/null"])
+            .fails_with_code(2);
+
+        // The caret covers the ordering options, not the field number.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: options '-hV' are incompatible
+   ╭─[ sort:1:9 ]
+   │
+ 1 │ sort -k1hV /dev/null
+   │         ──
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_a_file_that_ends_like_the_key() {
+        let (at, mut ucmd) = at_and_ucmd!();
+        at.touch("data.2.3q");
+
+        // The input file's name ends with the key's text; the caret must stay
+        // on the `-k` operand, not drift onto the file.
+        let result = ucmd
+            .terminal_sim_stderr()
+            .args(&["data.2.3q", "-k2.3q"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: stray character in field spec: invalid field specification '2.3q'
+   ╭─[ sort:1:21 ]
+   │
+ 1 │ sort data.2.3q -k2.3q
+   │                     ─
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_ignores_the_program_name_as_a_key() {
+        // A key spelled exactly like the program name must not pull the caret
+        // onto `sort` itself at the start of the line.
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-k", "sort", "/dev/null"])
+            .fails_with_code(2);
+
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid number at field start: invalid count at start of 'sort'
+   ╭─[ sort:1:9 ]
+   │
+ 1 │ sort -k sort /dev/null
+   │         ──┬─
+   │           ╰─── expected a number here
+   │
+   │ Help: a key is FIELD[.CHAR][OPTS][,FIELD[.CHAR][OPTS]], as in -k2.3,4nr
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit_of_a_buffer_size() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+sort: invalid suffix in --buffer-size argument '8zz'
+   ╭─[ sort:1:10 ]
+   │
+ 1 │ sort -S 8zz /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_not_a_terminal() {
+        // The test harness pipes stderr, so the report must not appear.
+        new_ucmd!()
+            .args(&["-k2.3q", "/dev/null"])
+            .fails_with_code(2)
+            .stderr_only(
+                "sort: stray character in field spec: invalid field specification '2.3q'\n",
+            );
+        new_ucmd!()
+            .args(&["-S", "8zz", "/dev/null"])
+            .fails_with_code(2)
+            .stderr_only("sort: invalid suffix in --buffer-size argument '8zz'\n");
+    }
 }
 
 /* spell-checker: enable */

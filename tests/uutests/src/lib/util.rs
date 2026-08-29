@@ -27,8 +27,6 @@ use pretty_assertions::assert_eq;
 use rlimit::setrlimit;
 use std::borrow::Cow;
 use std::collections::VecDeque;
-#[cfg(not(windows))]
-use std::ffi::CString;
 use std::ffi::{OsStr, OsString};
 use std::fs::{self, File, OpenOptions, hard_link, remove_file};
 use std::io::{self, BufWriter, Read, Result, Write};
@@ -109,8 +107,7 @@ pub fn is_locale_available(locale: &str) -> bool {
         .env("LC_ALL", locale)
         .arg("charmap")
         .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
-        .unwrap_or(false)
+        .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).trim() == "UTF-8")
 }
 
 /// Read a test scenario fixture, returning its bytes
@@ -400,6 +397,42 @@ impl CmdResult {
     /// Returns the program's standard error as a string slice
     pub fn stderr_str(&self) -> &str {
         std::str::from_utf8(&self.stderr).unwrap()
+    }
+
+    /// Returns the program's standard error with the carriage returns a
+    /// pseudo-terminal inserts and any trailing padding on each line removed.
+    ///
+    /// Diagnostics rendered under [`UCommand::terminal_sim_stderr`] pad their
+    /// lines out to the width of the report, which makes them awkward to
+    /// compare verbatim; this gives back the block as it reads on screen.
+    pub fn stderr_as_displayed(&self) -> String {
+        self.stderr_str()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// Returns the one-based column a caret diagnostic points at.
+    ///
+    /// A report opens with a header naming the utility and the position it
+    /// points at — `╭─[ chmod:1:5 ]` — which is the only place the column is
+    /// written out; the caret row itself is padded and drawn with box
+    /// characters. Asserting on the column keeps a test to the one thing it
+    /// cares about, where matching the block verbatim would break on every
+    /// wording change.
+    ///
+    /// # Returns
+    ///
+    /// `None` when stderr carries no such header: the plain one-line message
+    /// was printed, or the diagnostic pointed at another line.
+    pub fn caret_column(&self) -> Option<usize> {
+        let header = format!("{}:1:", self.util_name.as_ref()?);
+        let line = self
+            .stderr_str()
+            .lines()
+            .find(|line| line.contains(&header))?;
+        line.rsplit(':').next()?.trim_end_matches(" ]").parse().ok()
     }
 
     /// Returns the program's standard error as a string slice, automatically handling invalid utf8
@@ -1166,12 +1199,13 @@ impl AtPath {
 
     #[cfg(not(windows))]
     pub fn mkfifo(&self, fifo: &str) {
+        // rustix::fs::mkfifoat is linux only
+        use nix::sys::stat::Mode;
         let full_path = self.plus_as_string(fifo);
         log_info("mkfifo", &full_path);
-        unsafe {
-            let fifo_name: CString = CString::new(full_path).expect("CString creation failed.");
-            libc::mkfifo(fifo_name.as_ptr(), libc::S_IWUSR | libc::S_IRUSR);
-        }
+
+        let mode = Mode::S_IRUSR | Mode::S_IWUSR;
+        nix::unistd::mkfifo(Path::new(&full_path), mode).expect("mkfifo failed");
     }
 
     #[cfg(unix)]
@@ -1385,10 +1419,8 @@ impl TestScenario {
         fixture_path_builder.push(TESTS_DIR);
         fixture_path_builder.push(FIXTURES_DIR);
         fixture_path_builder.push(util_name.as_ref());
-        if let Ok(m) = fs::metadata(&fixture_path_builder) {
-            if m.is_dir() {
-                recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
-            }
+        if fs::metadata(&fixture_path_builder).is_ok_and(|m| m.is_dir()) {
+            recursive_copy(&fixture_path_builder, &ts.fixtures.subdir).unwrap();
         }
         ts
     }
@@ -1725,6 +1757,21 @@ impl UCommand {
     pub fn terminal_sim_stdio(&mut self, config: TerminalSimulation) -> &mut Self {
         self.terminal_simulation = Some(config);
         self
+    }
+
+    /// Attach stderr (and only stderr) to a simulated terminal, with colors
+    /// disabled through `NO_COLOR`.
+    ///
+    /// This is useful to test output that is only rendered when
+    /// `stderr.is_terminal()` is `true`, such as the rich error reports of
+    /// `chmod` or `test`, while letting assertions see plain text.
+    #[cfg(unix)]
+    pub fn terminal_sim_stderr(&mut self) -> &mut Self {
+        self.terminal_sim_stdio(TerminalSimulation {
+            stderr: true,
+            ..Default::default()
+        })
+        .env("NO_COLOR", "1")
     }
 
     #[cfg(unix)]
@@ -2943,12 +2990,12 @@ pub fn whoami() -> String {
 
 /// Create a PTY (pseudo-terminal) for testing utilities that require a TTY.
 ///
-/// Returns a tuple of (path, controller_fd, replica_fd) where:
+/// Returns a tuple of (path, controller, replica) where:
 /// - path: The filesystem path to the PTY replica device
-/// - controller_fd: The controller file descriptor
-/// - replica_fd: The replica file descriptor
+/// - controller: The controller file
+/// - replica: The replica file
 #[cfg(unix)]
-pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
+pub fn pty_path() -> (String, File, File) {
     use nix::pty::openpty;
     use nix::unistd::ttyname;
     let pty = openpty(None, None).expect("Failed to create PTY");
@@ -2956,7 +3003,7 @@ pub fn pty_path() -> (String, OwnedFd, OwnedFd) {
         .expect("Failed to get PTY path")
         .to_string_lossy()
         .to_string();
-    (path, pty.master, pty.slave)
+    (path, pty.master.into(), pty.slave.into())
 }
 
 /// Add prefix 'g' for `util_name` if not on linux
@@ -3245,7 +3292,7 @@ mod tests {
 
     // Create a init for the test with a fake value (not needed)
     #[cfg(test)]
-    #[ctor::ctor]
+    #[ctor::ctor(unsafe)]
     fn init() {
         unsafe {
             env::set_var("UUTESTS_BINARY_PATH", "");

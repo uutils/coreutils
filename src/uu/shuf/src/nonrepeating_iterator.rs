@@ -6,7 +6,8 @@
 use rustc_hash::FxHashMap;
 use std::ops::RangeInclusive;
 
-use uucore::error::UResult;
+use uucore::error::{UResult, USimpleError};
+use uucore::translate;
 
 use crate::WrappedRng;
 
@@ -53,7 +54,7 @@ impl<'a> NonrepeatingIterator<'a> {
         range: RangeInclusive<u64>,
         rng: &'a mut WrappedRng,
         head_count: Option<usize>,
-    ) -> Self {
+    ) -> UResult<Self> {
         // Save RAM usage with shuf -i 1-huge_number -n small_number
         const TOO_LARGE_VEC_SIZE: usize = 16_777_216;
         let range_len = range.size_hint().0;
@@ -63,13 +64,18 @@ impl<'a> NonrepeatingIterator<'a> {
             Values::Full(items)
         } else {
             const MAX_CAPACITY: usize = 128; // todo: optimize this
+            // `capacity` is the requested output count; with no --head-count it
+            // defaults to the whole range, which can be up to usize::MAX.
+            // Reserve fallibly so an unsatisfiable request errors cleanly
+            // instead of panicking in hashbrown (capacity overflow) or aborting
+            // in the allocator — mirroring the `try_reserve` on the Vec branch.
             let capacity = head_count.unwrap_or(MAX_CAPACITY).min(range_len);
-            Values::Sparse(
-                range,
-                FxHashMap::with_capacity_and_hasher(capacity, rustc_hash::FxBuildHasher),
-            )
+            let mut map = FxHashMap::with_hasher(rustc_hash::FxBuildHasher);
+            map.try_reserve(capacity)
+                .map_err(|_| USimpleError::new(1, translate!("shuf-error-memory-exhausted")))?;
+            Values::Sparse(range, map)
         };
-        NonrepeatingIterator { rng, values }
+        Ok(NonrepeatingIterator { rng, values })
     }
 
     fn produce(&mut self) -> UResult<u64> {

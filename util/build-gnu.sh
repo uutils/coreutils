@@ -114,6 +114,9 @@ done
 # This ensures the correct path is used even if the repository was moved or rebuilt in a different location
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" tests/local.mk
 
+# Use GNU nproc for *BSD and macOS
+NPROC="$(command -v nproc||command -v gnproc)"
+
 if test -f gnu-built; then
     echo "GNU build already found. Skip"
     echo "'rm -f $(pwd)/{gnu-built,src/getlimits}' to force the build"
@@ -132,12 +135,11 @@ else
     # Use a better diff
     sed -i 's|diff -c|diff -u|g' tests/Coreutils.pm
 
-    # Skip make if possible
-    # Use GNU nproc for *BSD and macOS
-    NPROC="$(command -v nproc||command -v gnproc)"
-    test "${SELINUX_ENABLED}" = 1 && touch src/getlimits # SELinux tests does not use it
-    test -f src/getlimits || make -j "$("${NPROC}")"
-    cp -f src/getlimits "${UU_BUILD_DIR}"
+    # Skip make if possible. The SELinux job does not build the GNU tree at all;
+    # the block after this "if" builds the one program its tests need.
+    if [ "${SELINUX_ENABLED}" != 1 ]; then
+        test -x src/getlimits || make -j "$("${NPROC}")"
+    fi
 
     # Handle generated factor tests
     t_first=00
@@ -161,14 +163,34 @@ else
     touch gnu-built
 fi
 
-# Keep getlimits available on PATH for GNU shell and Perl tests even when
-# reusing an existing GNU build directory.
-test -f src/getlimits && cp -f src/getlimits "${UU_BUILD_DIR}"
-
 # Keep Makefile.in newer than the local.mk files we just modified,
 # and Makefile newer than Makefile.in, so make won't re-run
 # automake or config.status and undo our edits.
 touch Makefile.in Makefile
+
+# The GNU shell and Perl tests call getlimits_, so getlimits has to be a real
+# program on PATH, also when reusing an existing GNU build directory. An earlier
+# version of this script left an empty, non-executable stub behind under
+# SELINUX_ENABLED, hence the test for an executable rather than for a file.
+# Build only that program, plus the generated sources that the "all" target
+# would otherwise pull in, so the SELinux job still skips the rest of the tree.
+# This has to come after the touch above: stripping the factor tests leaves
+# tests/local.mk with a trailing backslash that automake rejects, so a make that
+# still sees it as newer than Makefile.in dies in the remake rule.
+if ! test -x src/getlimits; then
+    rm -f src/getlimits
+    printf 'built-sources: $(BUILT_SOURCES)\n' |
+        make -f Makefile -f - -j "$("${NPROC}")" built-sources || true
+    make -j "$("${NPROC}")" src/getlimits || true
+fi
+if test -x src/getlimits; then
+    # Remove the destination first: cp keeps the permissions of an existing
+    # file, so a leftover stub there would stay non-executable.
+    rm -f "${UU_BUILD_DIR}/getlimits"
+    cp -f src/getlimits "${UU_BUILD_DIR}"
+else
+    echo "WARNING: could not build getlimits; tests calling getlimits_ will fail" >&2
+fi
 
 # Patch the Makefile PATH to point to uutils build dir instead of GNU src/
 sed -i "s/^[[:blank:]]*PATH=.*/  PATH='${UU_BUILD_DIR//\//\\/}\$(PATH_SEPARATOR)'\"\$\$PATH\" \\\/" Makefile
@@ -194,8 +216,8 @@ sed -i "s|--coreutils-prog=||g" tests/misc/coreutils.sh
 sed -i "s|grep '^#define HAVE_CAP 1' \$CONFIG_HEADER > /dev/null|true|"  tests/ls/capability.sh
 
 # our messages are better
-sed -i "s|cannot stat 'symlink': Permission denied|not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
-sed -i "s|cp: target directory 'symlink': Permission denied|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
+sed -i "s|cp: cannot stat 'symlink': .*|cp: not writing through dangling symlink 'symlink'|" tests/cp/fail-perm.sh
+sed -i "s|cp: target directory 'symlink': .*|cp: 'symlink' is not a directory|" tests/cp/fail-perm.sh
 
 # Our message is a bit better
 sed -i "s|cannot create regular file 'no-such/': Not a directory|'no-such/' is not a directory|" tests/mv/trailing-slash.sh
@@ -215,7 +237,7 @@ grep -rlE '/usr/local/bin/\s?/usr/local/bin' init.cfg tests/* | xargs -r "${SED}
 sed -i -e "s|removed directory 'a/'|removed directory 'a'|g" tests/rm/v-slash.sh
 
 # 'rel' doesn't exist. Our implementation is giving a better message.
-sed -i -e "s|rm: cannot remove 'rel': Permission denied|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
+sed -i -e "s|rm: cannot remove 'rel': \$EACCES|rm: cannot remove 'rel': No such file or directory|g" tests/rm/inaccessible.sh
 
 # Our implementation shows "Directory not empty" for directories that can't be accessed due to lack of execute permissions
 # This is actually more accurate than "Permission denied" since the real issue is that we can't empty the directory
@@ -268,6 +290,10 @@ sed -i "s|# Independent of whether SELinux|return 0\n  #|g" init.cfg
 # making it too restrictive for us
 sed -i "s|\$PACKAGE_VERSION|[0-9]*|g" tests/rm/fail-2eperm.sh tests/mv/sticky-to-xpart.sh init.cfg
 
+# usage_vs_refs.sh checks that all options appear in GNU's texi docs.
+# we have some extra options
+sed -i '1s/^/Exit 77\n/' tests/misc/usage_vs_refs.sh
+
 # usage_vs_getopt.sh is heavily modified as it runs all the binaries
 # with the option -/ is used, clap is returning a better error than GNU's. Adjust the GNU test
 sed -i -e "s~  grep \" '\*/'\*\" err || framework_failure_~  grep \" '*-/'*\" err || framework_failure_~" tests/misc/usage_vs_getopt.sh
@@ -290,9 +316,6 @@ sed -i -Ez "s/\n([^\n#]*pad-3\.2[^\n]*)\n([^\n]*)\n([^\n]*)/\n# uutils\/numfmt s
 # Update the GNU error message to match the one generated by clap
 sed -i -e "s/\$prog: multiple field specifications/error: the argument '--field <FIELDS>' cannot be used multiple times\n\nUsage: numfmt [OPTION]... [NUMBER]...\n\nFor more information, try '--help'./g" tests/numfmt/numfmt.pl
 sed -i -e "s/Try 'mv --help' for more information/For more information, try '--help'/g" -e "s/mv: missing file operand/error: the following required arguments were not provided:\n  <files>...\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" -e "s/mv: missing destination file operand after 'no-file'/error: The argument '<files>...' requires at least 2 values, but only 1 was provided\n\nUsage: mv [OPTION]... [-T] SOURCE DEST\n       mv [OPTION]... SOURCE... DIRECTORY\n       mv [OPTION]... -t DIRECTORY SOURCE...\n/g" tests/mv/diag.sh
-
-# our error message is better
-sed -i -e "s|mv: cannot overwrite 'a/t': Directory not empty|mv: cannot move 'b/t' to 'a/t': Directory not empty|" tests/mv/dir2dir.sh
 
 # GNU doesn't support width > INT_MAX
 # disable these test cases

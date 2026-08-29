@@ -6,6 +6,7 @@
 mod blocks;
 mod columns;
 mod filesystem;
+mod platform;
 mod table;
 
 use blocks::HumanReadable;
@@ -21,13 +22,13 @@ use uucore::{format_usage, show, show_warning};
 use clap::{Arg, ArgAction, ArgMatches, Command, parser::ValueSource};
 
 use std::ffi::OsString;
-use std::io::stdout;
+use std::io::{BufWriter, Write, stdout};
 use std::path::Path;
 use thiserror::Error;
 
 use crate::blocks::{BlockSize, read_block_size};
 use crate::columns::{Column, ColumnError};
-use crate::filesystem::Filesystem;
+pub use crate::filesystem::Filesystem;
 use crate::filesystem::FsError;
 use crate::table::Table;
 
@@ -58,7 +59,7 @@ static OUTPUT_FIELD_LIST: [&str; 12] = [
 /// Most of these parameters control which rows and which columns are
 /// displayed. The `block_size` determines the units to use when
 /// displaying numbers of bytes or inodes.
-struct Options {
+pub struct Options {
     show_local_fs: bool,
     show_all_fs: bool,
     human_readable: Option<HumanReadable>,
@@ -112,6 +113,11 @@ impl Default for Options {
 }
 
 impl Options {
+    /// Convert command-line arguments into [`Options`].
+    pub fn from_matches(matches: &ArgMatches) -> UResult<Self> {
+        Ok(Self::from(matches).map_err(DfError::OptionsError)?)
+    }
+
     /// Whether -a, -l, -t, or -x options require the mount table.
     fn requires_mount_table(&self) -> bool {
         self.show_all_fs || self.show_local_fs || self.include.is_some() || self.exclude.is_some()
@@ -157,10 +163,10 @@ impl Options {
             .get_many::<OsString>(OPT_EXCLUDE_TYPE)
             .map(|v| v.map(|s| s.to_string_lossy().to_string()).collect());
 
-        if let (Some(include), Some(exclude)) = (&include, &exclude) {
-            if let Some(types) = Self::get_intersected_types(include, exclude) {
-                return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
-            }
+        if let (Some(include), Some(exclude)) = (&include, &exclude)
+            && let Some(types) = Self::get_intersected_types(include, exclude)
+        {
+            return Err(OptionsError::FilesystemTypeBothSelectedAndExcluded(types));
         }
 
         Ok(Self {
@@ -172,8 +178,9 @@ impl Options {
                 ParseSizeError::SizeTooBig(_) => OptionsError::BlockSizeTooLarge(
                     matches.get_one::<String>(OPT_BLOCKSIZE).unwrap().to_owned(),
                 ),
-                ParseSizeError::ParseFailure(s) => OptionsError::InvalidBlockSize(s),
-                ParseSizeError::PhysicalMem(s) => OptionsError::InvalidBlockSize(s),
+                ParseSizeError::ParseFailure(s) | ParseSizeError::PhysicalMem(s) => {
+                    OptionsError::InvalidBlockSize(s)
+                }
             })?,
             header_mode: {
                 if matches.get_flag(OPT_HUMAN_READABLE_BINARY)
@@ -222,31 +229,17 @@ impl Options {
 /// Whether to display the mount info given the inclusion settings.
 fn is_included(mi: &MountInfo, opt: &Options) -> bool {
     // Don't show remote filesystems if `--local` has been given.
-    if mi.remote && opt.show_local_fs {
-        return false;
-    }
+    !(mi.remote && opt.show_local_fs) &&
 
     // Don't show pseudo filesystems unless `--all` has been given.
     // The "lofs" filesystem is a loopback
     // filesystem present on Solaris and FreeBSD systems. It
     // is similar to a symbolic link.
-    if (mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs {
-        return false;
-    }
+    !((mi.dummy || mi.fs_type == "lofs") && !opt.show_all_fs) &&
 
     // Don't show filesystems if they have been explicitly excluded.
-    if let Some(ref excludes) = opt.exclude {
-        if excludes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-    if let Some(ref includes) = opt.include {
-        if !includes.contains(&mi.fs_type) {
-            return false;
-        }
-    }
-
-    true
+    !opt.exclude.as_ref().is_some_and(|e| e.contains(&mi.fs_type)) &&
+    opt.include.as_ref().is_none_or(|i| i.contains(&mi.fs_type))
 }
 
 /// Whether the mount info in `m2` should be prioritized over `m1`.
@@ -273,11 +266,7 @@ fn mount_info_lt(m1: &MountInfo, m2: &MountInfo) -> bool {
     // matching an existing mnt point, to avoid problematic
     // replacement when given inaccurate mount lists, seen with some
     // chroot environments for example.
-    if m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir {
-        return false;
-    }
-
-    true
+    !(m1.dev_name != m2.dev_name && m1.mount_dir == m2.mount_dir)
 }
 
 /// Whether to prioritize given mount info over all others on the same device.
@@ -295,15 +284,8 @@ fn is_best(previous: &[MountInfo], mi: &MountInfo) -> bool {
 
 /// Get all currently mounted filesystems.
 ///
-/// `opt` excludes certain filesystems from consideration and allows for the synchronization of filesystems before running; see
-/// [`Options`] for more information.
+/// `opt` excludes certain filesystems from consideration; see [`Options`] for more information.
 fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
-    // Run a sync call before any operation if so instructed.
-    if opt.sync {
-        #[cfg(not(any(windows, target_os = "redox")))]
-        rustix::fs::sync();
-    }
-
     let mut mounts = vec![];
     for mut mi in read_fs_list()? {
         // TODO The running time of the `is_best()` function is linear
@@ -317,14 +299,15 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
             // like "tmpfs", "sysfs", etc., is_symlink() would resolve relative to
             // the current working directory, which is extremely slow in deeply
             // nested directories (O(n) syscalls where n is the directory depth).
-            if dev_path.is_absolute() && dev_path.is_symlink() {
-                if let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
+            if dev_path.is_absolute()
+                && dev_path.is_symlink()
+                && let Ok(canonicalized_symlink) = uucore::fs::canonicalize(
                     dev_path,
                     uucore::fs::MissingHandling::Existing,
                     uucore::fs::ResolveMode::Logical,
-                ) {
-                    mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
-                }
+                )
+            {
+                mi.dev_name = canonicalized_symlink.to_string_lossy().to_string();
             }
 
             mounts.push(mi);
@@ -333,25 +316,14 @@ fn get_all_filesystems(opt: &Options) -> UResult<Vec<Filesystem>> {
 
     // Convert each `MountInfo` into a `Filesystem`, which contains
     // both the mount information and usage information.
-    #[cfg(not(windows))]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&mounts, &m, None).ok();
-        Ok(mounts
-            .clone()
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
-    #[cfg(windows)]
-    {
-        let maybe_mount = |m| Filesystem::from_mount(&m, None).ok();
-        Ok(mounts
-            .into_iter()
-            .filter_map(maybe_mount)
-            .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
-            .collect())
-    }
+
+    let maybe_mount = |m| platform::filesystem_from_mount(&mounts, m, None).ok();
+
+    Ok(mounts
+        .iter()
+        .filter_map(maybe_mount)
+        .filter(|fs| opt.show_all_fs || fs.usage.blocks > 0)
+        .collect())
 }
 
 /// For each path, get the filesystem that contains that path.
@@ -362,7 +334,6 @@ where
     // The list of all mounted filesystems.
     let mounts_result = read_fs_list();
 
-    #[allow(unused_variables)]
     let (mounts, use_fallback) = match mounts_result {
         Ok(m) => (m, false),
         Err(e) => {
@@ -382,14 +353,7 @@ where
     // Convert each path into a `Filesystem`, which contains
     // both the mount information and usage information.
     for path in paths {
-        #[cfg(unix)]
-        let fs_result = if use_fallback {
-            Filesystem::from_path_direct(path)
-        } else {
-            Filesystem::from_path(&mounts, path)
-        };
-        #[cfg(not(unix))]
-        let fs_result = Filesystem::from_path(&mounts, path);
+        let fs_result = platform::filesystem_for_path(&mounts, use_fallback, path);
 
         match fs_result {
             Ok(fs) => {
@@ -442,29 +406,25 @@ impl UError for DfError {
     }
 }
 
-#[uucore::main]
-pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
-
-    #[cfg(windows)]
-    {
-        if matches.get_flag(OPT_INODES) {
-            println!(
-                "{}",
-                translate!("df-error-inodes-not-supported-windows", "program" => "df")
-            );
-            return Ok(());
-        }
+/// Gather the filesystems that `df` would report on, without formatting anything.
+///
+/// `paths` is `None` to report on every mounted filesystem, as `df` does when
+/// called without operands, or `Some` to report on the filesystems containing
+/// the given paths.
+pub fn filesystems(paths: Option<&[&Path]>, opt: &Options) -> UResult<Vec<Filesystem>> {
+    // Run a sync call before any operation if so instructed.
+    if opt.sync {
+        platform::sync();
     }
 
-    let opt = Options::from(&matches).map_err(DfError::OptionsError)?;
-    // Get the list of filesystems to display in the output table.
-    let filesystems: Vec<Filesystem> = match matches.get_many::<OsString>(OPT_PATHS) {
+    let unreadable_mount_table = |e: Box<dyn UError>| {
+        let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
+        USimpleError::new(e.code(), format!("{context}: {e}"))
+    };
+
+    match paths {
         None => {
-            let filesystems = get_all_filesystems(&opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
+            let filesystems = get_all_filesystems(opt).map_err(unreadable_mount_table)?;
 
             if filesystems.is_empty() {
                 return Err(USimpleError::new(
@@ -473,28 +433,56 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 ));
             }
 
-            filesystems
+            Ok(filesystems)
         }
-        Some(paths) => {
-            let paths: Vec<_> = paths.collect();
-            let filesystems = get_named_filesystems(&paths, &opt).map_err(|e| {
-                let context = translate!("df-error-cannot-read-table-of-mounted-filesystems");
-                USimpleError::new(e.code(), format!("{context}: {e}"))
-            })?;
+        Some(paths) => get_named_filesystems(paths, opt).map_err(unreadable_mount_table),
+    }
+}
 
-            // This can happen if paths are given as command-line arguments
-            // but none of the paths exist.
-            if filesystems.is_empty() {
-                return Ok(());
-            }
+/// Write `filesystems` to `writer` as the standard `df` table.
+pub fn write_table<W>(writer: &mut W, filesystems: Vec<Filesystem>, opt: &Options) -> UResult<()>
+where
+    W: Write,
+{
+    Table::new(opt, filesystems).write_to(writer)?;
+    Ok(())
+}
 
-            filesystems
-        }
-    };
+/// Display filesystem usage information as a table on stdout.
+///
+/// `paths` has the same meaning as in [`filesystems`].
+pub fn df(paths: Option<&[&Path]>, opt: &Options) -> UResult<()> {
+    let filesystems = filesystems(paths, opt)?;
 
-    Table::new(&opt, filesystems).write_to(&mut stdout())?;
+    // Every path given on the command line was rejected; `filesystems` has
+    // already emitted a diagnostic for each, so there is no table to print.
+    if filesystems.is_empty() {
+        return Ok(());
+    }
+
+    let mut writer = BufWriter::new(stdout().lock());
+    write_table(&mut writer, filesystems, opt)?;
+
+    // `BufWriter` swallows errors per drop, so flush explicitly.
+    writer.flush()?;
 
     Ok(())
+}
+
+#[uucore::main]
+pub fn uumain(args: impl uucore::Args) -> UResult<()> {
+    let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
+
+    if let Some(result) = platform::maybe_unsupported_options(&matches) {
+        return result;
+    }
+
+    let opt = Options::from_matches(&matches)?;
+    let paths: Option<Vec<&Path>> = matches
+        .get_many::<OsString>(OPT_PATHS)
+        .map(|paths| paths.map(Path::new).collect());
+
+    df(paths.as_deref(), &opt)
 }
 
 pub fn uu_app() -> Command {
@@ -647,6 +635,80 @@ pub fn uu_app() -> Command {
 
 #[cfg(test)]
 mod tests {
+
+    // spell-checker:ignore apfs
+    mod write_table {
+
+        use crate::blocks::BlockSize;
+        use crate::{Filesystem, Options, write_table};
+        use std::ffi::OsString;
+        use uucore::fsext::{FsUsage, MountInfo};
+
+        /// `Options::default()` picks up the block size from the environment
+        /// (`POSIXLY_CORRECT` halves it), so pin it for reproducible output.
+        fn options() -> Options {
+            Options {
+                block_size: BlockSize::Bytes(1024),
+                ..Options::default()
+            }
+        }
+
+        fn filesystem() -> Filesystem {
+            Filesystem {
+                file: Some(OsString::from("/tmp/file")),
+                mount_info: MountInfo {
+                    dev_id: String::from("1"),
+                    dev_name: String::from("/dev/disk1"),
+                    fs_type: String::from("apfs"),
+                    mount_dir: OsString::from("/"),
+                    mount_option: String::new(),
+                    mount_root: OsString::new(),
+                    remote: false,
+                    dummy: false,
+                },
+                usage: FsUsage {
+                    blocksize: 1024,
+                    blocks: 10,
+                    bfree: 4,
+                    bavail: 3,
+                    bavail_top_bit_set: false,
+                    files: 20,
+                    ffree: 5,
+                },
+            }
+        }
+
+        /// Rendering must be possible without touching stdout, so that crate
+        /// users can capture the table themselves.
+        #[test]
+        fn test_write_table_to_arbitrary_writer() {
+            let mut buffer: Vec<u8> = Vec::new();
+            write_table(&mut buffer, vec![filesystem()], &options()).unwrap();
+
+            // Header text is localized and the bundle is not loaded in unit
+            // tests, so only the data row is asserted on here.
+            let table = String::from_utf8(buffer).unwrap();
+            let row = table.lines().nth(1).unwrap();
+
+            assert_eq!(table.lines().count(), 2);
+            assert!(row.starts_with("/dev/disk1"));
+            assert!(row.ends_with(" /"));
+            // 10 blocks of 1K, of which 6 are used and 3 available.
+            assert_eq!(
+                row.split_whitespace().collect::<Vec<_>>(),
+                ["/dev/disk1", "10", "6", "3", "67%", "/"]
+            );
+        }
+
+        #[test]
+        fn test_write_table_empty() {
+            let mut buffer: Vec<u8> = Vec::new();
+            write_table(&mut buffer, vec![], &options()).unwrap();
+
+            let table = String::from_utf8(buffer).unwrap();
+            assert_eq!(table.lines().count(), 1);
+        }
+    }
 
     mod mount_info_lt {
 

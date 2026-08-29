@@ -11,13 +11,12 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use std::ffi::OsString;
 use std::io::{Write, stdout};
 use std::path::{Path, PathBuf};
-#[cfg(all(unix, target_os = "linux"))]
-use uucore::error::FromIo;
+#[cfg(not(windows))]
+use uucore::error::ExitCode;
 use uucore::error::{UResult, USimpleError};
-use uucore::translate;
-
 #[cfg(not(windows))]
 use uucore::mode;
+use uucore::translate;
 use uucore::{display::Quotable, fs::dir_strip_dot_for_creation};
 use uucore::{format_usage, show_if_err};
 
@@ -37,8 +36,8 @@ pub struct Config<'a> {
     /// Create parent directories as needed.
     pub recursive: bool,
 
-    /// File permissions (octal).
-    pub mode: u32,
+    /// File permissions (octal) if provided via -m
+    pub mode: Option<u32>,
 
     /// Print message for each created directory.
     pub verbose: bool,
@@ -55,19 +54,29 @@ pub struct Config<'a> {
     clippy::unnecessary_wraps,
     reason = "fn sig must match on all platforms"
 )]
-fn get_mode(_matches: &ArgMatches) -> Result<u32, String> {
-    Ok(DEFAULT_PERM)
+fn get_mode(_matches: &ArgMatches, _diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
+    Ok(None)
 }
 
+/// `diag_args` is the argument list a caret can point into, or `None` when the
+/// plain one-line message is all that is wanted.
 #[cfg(not(windows))]
-fn get_mode(matches: &ArgMatches) -> Result<u32, String> {
+fn get_mode(matches: &ArgMatches, diag_args: Option<&[OsString]>) -> UResult<Option<u32>> {
     // Not tested on Windows
-    if let Some(m) = matches.get_one::<String>(options::MODE) {
-        mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
-    } else {
-        // If no mode argument is specified return the mode derived from umask
-        Ok(!mode::get_umask() & DEFAULT_PERM)
-    }
+    let Some(m) = matches.get_one::<String>(options::MODE) else {
+        // If no mode argument, let the kernel apply umask and ACLs naturally.
+        return Ok(None);
+    };
+    mode::parse_chmod(DEFAULT_PERM, m, true, mode::get_umask())
+        .map(Some)
+        .map_err(|err| {
+            if diag_args.is_some_and(|args| err.render_mode_value(args, m, 0, &err.to_string())) {
+                // The diagnostic is already on stderr; exit quietly.
+                ExitCode::new(1)
+            } else {
+                USimpleError::new(1, err.to_string())
+            }
+        })
 }
 
 #[uucore::main]
@@ -75,8 +84,12 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     // Linux-specific options, not implemented
     // opts.optflag("Z", "context", "set SELinux security context" +
     // " of each created directory to CTX"),
+    let args: Vec<OsString> = args.collect();
+    // Kept for the caret in mode diagnostics, which needs the mode as typed.
+    let diag_args = uucore::diagnostics::operands(&args);
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
+    let mode = get_mode(&matches, diag_args.as_deref())?;
     let dirs = matches
         .get_many::<OsString>(options::DIRS)
         .unwrap_or_default();
@@ -87,20 +100,17 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let set_security_context = matches.get_flag(options::SECURITY_CONTEXT);
     let context = matches.get_one::<String>(options::CONTEXT);
 
-    match get_mode(&matches) {
-        Ok(mode) => {
-            let config = Config {
-                recursive,
-                mode,
-                verbose,
-                set_security_context: set_security_context || context.is_some(),
-                context,
-            };
-            exec(dirs, &config);
-            Ok(())
-        }
-        Err(f) => Err(USimpleError::new(1, f)),
-    }
+    let config = Config {
+        recursive,
+        mode,
+        verbose,
+        set_security_context: set_security_context || context.is_some(),
+        context,
+    };
+
+    exec(dirs, &config);
+
+    Ok(())
 }
 
 pub fn uu_app() -> Command {
@@ -196,17 +206,6 @@ pub fn mkdir(path: &Path, config: &Config) -> UResult<()> {
     create_dir(path, false, config)
 }
 
-/// Only needed on Linux to add ACL permission bits after directory creation.
-#[cfg(all(unix, target_os = "linux"))]
-fn chmod(path: &Path, mode: u32) -> UResult<()> {
-    use std::fs::{Permissions, set_permissions};
-    use std::os::unix::fs::PermissionsExt;
-    let mode = Permissions::from_mode(mode);
-    set_permissions(path, mode).map_err_context(
-        || translate!("mkdir-error-cannot-set-permissions", "path" => path.quote()),
-    )
-}
-
 // Create a directory at the given path.
 // Uses iterative approach instead of recursion to avoid stack overflow with deep nesting.
 fn create_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
@@ -272,43 +271,69 @@ impl Drop for UmaskGuard {
 
 /// Create a directory with the exact mode specified, bypassing umask.
 ///
-/// GNU mkdir temporarily sets umask to 0 before calling mkdir(2), ensuring the
-/// directory is created atomically with the correct permissions. This avoids a
-/// race condition where the directory briefly exists with umask-based permissions.
+/// GNU mkdir temporarily sets umask to a shaped umask before calling mkdir(2),
+/// ensuring the directory is created atomically with the correct permissions.
+/// This avoids a race condition where the directory briefly exists with
+/// umask-based permissions.
 #[cfg(unix)]
-fn create_dir_with_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+fn create_dir_with_mode(
+    path: &Path,
+    mode: u32,
+    shaped_umask: rustix::fs::Mode,
+) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
 
-    // Temporarily set umask to 0 so the directory is created with the exact mode.
-    // The guard restores the original umask on drop, even if we panic.
-    let _guard = UmaskGuard::set(rustix::fs::Mode::empty());
+    let _guard = UmaskGuard::set(shaped_umask);
 
     std::fs::DirBuilder::new().mode(mode).create(path)
 }
 
 #[cfg(not(unix))]
-fn create_dir_with_mode(path: &Path, _mode: u32) -> std::io::Result<()> {
+fn create_dir_with_mode(path: &Path, _mode: u32, _shaped_umask: u32) -> std::io::Result<()> {
     std::fs::create_dir(path)
 }
 
 // Helper function to create a single directory with appropriate permissions
 // `is_parent` argument is not used on windows
-#[allow(unused_variables)]
+#[cfg_attr(not(unix), allow(unused_variables))]
 fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<()> {
-    let path_exists = path.exists();
-
-    // Calculate the mode to use for directory creation
     #[cfg(unix)]
-    let create_mode = if is_parent {
-        // For parent directories with -p, use umask-derived mode with u+wx
-        (!mode::get_umask() & 0o777) | 0o300
-    } else {
-        config.mode
+    let (mkdir_mode, shaped_umask) = {
+        let mode_bits = |x: u32| rustix::fs::Mode::from_bits_truncate(x as rustix::fs::RawMode);
+        let umask_bits = mode_bits(mode::get_umask());
+        if is_parent {
+            // Parent directories are never affected by -m (matches GNU behavior).
+            // We pass 0o777 as the mode and shape the umask so it cannot block
+            // owner write or execute (u+wx), ensuring the owner can traverse and
+            // write into the parent to create children. All other umask bits are
+            // preserved so the kernel applies them — and any default ACL on the
+            // grandparent — through the normal mkdir(2) path.
+            (DEFAULT_PERM, umask_bits & !mode_bits(0o300))
+        } else {
+            match config.mode {
+                // Explicit -m: shape umask so it cannot block explicitly requested bits.
+                Some(m) => (m, umask_bits & !mode_bits(m)),
+                // No -m: leave umask fully intact; kernel applies umask + ACL naturally.
+                None => (DEFAULT_PERM, umask_bits),
+            }
+        }
     };
     #[cfg(not(unix))]
-    let create_mode = config.mode;
+    let (mkdir_mode, shaped_umask) = (config.mode.unwrap_or(DEFAULT_PERM), 0u32);
 
-    match create_dir_with_mode(path, create_mode) {
+    // Label the directory at creation, as GNU does; relabelling after leaves a window.
+    #[cfg(all(feature = "selinux", any(target_os = "android", target_os = "linux")))]
+    let _selinux_guard = if config.set_security_context && uucore::selinux::is_selinux_enabled() {
+        let mode = uucore::libc::S_IFDIR | mkdir_mode as uucore::libc::mode_t;
+        match uucore::selinux::FsCreateContext::new(path, Some(mode), config.context) {
+            Ok(guard) => Some(guard),
+            Err(e) => return Err(USimpleError::new(1, e.to_string())),
+        }
+    } else {
+        None
+    };
+
+    match create_dir_with_mode(path, mkdir_mode, shaped_umask) {
         Ok(()) => {
             if config.verbose {
                 writeln!(
@@ -318,30 +343,8 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
                 )?;
             }
 
-            // On Linux, we may need to add ACL permission bits via chmod.
-            // On other Unix systems, the directory was already created with the correct mode.
-            #[cfg(all(unix, target_os = "linux"))]
-            if !path_exists {
-                // TODO: Make this macos and freebsd compatible by creating a function to get permission bits from
-                // acl in extended attributes
-                let acl_perm_bits = uucore::fsxattr::get_acl_perm_bits_from_xattr(path);
-                if acl_perm_bits != 0 {
-                    chmod(path, create_mode | acl_perm_bits)?;
-                }
-            }
-
-            // Apply SELinux context if requested
-            #[cfg(feature = "selinux")]
-            if config.set_security_context && uucore::selinux::is_selinux_enabled() {
-                if let Err(e) = uucore::selinux::set_selinux_security_context(path, config.context)
-                {
-                    let _ = std::fs::remove_dir(path);
-                    return Err(USimpleError::new(1, e.to_string()));
-                }
-            }
-
             // Apply SMACK context if requested
-            #[cfg(feature = "smack")]
+            #[cfg(all(feature = "smack", target_os = "linux"))]
             if config.set_security_context {
                 uucore::smack::set_smack_label_and_cleanup(path, config.context, |p| {
                     std::fs::remove_dir(p)
@@ -350,7 +353,7 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             Ok(())
         }
 
-        Err(_) if path.is_dir() => {
+        Err(_) if config.recursive && path.is_dir() => {
             // Directory already exists - check if this is a logical directory creation
             // (i.e., not just a parent reference like "test_dir/..")
             let ends_with_parent_dir = matches!(
@@ -369,6 +372,9 @@ fn create_single_dir(path: &Path, is_parent: bool, config: &Config) -> UResult<(
             }
             Ok(())
         }
-        Err(e) => Err(e.into()),
+        Err(e) => Err(USimpleError::new(
+            1,
+            translate!("mkdir-error-cannot-create-directory", "path" => path.display(), "error" => uucore::error::strip_errno(&e)),
+        )),
     }
 }

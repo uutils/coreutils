@@ -65,6 +65,25 @@ fn test_fmt_width_max_display_width() {
         .stdout_is("aa\nbb cc\ndd ee\n");
 }
 
+/// Regression for https://github.com/uutils/coreutils/issues/10095
+///
+/// GNU `fmt` measures `-w` in UTF-8 bytes (not Unicode display columns).
+/// These cases match GNU coreutils 9.11.
+#[test]
+fn test_fmt_width_multibyte_gnu_compatible() {
+    new_ucmd!()
+        .args(&["-w", "10"])
+        .pipe_in("漢 字 test 日 本 語")
+        .succeeds()
+        .stdout_is("漢 字\ntest 日\n本 語\n");
+
+    new_ucmd!()
+        .args(&["-w", "15"])
+        .pipe_in("漢字 test 日本語")
+        .succeeds()
+        .stdout_is("漢字 test\n日本語\n");
+}
+
 #[test]
 fn test_fmt_width_invalid() {
     new_ucmd!()
@@ -427,4 +446,12 @@ fn test_fmt_invalid_utf8() {
         .pipe_in(input)
         .succeeds()
         .stdout_is_bytes(b"=\xA0=\n");
+}
+
+#[test]
+fn test_fmt_width_multiplication_overflow() {
+    new_ucmd!()
+        .args(&["-w", "267672676527678256"])
+        .fails_with_code(1)
+        .stderr_is("fmt: invalid width: '267672676527678256'\n");
 }

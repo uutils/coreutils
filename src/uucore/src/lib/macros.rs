@@ -89,9 +89,10 @@ macro_rules! show(
     ($err:expr) => ({
         #[allow(unused_imports)]
         use $crate::error::UError;
+        use std::io::Write as _;
+
         let e = $err;
         $crate::error::set_exit_code(e.code());
-        use std::io::Write as _;
         let _ = writeln!(std::io::stderr().lock(), "{}: {e}", $crate::util_name());
     })
 );

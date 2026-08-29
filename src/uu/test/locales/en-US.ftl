@@ -149,6 +149,10 @@ test-after-help = Exit with the status determined by EXPRESSION.
   NOTE: your shell may have its own version of test and/or {"["}, which usually supersedes the version described here.
   Please refer to your shell's documentation for details about the options it supports.
 
+  Errors are reported with the expression echoed back and a caret under the
+  argument at fault whenever stderr is a terminal; anything else reading
+  stderr gets the usual single-line message.
+
 # Error messages
 test-error-missing-closing-bracket = missing '{"]"}'
 test-error-expected = expected { $value }
@@ -158,3 +162,12 @@ test-error-extra-argument = extra argument { $argument }
 test-error-unknown-operator = unknown operator { $operator }
 test-error-invalid-integer = invalid integer { $value }
 test-error-unary-operator-expected = { $operator }: unary operator expected
+
+# Diagnostic labels, used when errors are rendered with a source snippet
+test-diag-label-unary-operator-expected = this needs an expression on both sides
+test-diag-help-integer-op = -eq, -ne, -lt, -le, -gt and -ge compare integers; use =, {"!"}=, {"<"} or {">"} to compare strings
+test-diag-help-integer-op-mnemonics = -eq equal, -ne not equal, -lt less than, -le less than or equal, -gt greater than, -ge greater than or equal
+test-diag-help-file-descriptor = -t takes a file descriptor number: 0 is standard input, 1 standard output, 2 standard error
+test-diag-help-missing-argument = an unset or empty variable expands to nothing, leaving the operator without an operand; quote it as "$var"
+test-diag-help-extra-argument = an unquoted variable expanding to several words is the usual cause; quote it as "$var" to keep it a single operand
+test-diag-help-unknown-operator = run '{ $name } --help' for the list of supported operators

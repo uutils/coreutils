@@ -55,10 +55,9 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 host: _,
                 time: _,
             } = entry
+                && !user.is_empty()
             {
-                if !user.is_empty() {
-                    users.push(user);
-                }
+                users.push(user);
             }
         }
     };

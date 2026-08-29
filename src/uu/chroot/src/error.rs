@@ -9,7 +9,7 @@ use std::io::Error;
 use std::path::PathBuf;
 use thiserror::Error;
 use uucore::display::Quotable;
-use uucore::error::UError;
+use uucore::error::{UError, strip_errno};
 use uucore::libc;
 use uucore::translate;
 
@@ -17,7 +17,7 @@ use uucore::translate;
 #[derive(Debug, Error)]
 pub enum ChrootError {
     /// Failed to enter the specified directory.
-    #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => _1))]
+    #[error("{}", translate!("chroot-error-cannot-enter", "dir" => _0.quote(), "err" => strip_errno(_1)))]
     CannotEnter(PathBuf, #[source] Error),
 
     /// Failed to execute the specified command.
@@ -51,10 +51,6 @@ pub enum ChrootError {
     /// Failed to find the specified group.
     #[error("{}", translate!("chroot-error-no-such-group"))]
     NoSuchGroup,
-
-    /// The given directory does not exist.
-    #[error("{}", translate!("chroot-error-no-such-directory", "dir" => _0.quote()))]
-    NoSuchDirectory(PathBuf),
 
     /// The call to `setgid()` failed.
     #[error("{}", translate!("chroot-error-set-gid-failed", "gid" => _0, "err" => _1))]

@@ -68,7 +68,7 @@ pub use libc::utmpxname;
 /// # Safety
 /// Just fixed the clippy warning. Please add description here.
 #[cfg(target_os = "freebsd")]
-pub unsafe extern "C" fn utmpxname(_file: *const libc::c_char) -> libc::c_int {
+pub unsafe extern "C" fn utmpxname(_file: *const core::ffi::c_char) -> core::ffi::c_int {
     0
 }
 

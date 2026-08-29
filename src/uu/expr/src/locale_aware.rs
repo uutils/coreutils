@@ -4,6 +4,7 @@
 // file that was distributed with this source code.
 
 use std::cmp::Ordering;
+use std::collections::HashSet;
 
 use uucore::{
     CharByte, IntoCharByteIterator,
@@ -39,15 +40,22 @@ fn index_with_locale(
             // In the UTF-8 case, we try to decode the strings on the fly. We
             // compare UTf-8 characters as long as the stream is valid, and
             // switch to byte comparison when the byte is an invalid sequence.
+            // Collect the needle chars into a set first so the search is
+            // O(N + M) rather than O(N * M).
+            let needles: HashSet<CharByte> = right.iter_char_bytes().collect();
             left.iter_char_bytes()
-                .position(|ch_h| right.iter_char_bytes().any(|ch_n| ch_n == ch_h))
+                .position(|ch_h| needles.contains(&ch_h))
                 .map_or(0, |idx| idx + 1)
         }
         UEncoding::Ascii => {
             // In the default case, we just perform byte-wise comparison on the
-            // arrays.
+            // arrays. A 256-entry lookup table keeps this O(N + M).
+            let mut needles = [false; 256];
+            for &b in right {
+                needles[b as usize] = true;
+            }
             left.iter()
-                .position(|ch_h| right.iter().any(|ch_n| ch_n == ch_h))
+                .position(|&ch_h| needles[ch_h as usize])
                 .map_or(0, |idx| idx + 1)
         }
     }

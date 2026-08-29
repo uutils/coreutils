@@ -2,32 +2,29 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-// spell-checker:ignore libc's setpriority
+// spell-checker:ignore getpriority setpriority
 use uutests::new_ucmd;
 
 #[test]
 #[cfg(not(target_os = "android"))]
 fn test_get_current_niceness() {
-    // Test that the nice command with no arguments returns the default nice
-    // value, which we determine by querying libc's `nice` in our own process.
-    new_ucmd!()
-        .succeeds()
-        .stdout_is(format!("{}\n", unsafe { libc::nice(0) }));
+    // Test that the nice command with no arguments returns the default nice value
+    let nice = rustix::process::getpriority_process(None).unwrap();
+    new_ucmd!().succeeds().stdout_is(format!("{nice}\n"));
 }
 
 #[test]
 #[cfg(not(target_os = "android"))]
-fn test_negative_adjustment() {
+fn test_nice_adj_negative() {
     // This assumes the test suite is run as a normal (non-root) user, and as
     // such attempting to set a negative niceness value will be rejected by
     // the OS.  If it gets denied, then we know a negative value was parsed
     // correctly.
 
-    let res = new_ucmd!().args(&["-n", "-1", "true"]).succeeds();
-    assert!(
-        res.stderr_str()
-            .starts_with("nice: warning: setpriority: Permission denied")
-    ); // spell-checker:disable-line
+    new_ucmd!()
+        .args(&["--adj", "-20", "true"])
+        .succeeds()
+        .stderr_is("nice: warning: setpriority: Permission denied\n");
 }
 
 #[test]

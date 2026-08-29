@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/ls.rs"
 doctest = false
@@ -26,7 +23,6 @@ clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 lscolors = { workspace = true }
 rustc-hash = { workspace = true }
-selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
 uucore = { workspace = true, features = [
@@ -36,6 +32,7 @@ uucore = { workspace = true, features = [
   "fs",
   "fsext",
   "fsxattr",
+  "i18n-collator",
   "parser-size",
   "parser-glob",
   "quoting-style",
@@ -44,6 +41,9 @@ uucore = { workspace = true, features = [
 ] }
 uutils_term_grid = { workspace = true }
 fluent = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 # hostname crate does not support WASI (no OS-level hostname API)
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
@@ -63,5 +63,8 @@ name = "ls_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
+selinux = ["dep:selinux", "uucore/selinux"]
 smack = ["uucore/smack"]
+
+[lints]
+workspace = true

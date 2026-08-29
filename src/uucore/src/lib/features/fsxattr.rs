@@ -3,7 +3,7 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore getxattr posix_acl_default
+// spell-checker:ignore getxattr posix_acl_default posix_acl_access ENOTSUP EOPNOTSUPP renamer
 
 //! Set of functions to manage xattr on files and dirs
 use itertools::Itertools;
@@ -13,16 +13,24 @@ use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 
-/// Copies extended attributes (xattrs) from one file or directory to another.
-///
-/// # Arguments
-///
-/// * `source` - A reference to the source path.
-/// * `dest` - A reference to the destination path.
-///
-/// # Returns
-///
-/// A result indicating success or failure.
+/// True if the error is `ENOTSUP` / `EOPNOTSUPP` (same errno on Linux,
+/// distinct on the BSDs).
+#[cfg(unix)]
+fn is_xattr_unsupported(err: &std::io::Error) -> bool {
+    matches!(
+        err.raw_os_error(),
+        Some(e) if e == libc::ENOTSUP || e == libc::EOPNOTSUPP
+    )
+}
+
+#[cfg(not(unix))]
+fn is_xattr_unsupported(_err: &std::io::Error) -> bool {
+    false
+}
+
+/// Copies extended attributes (xattrs) from one path to another.
+/// All errors propagate, including `ENOTSUP` / `EOPNOTSUPP`; for
+/// best-effort callers see [`copy_xattrs_ignore_unsupported`].
 pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
@@ -32,17 +40,74 @@ pub fn copy_xattrs<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Like [`copy_xattrs`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`
+/// for callers where xattr preservation is best-effort.
+pub fn copy_xattrs_ignore_unsupported<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
+    match copy_xattrs(source, dest) {
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        res => res,
+    }
+}
+
+/// Copies xattrs between two open file descriptors. Pins both inodes so
+/// list/get/set calls cannot be redirected by a concurrent renamer, unlike
+/// the path-based [`copy_xattrs`].
+#[cfg(unix)]
+pub fn copy_xattrs_fd(source: &std::fs::File, dest: &std::fs::File) -> std::io::Result<()> {
+    use xattr::FileExt;
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
+            dest.set_xattr(&attr_name, &value)?;
+        }
+    }
+    Ok(())
+}
+
+/// Like [`copy_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn copy_xattrs_fd_ignore_unsupported(
+    source: &std::fs::File,
+    dest: &std::fs::File,
+) -> std::io::Result<()> {
+    match copy_xattrs_fd(source, dest) {
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        res => res,
+    }
+}
+
 /// Like `copy_xattrs`, but skips the security.selinux attribute.
 #[cfg(unix)]
 pub fn copy_xattrs_skip_selinux<P: AsRef<Path>>(source: P, dest: P) -> std::io::Result<()> {
     for attr_name in xattr::list(&source)? {
-        if attr_name.to_string_lossy() != "security.selinux" {
-            if let Some(value) = xattr::get(&source, &attr_name)? {
-                xattr::set(&dest, &attr_name, &value)?;
-            }
+        if attr_name.as_bytes() != b"security.selinux"
+            && let Some(value) = xattr::get(&source, &attr_name)?
+        {
+            xattr::set(&dest, &attr_name, &value)?;
         }
     }
     Ok(())
+}
+
+/// Copies only the POSIX ACL xattrs (`system.posix_acl_access` and
+/// `system.posix_acl_default`) from `source` to `dest`.
+///
+/// GNU `cp -p` preserves ACLs as part of mode preservation but does not
+/// preserve other (user/security) xattrs unless `--preserve=xattr` or
+/// `-a` is requested. On Linux, POSIX ACLs are stored as the two `system.*`
+/// xattrs above; copying them here without copying the rest gives the
+/// GNU-compatible "preserve mode (incl. ACLs) but not user xattrs" behavior.
+///
+/// Errors from the underlying xattr calls are silently ignored: filesystems
+/// without ACL/xattr support are common, and GNU cp itself does not surface
+/// failures here when `mode` is the only thing being preserved.
+#[cfg(unix)]
+pub fn copy_acls<P: AsRef<Path>>(source: P, dest: P) {
+    for name in ["system.posix_acl_access", "system.posix_acl_default"] {
+        if let Ok(Some(value)) = xattr::get(&source, name) {
+            // Best-effort: silently skip if dest doesn't support ACL xattrs.
+            let _ = xattr::set(&dest, name, &value);
+        }
+    }
 }
 
 /// Retrieves the extended attributes (xattrs) of a given file or directory.
@@ -58,6 +123,30 @@ pub fn retrieve_xattrs<P: AsRef<Path>>(source: P) -> std::io::Result<FxHashMap<O
     let mut attrs = FxHashMap::default();
     for attr_name in xattr::list(&source)? {
         if let Some(value) = xattr::get(&source, &attr_name)? {
+            attrs.insert(attr_name, value);
+        }
+    }
+    Ok(attrs)
+}
+
+/// Retrieves the extended attributes (xattrs) of a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `source` - A reference to the file (open file descriptor).
+///
+/// # Returns
+///
+/// A result containing a map of attribute names to values, or an error.
+#[cfg(unix)]
+pub fn retrieve_xattrs_fd(source: &std::fs::File) -> std::io::Result<FxHashMap<OsString, Vec<u8>>> {
+    use xattr::FileExt;
+    let mut attrs = FxHashMap::default();
+    for attr_name in source.list_xattr()? {
+        if let Some(value) = source.get_xattr(&attr_name)? {
             attrs.insert(attr_name, value);
         }
     }
@@ -82,6 +171,43 @@ pub fn apply_xattrs<P: AsRef<Path>>(
         xattr::set(&dest, &attr, &value)?;
     }
     Ok(())
+}
+
+/// Applies extended attributes (xattrs) to a given file using a file descriptor.
+///
+/// This version avoids TOCTOU races by operating on an open file descriptor
+/// rather than a path, ensuring all operations target the same inode.
+///
+/// # Arguments
+///
+/// * `dest` - A reference to the file (open file descriptor).
+/// * `xattrs` - A map of attribute names to their corresponding values.
+///
+/// # Returns
+///
+/// A result indicating success or failure.
+#[cfg(unix)]
+pub fn apply_xattrs_fd(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    use xattr::FileExt;
+    for (attr, value) in xattrs {
+        dest.set_xattr(&attr, &value)?;
+    }
+    Ok(())
+}
+
+/// Like [`apply_xattrs_fd`], but maps `ENOTSUP` / `EOPNOTSUPP` to `Ok(())`.
+#[cfg(unix)]
+pub fn apply_xattrs_fd_ignore_unsupported(
+    dest: &std::fs::File,
+    xattrs: FxHashMap<OsString, Vec<u8>>,
+) -> std::io::Result<()> {
+    match apply_xattrs_fd(dest, xattrs) {
+        Err(e) if is_xattr_unsupported(&e) => Ok(()),
+        res => res,
+    }
 }
 
 /// Checks if a file has an Access Control List (ACL) based on its extended attributes.
@@ -163,7 +289,7 @@ pub fn get_acl_perm_bits_from_xattr<P: AsRef<Path>>(source: P) -> u32 {
                 .copied()
                 .collect::<Vec<u8>>();
 
-            for entry in acl_entries.chunks_exact(4) {
+            for entry in acl_entries.as_chunks::<4>().0 {
                 // Third byte and fourth byte will be the perm bits
                 perm = (perm << 3) | u32::from(entry[2]) | u32::from(entry[3]);
             }
@@ -198,6 +324,35 @@ mod tests {
 
         let copied_value = xattr::get(&dest_path, test_attr).unwrap().unwrap();
         assert_eq!(copied_value, test_value);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_copy_xattrs_fd() {
+        let temp_dir = tempdir().unwrap();
+        let source_path = temp_dir.path().join("source.txt");
+        let dest_path = temp_dir.path().join("dest.txt");
+
+        File::create(&source_path).unwrap();
+        File::create(&dest_path).unwrap();
+
+        let test_attr = "user.fd_test";
+        let test_value = b"fd value";
+        // Skip silently if the test fs doesn't support user xattrs.
+        if xattr::set(&source_path, test_attr, test_value).is_err() {
+            return;
+        }
+
+        let src = File::open(&source_path).unwrap();
+        let dst = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&dest_path)
+            .unwrap();
+
+        copy_xattrs_fd(&src, &dst).unwrap();
+
+        let copied = xattr::get(&dest_path, test_attr).unwrap().unwrap();
+        assert_eq!(copied, test_value);
     }
 
     #[test]
@@ -298,5 +453,36 @@ mod tests {
 
             assert!(has_security_cap_acl(&file_path));
         }
+    }
+
+    #[test]
+    fn test_apply_and_retrieve_xattrs_fd() {
+        use std::fs::OpenOptions;
+
+        let temp_dir = tempdir().unwrap();
+        let file_path = temp_dir.path().join("test_file.txt");
+
+        File::create(&file_path).unwrap();
+
+        let mut test_xattrs = FxHashMap::default();
+        let test_attr = "user.test_attr_fd";
+        let test_value = b"test value fd";
+        test_xattrs.insert(OsString::from(test_attr), test_value.to_vec());
+
+        // Apply using file descriptor
+        let file = OpenOptions::new().write(true).open(&file_path).unwrap();
+        apply_xattrs_fd(&file, test_xattrs).unwrap();
+        drop(file);
+
+        // Retrieve using file descriptor
+        let file = File::open(&file_path).unwrap();
+        let retrieved_xattrs = retrieve_xattrs_fd(&file).unwrap();
+        assert!(retrieved_xattrs.contains_key(OsString::from(test_attr).as_os_str()));
+        assert_eq!(
+            retrieved_xattrs
+                .get(OsString::from(test_attr).as_os_str())
+                .unwrap(),
+            test_value
+        );
     }
 }

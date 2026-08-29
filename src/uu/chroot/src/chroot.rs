@@ -3,21 +3,20 @@
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
 
-// spell-checker:ignore (ToDO) NEWROOT Userspec pstatus chdir
+// spell-checker:ignore (ToDO) NEWROOT Userspec chrooting chroots chdir pstatus repointed
 mod error;
 
 use crate::error::ChrootError;
 use clap::{Arg, ArgAction, Command};
-use std::ffi::{CString, OsStr};
+use std::ffi::OsString;
 use std::io::{Error, ErrorKind};
-use std::os::unix::prelude::OsStrExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process;
 use uucore::entries::{Locate, Passwd, grp2gid, usr2gid, usr2uid};
 use uucore::error::{UResult, UUsageError};
 use uucore::fs::{MissingHandling, ResolveMode, canonicalize};
-use uucore::libc::{self, chroot, setgid, setgroups, setuid};
+use uucore::libc::{self, setgid, setgroups, setuid};
 use uucore::{format_usage, show};
 
 use uucore::translate;
@@ -39,8 +38,12 @@ enum UserSpec {
 }
 
 struct Options {
-    /// Path to the new root directory.
+    /// Path to the new root directory, as the caller spelled it. Used for
+    /// diagnostics.
     newroot: PathBuf,
+    /// The path actually passed to `chroot(2)`, when it must differ from
+    /// `newroot`. See the `--skip-chdir` handling in `uumain`.
+    chroot_target: Option<PathBuf>,
     /// Whether to change to the new root directory.
     skip_chdir: bool,
     /// List of groups under which the command will be run.
@@ -147,6 +150,7 @@ impl Options {
             .map(|s| parse_userspec(s));
         Ok(Self {
             newroot,
+            chroot_target: None,
             skip_chdir,
             groups,
             userspec,
@@ -159,62 +163,58 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches =
         uucore::clap_localization::handle_clap_result_with_exit_code(uu_app(), args, 125)?;
 
-    let default_shell: &'static OsStr = OsStr::new("/bin/sh");
-    let default_option: &'static OsStr = OsStr::new("-i");
-    let user_shell = std::env::var_os("SHELL");
-
-    let options = Options::from(&matches)?;
+    let mut options = Options::from(&matches)?;
 
     // We are resolving the path in case it is a symlink or /. or /../
-    if options.skip_chdir
-        && canonicalize(
+    //
+    // GNU validates the resolved path but then chroots the original spelling,
+    // which leaves a window: a NEWROOT symlink repointed after the check would
+    // pass the guard and still put the process somewhere else, with a working
+    // directory left outside it because --skip-chdir suppresses the chdir.
+    // Since the guard only succeeds when the resolution is `/`, chrooting the
+    // resolved path is the same destination and closes that window.
+    if options.skip_chdir {
+        let resolved = canonicalize(
             &options.newroot,
             MissingHandling::Normal,
             ResolveMode::Logical,
         )
-        .unwrap()
-        .to_str()
-            != Some("/")
-    {
-        return Err(UUsageError::new(
-            125,
-            translate!("chroot-error-skip-chdir-only-permitted"),
-        ));
+        // A NEWROOT that does not resolve is by definition not old `/`, so treat
+        // an Err as a non-match instead of unwrapping it.
+        .ok();
+        if resolved.as_deref().and_then(|p| p.to_str()) != Some("/") {
+            return Err(UUsageError::new(
+                125,
+                translate!("chroot-error-skip-chdir-only-permitted"),
+            ));
+        }
+        // The guard proved the resolution is `/`, so chrooting it is the same
+        // destination, minus the window. NEWROOT is kept for diagnostics so the
+        // error text still names what the caller asked for.
+        options.chroot_target = resolved;
     }
 
-    if !options.newroot.is_dir() {
-        return Err(ChrootError::NoSuchDirectory(options.newroot).into());
-    }
-
-    let commands: Vec<&OsStr> = matches
-        .get_many::<String>(options::COMMAND)
-        .map_or_else(Vec::new, |v| v.map(OsStr::new).collect());
-
-    // TODO: refactor the args and command matching
-    // See: https://github.com/uutils/coreutils/pull/2365#discussion_r647849967
-    let command = if commands.is_empty() {
-        vec![
-            user_shell.as_deref().unwrap_or(default_shell),
-            default_option,
-        ]
-    } else {
-        commands
+    let mut cmd_iter = matches
+        .get_many::<OsString>(options::COMMAND)
+        .into_iter()
+        .flatten();
+    let (chroot_command, args) = match cmd_iter.next() {
+        Some(c) => (c.clone(), cmd_iter.cloned().collect::<Vec<OsString>>()),
+        None => (
+            std::env::var_os("SHELL").unwrap_or_else(|| "/bin/sh".into()),
+            vec!["-i".into()],
+        ),
     };
-
-    assert!(!command.is_empty());
-    let chroot_command = command[0];
 
     // NOTE: Tests can only trigger code beyond this point if they're invoked with root permissions
     set_context(&options)?;
 
-    let err = process::Command::new(chroot_command)
-        .args(&command[1..])
-        .exec();
+    let err = process::Command::new(&chroot_command).args(&args).exec();
 
     Err(if err.kind() == ErrorKind::NotFound {
-        ChrootError::CommandNotFound(chroot_command.to_owned(), err)
+        ChrootError::CommandNotFound(chroot_command, err)
     } else {
-        ChrootError::CommandFailed(chroot_command.to_owned(), err)
+        ChrootError::CommandFailed(chroot_command, err)
     }
     .into())
 }
@@ -257,6 +257,7 @@ pub fn uu_app() -> Command {
             Arg::new(options::COMMAND)
                 .action(ArgAction::Append)
                 .value_hint(clap::ValueHint::CommandName)
+                .value_parser(clap::value_parser!(OsString))
                 .hide(true)
                 .index(2),
         )
@@ -311,7 +312,7 @@ fn set_supplemental_gids(gids: &[libc::gid_t]) -> std::io::Result<()> {
         target_os = "cygwin",
         target_os = "netbsd"
     ))]
-    let n = gids.len() as libc::c_int;
+    let n = gids.len() as core::ffi::c_int;
     #[cfg(any(target_os = "linux", target_os = "android"))]
     let n = gids.len() as libc::size_t;
     let err = unsafe { setgroups(n, gids.as_ptr()) };
@@ -391,17 +392,18 @@ fn set_supplemental_gids_with_strategy(
 
 /// Change the root, set the user ID, and set the group IDs for this process.
 fn set_context(options: &Options) -> UResult<()> {
-    enter_chroot(&options.newroot, options.skip_chdir)?;
     match &options.userspec {
         None | Some(UserSpec::NeitherGroupNorUser) => {
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
         }
         Some(UserSpec::UserOnly(user)) => {
             let uid = name_to_uid(user)?;
             let gid = usr2gid(user).map_err(|_| ChrootError::NoGroupSpecified(uid))?;
             let strategy = Strategy::FromUID(uid, false);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(user.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -409,6 +411,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::Nothing;
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
         }
         Some(UserSpec::UserAndGroup(user, group)) => {
@@ -416,6 +419,7 @@ fn set_context(options: &Options) -> UResult<()> {
             let gid = name_to_gid(group)?;
             let strategy = Strategy::FromUID(uid, true);
             set_supplemental_gids_with_strategy(strategy, options.groups.as_ref())?;
+            enter_chroot(options, options.skip_chdir)?;
             set_gid(gid).map_err(|e| ChrootError::SetGidFailed(group.to_owned(), e))?;
             set_uid(uid).map_err(|e| ChrootError::SetUserFailed(user.to_owned(), e))?;
         }
@@ -423,23 +427,14 @@ fn set_context(options: &Options) -> UResult<()> {
     Ok(())
 }
 
-fn enter_chroot(root: &Path, skip_chdir: bool) -> UResult<()> {
-    let err = unsafe {
-        chroot(
-            CString::new(root.as_os_str().as_bytes().to_vec())
-                .map_err(|e| ChrootError::CannotEnter("root".into(), e.into()))?
-                .as_bytes_with_nul()
-                .as_ptr()
-                .cast(),
-        )
-    };
-
-    if err == 0 {
-        if !skip_chdir {
-            std::env::set_current_dir("/")?;
-        }
-        Ok(())
-    } else {
-        Err(ChrootError::CannotEnter(root.into(), Error::last_os_error()).into())
+fn enter_chroot(options: &Options, skip_chdir: bool) -> UResult<()> {
+    // chroot the resolved target when there is one; name the caller's spelling
+    // in the error either way.
+    let target = options.chroot_target.as_deref().unwrap_or(&options.newroot);
+    rustix::process::chroot(target)
+        .map_err(|e| ChrootError::CannotEnter(options.newroot.clone(), e.into()))?;
+    if !skip_chdir {
+        std::env::set_current_dir("/")?;
     }
+    Ok(())
 }

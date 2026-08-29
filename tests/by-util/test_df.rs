@@ -12,7 +12,7 @@
 
 use std::collections::HashSet;
 
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))]
+#[cfg(not(any(target_os = "freebsd", windows)))]
 use uutests::at_and_ucmd;
 use uutests::new_ucmd;
 #[cfg(target_os = "linux")]
@@ -89,6 +89,18 @@ fn test_df_output_arg() {
     new_ucmd!()
         .args(&["--output=source", "--output=source"])
         .fails();
+}
+
+#[test]
+#[cfg(windows)]
+fn test_inodes_not_supported_windows() {
+    // The notice goes to stdout with exit 0, before any other option is validated.
+    for args in [&["-i"][..], &["-i", "--block-size=bogus"][..]] {
+        new_ucmd!()
+            .args(args)
+            .succeeds()
+            .stdout_only("df: doesn't support -i option\n");
+    }
 }
 
 #[test]
@@ -328,8 +340,8 @@ fn test_type_option() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", target_os = "windows")))] // FIXME: fix test for FreeBSD, OpenBSD & Win
-#[cfg(not(feature = "feat_selinux"))]
+#[cfg(not(any(target_os = "freebsd", target_os = "openbsd", windows)))] // FIXME: fix test for FreeBSD, OpenBSD & Win
+#[cfg(not(feature = "selinux"))]
 fn test_type_option_with_file() {
     let fs_type = new_ucmd!()
         .args(&["--output=fstype", "."])
@@ -994,7 +1006,7 @@ fn test_output_file_all_filesystems() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_output_file_specific_files() {
     // Create three files.
     let (at, mut ucmd) = at_and_ucmd!();
@@ -1013,7 +1025,7 @@ fn test_output_file_specific_files() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_file_column_width_if_filename_contains_unicode_chars() {
     let (at, mut ucmd) = at_and_ucmd!();
     at.touch("äöü.txt");
@@ -1036,7 +1048,7 @@ fn test_output_field_no_more_than_once() {
 }
 
 #[test]
-#[cfg(not(any(target_os = "freebsd", target_os = "windows")))] // FIXME: fix test for FreeBSD & Win
+#[cfg(not(any(target_os = "freebsd", windows)))] // FIXME: fix test for FreeBSD & Win
 fn test_nonexistent_file() {
     new_ucmd!()
         .arg("does-not-exist")
@@ -1054,8 +1066,7 @@ fn test_nonexistent_file() {
 fn test_df_all_shows_binfmt_misc() {
     // Check if binfmt_misc is mounted
     let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
-        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
-        .unwrap_or(false);
+        .is_ok_and(|content| content.lines().any(|line| line.contains("binfmt_misc")));
 
     if is_mounted {
         let output = new_ucmd!()
@@ -1076,8 +1087,7 @@ fn test_df_all_shows_binfmt_misc() {
 fn test_df_hides_binfmt_misc_by_default() {
     // Check if binfmt_misc is mounted
     let is_mounted = std::fs::read_to_string("/proc/self/mountinfo")
-        .map(|content| content.lines().any(|line| line.contains("binfmt_misc")))
-        .unwrap_or(false);
+        .is_ok_and(|content| content.lines().any(|line| line.contains("binfmt_misc")));
 
     if is_mounted {
         let output = new_ucmd!()
@@ -1101,13 +1111,11 @@ fn run_df_with_masked_proc(args: &str) -> Option<(bool, String, String)> {
     use std::process::Command;
 
     // Check if user namespaces are available
-    if !Command::new("unshare")
+    Command::new("unshare")
         .args(["-rm", "true"])
         .status()
-        .is_ok_and(|s| s.success())
-    {
-        return None;
-    }
+        .ok()
+        .filter(std::process::ExitStatus::success)?;
 
     let df_path = TestScenario::new("df").bin_path.clone();
     let output = Command::new("unshare")

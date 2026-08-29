@@ -65,17 +65,11 @@ Your git commits will then automatically be checked. If a check fails, an error
 message will explain why, and your commit will be canceled. You can then make
 the suggested changes, and run `git commit ...` again.
 
-**NOTE: On MacOS** the pre-commit hooks are currently broken. There are workarounds involving switching to unstable nightly Rust and components.
-
 ### clippy
 
 ```shell
-cargo clippy --all-targets --all-features
+cargo clippy --workspace --all-targets --all-features
 ```
-
-The `msrv` key in the clippy configuration file `clippy.toml` is used to disable
-lints pertaining to newer features by specifying the minimum supported Rust
-version (MSRV).
 
 ### rustfmt
 
@@ -202,7 +196,7 @@ make CARGOFLAGS='--no-fail-fast' UTILS='UTILITY_1 UTILITY_2' nextest
 
 ### Run Busybox Tests
 
-This testing functionality is only available on *nix operating systems and
+This testing functionality is only available on Unix-like operating systems and
 requires `make`.
 
 To run busybox tests for all utilities for which busybox has tests

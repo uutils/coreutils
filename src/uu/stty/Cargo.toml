@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/stty.rs"
 doctest = false
@@ -23,12 +20,15 @@ clap = { workspace = true }
 uucore = { workspace = true, features = ["parser"] }
 fluent = { workspace = true }
 
+[build-dependencies]
+cfg_aliases = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["ioctl", "term"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "stty"
 path = "src/main.rs"
-
-[build-dependencies]
-cfg_aliases = "0.2.1"

@@ -2,10 +2,12 @@
 //
 // For the full copyright and license information, please view the LICENSE
 // file that was distributed with this source code.
-
+// spell-checker:ignore defaultcon setfscreatecon
 //! Set of functions to manage SELinux security contexts
 
+use std::borrow::Cow;
 use std::error::Error;
+use std::marker::PhantomData;
 use std::path::Path;
 
 use crate::translate;
@@ -60,6 +62,127 @@ impl From<SeLinuxError> for i32 {
 /// Note: libselinux internally caches this value, so no additional caching is needed.
 pub fn is_selinux_enabled() -> bool {
     selinux::kernel_support() != selinux::KernelSupport::Unsupported
+}
+
+/// Sets the context the kernel applies to objects created by this thread, and
+/// restores the policy default when dropped (`setfscreatecon`).
+///
+/// Unlike [`set_selinux_security_context`], which relabels after creating, the
+/// object is never visible with the wrong context. Not [`Send`]: the context is
+/// per-thread state.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::path::Path;
+/// use uucore::selinux::FsCreateContext;
+///
+/// let context = String::from("unconfined_u:object_r:user_home_t:s0");
+/// let _guard = FsCreateContext::new(Path::new("/path/to/fifo"), None, Some(&context))?;
+/// // Anything created from here on is labelled at creation time.
+/// # Ok::<(), uucore::selinux::SeLinuxError>(())
+/// ```
+#[must_use = "the creation context is restored as soon as the guard is dropped"]
+pub struct FsCreateContext {
+    // False when no default context existed, so there is nothing to restore.
+    installed: bool,
+    _not_send: PhantomData<*const ()>,
+}
+
+/// GNU creates the object unlabelled rather than failing when the policy has no
+/// default for the path, or the filesystem cannot hold one (`ignorable_ctx_err`).
+fn is_ignorable_context_error(error: &(dyn Error + 'static)) -> bool {
+    let mut current = Some(error);
+    while let Some(err) = current {
+        if let Some(io_error) = err.downcast_ref::<std::io::Error>() {
+            return matches!(
+                io_error.raw_os_error(),
+                Some(libc::ENOENT | libc::ENODATA | libc::ENOTSUP)
+            );
+        }
+        current = err.source();
+    }
+    false
+}
+
+impl FsCreateContext {
+    /// Installs the creation context.
+    ///
+    /// `context` is an explicit `--context=CTX` value. `None` asks the policy
+    /// for the default context of `path`, which is what a bare `-Z` does;
+    /// `mode` refines that lookup with the type and permission bits of the
+    /// object about to be created, and may be `None` when they are not known.
+    pub fn new(
+        path: &Path,
+        mode: Option<libc::mode_t>,
+        context: Option<&String>,
+    ) -> Result<Self, SeLinuxError> {
+        if !is_selinux_enabled() {
+            return Err(SeLinuxError::SELinuxNotEnabled);
+        }
+
+        if let Some(ctx_str) = context {
+            let c_context = std::ffi::CString::new(ctx_str.as_str()).map_err(|e| {
+                SeLinuxError::ContextConversionFailure(
+                    ctx_str.to_owned(),
+                    selinux_error_description(&e),
+                )
+            })?;
+
+            SecurityContext::from_c_str(&c_context, false)
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| {
+                    SeLinuxError::ContextSetFailure(
+                        ctx_str.to_owned(),
+                        selinux_error_description(&e),
+                    )
+                })?;
+        } else {
+            // Mirror GNU's `defaultcon`.
+            let labeler =
+                selinux::label::Labeler::<selinux::label::back_end::File>::new(&[], false)
+                    .map_err(|e| {
+                        SeLinuxError::ContextRetrievalFailure(selinux_error_description(&e))
+                    })?;
+
+            let default_context =
+                match labeler.look_up_by_path(path, mode.and_then(selinux::FileAccessMode::new)) {
+                    Ok(context) => context,
+                    Err(e) if is_ignorable_context_error(&e) => {
+                        return Ok(Self {
+                            installed: false,
+                            _not_send: PhantomData,
+                        });
+                    }
+                    Err(e) => {
+                        return Err(SeLinuxError::ContextRetrievalFailure(
+                            selinux_error_description(&e),
+                        ));
+                    }
+                };
+
+            default_context
+                .set_for_new_file_system_objects(false)
+                .map_err(|e| {
+                    SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e))
+                })?;
+        }
+
+        Ok(Self {
+            installed: true,
+            _not_send: PhantomData,
+        })
+    }
+}
+
+impl Drop for FsCreateContext {
+    fn drop(&mut self) {
+        if !self.installed {
+            return;
+        }
+        // A failed reset is not actionable here.
+        let _ = SecurityContext::set_default_context_for_new_file_system_objects();
+    }
 }
 
 /// Returns a string describing the error and its causes.
@@ -168,7 +291,8 @@ pub fn set_selinux_security_context(
         })
     } else {
         // If no context provided, set the default SELinux context for the path
-        SecurityContext::set_default_for_path(path).map_err(|e| match &e {
+        let path = absolute_for_policy_lookup(path);
+        SecurityContext::set_default_for_path(&path).map_err(|e| match &e {
             selinux::errors::Error::IO1Path { source, .. }
                 if source.raw_os_error() == Some(libc::ENOTSUP) =>
             {
@@ -177,6 +301,35 @@ pub fn set_selinux_security_context(
             _ => SeLinuxError::ContextSetFailure(String::new(), selinux_error_description(&e)),
         })
     }
+}
+
+/// Returns `path` as an absolute name, for the default context lookup.
+///
+/// The policy's `file_contexts` only ever holds absolute names, so a relative
+/// one matches nothing -- and libselinux reports the miss as success, leaving
+/// the object with the context it already carried.
+fn absolute_for_policy_lookup(path: &Path) -> Cow<'_, Path> {
+    if path.is_absolute() {
+        return Cow::Borrowed(path);
+    }
+    // Resolve the directory only, so that `.` and `..` do not reach the policy
+    // patterns; the last component is labelled itself, symbolic link or not.
+    let resolved = match (path.parent(), path.file_name()) {
+        (Some(directory), Some(name)) => {
+            let directory = if directory.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                directory
+            };
+            std::fs::canonicalize(directory).map(|directory| directory.join(name))
+        }
+        // No last component to keep: the name ends in `.` or `..`, which names
+        // a directory and never a symbolic link, so resolve the whole of it.
+        // A lexical absolute name would keep those components and match no
+        // pattern.
+        _ => std::fs::canonicalize(path),
+    };
+    resolved.map_or(Cow::Borrowed(path), Cow::Owned)
 }
 
 /// Gets the SELinux security context for the given filesystem path.
@@ -411,6 +564,32 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[test]
+    fn test_absolute_for_policy_lookup() {
+        let directory = tempfile::tempdir().expect("Failed to create tempdir");
+        let directory = std::fs::canonicalize(directory.path()).expect("Failed to canonicalize");
+        std::fs::create_dir(directory.join("branch")).expect("Failed to create dir");
+        let previous = std::env::current_dir().expect("Failed to read the working directory");
+        std::env::set_current_dir(&directory).expect("Failed to change the working directory");
+
+        // An absolute name is handed to the policy untouched.
+        let untouched = Path::new("/opt/quokka");
+        assert_eq!(absolute_for_policy_lookup(untouched), untouched);
+
+        // A relative one becomes absolute, and `.`/`..` never reach the policy.
+        for (given, expected) in [
+            ("quokka", directory.join("quokka")),
+            ("./quokka", directory.join("quokka")),
+            ("branch/../quokka", directory.join("quokka")),
+            ("branch/..", directory.clone()),
+            (".", directory.clone()),
+        ] {
+            assert_eq!(absolute_for_policy_lookup(Path::new(given)), expected);
+        }
+
+        std::env::set_current_dir(previous).expect("Failed to restore the working directory");
+    }
+
+    #[test]
     fn test_selinux_context_setting() {
         let tmpfile = NamedTempFile::new().expect("Failed to create tempfile");
         let path = tmpfile.path();
@@ -618,7 +797,9 @@ mod tests {
 
         // Create a FIFO (pipe)
         let fifo_path = dir_path.join("my_fifo");
-        crate::fs::make_fifo(&fifo_path).expect("Failed to create FIFO");
+        // todo: use rustix::fs::mkfifoat since selinux is linux specific
+        nix::unistd::mkfifo(&fifo_path, nix::sys::stat::Mode::from_bits_truncate(0o666))
+            .expect("Failed to create FIFO");
 
         // Just getting a context is good enough
         get_selinux_security_context(&fifo_path, false).expect("Cannot get fifo context");

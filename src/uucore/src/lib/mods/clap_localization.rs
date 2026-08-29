@@ -219,16 +219,16 @@ impl<'a> ErrorFormatter<'a> {
             }
 
             // Show possible values for InvalidValue errors
-            if matches!(err.kind(), ErrorKind::InvalidValue) {
-                if let Some(valid_values) = err.get(ContextKind::ValidValue) {
-                    if !valid_values.to_string().is_empty() {
-                        let _ = writeln!(
-                            stderr(),
-                            "\n  [{}: {valid_values}]",
-                            translate!("clap-error-possible-values")
-                        );
-                    }
-                }
+            if matches!(err.kind(), ErrorKind::InvalidValue)
+                && let Some(valid_values) = err
+                    .get(ContextKind::ValidValue)
+                    .filter(|v| !v.to_string().is_empty())
+            {
+                let _ = writeln!(
+                    stderr(),
+                    "\n  [{}: {valid_values}]",
+                    translate!("clap-error-possible-values")
+                );
             }
             let _ = writeln!(stderr(), "\n{}", translate!("common-help-suggestion"));
         } else {
@@ -397,6 +397,33 @@ where
     T: Into<OsString> + Clone,
 {
     handle_clap_result_with_exit_code(cmd, itr, 1)
+}
+
+/// Parses the command line as [`handle_clap_result`] does, keeping a copy of
+/// it for a caret diagnostic first.
+///
+/// Parsing consumes the argument list, and a caret echoes it as it was typed,
+/// so the copy has to be taken before — which is what this saves every caller
+/// from spelling out. A utility that rewrites its arguments before parsing
+/// keeps capturing on its own, since only it knows which of the two lists the
+/// caret should echo.
+///
+/// # Arguments
+///
+/// * `cmd` - The clap `Command` to parse arguments against
+/// * `args` - The command line, program name included
+///
+/// # Returns
+///
+/// The parsed arguments, and the command line as typed — `None` when
+/// diagnostics are off, so that nothing is copied for a report no one will
+/// see.
+pub fn handle_clap_result_with_diagnostics(
+    cmd: Command,
+    args: Vec<OsString>,
+) -> UResult<(ArgMatches, Option<Vec<OsString>>)> {
+    let diag_args = crate::diagnostics::capture(&args);
+    Ok((handle_clap_result(cmd, args)?, diag_args))
 }
 
 /// Handles clap command parsing with a custom exit code for errors.

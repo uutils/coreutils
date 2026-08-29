@@ -6,11 +6,11 @@
 // spell-checker:ignore (words) bogusfile emptyfile abcdefghijklmnopqrstuvwxyz abcdefghijklmnopqrstu
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 use std::io::Read;
 use uutests::new_ucmd;
@@ -180,7 +180,7 @@ fn test_negative_byte_syntax() {
         .args(&["--bytes=-2"])
         .pipe_in("a\n")
         .succeeds()
-        .stdout_is("");
+        .no_output();
 }
 
 #[test]
@@ -221,6 +221,35 @@ fn test_negative_zero_bytes() {
         .pipe_in("qwerty")
         .succeeds()
         .stdout_is("qwerty");
+}
+
+#[test]
+fn test_zero_bytes_with_suffix() {
+    // --bytes=0K makes head stop before draining stdin, so the harness's write may fail
+    // with EPIPE. That is expected and must not fail the test.
+    //
+    // "0K" must be 0 bytes, not 1KiB (bare suffix parses as 1)
+    new_ucmd!()
+        .args(&["--bytes=0K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=00K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
+    new_ucmd!()
+        .args(&["--bytes=+0K"])
+        .ignore_stdin_write_error()
+        .pipe_in("qwerty")
+        .ignore_stdin_write_error()
+        .succeeds()
+        .no_output();
 }
 #[test]
 fn test_no_such_file_or_directory() {
@@ -548,11 +577,11 @@ fn test_all_but_last_lines_large_file() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -652,11 +681,11 @@ fn test_validate_stdin_offset_lines() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(
@@ -781,11 +810,11 @@ fn test_validate_stdin_offset_bytes() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -798,11 +827,11 @@ fn test_read_backwards_bytes_proc_fs_version() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -819,11 +848,11 @@ fn test_read_backwards_bytes_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/proc) not visible")]
@@ -840,11 +869,11 @@ fn test_read_backwards_lines_proc_fs_modules() {
 }
 
 #[cfg(all(
-    not(target_os = "windows"),
     not(target_os = "macos"),
     not(target_os = "android"),
     not(target_os = "freebsd"),
-    not(target_os = "openbsd")
+    not(target_os = "openbsd"),
+    not(windows)
 ))]
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/sys) not visible")]
@@ -872,6 +901,24 @@ fn test_value_too_large() {
 }
 
 #[test]
+fn test_all_but_last_lines_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12836
+    new_ucmd!()
+        .args(&["-n=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
+fn test_all_but_last_bytes_huge_count_does_not_panic() {
+    // https://github.com/uutils/coreutils/issues/12837
+    new_ucmd!()
+        .args(&["-c=-116265256266241262252526", "lorem_ipsum.txt"])
+        .succeeds()
+        .no_stdout();
+}
+
+#[test]
 fn test_all_but_last_lines() {
     new_ucmd!()
         .args(&["-n", "-15", "lorem_ipsum.txt"])
@@ -896,7 +943,7 @@ fn test_write_to_dev_full() {
                 .pipe_in_fixture(INPUT)
                 .set_stdout(dev_full)
                 .fails()
-                .stderr_contains("error writing 'standard output': No space left on device");
+                .stderr_is("head: error writing 'standard output': No space left on device\n");
         }
     }
 }
@@ -932,4 +979,205 @@ fn test_do_not_attempt_to_read_a_directory() {
         .arg(".")
         .fails_with_code(1)
         .stderr_contains("error reading '.'");
+}
+
+/// Regression test for https://github.com/uutils/coreutils/issues/12215
+/// `head -c0 <directory>` should succeed (nothing to read), matching GNU.
+#[test]
+fn test_zero_bytes_on_directory_succeeds() {
+    new_ucmd!().args(&["-c", "0", "."]).succeeds().no_output();
+}
+
+/// `head -n0 <directory>` should also succeed.
+#[test]
+fn test_zero_lines_on_directory_succeeds() {
+    new_ucmd!().args(&["-n", "0", "."]).succeeds().no_output();
+}
+
+/// GNU `head` prints the `==> name <==` header for every file argument
+/// (including directories) when invoked with multiple files. With non-zero
+/// output, directories also produce an "Is a directory" error after the
+/// header.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "5", "d", "f"])
+        .fails_with_code(1)
+        .stdout_is("==> d <==\n\n==> f <==\nhello")
+        .stderr_contains("Is a directory");
+}
+
+/// With `-c 0` (zero output), the directory header is still printed but no
+/// error is emitted.
+#[cfg(not(windows))]
+#[test]
+fn test_directory_header_with_multiple_files_zero_output() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.mkdir("d");
+    at.write("f", "hello\n");
+    ts.ucmd()
+        .args(&["-c", "0", "d", "f"])
+        .succeeds()
+        .stdout_is("==> d <==\n\n==> f <==\n")
+        .no_stderr();
+}
+
+/// GNU `head` prints the `==> name <==` header only after the file is
+/// successfully opened. A file that exists but cannot be opened (e.g. no read
+/// permission) must therefore produce only an error and no header.
+#[cfg(unix)]
+#[test]
+fn test_unreadable_file_prints_no_header() {
+    let ts = TestScenario::new(util_name!());
+    let at = &ts.fixtures;
+    at.write("unreadable", "secret\n");
+    at.write("readable", "hello\n");
+    at.set_mode("unreadable", 0o000);
+
+    // Running as root bypasses permission checks, so the open would succeed.
+    if std::fs::File::open(at.plus("unreadable")).is_ok() {
+        return;
+    }
+
+    ts.ucmd()
+        .args(&["-c", "5", "unreadable", "readable"])
+        .fails_with_code(1)
+        .stdout_is("==> readable <==\nhello")
+        .stdout_does_not_contain("==> unreadable <==")
+        .stderr_contains("cannot open 'unreadable' for reading: Permission denied");
+}
+
+/// Regression for #13887: writing the `==> filename <==` verbose header to a
+/// full/closed stdout must surface the write error instead of panicking inside
+/// `print_verbatim(...).unwrap()`. A filename longer than the stdout buffer
+/// forces the header write to flush mid-write so the failure surfaces inside
+/// the filename write rather than at the next checked one.
+#[test]
+#[cfg(target_os = "linux")]
+#[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths (/dev) not visible")]
+fn test_verbose_header_write_error_long_filename() {
+    use std::fs::File;
+
+    let dev_full =
+        File::create("/dev/full").expect("Failed to open /dev/full - test must run on Linux");
+
+    let long_path = format!("/dev/{}null", "./".repeat(512));
+
+    new_ucmd!()
+        .arg("-v")
+        .arg(long_path)
+        .set_stdout(dev_full)
+        .fails()
+        .code_is(1)
+        .stderr_contains("No space left on device");
+}
+
+/// Regression for #11972: head must reject directories detected on the
+/// open fd, not via a separate `Path::is_dir()` call. A symlink that
+/// resolves to a directory must still be rejected — verifying the fd
+/// check survives an indirection.
+#[test]
+#[cfg(unix)]
+fn test_head_rejects_directory_through_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.mkdir("real_dir");
+    symlink("real_dir", at.plus("link_to_dir")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_dir")
+        .fails_with_code(1)
+        .stderr_contains("Is a directory");
+}
+
+/// Regression for #11972: a symlink that points to a regular file must
+/// still be readable by head (the fd-based check must distinguish the
+/// fd's mode, not the symlink's).
+#[test]
+#[cfg(unix)]
+fn test_head_follows_symlink_to_regular_file() {
+    use std::os::unix::fs::symlink;
+
+    let scene = TestScenario::new(util_name!());
+    let at = &scene.fixtures;
+    at.write("regular", "hello\n");
+    symlink("regular", at.plus("link_to_regular")).unwrap();
+
+    scene
+        .ucmd()
+        .arg("link_to_regular")
+        .succeeds()
+        .stdout_is("hello\n");
+}
+
+#[cfg(unix)]
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; it is the unit that did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+head: invalid number of bytes: '1fb'
+   ╭─[ head:1:10 ]
+   │
+ 1 │ head -c 1fb /dev/null
+   │          ─┬
+   │           ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[test]
+    fn test_snippet_underlines_a_size_with_no_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--bytes=xyz", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined, and the
+        // message already says what is wrong.
+        assert!(stderr.contains("head:1:14"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_snippet_preserves_obsolete_option_spelling() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-5", "-c", "1fb", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("1 │ head -5 -c 1fb /dev/null"), "{stderr}");
+        assert!(!stderr.contains("head -n 5 -c"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-c", "1fb", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("head: invalid number of bytes: '1fb'\n");
+    }
 }

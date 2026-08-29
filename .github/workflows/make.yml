@@ -1,11 +1,10 @@
 name: make
-
 # spell-checker:ignore (abbrev/names) CACHEDIR taiki
-# spell-checker:ignore (env/flags) RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL
+# spell-checker:ignore (env/flags) CHERE RUSTDOCFLAGS RUSTFLAGS CARGOFLAGS CLEVEL relocs EAGAIN
 # spell-checker:ignore (jargon) deps softprops toolchain
 # spell-checker:ignore (people) dawidd
-# spell-checker:ignore (shell/tools) nextest sccache zstd
-# spell-checker:ignore (misc) bindir busytest defconfig DESTDIR manpages multisize runtest testsuite toybox uutils
+# spell-checker:ignore (shell/tools) bsdtar nextest pacman sccache zstd
+# spell-checker:ignore (misc) bindir busytest defconfig dynamicbase DESTDIR libopenssl manpages multisize noconfirm runtest testsuite toybox uutils
 
 env:
   PROJECT_NAME: coreutils
@@ -34,6 +33,9 @@ concurrency:
 jobs:
   build_makefile:
     name: Build/Makefile and measure binary size
+    env:
+      # to reduce the size:
+      RUSTFLAGS: "-C force-unwind-tables=no -C strip=symbols -Clink-arg=-z -Clink-arg=pack-relative-relocs"
     permissions:
       contents: write # Publish individual binaries
     runs-on: ${{ matrix.job.os }}
@@ -43,7 +45,7 @@ jobs:
         job:
           - { os: ubuntu-latest , features: feat_os_unix }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: taiki-e/install-action@nextest
@@ -51,7 +53,7 @@ jobs:
     # Test build on the system missing libselinux (don't install libselinux1-dev at here)
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -85,7 +87,7 @@ jobs:
         RUST_BACKTRACE: "1"
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         report_type: test_results
@@ -93,26 +95,6 @@ jobs:
         disable_search: true
         flags: makefile,${{ matrix.job.os }}
         fail_ci_if_error: false
-    - name: "`make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
-      shell: bash
-      run: |
-        set -x
-        DESTDIR=/tmp/ make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-        # Check that utils are built with given profile
-        ./target/release-small/true
-        # Check that the progs have prefix
-        test -f /tmp/usr/local/bin/uu-tty
-        test -f /tmp/usr/local/libexec/uu-coreutils/libstdbuf.*
-        # Check that the manpage is not present
-        ! test -f /tmp/usr/local/share/man/man1/uu-whoami.1
-        # Check that the completion is not present
-        ! test -f /tmp/usr/local/share/zsh/site-functions/_uu-install
-        ! test -f /tmp/usr/local/share/bash-completion/completions/uu-head.bash
-        ! test -f /tmp/usr/local/share/fish/vendor_completions.d/uu-cat.fish
-        # don't publish binaries with uu-
-        make uninstall PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
-      env:
-        RUST_BACKTRACE: "1"
     - name: "`make install`"
       shell: bash
       run: |
@@ -164,7 +146,6 @@ jobs:
       run: |
         # Check that libstdbuf is present too
         mv target/release/deps/libstdbuf.so -t /tmp/individual/usr/local/bin
-        strip -s /tmp/individual/usr/local/bin/*
         ZSTD_CLEVEL=19 tar --zstd -caf individual-x86_64-unknown-linux-gnu.tar.zst -C /tmp/individual/usr/local bin
     - name: Publish
       uses: softprops/action-gh-release@v3
@@ -173,6 +154,7 @@ jobs:
         tag_name: latest-commit
         draft: false
         prerelease: true
+        overwrite_files: true
         files: |
           individual-x86_64-unknown-linux-gnu.tar.zst
       env:
@@ -201,14 +183,14 @@ jobs:
               --arg multisize "$SIZE_MULTI" \
               '{($date): { sha: $sha, size: $size, multisize: $multisize, }}' > size-result.json
     - name: Download the previous individual size result
-      uses: dawidd6/action-download-artifact@v20
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: individual-size-result
         repo: uutils/coreutils
         path: dl
     - name: Download the previous size result
-      uses: dawidd6/action-download-artifact@v20
+      uses: dawidd6/action-download-artifact@v24
       with:
         workflow: make.yml
         name: size-result
@@ -292,38 +274,94 @@ jobs:
         DESTDIR=/tmp/ make SKIP_UTILS="stdbuf" install
 
   # keep this job minimal to avoid have many duplicated build with CICD
-  build_makefile-other:
-    name: Build/Makefile
+  build_makefile-windows-cygwin:
+    name: Build MSYS
+    permissions:
+      contents: write # Publish cygwin binary
     runs-on: ${{ matrix.job.os }}
     env:
       CARGO_INCREMENTAL: 0
+      RUSTFLAGS: "-C link-arg=-Wl,--dynamicbase -C link-arg=-Wl,--enable-auto-image-base"
     strategy:
       fail-fast: false
       matrix:
         job:
           - { os: windows-latest , features: feat_os_windows }
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
       run: |
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
-    - name: "`make build`"
+    - name: Disable Mandatory ASLR (required for Cygwin/MSYS2 bash on GitHub runners)
+      shell: powershell
+      run: |
+        # exit code 254 from bash.exe is caused by Windows Mandatory ASLR
+        # See: https://github.com/appveyor/ci/issues/3777
+        Set-ProcessMitigation -System -Disable ForceRelocateImages
+    - name: Update MSYS2 packages
+      # msys2-runtime must be upgraded in a separate bash session before the build.
+      # Upgrading it mid-session changes the shared memory layout (60344 -> 59320),
+      # which causes subsequent fork() calls to fail with EAGAIN (exit code 254).
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        pacman -Sy --noconfirm --needed base-devel libopenssl make openssl-devel pkgconf rust
+      env:
+        CHERE_INVOKING: 1
+    - name: "`(x86_64-pc-cygwin) make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n`"
+      shell: 'C:\msys64\usr\bin\bash.exe --login -eo pipefail {0}'
+      run: |
+        set -x
+        export OPENSSL_NO_VENDOR=1
+        export CARGOFLAGS="--features openssl"
+        DESTDIR=/tmp/c make install PROG_PREFIX=uu- PROFILE=release-small COMPLETIONS=n MANPAGES=n LOCALES=n
+        # Check that cksum is linked with openssl (e.g. msys-crypto-*.dll)
+        # Also check that utils are built with given profile
+        ldd target/release-small/cksum | grep crypto
+        # Check that the progs have prefix
+        test -f /tmp/c/usr/local/bin/uu-tty
+        test -f /tmp/c/usr/local/libexec/uu-coreutils/libstdbuf.dll
+        # Check that the manpage is not present
+        ! test -f /tmp/c/usr/local/share/man/man1/uu-whoami.1
+        # Check that the completion is not present
+        ! test -f /tmp/c/usr/local/share/zsh/site-functions/_uu-install
+        ! test -f /tmp/c/usr/local/share/bash-completion/completions/uu-head.bash
+        ! test -f /tmp/c/usr/local/share/fish/vendor_completions.d/uu-cat.fish
+        # package
+        mv target/release-small/deps/stdbuf.dll -t /tmp/c/usr/local/bin
+        bsdtar -caf x86_64-pc-cygwin.tar.zst -C /tmp/c/usr/local bin
+      env:
+        CHERE_INVOKING: 1
+        RUST_BACKTRACE: "1"
+    - name: Publish
+      uses: softprops/action-gh-release@v3
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      with:
+        tag_name: latest-commit
+        draft: false
+        prerelease: true
+        overwrite_files: true
+        files: |
+          x86_64-pc-cygwin.tar.zst
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: "`make install`"
       shell: bash
       run: |
         set -x
         # Check that we exclude unix programs to avoid build failure
-        make PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
-         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr truncate tsort uname unexpand uniq unlink vdir wc whoami yes"
-        target/debug/coreutils.exe true
+        # Windows's stdbuf depends on Cygwin's libstdbuf. So make should not try to install libstdbuf
+        make install DESTDIR=/tmp/w PREFIX=/tmp/usr MULTICALL=y COMPLETIONS=n MANPAGES=n LOCALES=n \
+         SKIP_UTILS="arch b2sum base32 base64 basename basenc cat cksum comm cp csplit cut date dd df dir dircolors dirname du echo env expand expr factor false fmt fold head hostname join link ln ls md5sum mkdir mktemp more mv nl nproc numfmt od paste pathchk pr printenv printf ptx pwd readlink realpath rm rmdir seq sha1sum sha224sum sha256sum sha384sum sha512sum shred shuf sleep sort split sum sync tac tail tee test touch tr true truncate tsort tty uname unexpand uniq unlink vdir wc whoami yes"
+        target/release/coreutils.exe stdbuf --version
 
   test_busybox:
     name: Tests/BusyBox test suite
@@ -340,13 +378,13 @@ jobs:
       run: |
         ## VARs setup
         echo "TEST_SUMMARY_FILE=busybox-result.json" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'
@@ -426,13 +464,13 @@ jobs:
         outputs() { step_id="${{ github.action }}"; for var in "$@" ; do echo steps.${step_id}.outputs.${var}="${!var}"; echo "${var}=${!var}" >> $GITHUB_OUTPUT; done; }
         TEST_SUMMARY_FILE="toybox-result.json"
         outputs TEST_SUMMARY_FILE
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v7.0.1
       with:
         persist-credentials: false
     - uses: Swatinem/rust-cache@v2
     - name: Run sccache-cache
       id: sccache-setup
-      uses: mozilla-actions/sccache-action@v0.0.9
+      uses: mozilla-actions/sccache-action@v0.0.11
       continue-on-error: true
     - name: Export sccache
       if: steps.sccache-setup.outcome == 'success'

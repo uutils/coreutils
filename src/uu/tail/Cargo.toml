@@ -12,9 +12,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tail.rs"
 doctest = false
@@ -33,6 +30,9 @@ notify = { workspace = true }
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true, features = ["fs", "process"] }
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+uucore = { workspace = true, features = ["pipes"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
   "Win32_System_Threading",
@@ -41,6 +41,12 @@ windows-sys = { workspace = true, features = [
 
 [dev-dependencies]
 rstest = { workspace = true }
+
+[features]
+diagnostics = ["uucore/diagnostics"]
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tail"

@@ -17,6 +17,9 @@ on:
       - 'src/uu/*/locales/en-US.ftl'
       - 'Cargo.toml'
 
+permissions:
+  contents: read
+
 jobs:
   check-doc:
     name: Verify uudoc generates correct documentation
@@ -24,14 +27,13 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install/setup prerequisites
         shell: bash
         run: sudo apt-get -y update ; sudo apt-get -y install libselinux1-dev libsystemd-dev libacl1-dev libattr1-dev libcap-dev
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
 
       - name: Download tldr
         run: curl -L https://github.com/tldr-pages/tldr/releases/latest/download/tldr.zip -o docs/tldr.zip

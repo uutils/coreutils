@@ -32,13 +32,14 @@
 //! assert!(entries::Group::locate(root_group).is_ok());
 //! ```
 
+use core::ffi::{CStr, c_char, c_int};
 #[cfg(any(target_os = "freebsd", target_vendor = "apple"))]
 use libc::time_t;
-use libc::{c_char, c_int, gid_t, uid_t};
-use libc::{getgrgid, getgrnam, getgroups};
+use libc::{getgrgid, getgrnam};
 use libc::{getpwnam, getpwuid, group, passwd};
+use libc::{gid_t, uid_t};
 
-use std::ffi::{CStr, CString};
+use std::ffi::CString;
 use std::io::Error as IOError;
 use std::io::ErrorKind;
 use std::io::Result as IOResult;
@@ -55,42 +56,6 @@ unsafe extern "C" {
         groups: *mut gid_t,
         ngroups: *mut c_int,
     ) -> c_int;
-}
-
-/// From: `<https://man7.org/linux/man-pages/man2/getgroups.2.html>`
-/// > getgroups() returns the supplementary group IDs of the calling
-/// > process in list.
-/// > If size is zero, list is not modified, but the total number of
-/// > supplementary group IDs for the process is returned.  This allows
-/// > the caller to determine the size of a dynamically allocated list
-/// > to be used in a further call to getgroups().
-pub fn get_groups() -> IOResult<Vec<gid_t>> {
-    let mut groups = Vec::new();
-    loop {
-        let ngroups = match unsafe { getgroups(0, ptr::null_mut()) } {
-            -1 => return Err(IOError::last_os_error()),
-            // Not just optimization; 0 would mess up the next call
-            0 => return Ok(Vec::new()),
-            n => n,
-        };
-
-        // This is a small buffer, so we can afford to zero-initialize it and
-        // use safe Vec operations
-        groups.resize(ngroups.try_into().unwrap(), 0);
-        let res = unsafe { getgroups(ngroups, groups.as_mut_ptr()) };
-        if res == -1 {
-            let err = IOError::last_os_error();
-            if err.raw_os_error() == Some(libc::EINVAL) {
-                // Number of groups has increased, retry
-            } else {
-                return Err(err);
-            }
-        } else {
-            // Number of groups may have decreased
-            groups.truncate(res.try_into().unwrap());
-            return Ok(groups);
-        }
-    }
 }
 
 /// The list of group IDs returned from GNU's `groups` and GNU's `id --groups`
@@ -116,8 +81,9 @@ pub fn get_groups() -> IOResult<Vec<gid_t>> {
 /// > history of a process and its parents could affect the details of
 /// > the result.)
 #[cfg(all(unix, not(target_os = "redox"), feature = "process"))]
-pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<gid_t>> {
-    let groups = get_groups()?;
+pub fn get_groups_gnu(arg_id: Option<u32>) -> IOResult<Vec<rustix::process::RawGid>> {
+    let groups = rustix::process::getgroups()
+        .map(|g| g.into_iter().map(rustix::fs::Gid::as_raw).collect())?;
     let egid = arg_id.unwrap_or_else(crate::features::process::getegid);
     Ok(sort_groups(groups, egid))
 }
@@ -383,11 +349,14 @@ mod test {
 
     #[test]
     fn test_entries_get_groups_gnu() {
-        if let Ok(mut groups) = get_groups() {
-            if let Some(last) = groups.pop() {
-                groups.insert(0, last);
-                assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
-            }
+        if let Ok(mut groups) = rustix::process::getgroups().map(|g| {
+            g.into_iter()
+                .map(rustix::fs::Gid::as_raw)
+                .collect::<Vec<_>>()
+        }) && let Some(last) = groups.pop()
+        {
+            groups.insert(0, last);
+            assert_eq!(get_groups_gnu(Some(last)).unwrap(), groups);
         }
     }
 }

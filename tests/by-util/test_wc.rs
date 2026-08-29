@@ -437,7 +437,7 @@ fn test_read_from_directory_error() {
         // wasi-libc may report a different error string than the host libc
         cmd.stderr_contains("wc: .:");
     } else if cfg!(windows) {
-        cmd.stderr_contains(".: Permission denied").stdout_is("");
+        cmd.stderr_contains(".: Permission denied").no_stdout();
     } else {
         cmd.stderr_contains(".: Is a directory")
             .stdout_is("      0       0       0 .\n");
@@ -505,7 +505,7 @@ fn test_files0_disabled_files_argument() {
         .arg("lorem_ipsum.txt")
         .fails()
         .stderr_contains(MSG)
-        .stdout_is("");
+        .no_stdout();
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn test_files0_from_with_stdin_try_read_from_stdin() {
         .pipe_in("-")
         .fails()
         .stderr_contains(MSG)
-        .stdout_is("");
+        .no_stdout();
 }
 
 #[test]
@@ -794,9 +794,6 @@ fn test_files0_stops_after_stdout_write_error() {
 
 #[test]
 fn files0_from_dir() {
-    // On Unix, `read(open("."))` fails. On Windows, `open(".")` fails. Thus, the errors happen in
-    // different contexts. On WASI, the error string may differ (e.g., "Bad file descriptor").
-    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
     #[cfg(not(windows))]
     macro_rules! dir_err {
         ($p:literal) => {
@@ -813,6 +810,10 @@ fn files0_from_dir() {
     const DOT_ERR: &str = dir_err!("'.'");
     #[cfg(not(windows))]
     const DOT_ERR: &str = dir_err!(".");
+
+    // On Unix, `read(open("."))` fails. On Windows, `open(".")` fails. Thus, the errors happen in
+    // different contexts. On WASI, the error string may differ (e.g., "Bad file descriptor").
+    let wasm = std::env::var("UUTESTS_WASM_RUNNER").is_ok();
 
     let cmd = new_ucmd!().args(&["--files0-from=dir with spaces"]).fails();
     if wasm {
@@ -874,6 +875,8 @@ fn test_invalid_byte_sequence_word_count() {
 #[test]
 #[cfg_attr(wasi_runner, ignore = "WASI sandbox: host paths not visible")]
 fn test_simd_respects_glibc_tunables() {
+    use std::fmt::Write as _;
+
     // Ensure debug output reflects that SIMD paths are disabled via GLIBC_TUNABLES
     let debug_output = new_ucmd!()
         .args(&["-l", "--debug", "/dev/null"])
@@ -892,7 +895,6 @@ fn test_simd_respects_glibc_tunables() {
 
     // WC results should be identical with and without GLIBC_TUNABLES overrides
     let sample_sizes = [0usize, 1, 7, 128, 513, 999];
-    use std::fmt::Write as _;
     for &lines in &sample_sizes {
         let content: String = (0..lines).fold(String::new(), |mut acc, i| {
             // Build the input buffer efficiently without allocating per line.

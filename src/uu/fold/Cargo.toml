@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/fold.rs"
 test = false
@@ -29,6 +26,9 @@ unicode-width = { workspace = true }
 divan = { workspace = true }
 tempfile = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "fold"

@@ -6,7 +6,7 @@
 // spell-checker:ignore (ToDO) getlogin userlogin
 
 use clap::Command;
-use std::ffi::CStr;
+use core::ffi::CStr;
 use std::io::{Write, stdout};
 use uucore::translate;
 use uucore::{error::UResult, show_error};
@@ -26,11 +26,11 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
 
     if let Some(userlogin) = get_userlogin() {
         writeln!(stdout(), "{userlogin}")?;
+        Ok(())
     } else {
         show_error!("{}", translate!("logname-error-no-login-name"));
+        Err(1.into())
     }
-
-    Ok(())
 }
 
 pub fn uu_app() -> Command {

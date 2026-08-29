@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cksum.rs"
 test = false
@@ -30,9 +27,15 @@ uucore = { workspace = true, features = [
 uu_checksum_common = { workspace = true }
 fluent = { workspace = true }
 
+[features]
+openssl = ["uucore/openssl"]
+
 [dev-dependencies]
 divan = { workspace = true }
 uucore = { workspace = true, features = ["benchmark"] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "cksum"

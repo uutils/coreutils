@@ -11,19 +11,22 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/od.rs"
 
 [dependencies]
-byteorder = { workspace = true }
 clap = { workspace = true }
 half = { workspace = true }
-uucore = { workspace = true, features = ["parser-size"] }
+rustix = { workspace = true, features = ["stdio"] }
+uucore = { workspace = true, features = ["fs", "parser-size", "pipes"] }
 fluent = { workspace = true }
 libc.workspace = true
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "od"

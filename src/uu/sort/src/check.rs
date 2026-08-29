@@ -53,7 +53,13 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
 
     let mut prev_chunk: Option<Chunk> = None;
     let mut line_idx = 0;
-    for chunk in loaded_receiver {
+    let mut result: UResult<()> = Ok(());
+    // Note that we iterate over a reference, so that `loaded_receiver` is still alive
+    // once we stop: `chunks::read` unwraps its `send`, so dropping our end while the
+    // reader thread is still going would panic it. Since we stop at the *first*
+    // disorder, the reader is usually still working at that point, so we shut it down
+    // in an orderly fashion below instead of just dropping our end.
+    'outer: for chunk in &loaded_receiver {
         line_idx += 1;
         if let Some(prev_chunk) = prev_chunk.take() {
             // Check if the first element of the new chunk is greater than the last
@@ -69,13 +75,14 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
                 chunk.line_data(),
             ) > max_allowed_cmp
             {
-                return Err(SortError::Disorder {
+                result = Err(SortError::Disorder {
                     file: path.to_owned(),
                     line_number: line_idx,
                     line: String::from_utf8_lossy(new_first.line).into_owned(),
                     silent: settings.check_silent,
                 }
                 .into());
+                break 'outer;
             }
             let _ = recycled_sender.send(prev_chunk.recycle());
         }
@@ -83,19 +90,28 @@ pub fn check(path: &OsStr, settings: &GlobalSettings) -> UResult<()> {
         for (a, b) in chunk.lines().iter().tuple_windows() {
             line_idx += 1;
             if compare_by(a, b, settings, chunk.line_data(), chunk.line_data()) > max_allowed_cmp {
-                return Err(SortError::Disorder {
+                result = Err(SortError::Disorder {
                     file: path.to_owned(),
                     line_number: line_idx,
                     line: String::from_utf8_lossy(b.line).into_owned(),
                     silent: settings.check_silent,
                 }
                 .into());
+                break 'outer;
             }
         }
 
         prev_chunk = Some(chunk);
     }
-    Ok(())
+
+    // Stop handing out buffers, so the reader runs out of work, then drain anything it
+    // has already produced. This lets its in-flight `send` complete instead of failing,
+    // and terminates because the reader can only own the (at most two) recycled chunks
+    // that are still outstanding.
+    drop(recycled_sender);
+    while loaded_receiver.recv().is_ok() {}
+
+    result
 }
 
 /// The function running on the reader thread.

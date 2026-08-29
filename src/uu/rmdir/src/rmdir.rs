@@ -152,22 +152,14 @@ const PERHAPS_EMPTY_CODES: &[i32] = &[
 ];
 
 fn dir_not_empty(error: &io::Error, path: &Path) -> bool {
-    if let Some(code) = error.raw_os_error() {
-        if NOT_EMPTY_CODES.contains(&code) {
-            return true;
-        }
+    error.raw_os_error().is_some_and(|code| {
+        NOT_EMPTY_CODES.contains(&code)
         // If --ignore-fail-on-non-empty is used then we want to ignore all errors
         // for non-empty directories, even if the error was e.g. because there's
         // no permission. So we do an additional check.
-        if PERHAPS_EMPTY_CODES.contains(&code) {
-            if let Ok(mut iterator) = read_dir(path) {
-                if iterator.next().is_some() {
-                    return true;
-                }
-            }
-        }
-    }
-    false
+            || PERHAPS_EMPTY_CODES.contains(&code)
+                && read_dir(path).is_ok_and(|mut iter| iter.next().is_some())
+    })
 }
 
 #[derive(Clone, Copy, Debug)]

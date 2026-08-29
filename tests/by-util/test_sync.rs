@@ -80,7 +80,7 @@ fn test_sync_no_permission_dir() {
     result.stderr_contains("sync: error opening 'foo': Permission denied");
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(not(windows))]
 #[cfg(feature = "chmod")]
 #[test]
 fn test_sync_no_permission_file() {
@@ -177,8 +177,7 @@ fn test_sync_multiple_files() {
 fn test_sync_multiple_nonexistent_files() {
     let result = new_ucmd!().arg("--data").arg("bad1").arg("bad2").fails();
 
-    result.stderr_contains("sync: error opening 'bad1': No such file or directory");
-    result.stderr_contains("sync: error opening 'bad2': No such file or directory");
+    result.stderr_is("sync: error opening 'bad1': No such file or directory\nsync: error opening 'bad2': No such file or directory\n");
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]

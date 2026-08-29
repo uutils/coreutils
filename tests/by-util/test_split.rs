@@ -133,6 +133,18 @@ fn test_invalid_arg() {
 }
 
 #[test]
+#[cfg(all(unix, not(target_os = "android")))]
+fn test_split_to_non_seekable() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.symlink_file("/dev/stdout", "xaa");
+
+    ucmd.args(&["-"])
+        .pipe_in("string")
+        .succeeds()
+        .stdout_is("string");
+}
+
+#[test]
 fn test_split_non_existing_file() {
     new_ucmd!()
         .arg("non-existing")
@@ -411,8 +423,7 @@ fn test_split_lines_number() {
         .ucmd()
         .args(&["--lines", "2", "file"])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     scene
         .ucmd()
         .args(&["--lines", "0", "file"])
@@ -476,7 +487,7 @@ fn test_split_obs_lines_standalone() {
     let (at, mut ucmd) = at_and_ucmd!();
     let name = "obs-lines-standalone";
     RandomFile::new(&at, name).add_lines(4);
-    ucmd.args(&["-2", name]).succeeds().no_stderr().no_stdout();
+    ucmd.args(&["-2", name]).succeeds().no_output();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -490,8 +501,7 @@ fn test_split_obs_lines_standalone_overflow() {
     RandomFile::new(&at, name).add_lines(4);
     ucmd.args(&["-99999999999999999991", name])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 1);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -517,10 +527,7 @@ fn test_split_obs_lines_within_combined_shorts() {
     let name = "obs-lines-within-shorts";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-x200de", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-x200de", name]).succeeds().no_output();
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
     assert_eq!(glob.collate(), at.read_bytes(name));
@@ -548,10 +555,7 @@ fn test_split_obs_lines_starts_combined_shorts() {
     let name = "obs-lines-starts-shorts";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-200xd", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-200xd", name]).succeeds().no_output();
 
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
@@ -641,6 +645,22 @@ fn test_split_obs_lines_as_other_option_value() {
         .stderr_contains("split: invalid number of chunks: '-e200'\n");
 }
 
+#[test]
+fn test_split_chunks_by_line_or_round_robin_zero_chunks() {
+    let scene = TestScenario::new(util_name!());
+    scene.fixtures.write("file", "a\nb\nc\nd\n");
+    scene
+        .ucmd()
+        .args(&["-n", "l/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+    scene
+        .ucmd()
+        .args(&["-n", "r/0", "file"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid number of chunks: '0'\n");
+}
+
 /// Test for using more than one obsolete lines option (standalone)
 /// last one wins
 #[test]
@@ -650,10 +670,7 @@ fn test_split_multiple_obs_lines_standalone() {
     let name = "multiple-obs-lines";
     RandomFile::new(&at, name).add_lines(400);
 
-    ucmd.args(&["-3000", "-200", name])
-        .succeeds()
-        .no_stderr()
-        .no_stdout();
+    ucmd.args(&["-3000", "-200", name]).succeeds().no_output();
 
     let glob = Glob::new(&at, ".", r"x[[:alpha:]][[:alpha:]]$");
     assert_eq!(glob.count(), 2);
@@ -671,8 +688,7 @@ fn test_split_multiple_obs_lines_within_combined() {
 
     ucmd.args(&["-d5000x", "-e200d", name])
         .succeeds()
-        .no_stderr()
-        .no_stdout();
+        .no_output();
 
     let glob = Glob::new(&at, ".", r"x\d\d$");
     assert_eq!(glob.count(), 2);
@@ -927,6 +943,14 @@ fn test_suffix_length_req() {
 }
 
 #[test]
+fn test_large_suffix_length_is_rejected() {
+    new_ucmd!()
+        .args(&["-a", "66542562175252"])
+        .fails_with_code(1)
+        .stderr_only("split: invalid suffix length: '66542562175252'\n");
+}
+
+#[test]
 fn test_verbose() {
     new_ucmd!()
         .args(&["-b", "5", "--verbose", "asciilowercase.txt"])
@@ -1140,10 +1164,7 @@ fn test_include_newlines() {
 #[test]
 fn test_split_number_chunks_short_concatenated_with_value() {
     let (at, mut ucmd) = at_and_ucmd!();
-    ucmd.args(&["-n3", "threebytes.txt"])
-        .succeeds()
-        .no_stdout()
-        .no_stderr();
+    ucmd.args(&["-n3", "threebytes.txt"]).succeeds().no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1154,8 +1175,7 @@ fn test_allow_empty_files() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1167,8 +1187,7 @@ fn test_elide_empty_files_n_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "a");
     assert_eq!(at.read("xab"), "b");
     assert_eq!(at.read("xac"), "c");
@@ -1181,8 +1200,7 @@ fn test_elide_dev_null_n_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "3", "/dev/null"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.plus("xaa").exists());
     assert!(!at.plus("xab").exists());
     assert!(!at.plus("xac").exists());
@@ -1205,8 +1223,7 @@ fn test_elide_empty_files_l_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "l/7", "fivelines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "2\n");
     assert_eq!(at.read("xac"), "3\n");
@@ -1222,8 +1239,7 @@ fn test_elide_dev_null_l_chunks() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-e", "-n", "l/3", "/dev/null"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert!(!at.plus("xaa").exists());
     assert!(!at.plus("xab").exists());
     assert!(!at.plus("xac").exists());
@@ -1257,6 +1273,21 @@ fn test_number_by_lines_kth() {
         .args(&["-n", "l/3/10", "onehundredlines.txt"])
         .succeeds()
         .stdout_only("20\n21\n22\n23\n24\n25\n26\n27\n28\n29\n");
+}
+
+/// Chunks smaller than one byte must not loop forever.
+///
+/// When the input is shorter than the requested number of chunks, the trailing
+/// chunks are zero-sized. The chunk-advancing loop used to make no progress in
+/// that case and spun forever at 100% CPU.
+#[test]
+fn test_number_by_lines_fewer_bytes_than_chunks_elide() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    at.write("in", "a");
+    ucmd.args(&["-e", "-n", "l/3", "in"]).succeeds().no_output();
+    assert_eq!(at.read("xaa"), "a");
+    assert!(!at.plus("xab").exists());
+    assert!(!at.plus("xac").exists());
 }
 
 #[test]
@@ -1326,8 +1357,7 @@ fn test_line_bytes_no_final_newline() {
     ucmd.args(&["-C", "2"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "22");
     assert_eq!(at.read("xac"), "22");
@@ -1342,8 +1372,7 @@ fn test_line_bytes_no_empty_file() {
     ucmd.args(&["-C", "1"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1");
     assert_eq!(at.read("xab"), "\n");
     assert_eq!(at.read("xac"), "2");
@@ -1363,8 +1392,7 @@ fn test_line_bytes_no_eof() {
     ucmd.args(&["-C", "3"])
         .pipe_in("1\n2222\n3\n4")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n");
     assert_eq!(at.read("xab"), "222");
     assert_eq!(at.read("xac"), "2\n");
@@ -1383,8 +1411,7 @@ fn test_guard_input() {
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
     scene
@@ -1392,8 +1419,7 @@ fn test_guard_input() {
         .args(&["-C", "6"])
         .pipe_in("1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("xaa"), "1\n2\n3\n");
 
     scene
@@ -1424,8 +1450,7 @@ fn test_numeric_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric-suffixes=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1437,8 +1462,7 @@ fn test_numeric_suffix_inferred() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--numeric=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1450,8 +1474,7 @@ fn test_hex_suffix() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--hex-suffixes=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
@@ -1463,8 +1486,7 @@ fn test_hex_suffix_alias() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-n", "4", "--hex=9", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
@@ -1493,8 +1515,7 @@ fn test_short_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "-d", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1515,8 +1536,7 @@ fn test_numeric_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "--numeric-suffixes", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1537,8 +1557,7 @@ fn test_short_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "-x", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1559,8 +1578,7 @@ fn test_hex_suffix_no_value() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-l", "9", "--hex-suffixes", "onehundredlines.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "00\n01\n02\n03\n04\n05\n06\n07\n08\n");
     assert_eq!(at.read("x01"), "09\n10\n11\n12\n13\n14\n15\n16\n17\n");
     assert_eq!(at.read("x02"), "18\n19\n20\n21\n22\n23\n24\n25\n26\n");
@@ -1599,8 +1617,7 @@ fn test_short_combination() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.args(&["-dxen", "4", "threebytes.txt"])
         .succeeds()
-        .no_stdout()
-        .no_stderr();
+        .no_output();
     assert_eq!(at.read("x00"), "a");
     assert_eq!(at.read("x01"), "b");
     assert_eq!(at.read("x02"), "c");
@@ -1623,8 +1640,7 @@ fn test_effective_suffix_numeric_last() {
         "threebytes.txt",
     ])
     .succeeds()
-    .no_stdout()
-    .no_stderr();
+    .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x10"), "b");
     assert_eq!(at.read("x11"), "c");
@@ -1647,8 +1663,7 @@ fn test_effective_suffix_hex_last() {
         "threebytes.txt",
     ])
     .succeeds()
-    .no_stdout()
-    .no_stderr();
+    .no_output();
     assert_eq!(at.read("x09"), "a");
     assert_eq!(at.read("x0a"), "b");
     assert_eq!(at.read("x0b"), "c");
@@ -1750,7 +1765,7 @@ fn test_split_non_utf8_argument_windows() {
     ucmd.args(&[opt, opt_value, name]).succeeds();
 }
 
-// Test '--separator' / '-t' option following GNU tests example
+// Test '--separator' / '-t' option
 // test separators: '\n' , '\0' , ';'
 // test with '--lines=2' , '--line-bytes=4' , '--number=l/3' , '--number=r/3' , '--number=l/1/3' , '--number=r/1/3'
 #[test]
@@ -2093,7 +2108,7 @@ fn test_split_non_utf8_additional_suffix_is_byte_preserving() {
 }
 
 #[test]
-#[cfg(target_os = "linux")] // To re-enable on Windows once I work out what goes wrong with it.
+#[cfg(unix)] // To re-enable on Windows once I work out what goes wrong with it.
 fn test_split_directory_already_exists() {
     let (at, mut ucmd) = at_and_ucmd!();
 
@@ -2103,4 +2118,103 @@ fn test_split_directory_already_exists() {
         .fails_with_code(1)
         .no_stdout()
         .stderr_is("split: 'xaa': Is a directory\n");
+}
+
+#[test]
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn test_io_error() {
+    // /proc/self/mem causes EIO
+    new_ucmd!()
+        .arg("/proc/self/mem")
+        .fails_with_code(1)
+        //todo: add file path with proper distinction of input/output
+        .stderr_contains("Input/output error\n");
+}
+
+/// Writing a chunk to a full device must be reported and must stop the split.
+#[test]
+#[cfg(target_os = "linux")]
+fn test_write_error_on_full_device() {
+    if !Path::new("/dev/full").exists() {
+        return;
+    }
+
+    let (at, mut ucmd) = at_and_ucmd!();
+
+    // The first chunk lands on /dev/full, so its write can never succeed.
+    at.symlink_file("/dev/full", "xaa");
+    at.write("input", "uv");
+
+    ucmd.args(&["-b", "1", "input"])
+        .fails_with_code(1)
+        .no_stdout()
+        .stderr_contains("split: xaa: No space left on device");
+
+    // split must not have moved on to the next chunk.
+    assert!(!at.file_exists("xab"));
+}
+
+#[cfg(all(feature = "feat_diagnostics", not(wasi_runner)))]
+mod diagnostics {
+    use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_at_the_unknown_unit() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-b", "7zq", "/dev/null"])
+            .fails_with_code(1);
+
+        // The number parsed; only the unit did not.
+        assert_eq!(
+            result.stderr_as_displayed(),
+            "\
+split: invalid number of bytes: '7zq'
+   ╭─[ split:1:11 ]
+   │
+ 1 │ split -b 7zq /dev/null
+   │           ─┬
+   │            ╰── not a known unit
+   │
+   │ Help: a size is a number and an optional unit: K, M, G and so on for 1024, KB, MB, GB for 1000
+───╯"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_points_inside_a_line_bytes_value() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["--line-bytes=3qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        assert!(stderr.contains("split:1:21"), "{stderr}");
+        assert!(stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_snippet_underlines_a_count_with_no_number() {
+        let result = new_ucmd!()
+            .terminal_sim_stderr()
+            .args(&["-l", "qq", "/dev/null"])
+            .fails_with_code(1);
+        let stderr = result.stderr_as_displayed();
+
+        // Nothing usable was read, so the whole value is underlined and the
+        // message says the rest.
+        assert!(stderr.contains("invalid number of lines"), "{stderr}");
+        assert!(!stderr.contains("not a known unit"), "{stderr}");
+    }
+
+    #[test]
+    fn test_plain_message_when_stderr_is_a_pipe() {
+        new_ucmd!()
+            .args(&["-b", "7zq", "/dev/null"])
+            .fails_with_code(1)
+            .stderr_is("split: invalid number of bytes: '7zq'\n");
+    }
 }

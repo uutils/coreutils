@@ -15,9 +15,6 @@ version.workspace = true
 [package.metadata.docs.rs]
 all-features = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/lib/lib.rs"
 
@@ -44,3 +41,6 @@ rlimit = { workspace = true }
 
 [target.'cfg(all(unix, not(any(target_os = "macos", target_os = "openbsd"))))'.dependencies]
 xattr = { workspace = true }
+
+[lints]
+workspace = true

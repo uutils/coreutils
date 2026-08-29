@@ -11,9 +11,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/cp.rs"
 doctest = false
@@ -22,7 +19,6 @@ doctest = false
 clap = { workspace = true }
 filetime = { workspace = true }
 libc = { workspace = true }
-selinux = { workspace = true, optional = true }
 uucore = { workspace = true, features = [
   "backup-control",
   "buf-copy",
@@ -32,16 +28,29 @@ uucore = { workspace = true, features = [
   "parser",
   "perms",
   "mode",
+  "safe-copy",
   "update-control",
 ] }
 walkdir = { workspace = true }
 indicatif = { workspace = true }
 thiserror = { workspace = true }
 fluent = { workspace = true }
+rustix = { workspace = true }
+
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+selinux = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
-exacl = { workspace = true, optional = true }
 nix = { workspace = true, features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+] }
+
+[target.'cfg(target_os = "wasi")'.dependencies]
+rustix = { workspace = true, features = ["fs"] }
 
 [[bin]]
 name = "cp"
@@ -57,5 +66,7 @@ name = "cp_bench"
 harness = false
 
 [features]
-feat_selinux = ["selinux", "uucore/selinux"]
-feat_acl = ["exacl"]
+selinux = ["dep:selinux", "uucore/selinux"]
+
+[lints]
+workspace = true

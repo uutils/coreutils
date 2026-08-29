@@ -13,9 +13,6 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/tac.rs"
 doctest = false
@@ -26,10 +23,13 @@ memmap2 = { workspace = true }
 regex = { workspace = true }
 clap = { workspace = true }
 libc = { workspace = true }
-uucore = { workspace = true, features = ["signals"] }
+uucore = { workspace = true, features = ["buf-copy", "fs", "signals"] }
 thiserror = { workspace = true }
 fluent = { workspace = true }
 tempfile = { workspace = true }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "tac"

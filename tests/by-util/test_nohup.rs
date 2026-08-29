@@ -152,7 +152,7 @@ fn test_nohup_fallback_to_home() {
 
     // Skip test when running as root (permissions bypassed via CAP_DAC_OVERRIDE)
     // This is common in Docker/Podman containers but won't happen in CI
-    if unsafe { libc::geteuid() } == 0 {
+    if rustix::process::geteuid().is_root() {
         println!("Skipping test when running as root (file permissions bypassed)");
         return;
     }
@@ -203,9 +203,10 @@ fn test_nohup_fallback_to_home() {
 // or 126 when command exists but is not executable
 #[test]
 fn test_nohup_command_not_found() {
-    let result = new_ucmd!()
-        .arg("this-command-definitely-does-not-exist-anywhere")
-        .fails();
+    let command = "this-command-definitely-does-not-exist-anywhere";
+    let result = new_ucmd!().arg(command).fails();
+
+    result.stderr_contains(format!("failed to run command '{command}'"));
 
     // Accept either 126 (cannot execute) or 127 (command not found)
     let code = result.try_exit_status().and_then(|s| s.code());

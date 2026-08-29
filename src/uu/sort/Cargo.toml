@@ -13,22 +13,18 @@ edition.workspace = true
 rust-version.workspace = true
 readme.workspace = true
 
-[lints]
-workspace = true
-
 [lib]
 path = "src/sort.rs"
 doctest = false
 
 [features]
 default = ["i18n-collator"]
+diagnostics = ["uucore/diagnostics"]
 i18n-collator = ["uucore/i18n-collator"]
 
 [dependencies]
 bigdecimal = { workspace = true }
-binary-heap-plus = { workspace = true }
 clap = { workspace = true }
-compare = { workspace = true }
 itertools = { workspace = true }
 memchr = { workspace = true }
 rand = { workspace = true }
@@ -47,11 +43,14 @@ uucore = { workspace = true, features = [
 fluent = { workspace = true }
 foldhash = { workspace = true }
 
+[target.'cfg(all(unix, not(any(target_os = "redox", target_os = "fuchsia", target_os = "haiku", target_os = "solaris", target_os = "illumos"))))'.dependencies]
+rustix = { workspace = true, features = ["system", "process"] }
+
 [target.'cfg(not(any(target_os = "redox", target_os = "wasi")))'.dependencies]
 ctrlc = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-nix = { workspace = true, features = ["resource"] }
+libc = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
@@ -64,6 +63,9 @@ uucore = { workspace = true, features = [
   "i18n-collator",
   "i18n-datetime",
 ] }
+
+[lints]
+workspace = true
 
 [[bin]]
 name = "sort"
@@ -79,6 +81,10 @@ harness = false
 
 [[bench]]
 name = "sort_locale_utf8_bench"
+harness = false
+
+[[bench]]
+name = "sort_bench_merge"
 harness = false
 
 [[bench]]

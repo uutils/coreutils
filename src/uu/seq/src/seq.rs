@@ -17,6 +17,7 @@ use uucore::format::num_format::FloatVariant;
 use uucore::format::{Format, num_format};
 use uucore::{fast_inc::fast_inc, format_usage};
 
+mod diagnostics;
 mod error;
 
 // public to allow fuzzing
@@ -35,7 +36,7 @@ use uucore::translate;
 const OPT_SEPARATOR: &str = "separator";
 const OPT_TERMINATOR: &str = "terminator";
 const OPT_EQUAL_WIDTH: &str = "equal-width";
-const OPT_FORMAT: &str = "format";
+pub(crate) const OPT_FORMAT: &str = "format";
 
 const ARG_NUMBERS: &str = "numbers";
 
@@ -94,8 +95,14 @@ fn select_precision(
 
 #[uucore::main]
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
-    let matches =
-        uucore::clap_localization::handle_clap_result(uu_app(), split_short_args_with_value(args))?;
+    let raw_args: Vec<OsString> = args.collect();
+    // Captured before `-f%q` is split into two arguments, so that the caret
+    // echoes the command line as it was typed.
+    let diag_args = uucore::diagnostics::capture(&raw_args);
+    let matches = uucore::clap_localization::handle_clap_result(
+        uu_app(),
+        split_short_args_with_value(raw_args.into_iter()),
+    )?;
 
     let numbers_option = matches.get_many::<String>(ARG_NUMBERS);
 
@@ -123,18 +130,16 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     }
 
     let first = if numbers.len() > 1 {
-        match numbers[0].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[0].to_owned(), e).into()),
-        }
+        numbers[0]
+            .parse()
+            .map_err(|e| SeqError::ParseError(numbers[0].to_owned(), e))?
     } else {
         PreciseNumber::one()
     };
     let increment = if numbers.len() > 2 {
-        match numbers[1].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[1].to_owned(), e).into()),
-        }
+        numbers[1]
+            .parse()
+            .map_err(|e| SeqError::ParseError(numbers[1].to_owned(), e))?
     } else {
         PreciseNumber::one()
     };
@@ -146,34 +151,40 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
         // and at most three because of the argument specification in
         // `uu_app()`.
         let n: usize = numbers.len();
-        match numbers[n - 1].parse() {
-            Ok(num) => num,
-            Err(e) => return Err(SeqError::ParseError(numbers[n - 1].to_owned(), e).into()),
-        }
+        numbers[n - 1]
+            .parse()
+            .map_err(|e| SeqError::ParseError(numbers[n - 1].to_owned(), e))?
     };
 
     // If a format was passed on the command line, use that.
     // If not, use some default format based on parameters precision.
     let (format, padding, fast_allowed) = if let Some(str) = options.format {
-        (
-            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str)?,
-            0,
-            false,
-        )
+        let format =
+            Format::<num_format::Float, &ExtendedBigDecimal>::parse(str).map_err(|error| {
+                uucore::diagnostics::error_after_report(
+                    diag_args.as_deref(),
+                    error,
+                    |args, error| diagnostics::render(args, str, error),
+                )
+            })?;
+        (format, 0, false)
     } else {
         let precision = select_precision(&first, &increment, &last);
 
         let padding = if options.equal_width {
             let precision_value = precision.unwrap_or(0);
+            // Saturate rather than overflow: a value with an astronomically large
+            // exponent makes `num_integral_digits` near `usize::MAX`. The resulting
+            // width is rejected later by the formatter's width check.
             first
                 .num_integral_digits
                 .max(increment.num_integral_digits)
                 .max(last.num_integral_digits)
-                + if precision_value > 0 {
-                    precision_value + 1
+                .saturating_add(if precision_value > 0 {
+                    precision_value.saturating_add(1)
                 } else {
                     0
-                }
+                })
         } else {
             0
         };
