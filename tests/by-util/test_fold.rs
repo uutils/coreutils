@@ -1109,3 +1109,59 @@ fn test_width_overflow() {
             "fold: invalid number of columns: '999999999999999999999': Value too large to be stored in data type\n",
         );
 }
+
+#[test]
+fn test_negative_width_as_separate_value() {
+    // GNU consumes the argument after `-w` as its value even when it looks
+    // like an option, and reports that value as the invalid one. Passing a
+    // file too, because the width used to be mistaken for the obsolete
+    // `-WIDTH` form, leaving the file name to be read as the width.
+    for args in [
+        vec!["-w", "-1"],
+        vec!["--width", "-1"],
+        vec!["-bw", "-1"],
+        vec!["-sw", "-1"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .arg("lorem_ipsum.txt")
+            .fails_with_code(1)
+            .stderr_is("fold: invalid number of columns: '-1'\n");
+    }
+}
+
+#[test]
+fn test_obsolete_width_after_double_dash_is_a_file() {
+    // After `--` there are no more options, so `-3` names a file.
+    new_ucmd!()
+        .arg("--")
+        .arg("-3")
+        .fails_with_code(1)
+        .stderr_is("fold: -3: No such file or directory\n");
+}
+
+#[test]
+fn test_last_width_wins() {
+    // GNU processes options left to right, so the last width given wins,
+    // regardless of which spelling each one used.
+    for args in [
+        vec!["-w3", "-5"],
+        vec!["-3", "-5"],
+        vec!["-w", "3", "-w", "5"],
+        vec!["-w3", "-w5"],
+        vec!["-5", "-w", "5"],
+    ] {
+        new_ucmd!()
+            .args(&args)
+            .pipe_in("aaaaaaaaaa\n")
+            .succeeds()
+            .stdout_is("aaaaa\naaaaa\n");
+    }
+
+    // ...and an obsolete width is overridden by a later `-w` just the same.
+    new_ucmd!()
+        .args(&["-5", "-w", "3"])
+        .pipe_in("aaaaaa\n")
+        .succeeds()
+        .stdout_is("aaa\naaa\n");
+}
