@@ -7807,9 +7807,8 @@ fn test_ls_dereference_cross_branch_alias_after_first_branch_completes() {
 
     let result = ucmd.args(&["-RL", "top"]).succeeds();
     result
-        .stdout_contains("target:")
-        .stdout_contains("link:")
-        .stdout_contains("file")
+        .stdout_contains("target:\nfile")
+        .stdout_contains("link:\nfile")
         .no_stderr();
 }
 
@@ -7824,8 +7823,7 @@ fn test_ls_dereference_sibling_alias_not_already_listed() {
 
     let result = ucmd.args(&["-RL", "top"]).succeeds();
     result
-        .stdout_contains("real:")
-        .stdout_contains("link:")
-        .stdout_contains("file")
+        .stdout_contains("real:\nfile")
+        .stdout_contains("link:\nfile")
         .no_stderr();
 }
