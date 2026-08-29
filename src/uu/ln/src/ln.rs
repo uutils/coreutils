@@ -397,7 +397,7 @@ fn is_same_entry(src: &Path, dst: &Path) -> bool {
 
 /// Create symlink to src at dst with the given settings
 ///
-/// made public to allow other apps to use `ln` as a library
+/// This is made public to allow other apps to use `ln` as a library.
 #[allow(clippy::cognitive_complexity)]
 pub fn link(src: &Path, dst: &Path, settings: &Settings) -> LnResult<()> {
     let mut backup_path = None;
