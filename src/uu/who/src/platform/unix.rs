@@ -402,7 +402,6 @@ impl Who {
             ut.canon_host().map_err_context(|| {
                 let host = ut.host();
                 translate!("who-canonicalize-error", "host" => host.split(':').next().unwrap_or(&host).quote())
-                .to_string()
             })?
         } else {
             ut.host()

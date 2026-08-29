@@ -162,7 +162,7 @@ impl OdOptions {
                     1,
                     translate!(
                         "od-error-invalid-argument",
-                        "option" => width_display.clone(),
+                        "option" => width_display,
                         "value" => s.quote()
                     ),
                 ));

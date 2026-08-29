@@ -237,7 +237,7 @@ impl Params {
 
         // The template argument must end in 'X' if a suffix option is given.
         if options.suffix.is_some() && !template_str.ends_with('X') {
-            return Err(MkTempError::MustEndInX(template_str.clone()));
+            return Err(MkTempError::MustEndInX(template_str));
         }
 
         // Get the start and end indices of the randomized part of the template.
@@ -250,7 +250,7 @@ impl Params {
                     .chars()
                     .take(template_str.len())
                     .collect::<String>(),
-                None => template_str.clone(),
+                None => template_str,
             };
             return Err(MkTempError::TooFewXs(s));
         };

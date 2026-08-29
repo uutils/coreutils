@@ -580,7 +580,7 @@ fn extract_quoting_style(
             let _ = writeln!(
                 io::stderr(),
                 "{}",
-                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style.clone())
+                translate!("ls-invalid-quoting-style", "program" => std::env::args().next().unwrap_or_else(|| "ls".to_string()), "style" => style)
             );
         }
 
