@@ -1195,3 +1195,33 @@ fn test_invalid_count_keeps_its_leading_zeros() {
         .fails_with_code(1)
         .stderr_is("head: invalid number of lines: '00x'\n");
 }
+
+#[test]
+fn test_lowercase_multiplier_suffixes_rejected() {
+    // GNU accepts a lowercase suffix only for "k" and "m"; every other
+    // multiplier must be uppercase. "b" is bare-only (no B/iB/D form).
+    for suffix in ["g", "t", "p", "e", "z", "y", "r", "q"] {
+        new_ucmd!()
+            .args(&["-c", &format!("2{suffix}")])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of bytes: '2{suffix}'\n"));
+        new_ucmd!()
+            .args(&["-n", &format!("2{suffix}")])
+            .fails_with_code(1)
+            .stderr_is(format!("head: invalid number of lines: '2{suffix}'\n"));
+    }
+}
+
+#[test]
+fn test_accepted_multiplier_suffixes() {
+    for suffix in [
+        "b", "k", "m", "K", "M", "G", "T", "P", "E", "Z", "Y", "R", "Q", "kB", "KiB", "kD", "MiB",
+        "GB",
+    ] {
+        new_ucmd!()
+            .args(&["-c", &format!("1{suffix}")])
+            .pipe_in("x")
+            .ignore_stdin_write_error()
+            .succeeds();
+    }
+}
