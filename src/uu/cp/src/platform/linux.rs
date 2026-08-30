@@ -8,7 +8,6 @@ use rustix::fs::{SeekFrom, ftruncate, ioctl_ficlone, seek};
 use std::fs::File;
 use std::io::{self, Read};
 use std::os::unix::fs::FileExt;
-use std::os::unix::fs::FileTypeExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 
@@ -224,10 +223,18 @@ fn sparse_copy_fd(src_file: &mut File, dst_file: &File, context: &str) -> CopyRe
     Ok(())
 }
 
-/// Checks whether an existing destination is a fifo
-fn check_dest_is_fifo(dest: &Path) -> bool {
-    // If our destination file exists and its a fifo , we do a standard copy .
-    std::fs::metadata(dest).is_ok_and(|f| f.file_type().is_fifo())
+/// Checks whether an existing destination cannot be written to sparsely.
+///
+/// The sparse paths call `ftruncate` and write at explicit offsets, neither of
+/// which anything but a regular file supports. A fifo, a socket, or a character
+/// device such as the `/dev/null` that `/dev/stdout` may resolve to all reject
+/// `ftruncate` with `EINVAL`, so those take the standard copy instead, which is
+/// what GNU does with them.
+///
+/// A destination that does not exist yet is about to be created as a regular
+/// file, so it is not excluded here.
+fn dest_cannot_be_sparse(dest: &Path) -> bool {
+    std::fs::metadata(dest).is_ok_and(|f| !f.file_type().is_file())
 }
 
 /// Copy the contents of a stream from `source` to `dest`.
@@ -485,7 +492,7 @@ fn handle_reflink_auto_sparse_always(
         (true, false, _) => copy_debug.sparse_detection = SparseDebug::SeekHole,
         (_, _, _) => (),
     }
-    if check_dest_is_fifo(dest) {
+    if dest_cannot_be_sparse(dest) {
         copy_method = CopyMethod::FSCopy;
     }
     Ok((copy_debug, copy_method))
@@ -571,7 +578,7 @@ fn handle_reflink_auto_sparse_auto(
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
 
-    if check_dest_is_fifo(dest) {
+    if dest_cannot_be_sparse(dest) {
         copy_method = CopyMethod::FSCopy;
     }
     Ok((copy_debug, copy_method))
@@ -607,7 +614,7 @@ fn handle_reflink_never_sparse_auto(
         copy_debug.sparse_detection = SparseDebug::SeekHole;
     }
 
-    if check_dest_is_fifo(dest) {
+    if dest_cannot_be_sparse(dest) {
         copy_method = CopyMethod::FSCopy;
     }
     Ok((copy_debug, copy_method))
@@ -652,7 +659,7 @@ fn handle_reflink_never_sparse_always(
 
         (_, _, _) => (),
     }
-    if check_dest_is_fifo(dest) {
+    if dest_cannot_be_sparse(dest) {
         copy_method = CopyMethod::FSCopy;
     }
 
