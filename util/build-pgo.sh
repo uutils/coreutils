@@ -146,8 +146,6 @@ run wc "$WORDS" "$NUMBERS"
 "$BIN" tail -n 50000 "$WORDS" > "${WORK}/tail.txt" 2>/dev/null || true
 run head -c 1M "$BLOB"
 
-# Pipelines: splice/copy_file_range fast paths only fire on a pipe, so they are
-# never reached when every workload redirects to /dev/null.
 "$BIN" cat "$WORDS" | "$BIN" sort | "$BIN" uniq -c > "${WORK}/pipe1.txt" 2>/dev/null || true
 "$BIN" seq 200000 | "$BIN" wc -l > /dev/null 2>&1 || true
 "$BIN" cat "$BLOB" | "$BIN" sha256sum > /dev/null 2>&1 || true
