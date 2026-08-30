@@ -1165,3 +1165,27 @@ fn test_last_width_wins() {
         .succeeds()
         .stdout_is("aaa\naaa\n");
 }
+
+#[test]
+fn test_dash_operand_reads_stdin() {
+    // A bare `-` names stdin and leaves nothing after the dash for the
+    // width-value scan to index, which used to abort before reading input.
+    new_ucmd!()
+        .arg("-")
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hello\n");
+
+    // ...in every position, including as the value of -w, where GNU rejects
+    // it as a width rather than treating it as the operand.
+    new_ucmd!()
+        .args(&["-w", "3", "-"])
+        .pipe_in("hello\n")
+        .succeeds()
+        .stdout_is("hel\nlo\n");
+    new_ucmd!()
+        .args(&["-w", "-"])
+        .pipe_in("hello\n")
+        .fails()
+        .stderr_contains("invalid number of columns: '-'");
+}
