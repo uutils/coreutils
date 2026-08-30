@@ -684,12 +684,13 @@ fn test_with_join_lines_option() {
 fn test_value_for_number_lines() {
     // GNU takes the value of -n attached only, so the argument after a bare
     // -n is always an operand, never SEP[NUMBER]. `pr -n a f` reports
-    // "pr: a: No such file or directory" and still numbers f.
+    // "pr: a: No such file or directory" and still numbers f. Only the
+    // operand is asserted here, since the text after it comes from the OS.
     for operand in ["*5", "a", "foo5.txt"] {
         new_ucmd!()
             .args(&["-n", operand, "test.log"])
             .fails()
-            .stderr_contains(format!("{operand}: No such file or directory"));
+            .stderr_contains(format!("{operand}:"));
     }
 
     // Attached, the same values are read as SEP[NUMBER].
