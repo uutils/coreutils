@@ -1909,8 +1909,7 @@ dependencies = [
 [[package]]
 name = "nix"
 version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+source = "git+https://github.com/xtqqczze/nix-rust-nix?branch=horizon#dc4b69eabc263de2d32dc54337b76486b8ddeb4c"
 dependencies = [
  "bitflags 2.13.2",
  "cfg-if",
@@ -2879,8 +2878,7 @@ dependencies = [
 [[package]]
 name = "terminal_size"
 version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+source = "git+https://github.com/eminence/terminal-size?branch=master#d06b9155b1f0990a9b0096682f0eae9125b58cd5"
 dependencies = [
  "rustix",
  "windows-sys 0.60.2",
