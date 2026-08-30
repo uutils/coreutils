@@ -238,13 +238,14 @@ impl HardlinkGroupScanner {
             let entry = entry?;
             let path = entry.path();
 
-            // never descend through a symlink.
-            let metadata = path.symlink_metadata()?;
-            if metadata.is_dir() {
+            if entry.file_type()?.is_dir() {
                 self.scan_directory_recursive(&path)?;
-            } else if metadata.is_file() && metadata.nlink() > 1 {
-                let key = (metadata.dev(), metadata.ino());
-                self.hardlink_groups.entry(key).or_default().push(path);
+            } else {
+                let metadata = path.symlink_metadata()?;
+                if metadata.is_file() && metadata.nlink() > 1 {
+                    let key = (metadata.dev(), metadata.ino());
+                    self.hardlink_groups.entry(key).or_default().push(path);
+                }
             }
         }
         Ok(())
