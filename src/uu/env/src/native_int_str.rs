@@ -227,10 +227,6 @@ impl<'a> NativeStr<'a> {
         self.native.clone()
     }
 
-    pub fn into_native(self) -> Cow<'a, NativeIntStr> {
-        self.native
-    }
-
     pub fn contains(&self, x: char) -> Option<bool> {
         let n_c = get_single_native_int_value(x)?;
         Some(self.native.contains(&n_c))
