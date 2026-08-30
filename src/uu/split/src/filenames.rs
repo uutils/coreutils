@@ -199,9 +199,11 @@ impl Suffix {
         // Auto pre-calculate new suffix length (auto-width) if necessary
         if let Strategy::Number(number_type) = strategy {
             let chunks = number_type.num_chunks();
-            let required_length = ((start as u64 + chunks) as f64)
-                .log(stype.radix() as f64)
-                .ceil() as usize;
+            // The last suffix is the start plus the chunk count, and either of
+            // those alone can be as large as the type allows, so the sum needs
+            // room the type does not have.
+            let last = start as u128 + u128::from(chunks);
+            let required_length = (last as f64).log(stype.radix() as f64).ceil() as usize;
 
             if (start as u64) < chunks && !(is_length_cmd_opt && length > 0) {
                 // with auto-width ON the auto-widening is OFF
