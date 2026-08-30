@@ -745,21 +745,23 @@ fn test_shuf_invalid_input_range_one() {
     new_ucmd!()
         .args(&["-i", "0"])
         .fails()
-        .stderr_contains("invalid value '0' for '--input-range <LO-HI>': missing '-'");
+        .stderr_contains("invalid input range: '0'");
 }
 
 #[test]
 fn test_shuf_invalid_input_range_two() {
-    new_ucmd!().args(&["-i", "a-9"]).fails().stderr_contains(
-        "invalid value 'a-9' for '--input-range <LO-HI>': invalid digit found in string",
-    );
+    new_ucmd!()
+        .args(&["-i", "a-9"])
+        .fails()
+        .stderr_contains("invalid input range: 'a-9'");
 }
 
 #[test]
 fn test_shuf_invalid_input_range_three() {
-    new_ucmd!().args(&["-i", "0-b"]).fails().stderr_contains(
-        "invalid value '0-b' for '--input-range <LO-HI>': invalid digit found in string",
-    );
+    new_ucmd!()
+        .args(&["-i", "0-b"])
+        .fails()
+        .stderr_contains("invalid input range: '0-b'");
 }
 
 #[test]
@@ -867,7 +869,7 @@ fn test_range_empty_minus_one() {
         .arg("-i5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("invalid input range: '5-3'");
 }
 
 #[test]
@@ -897,7 +899,7 @@ fn test_range_repeat_empty_minus_one() {
         .arg("-ri5-3")
         .fails()
         .no_stdout()
-        .stderr_contains("invalid value '5-3' for '--input-range <LO-HI>': start exceeds end\n");
+        .stderr_contains("invalid input range: '5-3'");
 }
 
 // This test fails if we forget to flush the `BufWriter`.
@@ -1162,4 +1164,15 @@ fn test_seed_long_range_no_repeat() {
 #[test]
 fn test_empty_range_no_repeat() {
     new_ucmd!().arg("-i4-3").succeeds().no_output();
+}
+
+#[test]
+fn test_shuf_invalid_input_range_leading_hyphen() {
+    // A range starting with a hyphen never reached the range check at all;
+    // clap rejected it as an unknown option first. GNU reports it like any
+    // other malformed range.
+    new_ucmd!()
+        .args(&["-i", "-1-5"])
+        .fails()
+        .stderr_contains("invalid input range: '-1-5'");
 }

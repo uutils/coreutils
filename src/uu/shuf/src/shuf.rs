@@ -78,8 +78,13 @@ pub fn uumain(args: impl uucore::Args) -> UResult<()> {
                 .cloned()
                 .collect(),
         )
-    } else if let Some(range) = matches.get_one(options::INPUT_RANGE).cloned() {
-        Mode::InputRange(range)
+    } else if let Some(range) = matches.get_one::<String>(options::INPUT_RANGE) {
+        Mode::InputRange(parse_range(range).map_err(|_| {
+            USimpleError::new(
+                1,
+                translate!("shuf-error-invalid-input-range", "range" => range.quote()),
+            )
+        })?)
     } else {
         let mut operands = matches
             .get_many::<OsString>(options::FILE_OR_ARGS)
@@ -197,7 +202,11 @@ pub fn uu_app() -> Command {
                 .long(options::INPUT_RANGE)
                 .value_name("LO-HI")
                 .help(translate!("shuf-help-input-range"))
-                .value_parser(parse_range)
+                // GNU reports every malformed range the same way, so the range
+                // is taken verbatim here and checked in `uumain`. Parsing it as
+                // a clap value would wrap the reason in clap's own wording, and
+                // a range like `-1-5` would not even reach us.
+                .allow_hyphen_values(true)
                 .conflicts_with(options::FILE_OR_ARGS),
         )
         .arg(
@@ -445,17 +454,17 @@ fn shuf_exec(
     Ok(())
 }
 
-fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, String> {
+fn parse_range(input_range: &str) -> Result<RangeInclusive<u64>, ()> {
     if let Some((from, to)) = input_range.split_once('-') {
-        let begin = from.parse::<u64>().map_err(|e| e.to_string())?;
-        let end = to.parse::<u64>().map_err(|e| e.to_string())?;
+        let begin = from.parse::<u64>().map_err(|_| ())?;
+        let end = to.parse::<u64>().map_err(|_| ())?;
         if begin <= end || begin == end + 1 {
             Ok(begin..=end)
         } else {
-            Err(translate!("shuf-error-start-exceeds-end"))
+            Err(())
         }
     } else {
-        Err(translate!("shuf-error-missing-dash"))
+        Err(())
     }
 }
 
