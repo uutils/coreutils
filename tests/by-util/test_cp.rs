@@ -1056,6 +1056,24 @@ fn test_cp_reflink_always_failure_dest_cleanup() {
 }
 
 #[test]
+#[cfg(target_os = "linux")]
+fn test_cp_reflink_always_failure() {
+    let scene = TestScenario::new(util_name!());
+    scene
+        .ucmd()
+        .args(&["--reflink=always", "/dev/null", "/dev/full"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Invalid argument");
+    scene
+        .ucmd()
+        .args(&["--reflink=always", "/dev/null", "target"])
+        .fails()
+        .no_stdout()
+        .stderr_contains("Invalid cross-device link");
+}
+
+#[test]
 fn test_cp_arg_no_clobber() {
     let (at, mut ucmd) = at_and_ucmd!();
     ucmd.arg(TEST_HELLO_WORLD_SOURCE)
