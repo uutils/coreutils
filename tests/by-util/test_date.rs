@@ -598,6 +598,46 @@ fn test_date_for_file() {
 }
 
 #[test]
+fn test_date_file_invalid_utf8_line() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_file_invalid_utf8";
+    // A 0xFF byte makes the whole line invalid UTF-8
+    at.write_bytes(file, b"Hello\xffx\n");
+
+    // GNU date: "date: invalid date 'Hello\377x'" on stderr, exit code 1
+    let result = ucmd.args(&["-u", "-f", file]).fails_with_code(1);
+    result.no_stdout();
+    result.stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_file_invalid_utf8_line_continues() {
+    let (at, mut ucmd) = at_and_ucmd!();
+    let file = "test_date_file_mixed_invalid_utf8";
+    at.write_bytes(
+        file,
+        b"2024-01-15 12:00:00\nHello\xffx\n2024-01-16 13:00:00\n",
+    );
+
+    // GNU date reports the invalid line but still processes the other lines,
+    // exiting with code 1
+    let result = ucmd.args(&["-u", "-f", file]).fails_with_code(1);
+    result.stdout_contains("Mon Jan 15 12:00:00 UTC 2024");
+    result.stdout_contains("Tue Jan 16 13:00:00 UTC 2024");
+    result.stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
+fn test_date_stdin_invalid_utf8_line() {
+    // `date -f -` reads from stdin through the same path
+    new_ucmd!()
+        .args(&["-u", "-f", "-"])
+        .pipe_in(b"Hello\xffx\n".to_vec())
+        .fails_with_code(1)
+        .stderr_contains("date: invalid date 'Hello\\377x'");
+}
+
+#[test]
 fn test_date_for_file_mtime() {
     let (at, mut ucmd) = at_and_ucmd!();
     let file = "reference_file";

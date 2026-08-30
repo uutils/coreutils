@@ -1090,12 +1090,22 @@ fn parse_dates_from_reader<R: Read + 'static>(
 ) -> Box<
     dyn Iterator<Item = Result<ParsedDateTime, (String, parse_datetime::ParseDateTimeError)>> + '_,
 > {
-    let lines = BufReader::new(reader).lines();
-    Box::new(
-        lines
-            .map_while(Result::ok)
-            .map(move |s| parse_date(s, now, dbg_opts, allow_extended)),
-    )
+    let lines = BufReader::new(reader).split(b'\n');
+    Box::new(lines.map_while(Result::ok).map(move |mut bytes| {
+        // Strip a trailing '\r' (CRLF input; GNU's lexer ignores it too)
+        if bytes.last() == Some(&b'\r') {
+            bytes.pop();
+        }
+        match String::from_utf8(bytes) {
+            Ok(s) => parse_date(s, now, dbg_opts, allow_extended),
+            // Report lines with invalid UTF-8 (with non-printable bytes
+            // octal-escaped like GNU) instead of silently stopping the input
+            Err(e) => Err((
+                escape_invalid_bytes(e.as_bytes()),
+                parse_datetime::ParseDateTimeError::InvalidInput,
+            )),
+        }
+    }))
 }
 
 /// Parse a string into either an in-range [`Zoned`] value or an extended date.
