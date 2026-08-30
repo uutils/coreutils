@@ -134,9 +134,11 @@ where
         if let Some((_, line)) = input_iter.next() {
             // There is remaining input: create a final split and copy remainder
             split_writer.new_writer()?;
-            split_writer.writeln(&line?)?;
+            let line = split_writer.or_finish_split(line)?;
+            split_writer.writeln(&line)?;
             for (_, line) in input_iter {
-                split_writer.writeln(&line?)?;
+                let line = split_writer.or_finish_split(line)?;
+                split_writer.writeln(&line)?;
             }
             split_writer.finish_split()
         } else if all_up_to_line && options.suppress_matched {
@@ -332,6 +334,27 @@ impl SplitWriter<'_> {
         Ok(())
     }
 
+    /// The line, or the read error once the split the line was being read for
+    /// has been closed. GNU says how much of a split it wrote before it says
+    /// why there is no more input to write:
+    ///
+    /// ```text
+    /// $ csplit a_directory '/^a/'
+    /// csplit: read error: Is a directory
+    /// 0
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The read error, or the error from closing the split if closing it is
+    /// what went wrong.
+    fn or_finish_split(&mut self, line: UResult<String>) -> Result<String, CsplitError> {
+        match line {
+            Ok(line) => Ok(line),
+            Err(err) => self.finish_split().and(Err(err.into())),
+        }
+    }
+
     /// Removes all the split files that were created.
     ///
     /// # Errors
@@ -372,7 +395,7 @@ impl SplitWriter<'_> {
 
         let mut ret = Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
         while let Some((ln, line)) = input_iter.next() {
-            let line = line?;
+            let line = self.or_finish_split(line)?;
             match n.cmp(&(&ln + 1)) {
                 Ordering::Less => {
                     assert!(
@@ -430,7 +453,7 @@ impl SplitWriter<'_> {
             input_iter.set_size_of_buffer(1);
 
             while let Some((ln, line)) = input_iter.next() {
-                let line = line?;
+                let line = self.or_finish_split(line)?;
                 let l = line
                     .strip_suffix("\r\n")
                     .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
@@ -458,7 +481,8 @@ impl SplitWriter<'_> {
                     // write the extra lines required by the offset
                     while offset > 0 {
                         if let Some((_, line)) = input_iter.next() {
-                            self.writeln(&line?)?;
+                            let line = self.or_finish_split(line)?;
+                            self.writeln(&line)?;
                         } else {
                             self.finish_split()?;
                             return Err(CsplitError::LineOutOfRange(pattern_as_str.to_string()));
@@ -484,7 +508,7 @@ impl SplitWriter<'_> {
             let offset_usize = offset.unsigned_abs() as usize;
             input_iter.set_size_of_buffer(offset_usize);
             while let Some((ln, line)) = input_iter.next() {
-                let line = line?;
+                let line = self.or_finish_split(line)?;
                 let l = line
                     .strip_suffix("\r\n")
                     .unwrap_or_else(|| line.strip_suffix('\n').unwrap_or(&line));
