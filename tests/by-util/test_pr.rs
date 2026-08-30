@@ -1333,7 +1333,22 @@ fn test_optional_value_is_not_taken_from_the_next_argument() {
     // `-n`, `-s` and `-S` take their value attached only. A file whose name
     // happens to look like SEP[DIGITS] used to be swallowed as the value,
     // leaving no operand, so pr silently numbered stdin instead of the file.
-    for flag in ["-n", "-s", "-S"] {
+    // Every spelling has to be covered: the bare short flag, the trailing
+    // position of a cluster, the long name, and the abbreviations of it that
+    // `infer_long_args` accepts.
+    for flag in [
+        "-n",
+        "-s",
+        "-S",
+        "-tn",
+        "-ts",
+        "-tS",
+        "--number-lines",
+        "--separator",
+        "--sep-string",
+        "--number-l",
+        "--sep-s",
+    ] {
         new_ucmd!()
             .args(&["-t", flag, "f1"])
             .pipe_in("FROM_STDIN\n")
@@ -1341,4 +1356,10 @@ fn test_optional_value_is_not_taken_from_the_next_argument() {
             .stdout_contains("from_file")
             .stdout_does_not_contain("FROM_STDIN");
     }
+
+    // The attached spellings still carry their own value.
+    new_ucmd!()
+        .args(&["-t", "-n,3", "f1"])
+        .succeeds()
+        .stdout_contains(",from_file");
 }
