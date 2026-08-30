@@ -32,7 +32,6 @@ use uucore::{
     error::{FromIo, UError, UResult},
     format_usage,
     hardware::{HardwareFeature, HasHardwareFeatures as _, SimdPolicy},
-    parser::shortcut_value_parser::ShortcutValueParser,
     quoting_style::{self, QuotingStyle},
     show,
 };
@@ -74,15 +73,20 @@ impl Default for Settings<'_> {
 }
 
 impl<'a> Settings<'a> {
-    fn new(matches: &'a ArgMatches) -> Self {
+    fn new(matches: &'a ArgMatches) -> UResult<Self> {
         let files0_from = matches
             .get_one::<OsString>(options::FILES0_FROM)
             .map(Into::into);
 
-        let total_when = matches
-            .get_one::<String>(options::TOTAL)
-            .map(Into::into)
-            .unwrap_or_default();
+        // The last `--total` wins, but every one of them is still checked:
+        // GNU rejects a bad value even where a later one overrides it.
+        let mut total_when = TotalWhen::default();
+        for value in matches
+            .get_many::<String>(options::TOTAL)
+            .unwrap_or_default()
+        {
+            total_when = TotalWhen::parse(value)?;
+        }
 
         let settings = Self {
             show_bytes: matches.get_flag(options::BYTES),
@@ -95,7 +99,7 @@ impl<'a> Settings<'a> {
             total_when,
         };
 
-        if settings.number_enabled() > 0 {
+        Ok(if settings.number_enabled() > 0 {
             settings
         } else {
             Self {
@@ -104,7 +108,7 @@ impl<'a> Settings<'a> {
                 debug: settings.debug,
                 ..Default::default()
             }
-        }
+        })
     }
 
     fn number_enabled(&self) -> u32 {
@@ -321,19 +325,34 @@ enum TotalWhen {
     Never,
 }
 
-impl<T: AsRef<str>> From<T> for TotalWhen {
-    fn from(s: T) -> Self {
-        match s.as_ref() {
-            "auto" => Self::Auto,
-            "always" => Self::Always,
-            "only" => Self::Only,
-            "never" => Self::Never,
-            _ => unreachable!("Should have been caught by clap"),
-        }
-    }
-}
+/// The values `--total` accepts, in the order GNU lists them.
+const TOTAL_CHOICES: &[(&str, TotalWhen)] = &[
+    ("auto", TotalWhen::Auto),
+    ("always", TotalWhen::Always),
+    ("only", TotalWhen::Only),
+    ("never", TotalWhen::Never),
+];
 
 impl TotalWhen {
+    /// The choice `value` names, accepting any unambiguous abbreviation the
+    /// way GNU does: `--total=o` is `only`, while `--total=a` names both
+    /// `auto` and `always` and so names neither. An empty value abbreviates
+    /// all four, which GNU reports as ambiguous rather than invalid.
+    fn parse(value: &str) -> Result<Self, WcError> {
+        let mut named = TOTAL_CHOICES.iter().filter(|(c, _)| c.starts_with(value));
+        match (named.next(), named.next()) {
+            // No choice abbreviates another, so a single match is the answer
+            // whether or not it is the whole word.
+            (Some((_, when)), None) if !value.is_empty() => Ok(*when),
+            (Some(_), Some(_)) => Err(WcError::AmbiguousTotalArgument {
+                arg: value.to_string(),
+            }),
+            _ => Err(WcError::InvalidTotalArgument {
+                arg: value.to_string(),
+            }),
+        }
+    }
+
     fn is_total_row_visible(self, num_inputs: usize) -> bool {
         match self {
             Self::Auto => num_inputs > 1,
@@ -353,6 +372,10 @@ enum WcError {
     ZeroLengthFileName,
     #[error("{}", translate!("wc-error-zero-length-filename-ctx", "path" => path, "idx" => idx))]
     ZeroLengthFileNameCtx { path: Cow<'static, str>, idx: usize },
+    #[error("{}", translate!("wc-error-invalid-total-argument", "arg" => arg.clone()))]
+    InvalidTotalArgument { arg: String },
+    #[error("{}", translate!("wc-error-ambiguous-total-argument", "arg" => arg.clone()))]
+    AmbiguousTotalArgument { arg: String },
 }
 
 impl WcError {
@@ -384,7 +407,7 @@ impl UError for WcError {
 pub fn uumain(args: impl uucore::Args) -> UResult<()> {
     let matches = uucore::clap_localization::handle_clap_result(uu_app(), args)?;
 
-    let settings = Settings::new(&matches);
+    let settings = Settings::new(&matches)?;
     let inputs = Inputs::new(&matches)?;
 
     wc(&inputs, &settings)
@@ -437,11 +460,10 @@ pub fn uu_app() -> Command {
         .arg(
             Arg::new(options::TOTAL)
                 .long(options::TOTAL)
-                .value_parser(ShortcutValueParser::new([
-                    "auto", "always", "only", "never",
-                ]))
                 .value_name("WHEN")
-                .hide_possible_values(true)
+                // Appended rather than overwritten so that a value overridden
+                // by a later `--total` is still there to be checked.
+                .action(ArgAction::Append)
                 .help(translate!("wc-help-total")),
         )
         .arg(

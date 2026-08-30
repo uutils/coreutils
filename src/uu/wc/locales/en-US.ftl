@@ -23,6 +23,17 @@ wc-error-cannot-open-for-reading = cannot open { $path } for reading
 wc-error-read-error = { $path }: read error
 wc-error-failed-to-print-result = failed to print result for { $title }
 wc-error-failed-to-print-total = failed to print total
+wc-error-invalid-total-argument = invalid argument '{ $arg }' for '--total'
+  { wc-error-total-valid-arguments }
+wc-error-ambiguous-total-argument = ambiguous argument '{ $arg }' for '--total'
+  { wc-error-total-valid-arguments }
+wc-error-total-valid-arguments =
+  Valid arguments are:
+    - 'auto'
+    - 'always'
+    - 'only'
+    - 'never'
+  Try 'wc --help' for more information.
 
 # Decoder error messages
 decoder-error-invalid-byte-sequence = invalid byte sequence: { $bytes }

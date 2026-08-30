@@ -639,6 +639,73 @@ fn test_total_never() {
         ));
 }
 
+/// GNU names the option that was wrong and lists what it takes.
+#[test]
+fn test_total_invalid_argument() {
+    const VALID: &str = concat!(
+        "Valid arguments are:\n",
+        "  - 'auto'\n",
+        "  - 'always'\n",
+        "  - 'only'\n",
+        "  - 'never'\n",
+        "Try 'wc --help' for more information.\n",
+    );
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=bogus"])
+        .fails_with_code(1)
+        .stderr_is(format!(
+            "wc: invalid argument 'bogus' for '--total'\n{VALID}"
+        ));
+}
+
+/// A value that abbreviates more than one choice is ambiguous, not invalid,
+/// and an empty one abbreviates all four.
+#[test]
+fn test_total_ambiguous_argument() {
+    for arg in ["--total=a", "--total="] {
+        let value = arg.strip_prefix("--total=").unwrap();
+        new_ucmd!()
+            .args(&["lorem_ipsum.txt", arg])
+            .fails_with_code(1)
+            .stderr_contains(format!("wc: ambiguous argument '{value}' for '--total'"));
+    }
+}
+
+/// The last `--total` decides, but an earlier bad one is still an error:
+/// GNU rejects it rather than letting the override excuse it.
+#[test]
+fn test_total_checks_every_occurrence() {
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=bogus", "--total=only"])
+        .fails_with_code(1)
+        .stderr_contains("wc: invalid argument 'bogus' for '--total'");
+
+    new_ucmd!()
+        .args(&["lorem_ipsum.txt", "--total=only", "--total=never"])
+        .succeeds()
+        .stdout_is(" 13 109 772 lorem_ipsum.txt\n");
+}
+
+/// Any unambiguous abbreviation still resolves, which is what GNU accepts.
+#[test]
+fn test_total_unambiguous_abbreviations() {
+    for (arg, expected) in [
+        ("--total=au", " 13 109 772 lorem_ipsum.txt\n"),
+        (
+            "--total=al",
+            " 13 109 772 lorem_ipsum.txt\n 13 109 772 total\n",
+        ),
+        ("--total=o", "13 109 772\n"),
+        ("--total=onl", "13 109 772\n"),
+    ] {
+        new_ucmd!()
+            .args(&["lorem_ipsum.txt", arg])
+            .succeeds()
+            .stdout_is(expected);
+    }
+}
+
 #[test]
 fn test_total_only() {
     new_ucmd!()
