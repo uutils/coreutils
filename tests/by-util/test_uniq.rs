@@ -1220,3 +1220,13 @@ fn test_failed_write_is_reported() {
         .fails()
         .stderr_is("uniq: write error: No space left on device\n");
 }
+
+#[test]
+fn test_repeated_skip_fields_takes_the_last() {
+    // GNU lets a later -f override an earlier one rather than erroring.
+    new_ucmd!()
+        .args(&["-f", "1", "-f", "2"])
+        .pipe_in("x y a\nz w a\n")
+        .succeeds()
+        .stdout_is("x y a\n");
+}
