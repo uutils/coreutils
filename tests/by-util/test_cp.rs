@@ -1070,7 +1070,7 @@ fn test_cp_reflink_always_failure() {
         .args(&["--reflink=always", "/dev/null", "target"])
         .fails()
         .no_stdout()
-        .stderr_contains("Invalid cross-device link");
+        .stderr_contains("ross-device link"); // cover both of glibc and musl
 }
 
 #[test]
