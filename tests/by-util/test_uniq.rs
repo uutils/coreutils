@@ -1238,3 +1238,13 @@ fn test_nonexistent_input_file_error_matches_gnu() {
         .fails_with_code(1)
         .stderr_only("uniq: nosuchfile.txt: No such file or directory\n");
 }
+
+#[test]
+fn test_obsolete_skip_fields_not_read_after_double_dash() {
+    // After `--` there are no more options, so `-1` names a file rather than
+    // being taken as the obsolete "skip 1 field" spelling.
+    new_ucmd!()
+        .args(&["--", "-1"])
+        .fails()
+        .stderr_contains("-1");
+}
